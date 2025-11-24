@@ -1,0 +1,42 @@
+{
+    "request": {
+        "failed": "请求失败，请稍后重试！",
+        "timeout": "服务器响应超时",
+        "serverError": "服务器出现错误",
+        "notFound": "接口不存在",
+        "apiError": "接口报错",
+        "unauthorized": "用户名或密码不正确"
+    },
+    "me": {
+        "editInfo": "编辑资料",
+        "addIntro": "点击添加介绍，让大家认识你...",
+        "age": "{age}岁",
+        "private": "私密账号",
+        "douyinId": "抖音号：{id}",
+        "likes": "获赞",
+        "following": "关注",
+        "followers": "粉丝",
+        "works": "作品",
+        "liked": "喜欢",
+        "favorites": "收藏",
+        "privateLikes": "只有你能看到自己的喜欢列表",
+        "privateFavorites": "只有你能看到自己的收藏列表",
+        "video": "视频",
+        "all": "全部",
+        "music": "音乐",
+        "moreFunctions": "更多功能",
+        "back": "返回"
+    },
+    "settings": {
+        "title": "设置",
+        "account": "帐号",
+        "accountSecurity": "帐号与安全",
+        "privacy": "隐私设置",
+        "general": "通用",
+        "notification": "通知设置",
+        "generalSettings": "通用设置",
+        "language": "语言设置",
+        "logout": "退出登录",
+        "version": "抖音 {version}"
+    }
+}

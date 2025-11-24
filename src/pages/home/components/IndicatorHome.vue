@@ -2,28 +2,22 @@
   <div class="indicator-home" :class="{ isLight }">
     <div class="notice" :style="noticeStyle"><span>下拉刷新内容</span></div>
     <div class="toolbar" ref="toolbar" :style="toolbarStyle">
-      <Icon
-        icon="tabler:menu-deep"
-        class="search"
-        @click="$emit('showSlidebar')"
-        style="transform: rotateY(180deg)"
-      />
       <div class="tab-ctn">
         <div class="tabs" ref="tabs">
-          <div class="tab" :class="{ active: index === 0 }" @click.stop="change(0)">
+          <!-- <div class="tab" :class="{ active: index === 0 }" @click.stop="change(0)">
             <span>热点</span>
-          </div>
-          <div class="tab" :class="{ active: index === 1 }" @click.stop="change(1)">
+          </div> -->
+          <div class="tab" :class="{ active: index === 0 }" @click.stop="change(0)">
             <span>长视频</span>
           </div>
-          <div class="tab" :class="{ active: index === 2 }" @click.stop="change(2)">
+          <div class="tab" :class="{ active: index === 1 }" @click.stop="change(1)">
             <span>关注</span>
             <img src="../../../assets/img/icon/live.webp" class="tab2-img" />
           </div>
-          <div class="tab" :class="{ active: index === 3 }" @click.stop="change(3)">
+          <!-- <div class="tab" :class="{ active: index === 3 }" @click.stop="change(3)">
             <span>经验</span>
-          </div>
-          <div class="tab" :class="{ active: index === 4 }" @click.stop="change(4)">
+          </div> -->
+          <div class="tab" :class="{ active: index === 2 }" @click.stop="change(2)">
             <span>推荐</span>
           </div>
         </div>
@@ -165,7 +159,7 @@ export default {
         let tabWidth = _css(item, 'width')
         this.lefts.push(
           item.getBoundingClientRect().x -
-            tabs.children[0].getBoundingClientRect().x +
+            tabs.getBoundingClientRect().x +
             (tabWidth * 0.5 - indicatorWidth / 2)
         )
       }
@@ -237,12 +231,16 @@ export default {
     align-items: center;
 
     .tab-ctn {
-      width: 80%;
-      position: relative;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 70%; // Expanded to take more space
 
       .tabs {
         display: flex;
-        justify-content: space-between;
+        justify-content: center;
+        align-items: center;
+        gap: 52rem; // Increased gap to spread tabs wider
 
         .tab {
           transition: color 0.3s;
@@ -250,6 +248,7 @@ export default {
           position: relative;
           font-size: 17rem;
           cursor: pointer;
+          font-weight: 600; // Make it slightly bolder
 
           .tab1-img {
             position: absolute;
@@ -270,6 +269,7 @@ export default {
 
           &.active {
             color: white;
+            font-size: 18rem; // Slightly larger active font
           }
         }
       }
@@ -277,16 +277,17 @@ export default {
       .indicator {
         //transition: left .3s;
         position: absolute;
-        bottom: -6rem;
-        height: 2.6rem;
-        width: 26rem;
-        //width: calc(100% / 5);
+        bottom: -8rem; // Adjusted bottom
+        height: 3rem; // Slightly thicker
+        width: 20rem; // Fixed width for indicator
         background: #fff;
-        border-radius: 5rem;
+        border-radius: 2rem;
       }
     }
 
     .search {
+      position: absolute;
+      right: 15rem;
       color: white;
       font-size: 24rem;
     }

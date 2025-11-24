@@ -1,0 +1,42 @@
+{
+    "request": {
+        "failed": "Request failed, please try again later!",
+        "timeout": "Server response timeout",
+        "serverError": "Server error",
+        "notFound": "API not found",
+        "apiError": "API error",
+        "unauthorized": "Incorrect username or password"
+    },
+    "me": {
+        "editInfo": "Edit Profile",
+        "addIntro": "Add a bio to let people know you...",
+        "age": "{age} years old",
+        "private": "Private Account",
+        "douyinId": "Douyin ID: {id}",
+        "likes": "Likes",
+        "following": "Following",
+        "followers": "Followers",
+        "works": "Works",
+        "liked": "Liked",
+        "favorites": "Favorites",
+        "privateLikes": "Only you can see your liked videos",
+        "privateFavorites": "Only you can see your favorite list",
+        "video": "Video",
+        "all": "All",
+        "music": "Music",
+        "moreFunctions": "More",
+        "back": "Back"
+    },
+    "settings": {
+        "title": "Settings",
+        "account": "Account",
+        "accountSecurity": "Account & Security",
+        "privacy": "Privacy Settings",
+        "general": "General",
+        "notification": "Notification Settings",
+        "generalSettings": "General Settings",
+        "language": "Language Settings",
+        "logout": "Log Out",
+        "version": "Douyin {version}"
+    }
+}

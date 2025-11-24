@@ -169,6 +169,7 @@ export default defineConfig((): Promise<UserConfig> => {
           port: 3000,
           open: true,
           host: '0.0.0.0',
+          allowedHosts: ['.ngrok-free.app', '.ngrok.io', 'localhost'],
           fs: {
             strict: false
           }

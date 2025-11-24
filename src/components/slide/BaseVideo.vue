@@ -206,8 +206,10 @@ onMounted(() => {
   videoEl.addEventListener('loadedmetadata', () => {
     state.videoScreenHeight = videoEl.videoHeight / (videoEl.videoWidth / state.width)
     state.duration = videoEl.duration
-    state.progressBarRect = progressEl.getBoundingClientRect()
-    state.step = state.progressBarRect.width / Math.floor(state.duration)
+    if (progressEl) {
+      state.progressBarRect = progressEl.getBoundingClientRect()
+      state.step = state.progressBarRect.width / Math.floor(state.duration)
+    }
     videoEl.addEventListener('timeupdate', fun)
   })
 

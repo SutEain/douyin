@@ -34,8 +34,8 @@
             <div class="item" @click="_no">
               <Icon icon="ic:round-search" />
             </div>
-            <div class="item" @click.stop="baseActiveIndex = 1">
-              <Icon icon="ic:round-menu" />
+            <div class="item" @click.stop="$nav('/me/right-menu/setting')">
+              <Icon icon="ri:settings-line" />
             </div>
           </div>
         </div>
@@ -81,10 +81,7 @@
                     <span class="num">{{ _formatNumber(userinfo.aweme_count) }}</span>
                     <span>获赞</span>
                   </div>
-                  <div class="text" @click="$nav('/people/follow-and-fans', { type: 0 })">
-                    <span class="num">{{ _formatNumber(userinfo.following_count) }}</span>
-                    <span>朋友</span>
-                  </div>
+
                   <div class="text" @click="$nav('/people/follow-and-fans', { type: 0 })">
                     <span class="num">{{ _formatNumber(userinfo.following_count) }}</span>
                     <span>关注</span>
@@ -94,7 +91,6 @@
                     <span>粉丝</span>
                   </div>
                 </div>
-                <div class="button" @click="$nav('/people/find-acquaintance')">添加朋友</div>
               </div>
               <div class="signature" @click="$nav('/me/edit-userinfo-item', { type: 3 })">
                 <template v-if="!userinfo.signature">
@@ -122,30 +118,12 @@
                   {{ userinfo.school.name }}
                 </div>
               </div>
-              <div class="other">
-                <div class="item" @click="_no">
-                  <Icon icon="iconamoon:shopping-card-light" />
-                  <span>抖音商城</span>
-                </div>
-                <div class="item" @click="$nav('/me/my-music')">
-                  <Icon icon="iconamoon:music-2-light" />
-                  <span>我的音乐</span>
-                </div>
-                <div class="item" @click="_no">
-                  <Icon icon="streamline:chat-two-bubbles-oval" />
-                  <span>我的群聊</span>
-                </div>
-                <div class="item" @click="_no">
-                  <Icon icon="iconamoon:shopping-card-light" />
-                  <span>查看更多</span>
-                </div>
-              </div>
             </div>
           </div>
           <Indicator
             name="videoList"
             tabStyleWidth="25%"
-            :tabTexts="['作品', '私密', '喜欢', '收藏']"
+            :tabTexts="['作品', '喜欢', '收藏']"
             v-model:active-index="contentIndex"
           >
           </Indicator>
@@ -160,19 +138,7 @@
               <Loading v-if="loadings.loading0" :is-full-screen="false"></Loading>
               <no-more v-else />
             </SlideItem>
-            <SlideItem class="SlideItem" @scroll="scroll" :style="SlideItemStyle">
-              <div class="notice">
-                <img src="../../assets/img/icon/me/lock-gray.png" alt="" />
-                <span>只有你能看到设为私密的作品和日常</span>
-              </div>
-              <Posters
-                v-if="videos.private.total !== -1"
-                mode="date"
-                :list="videos.private.list"
-              ></Posters>
-              <Loading v-if="loadings.loading1" :is-full-screen="false"></Loading>
-              <no-more v-else />
-            </SlideItem>
+
             <SlideItem class="SlideItem" @scroll="scroll" :style="SlideItemStyle">
               <div class="notice">
                 <img src="../../assets/img/icon/me/lock-gray.png" alt="" />
@@ -235,113 +201,6 @@
           </SlideRowList>
         </div>
         <BaseFooter v-bind:init-tab="5" />
-        <transition name="fade">
-          <div class="mask" v-if="baseActiveIndex === 1" @click="baseActiveIndex = 0"></div>
-        </transition>
-      </SlideItem>
-      <SlideItem style="width: 70vw; overflow: auto">
-        <transition name="fade1">
-          <div class="ul" v-if="!isMoreFunction">
-            <div class="li" @click="_no">
-              <img src="../../assets/img/icon/newicon/left_menu/shopping.png" alt="" />
-              <span>我的订单</span>
-            </div>
-            <div class="li" @click="_no">
-              <img src="../../assets/img/icon/newicon/left_menu/wallet.png" alt="" />
-              <span>钱包</span>
-            </div>
-            <div class="line"></div>
-
-            <div class="li" @click="$nav('/me/my-card')">
-              <img src="../../assets/img/icon/newicon/left_menu/qrcode.png" alt="" />
-              <span>我的二维码</span>
-            </div>
-            <div class="li" @click="$nav('/me/right-menu/look-history')">
-              <img src="../../assets/img/icon/newicon/left_menu/time.png" alt="" />
-              <span>观看历史</span>
-            </div>
-            <div class="li" @click="_no">
-              <img src="../../assets/img/icon/newicon/left_menu/clock.png" alt="" />
-              <span>时间管理</span>
-            </div>
-            <div class="li" @click="_no">
-              <img src="../../assets/img/icon/newicon/left_menu/workbench.png" alt="" />
-              <span>创作者服务中心</span>
-            </div>
-
-            <div class="line"></div>
-
-            <div class="li" @click="_no">
-              <img src="../../assets/img/icon/newicon/left_menu/bytedance-mini-app.png" alt="" />
-              <span>小程序</span>
-            </div>
-            <div class="li" @click="_no">
-              <img src="../../assets/img/icon/newicon/left_menu/gongyi.png" alt="" />
-              <span>抖音公益</span>
-            </div>
-            <div class="li" @click="$nav('/me/right-menu/minor-protection/index')">
-              <img src="../../assets/img/icon/newicon/left_menu/umbrella.png" alt="" />
-              <span>未成年保护工具</span>
-            </div>
-            <div class="li" @click="_no">
-              <img src="../../assets/img/icon/newicon/left_menu/headset.png" alt="" />
-              <span>我的客服</span>
-            </div>
-            <div class="li" @click="$nav('/me/right-menu/setting')">
-              <img src="../../assets/img/icon/newicon/left_menu/setting-one.png" alt="" />
-              <span>设置</span>
-            </div>
-          </div>
-          <div v-else class="more-function">
-            <div class="title">生活服务</div>
-            <div class="functions">
-              <div class="function" @click="_no">
-                <img src="../../assets/img/icon/newicon/left_menu/quan.png" alt="" />
-                <span>卡券</span>
-              </div>
-              <div class="function" @click="_no">
-                <img src="../../assets/img/icon/newicon/left_menu/sd-card.png" alt="" />
-                <span>免流量</span>
-              </div>
-              <div class="function" @click="_no">
-                <img src="../../assets/img/icon/newicon/left_menu/alarmmmmmmmmmmmm.png" alt="" />
-                <span>视频彩铃</span>
-              </div>
-            </div>
-            <div class="title">拓展功能</div>
-            <div class="functions">
-              <div class="function" @click="_no">
-                <img src="../../assets/img/icon/newicon/left_menu/sun-one.png" alt="" />
-                <span>我的动态</span>
-              </div>
-              <div class="function" @click="_no">
-                <img src="../../assets/img/icon/newicon/left_menu/download.png" alt="" />
-                <span>我的缓存</span>
-              </div>
-              <div class="function" @click="_no">
-                <img src="../../assets/img/icon/newicon/left_menu/hot.png" alt="" />
-                <span>上热门</span>
-              </div>
-              <div class="function" @click="_no">
-                <img src="../../assets/img/icon/newicon/left_menu/shop.png" alt="" />
-                <span>小店随心推</span>
-              </div>
-              <div class="function" @click="_no">
-                <img src="../../assets/img/icon/newicon/left_menu/yuandi.png" alt="" />
-                <span>投教园地</span>
-              </div>
-            </div>
-          </div>
-        </transition>
-        <div class="button-ctn">
-          <div class="button" v-if="!isMoreFunction" @click="isMoreFunction = true">
-            <img src="../../assets/img/icon/newicon/left_menu/more.png" alt="" />
-            <span>更多功能</span>
-          </div>
-          <div class="button" v-if="isMoreFunction" @click="isMoreFunction = false">
-            <span>返回</span>
-          </div>
-        </div>
       </SlideItem>
     </SlideRowList>
     <transition name="fade">
@@ -379,7 +238,7 @@ import { mapState } from 'pinia'
 import bus from '../../utils/bus'
 import ConfirmDialog from '../../components/dialog/ConfirmDialog'
 import { _checkImgUrl, _formatNumber, _getUserDouyinId, _no, _stopPropagation } from '@/utils'
-import { likeVideo, myVideo, privateVideo } from '@/api/videos'
+import { likeVideo, myVideo } from '@/api/videos'
 import { useBaseStore } from '@/store/pinia'
 import { userCollect } from '@/api/user'
 import SlideRowList from '@/components/slide/SlideRowList.vue'
@@ -418,11 +277,7 @@ export default {
           total: -1,
           pageNo: 0
         },
-        private: {
-          list: [],
-          total: -1,
-          pageNo: 0
-        },
+
         like: {
           list: [],
           total: -1,
@@ -443,9 +298,7 @@ export default {
       initSlideHeight: 0,
       loadings: {
         loading0: false,
-        loading1: false,
-        loading2: false,
-        loading3: false
+        loading2: false
       },
       tempScroll: false,
       acceleration: 1.2,
@@ -497,9 +350,7 @@ export default {
     },
     setLoadingFalse() {
       this.loadings.loading0 = false
-      this.loadings.loading1 = false
       this.loadings.loading2 = false
-      this.loadings.loading3 = false
     },
     click(e) {
       if (this.baseActiveIndex === 0) return
@@ -510,7 +361,7 @@ export default {
     },
     async getScrollAreaHeight(index = this.contentIndex) {
       let scrollAreaHeight = 0
-      if (index === 3) {
+      if (index === 2) {
         nextTick(async () => {
           scrollAreaHeight = this.$refs.collect.clientHeight + 60 + 40
         })
@@ -525,9 +376,6 @@ export default {
           case 1:
             scrollAreaHeight += 60 + 40
             break
-          case 2:
-            scrollAreaHeight += 60 + 40
-            break
         }
       }
       return scrollAreaHeight
@@ -536,7 +384,7 @@ export default {
       // debugger
       if (this.loadings['loading' + newVal]) return
       let videoOb = this.videos[Object.keys(this.videos)[newVal]]
-      if (newVal === 3) {
+      if (newVal === 2) {
         if (videoOb.video.total === -1) {
           this.loadings['loading' + newVal] = true
           let res = await userCollect()
@@ -556,13 +404,6 @@ export default {
               if (res.success) this.videos.my = res.data
               break
             case 1:
-              res = await privateVideo({
-                pageNo: this.videos.private.pageNo,
-                pageSize: this.pageSize
-              })
-              if (res.success) this.videos.private = res.data
-              break
-            case 2:
               res = await likeVideo({
                 pageNo: this.videos.like.pageNo,
                 pageSize: this.pageSize
@@ -600,7 +441,7 @@ export default {
       console.log('到底了')
       let videoOb = this.videos[Object.keys(this.videos)[this.contentIndex]]
 
-      if (this.contentIndex !== 3 && videoOb.total > videoOb.list.length) {
+      if (this.contentIndex !== 2 && videoOb.total > videoOb.list.length) {
         videoOb.pageNo++
         this.loadings['loading' + this.contentIndex] = true
         let res
@@ -612,18 +453,12 @@ export default {
             })
             break
           case 1:
-            res = await privateVideo({
-              pageNo: videoOb.pageNo,
-              pageSize: this.pageSize
-            })
-            break
-          case 2:
             res = await likeVideo({
               pageNo: videoOb.pageNo,
               pageSize: this.pageSize
             })
             break
-          case 3:
+          case 2:
             res = await userCollect({
               pageNo: videoOb.pageNo,
               pageSize: this.pageSize
