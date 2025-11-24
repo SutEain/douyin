@@ -46,7 +46,7 @@
           <dy-back direction="right"></dy-back>
         </div>
       </div>
-      <div class="row">
+      <div class="row" @click="$nav('/me/right-menu/language-setting')">
         <div class="left">
           <img src="@/assets/img/icon/newicon/left_menu/about.png" alt="" />
           <span>语言设置</span>

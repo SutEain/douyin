@@ -92,6 +92,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/me/rightMenu/Setting.vue')
   },
   {
+    path: '/me/right-menu/language-setting',
+    component: () => import('@/pages/me/rightMenu/LanguageSetting.vue')
+  },
+  {
     path: '/me/collect/music-collect',
     component: () => import('@/pages/me/collect/MusicCollect.vue')
   },
