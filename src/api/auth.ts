@@ -21,8 +21,32 @@ const getAppServerBase = () => {
  * @param initData Telegram WebApp initData
  */
 export async function loginWithTelegram(initData: string): Promise<TelegramLoginResponse> {
+  console.log('[loginWithTelegram] 🚀 开始登录流程')
+
+  // 检查环境变量
+  const hasAnonKey = !!import.meta.env.VITE_SUPABASE_ANON_KEY
+  const hasAppServerUrl = !!import.meta.env.VITE_APP_SERVER_URL
+  const hasSupabaseUrl = !!import.meta.env.VITE_SUPABASE_URL
+
+  console.log('[loginWithTelegram] 📝 环境变量检查:', {
+    hasAnonKey,
+    hasAppServerUrl,
+    hasSupabaseUrl,
+    isDev: import.meta.env.DEV
+  })
+
+  if (!hasAnonKey) {
+    console.error('[loginWithTelegram] ❌ 缺少 VITE_SUPABASE_ANON_KEY 环境变量')
+    throw new Error('缺少必要的配置信息，请联系管理员')
+  }
+
   const base = getAppServerBase()
-  const response = await fetch(`${base}/auth/tg-login`, {
+  console.log('[loginWithTelegram] 🌐 API 地址:', base)
+
+  const url = `${base}/auth/tg-login`
+  console.log('[loginWithTelegram] 📡 发送登录请求:', url)
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -31,23 +55,31 @@ export async function loginWithTelegram(initData: string): Promise<TelegramLogin
     body: JSON.stringify({ initData })
   })
 
+  console.log('[loginWithTelegram] 📥 响应状态:', response.status, response.statusText)
+
   const result = await response.json()
+  console.log('[loginWithTelegram] 📦 响应数据:', result)
 
   if (result.code !== 0) {
+    console.error('[loginWithTelegram] ❌ 登录失败:', result.msg)
     throw new Error(result.msg || 'Login failed')
   }
 
   // 设置 Supabase session
   const { access_token, refresh_token } = result.data
+  console.log('[loginWithTelegram] 🔑 设置 Session...')
+
   const { error } = await supabase.auth.setSession({
     access_token,
     refresh_token
   })
-  
+
   if (error) {
+    console.error('[loginWithTelegram] ❌ Session 设置失败:', error)
     throw new Error('Failed to set session')
   }
 
+  console.log('[loginWithTelegram] ✅ 登录成功！')
   return result.data
 }
 

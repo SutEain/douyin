@@ -8,6 +8,21 @@
       <div v-if="errorMessage" class="error-box">
         <p class="error-icon">⚠️</p>
         <p class="error-text">{{ errorMessage }}</p>
+
+        <!-- 环境变量检查提示 -->
+        <div v-if="envCheck" class="env-info">
+          <p class="env-title">🔍 配置检查：</p>
+          <div class="env-item" :class="{ missing: !envCheck.hasAnonKey }">
+            {{ envCheck.hasAnonKey ? '✅' : '❌' }} ANON_KEY
+          </div>
+          <div class="env-item" :class="{ missing: !envCheck.hasAppServerUrl }">
+            {{ envCheck.hasAppServerUrl ? '✅' : '❌' }} APP_SERVER_URL
+          </div>
+          <div class="env-item" :class="{ missing: !envCheck.hasSupabaseUrl }">
+            {{ envCheck.hasSupabaseUrl ? '✅' : '❌' }} SUPABASE_URL
+          </div>
+        </div>
+
         <button @click="retry" class="retry-btn">重试</button>
       </div>
     </div>
@@ -24,6 +39,11 @@ const router = useRouter()
 const baseStore = useBaseStore()
 const isLoading = ref(true)
 const errorMessage = ref('')
+const envCheck = ref<{
+  hasAnonKey: boolean
+  hasAppServerUrl: boolean
+  hasSupabaseUrl: boolean
+} | null>(null)
 
 onMounted(() => {
   initTelegramLogin()
@@ -31,6 +51,15 @@ onMounted(() => {
 
 const initTelegramLogin = async () => {
   try {
+    // ✅ 检查环境变量
+    envCheck.value = {
+      hasAnonKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+      hasAppServerUrl: !!import.meta.env.VITE_APP_SERVER_URL,
+      hasSupabaseUrl: !!import.meta.env.VITE_SUPABASE_URL
+    }
+
+    console.log('[TelegramLogin] 📝 环境变量检查:', envCheck.value)
+
     // ✅ 等待 Telegram WebApp 准备就绪
     const tg = await waitForTelegram()
 
@@ -102,15 +131,18 @@ const waitForTelegram = (): Promise<any> => {
 }
 
 const getInitData = (): string | null => {
+  console.log('[TelegramLogin] 🔍 获取 initData...')
+
   // 优先使用早期捕获的 initData
   try {
     // @ts-ignore
     if (window.__TG_INIT_DATA__?.raw) {
+      console.log('[TelegramLogin] ✅ 从 __TG_INIT_DATA__ 获取到 initData')
       // @ts-ignore
       return window.__TG_INIT_DATA__.raw
     }
   } catch (e) {
-    // Ignore
+    console.warn('[TelegramLogin] __TG_INIT_DATA__ 不可用:', e)
   }
 
   // 从 Telegram WebApp 获取
@@ -118,12 +150,19 @@ const getInitData = (): string | null => {
     // @ts-ignore
     const tg = window.Telegram?.WebApp
     if (tg?.initData) {
+      console.log('[TelegramLogin] ✅ 从 Telegram.WebApp 获取到 initData')
+      console.log('[TelegramLogin] initData 长度:', tg.initData.length)
+      console.log('[TelegramLogin] initData 预览:', tg.initData.substring(0, 100) + '...')
       return tg.initData
+    } else {
+      console.warn('[TelegramLogin] ⚠️ Telegram.WebApp.initData 为空')
+      console.log('[TelegramLogin] Telegram.WebApp 对象:', tg)
     }
   } catch (e) {
-    // Ignore
+    console.error('[TelegramLogin] ❌ 获取 Telegram.WebApp 失败:', e)
   }
 
+  console.error('[TelegramLogin] ❌ 无法获取 initData')
   return null
 }
 
@@ -191,9 +230,34 @@ const retry = () => {
 
     .error-text {
       font-size: 16px;
-      margin: 0 0 25px 0;
+      margin: 0 0 20px 0;
       opacity: 0.9;
       line-height: 1.5;
+    }
+
+    .env-info {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 10px;
+      padding: 15px;
+      margin: 0 0 20px 0;
+      text-align: left;
+      font-size: 14px;
+
+      .env-title {
+        font-weight: 600;
+        margin: 0 0 10px 0;
+        text-align: center;
+      }
+
+      .env-item {
+        padding: 5px 0;
+        opacity: 0.9;
+
+        &.missing {
+          color: #ff6b6b;
+          font-weight: 600;
+        }
+      }
     }
 
     .retry-btn {
