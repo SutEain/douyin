@@ -45,9 +45,8 @@
       }
     </script>
     <!-- Telegram WebApp Script (Telegram 会自动注入，这里作为备用) -->
+    <!-- ✅ 在 Telegram 环境中预加载 Telegram WebApp 脚本 -->
     <script>
-      // ✅ 在 Telegram 环境中，同步加载 Telegram WebApp 脚本
-      // 这样确保脚本在 Vue 应用初始化前就已经加载完成
       ;(function () {
         const url = window.location.href
         const hasTgData =
@@ -58,10 +57,19 @@
           /Telegram/i.test(navigator.userAgent) || document.referrer.includes('telegram.org')
 
         if ((hasTgData || isTelegram) && !window.Telegram?.WebApp) {
-          // ✅ 使用 document.write 同步加载脚本（确保在页面解析时立即加载）
-          document.write(
-            '<scr' + 'ipt src="https://telegram.org/js/telegram-web-app.js"><\/scr' + 'ipt>'
-          )
+          // ✅ 使用 preload + async script 避免 document.write 警告
+          // Preload 提示浏览器尽早加载资源
+          const preload = document.createElement('link')
+          preload.rel = 'preload'
+          preload.as = 'script'
+          preload.href = 'https://telegram.org/js/telegram-web-app.js'
+          document.head.appendChild(preload)
+
+          // 立即插入 script 标签（不使用 async 确保顺序执行）
+          const script = document.createElement('script')
+          script.src = 'https://telegram.org/js/telegram-web-app.js'
+          // 不设置 async，确保在页面解析时同步加载
+          document.head.appendChild(script)
         }
       })()
     </script>
