@@ -60,9 +60,16 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
+  console.log('\n========== [深链接调试] handleVideoFeed START ==========')
+  console.log('[Feed] 完整请求URL:', req.url)
+  console.log('[Feed] 解析参数:', { pageNo, pageSize, from, to })
+  console.log('[Feed] 用户ID:', user?.id || 'anonymous')
+
   // 🎯 检查是否有深链接视频ID
   const startVideoId = url.searchParams.get('start_video_id')
-  console.log('[app-server][Feed] 请求参数:', { pageNo, pageSize, startVideoId })
+  console.log('[Feed] 深链接视频ID:', startVideoId || '无')
+  console.log('[Feed] 是否首次加载:', pageNo === 0)
+  console.log('[Feed] 是否触发深链接逻辑:', pageNo === 0 && !!startVideoId)
 
   let startVideo: any = null
   const adjustedFrom = from
@@ -70,7 +77,8 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
 
   // 🎯 如果是首次加载（pageNo=0）且有 start_video_id
   if (pageNo === 0 && startVideoId) {
-    console.log('[app-server][Feed] 🎯 检测到深链接视频ID:', startVideoId)
+    console.log('\n[深链接] ========== 步骤1: 获取深链接视频 ==========')
+    console.log('[深链接] 目标视频ID:', startVideoId)
 
     // 获取深链接视频
     const { data: startRow, error: startError } = await supabaseAdmin
@@ -81,26 +89,54 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
       .maybeSingle()
 
     if (startError) {
-      console.error('[app-server][Feed] 获取深链接视频失败:', startError)
+      console.error('[深链接] ❌ 查询失败:', {
+        错误代码: startError.code,
+        错误消息: startError.message,
+        详情: startError.details
+      })
     } else if (startRow) {
-      console.log('[app-server][Feed] ✅ 获取到深链接视频:', startRow.description)
+      console.log('[深链接] ✅ 查询成功:', {
+        视频ID: startRow.id,
+        标题: startRow.description?.substring(0, 30) + '...',
+        状态: startRow.status,
+        作者ID: startRow.user_id,
+        创建时间: startRow.created_at
+      })
       startVideo = startRow
 
       // 🎯 调整推荐视频的数量：总共返回 pageSize 个，深链接占1个，推荐占 pageSize-1 个
       adjustedTo = from + pageSize - 2 // -1 是因为 range 包含结束位置，再 -1 是因为深链接占1个
-      console.log('[app-server][Feed] 调整推荐视频范围: from=', adjustedFrom, 'to=', adjustedTo)
+      console.log('[深链接] 调整推荐视频范围:', {
+        原始范围: `${from}-${to}`,
+        调整后范围: `${adjustedFrom}-${adjustedTo}`,
+        原因: '深链接占1个位置'
+      })
     } else {
-      console.log('[app-server][Feed] ⚠️ 深链接视频不存在或未发布')
+      console.log('[深链接] ⚠️ 视频不存在或未发布:', {
+        视频ID: startVideoId,
+        可能原因: ['ID不存在', '状态不是published', '已被删除']
+      })
     }
   }
+
+  console.log('\n[推荐视频] ========== 步骤2: 查询推荐视频 ==========')
 
   // 🎯 构建查询，如果有深链接视频则排除它（避免重复）
   let query = supabaseAdmin.from('videos').select('*', { count: 'exact' }).eq('status', 'published')
 
   if (startVideo) {
-    console.log('[app-server][Feed] 🎯 排除深链接视频ID，避免重复:', startVideoId)
+    console.log('[推荐视频] 🎯 排除深链接视频，避免重复:', startVideoId)
     query = query.neq('id', startVideoId)
+  } else {
+    console.log('[推荐视频] 无需排除，正常查询')
   }
+
+  console.log('[推荐视频] 查询条件:', {
+    状态: 'published',
+    排除ID: startVideo ? startVideoId : '无',
+    排序: 'is_top desc, created_at desc',
+    范围: `${adjustedFrom}-${adjustedTo}`
+  })
 
   const {
     data: rows,
@@ -112,20 +148,50 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     .range(adjustedFrom, adjustedTo)
 
   if (videoError) {
-    console.error('[app-server] Load feed failed:', videoError)
+    console.error('[推荐视频] ❌ 查询失败:', {
+      错误代码: videoError.code,
+      错误消息: videoError.message,
+      详情: videoError.details
+    })
     return errorResponse('Failed to load feed', 1, 500)
   }
 
-  // 🎯 合并深链接视频和推荐视频
-  const allRows = startVideo ? [startVideo, ...(rows ?? [])] : (rows ?? [])
-  console.log('[app-server][Feed] 视频列表:', {
-    有深链接: !!startVideo,
-    推荐视频数: rows?.length || 0,
-    总数: allRows.length
+  console.log('[推荐视频] ✅ 查询成功:', {
+    返回数量: rows?.length || 0,
+    总数: count,
+    第一个ID: rows?.[0]?.id || '无',
+    最后一个ID: rows?.[rows.length - 1]?.id || '无'
   })
 
+  console.log('\n[数据合并] ========== 步骤3: 合并数据 ==========')
+
+  // 🎯 合并深链接视频和推荐视频
+  const allRows = startVideo ? [startVideo, ...(rows ?? [])] : (rows ?? [])
+
+  console.log('[数据合并] 合并结果:', {
+    有深链接: !!startVideo,
+    深链接ID: startVideo?.id || '无',
+    推荐视频数: rows?.length || 0,
+    合并后总数: allRows.length
+  })
+
+  if (startVideo) {
+    const allIds = allRows.map((r) => r.id)
+    const hasDuplicate = new Set(allIds).size !== allIds.length
+    console.log('[数据合并] 去重检查:', {
+      总ID数: allIds.length,
+      唯一ID数: new Set(allIds).size,
+      是否有重复: hasDuplicate ? '❌ 有重复!' : '✅ 无重复'
+    })
+    if (hasDuplicate) {
+      console.warn('[数据合并] ⚠️ 检测到重复ID，列表:', allIds)
+    }
+  }
+
+  console.log('\n[用户标记] 开始附加用户标记...')
   await attachUserFlags(allRows, user?.id ?? null)
 
+  console.log('[数据映射] 开始映射视频数据...')
   const profileCache = new Map<string, any>()
   const list = []
   for (const row of allRows) {
@@ -137,7 +203,23 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     }
   }
 
-  console.log('[app-server][Feed] 返回视频列表，第一个视频ID:', list[0]?.aweme_id)
+  console.log('[数据映射] 映射完成:', {
+    原始数据: allRows.length,
+    映射成功: list.length,
+    映射失败: allRows.length - list.length
+  })
+
+  console.log('\n[最终返回] ========== 返回数据给前端 ==========')
+  console.log('[最终返回] 返回结构:', {
+    list长度: list.length,
+    total: count ?? 0,
+    pageNo,
+    pageSize,
+    第一个视频ID: list[0]?.aweme_id || '无',
+    第一个视频标题: list[0]?.desc?.substring(0, 30) || '无',
+    前3个视频ID: list.slice(0, 3).map((v) => v.aweme_id)
+  })
+  console.log('========== [深链接调试] handleVideoFeed END ==========\n')
 
   return successResponse({
     list,
