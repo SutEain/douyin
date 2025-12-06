@@ -38,6 +38,7 @@
           x5-video-player-type="h5-page"
           :muted="slot.muted"
           @play="onPlay(slot)"
+          @playing="onPlaying(slot)"
           @pause="onPause(slot)"
           @error="onError(slot)"
           @click="togglePlay(slot)"
@@ -854,8 +855,7 @@ function onPlay(slot: SlotState) {
     isCurrent: slot.role === 'current'
   })
 
-  // 🎯 视频开始播放，隐藏 poster
-  slot.isPlaying = true
+  // 🎯 onPlay 不隐藏 poster，等待 onPlaying 事件
 
   if (slot.role === 'current') {
     isPlaying.value = true
@@ -873,6 +873,12 @@ function onPlay(slot: SlotState) {
   }
 }
 
+// 🎯 视频真正开始播放（有画面输出）
+function onPlaying(slot: SlotState) {
+  // 🎯 视频真正播放时，隐藏 poster
+  slot.isPlaying = true
+}
+
 function onPause(slot: SlotState) {
   console.log('[视频事件] onPause', {
     slotKey: slot.key,
@@ -883,8 +889,7 @@ function onPause(slot: SlotState) {
     isCurrent: slot.role === 'current'
   })
 
-  // 🎯 视频暂停，显示 poster
-  slot.isPlaying = false
+  // 🎯 暂停时不显示 poster（避免暂停时出现缩略图）
 
   if (slot.role === 'current') {
     isPlaying.value = false
@@ -1104,7 +1109,7 @@ defineExpose({
     left: 0;
     width: 100%;
     height: 100%;
-    background-size: cover;
+    background-size: contain; // 🎯 改为 contain，保持原始比例
     background-position: center;
     background-repeat: no-repeat;
     background-color: #000;
