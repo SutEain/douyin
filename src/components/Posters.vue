@@ -7,11 +7,14 @@
           <Icon icon="icon-park-outline:like" />
           <span>{{ _formatNumber(i.statistics.digg_count) }}</span>
         </div>
-        <div class="top" v-if="i.is_top">置顶</div>
-        <!-- ✅ 草稿标签 (status = draft 或 ready) -->
-        <div class="draft" v-if="i.status === 'draft' || i.status === 'ready'">草稿</div>
-        <!-- ✅ 私密标签 (is_private = true) -->
-        <div class="private" v-if="i.is_private">私密</div>
+        <!-- 🎯 只在 showLabels=true 时显示标签 -->
+        <template v-if="showLabels">
+          <div class="top" v-if="i.is_top">置顶</div>
+          <!-- ✅ 草稿标签 (status = draft 或 ready) -->
+          <div class="draft" v-if="i.status === 'draft' || i.status === 'ready'">草稿</div>
+          <!-- ✅ 私密标签 (is_private = true) -->
+          <div class="private" v-if="i.is_private">私密</div>
+        </template>
       </template>
       <div class="date" v-if="mode === 'date'">
         <div class="day">{{ getDay(i.create_time) }}</div>
@@ -42,6 +45,10 @@ const props = defineProps({
   mode: {
     type: String,
     default: 'normal' //date,music
+  },
+  showLabels: {
+    type: Boolean,
+    default: false // 🎯 默认不显示草稿/置顶/私密标签
   }
 })
 
@@ -122,7 +129,7 @@ function getMonth(time) {
     padding: 2rem 3rem;
     border-radius: 2rem;
   }
-  
+
   .top,
   .music {
     background: gold;
@@ -130,16 +137,16 @@ function getMonth(time) {
     top: 7rem;
     left: 7rem;
   }
-  
+
   .draft {
-    background: rgba(255, 165, 0, 0.9);  // 橙色背景 - 草稿
+    background: rgba(255, 165, 0, 0.9); // 橙色背景 - 草稿
     color: white;
     top: 7rem;
     right: 7rem;
   }
-  
+
   .private {
-    background: rgba(128, 128, 128, 0.9);  // 灰色背景 - 私密
+    background: rgba(128, 128, 128, 0.9); // 灰色背景 - 私密
     color: white;
     bottom: 35rem;
     left: 7rem;

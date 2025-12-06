@@ -8,19 +8,23 @@
         name="main"
         v-model:index="state.navIndex"
       />
-      
+
       <!-- ✅ 视频内容区域（只有推荐） -->
       <div class="video-content">
         <Slide4 :active="true" />
       </div>
-      
+
       <!-- 底部导航栏 -->
       <BaseFooter :init-tab="1" />
 
       <PlayFeedback v-model="state.showPlayFeedback" />
-      <DouyinCode v-if="state.currentItem" :item="state.currentItem" v-model="state.showDouyinCode" />
+      <DouyinCode
+        v-if="state.currentItem"
+        :item="state.currentItem"
+        v-model="state.showDouyinCode"
+      />
       <ShareTo v-model:type="state.shareType" />
-      
+
       <FollowSetting
         v-if="state.currentItem"
         v-model:currentItem="state.currentItem"
@@ -53,7 +57,7 @@
         :currentItem="state.currentItem"
         :active="state.showUserPanel"
         @back="handleCloseUserPanel"
-        @update:currentItem="(item) => state.currentItem = item"
+        @update:currentItem="(item) => (state.currentItem = item)"
       />
       <!-- 评论弹窗 -->
       <Comment
@@ -130,23 +134,29 @@ const state = reactive({
 })
 
 // 监听 navIndex 变化，暂停其他 tab 的视频
-watch(() => state.navIndex, (newIndex, oldIndex) => {
-  if (newIndex !== oldIndex) {
-    console.log(`[Home] 切换 tab: ${oldIndex} -> ${newIndex}`)
-    // 暂停所有视频，让新 tab 自己控制播放
-    videoManager.pauseAll()
-  }
-})
-
-// 监听 videoStore 的 currentVideo 变化，同步到 state.currentItem
-watch(() => videoStore.currentVideo, (newVideo) => {
-  if (newVideo) {
-    state.currentItem = {
-      ...newVideo,
-      aweme_list: (newVideo as any).aweme_list || []
+watch(
+  () => state.navIndex,
+  (newIndex, oldIndex) => {
+    if (newIndex !== oldIndex) {
+      console.log(`[Home] 切换 tab: ${oldIndex} -> ${newIndex}`)
+      // 暂停所有视频，让新 tab 自己控制播放
+      videoManager.pauseAll()
     }
   }
-})
+)
+
+// 监听 videoStore 的 currentVideo 变化，同步到 state.currentItem
+watch(
+  () => videoStore.currentVideo,
+  (newVideo) => {
+    if (newVideo) {
+      state.currentItem = {
+        ...newVideo,
+        aweme_list: (newVideo as any).aweme_list || []
+      }
+    }
+  }
+)
 
 // ========== Methods ==========
 function handleCommentSuccess() {
@@ -161,10 +171,10 @@ function handleCommentSuccess() {
 // 打开用户资料页
 function handleGoUserInfo() {
   console.log('[Home] 🎯 handleGoUserInfo 被调用了！')
-  
+
   // 优先使用 videoStore.currentVideo，因为它是实时的
   const currentVideo = videoStore.currentVideo || state.currentItem
-  
+
   if (currentVideo?.author) {
     const author = currentVideo.author
     console.log('[Home] 打开用户资料页', { author })
@@ -183,14 +193,59 @@ function handleCloseUserPanel() {
   state.showUserPanel = false
 }
 
+// 🎯 检查深链接参数
+async function checkDeepLink() {
+  const videoId = baseStore.startVideoId
+  if (!videoId) {
+    console.log('[DeepLink] 无深链接参数')
+    return
+  }
+
+  console.log('[DeepLink] 检测到 video_id:', videoId)
+
+  try {
+    // 获取视频详情
+    const { getVideoById } = await import('@/api/videos')
+    const res = await getVideoById(videoId)
+
+    if (res.success && res.data) {
+      console.log('[DeepLink] ✅ 获取视频成功，跳转到详情页')
+
+      // 保存视频数据到 store
+      baseStore.routeData = {
+        items: [res.data],
+        index: 0,
+        item: res.data
+      }
+
+      // 跳转到视频详情页
+      router.push({ path: '/video-detail' })
+
+      // 清空启动参数（避免重复跳转）
+      baseStore.clearStartVideoId()
+    } else {
+      console.error('[DeepLink] ❌ 获取视频失败:', res.message)
+      _notice('视频不存在或已删除')
+      baseStore.clearStartVideoId()
+    }
+  } catch (error) {
+    console.error('[DeepLink] ❌ 错误:', error)
+    _notice('加载视频失败')
+    baseStore.clearStartVideoId()
+  }
+}
+
 // ========== 生命周期 ==========
 onMounted(() => {
   console.log('[Home] mounted')
-  
+
   // 监听点击头像事件
   bus.on(EVENT_KEY.GO_USERINFO, handleGoUserInfo)
   console.log('[Home] ✅ 已注册 GO_USERINFO 监听器', EVENT_KEY.GO_USERINFO)
-  
+
+  // 🎯 检查深链接参数
+  checkDeepLink()
+
   // 首次打开时提示打开声音
   if (!sessionStorage.getItem('sound-tip-shown')) {
     setTimeout(() => {
@@ -236,7 +291,7 @@ onDeactivated(() => {
   width: 100%;
   height: calc(var(--vh, 1vh) * 100 - var(--footer-height));
   overflow: hidden;
-  
+
   /* 让每个 tab 的内容占满整个区域 */
   > * {
     position: absolute;

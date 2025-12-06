@@ -18,11 +18,15 @@ export async function handleVideoMy(req: Request): Promise<Response> {
   const userValue = profile.tg_user_id ?? profile.id
 
   // ✅ 只返回已发布和草稿状态的视频（不包括 processing）
-  const { data: rows, error: videoError, count } = await supabaseAdmin
+  const {
+    data: rows,
+    error: videoError,
+    count
+  } = await supabaseAdmin
     .from('videos')
     .select('*', { count: 'exact' })
     .eq(userField, userValue)
-    .in('status', ['draft', 'ready', 'published'])  // ✅ 排除 processing
+    .in('status', ['draft', 'ready', 'published']) // ✅ 排除 processing
     .order('is_top', { ascending: false })
     .order('created_at', { ascending: false })
     .range(from, to)
@@ -56,7 +60,11 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  const { data: rows, error: videoError, count } = await supabaseAdmin
+  const {
+    data: rows,
+    error: videoError,
+    count
+  } = await supabaseAdmin
     .from('videos')
     .select('*', { count: 'exact' })
     .eq('status', 'published')
@@ -99,7 +107,11 @@ export async function handleVideoAuthor(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  const { data: rows, error: videoError, count } = await supabaseAdmin
+  const {
+    data: rows,
+    error: videoError,
+    count
+  } = await supabaseAdmin
     .from('videos')
     .select('*', { count: 'exact' })
     .eq('status', 'published')
@@ -133,17 +145,91 @@ export async function handleVideoAuthor(req: Request): Promise<Response> {
   })
 }
 
+// 🎯 根据 video_id 获取单个视频详情
+export async function handleVideoDetail(req: Request): Promise<Response> {
+  const url = new URL(req.url)
+  const videoId = url.searchParams.get('video_id')
+  if (!videoId) {
+    throw new HttpError('Missing video_id', 400)
+  }
+  const { user } = await tryGetAuth(req)
+
+  const { data: row, error: videoError } = await supabaseAdmin
+    .from('videos')
+    .select('*')
+    .eq('id', videoId)
+    .eq('status', 'published')
+    .maybeSingle()
+
+  if (videoError) {
+    console.error('[app-server] Load video failed:', videoError)
+    return errorResponse('Failed to load video', 1, 500)
+  }
+
+  if (!row) {
+    return errorResponse('Video not found', 1, 404)
+  }
+
+  await attachUserFlags([row], user?.id ?? null)
+  const authorProfile = await getVideoAuthorProfile(row, new Map())
+  const mapped = await mapVideoRow(row, authorProfile)
+
+  if (!mapped) {
+    return errorResponse('Failed to process video', 1, 500)
+  }
+
+  applyRowFlags(mapped, row)
+
+  return successResponse(mapped)
+}
+
 export async function handleVideoLikes(req: Request): Promise<Response> {
-  const { user } = await requireAuth(req)
+  const { user } = await tryGetAuth(req)
   const url = new URL(req.url)
   const { pageNo, pageSize, from, to } = parsePagination(url)
 
-  const { data: likeRows, error, count } = await supabaseAdmin
+  // 🎯 支持查询指定用户的喜欢列表
+  const targetUserId = url.searchParams.get('user_id')
+
+  // 如果没有指定user_id，则必须登录，查询自己的
+  if (!targetUserId) {
+    if (!user) {
+      throw new HttpError('Missing user_id or authentication', 401)
+    }
+    // 查询自己的喜欢列表，无需隐私检查
+    return await queryUserLikes(user.id, user.id, { pageNo, pageSize, from, to })
+  }
+
+  // 查询别人的喜欢列表，需要检查隐私设置
+  const targetProfile = await getProfileById(targetUserId)
+  if (!targetProfile || targetProfile.show_like !== true) {
+    // 如果隐私设置不允许，返回空列表
+    return successResponse({
+      list: [],
+      total: 0,
+      pageNo,
+      pageSize
+    })
+  }
+
+  return await queryUserLikes(targetUserId, user?.id ?? null, { pageNo, pageSize, from, to })
+}
+
+async function queryUserLikes(
+  targetUserId: string,
+  currentUserId: string | null,
+  pagination: { pageNo: number; pageSize: number; from: number; to: number }
+): Promise<Response> {
+  const {
+    data: likeRows,
+    error,
+    count
+  } = await supabaseAdmin
     .from('video_likes')
     .select('video_id, created_at', { count: 'exact' })
-    .eq('user_id', user.id)
+    .eq('user_id', targetUserId)
     .order('created_at', { ascending: false })
-    .range(from, to)
+    .range(pagination.from, pagination.to)
 
   if (error) {
     console.error('[app-server] Load liked videos failed:', error)
@@ -165,7 +251,7 @@ export async function handleVideoLikes(req: Request): Promise<Response> {
     videos = videoIds.map((id) => videoMap.get(id)).filter(Boolean)
   }
 
-  await attachUserFlags(videos, user.id)
+  await attachUserFlags(videos, currentUserId)
 
   const profileCache = new Map<string, any>()
   const list = []
@@ -182,8 +268,8 @@ export async function handleVideoLikes(req: Request): Promise<Response> {
   return successResponse({
     list,
     total: count ?? 0,
-    pageNo,
-    pageSize
+    pageNo: pagination.pageNo,
+    pageSize: pagination.pageSize
   })
 }
 
@@ -227,16 +313,52 @@ export async function handleVideoLike(req: Request): Promise<Response> {
 }
 
 export async function handleVideoCollections(req: Request): Promise<Response> {
-  const { user } = await requireAuth(req)
+  const { user } = await tryGetAuth(req)
   const url = new URL(req.url)
   const { pageNo, pageSize, from, to } = parsePagination(url)
 
-  const { data: collectionRows, error, count } = await supabaseAdmin
+  // 🎯 支持查询指定用户的收藏列表
+  const targetUserId = url.searchParams.get('user_id')
+
+  // 如果没有指定user_id，则必须登录，查询自己的
+  if (!targetUserId) {
+    if (!user) {
+      throw new HttpError('Missing user_id or authentication', 401)
+    }
+    // 查询自己的收藏列表，无需隐私检查
+    return await queryUserCollections(user.id, user.id, { pageNo, pageSize, from, to })
+  }
+
+  // 查询别人的收藏列表，需要检查隐私设置
+  const targetProfile = await getProfileById(targetUserId)
+  if (!targetProfile || targetProfile.show_collect !== true) {
+    // 如果隐私设置不允许，返回空列表
+    return successResponse({
+      list: [],
+      total: 0,
+      pageNo,
+      pageSize
+    })
+  }
+
+  return await queryUserCollections(targetUserId, user?.id ?? null, { pageNo, pageSize, from, to })
+}
+
+async function queryUserCollections(
+  targetUserId: string,
+  currentUserId: string | null,
+  pagination: { pageNo: number; pageSize: number; from: number; to: number }
+): Promise<Response> {
+  const {
+    data: collectionRows,
+    error,
+    count
+  } = await supabaseAdmin
     .from('video_collections')
     .select('video_id, created_at', { count: 'exact' })
-    .eq('user_id', user.id)
+    .eq('user_id', targetUserId)
     .order('created_at', { ascending: false })
-    .range(from, to)
+    .range(pagination.from, pagination.to)
 
   if (error) {
     console.error('[app-server] Load collected videos failed:', error)
@@ -258,7 +380,7 @@ export async function handleVideoCollections(req: Request): Promise<Response> {
     videos = videoIds.map((id) => videoMap.get(id)).filter(Boolean)
   }
 
-  await attachUserFlags(videos, user.id)
+  await attachUserFlags(videos, currentUserId)
 
   const profileCache = new Map<string, any>()
   const list = []
@@ -275,8 +397,8 @@ export async function handleVideoCollections(req: Request): Promise<Response> {
   return successResponse({
     list,
     total: count ?? 0,
-    pageNo,
-    pageSize
+    pageNo: pagination.pageNo,
+    pageSize: pagination.pageSize
   })
 }
 
@@ -318,4 +440,3 @@ export async function handleVideoCollect(req: Request): Promise<Response> {
     collect_count: video?.collect_count ?? 0
   })
 }
-

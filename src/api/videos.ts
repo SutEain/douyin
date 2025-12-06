@@ -43,11 +43,15 @@ export function authorVideos(userId: string, params?: { pageNo?: number; pageSiz
 }
 
 export function likeVideo(params?: any) {
-  return requestSupabaseVideoList(`${getAppServerBase()}/video/likes`, params, { requireAuth: true })
+  return requestSupabaseVideoList(`${getAppServerBase()}/video/likes`, params, {
+    requireAuth: true
+  })
 }
 
 export function collectedVideo(params?: any) {
-  return requestSupabaseVideoList(`${getAppServerBase()}/video/collections`, params, { requireAuth: true })
+  return requestSupabaseVideoList(`${getAppServerBase()}/video/collections`, params, {
+    requireAuth: true
+  })
 }
 
 export function privateVideo(params?: any, data?: any) {
@@ -65,7 +69,11 @@ export async function toggleVideoCollect(videoId: string, collected: boolean) {
   })
 }
 
-export async function videoComments(params: { videoId: string; pageNo?: number; pageSize?: number }) {
+export async function videoComments(params: {
+  videoId: string
+  pageNo?: number
+  pageSize?: number
+}) {
   try {
     const search = new URLSearchParams({
       video_id: params.videoId,
@@ -109,6 +117,21 @@ export async function getUserProfile(userId: string) {
   } catch (error: any) {
     console.error('[getUserProfile] 请求失败:', error)
     return { success: false, message: error?.message || '获取用户信息失败' }
+  }
+}
+
+// 🎯 根据 video_id 获取单个视频详情
+export async function getVideoById(videoId: string) {
+  try {
+    const data = await callAppServer(`/video/detail?video_id=${videoId}`, {
+      method: 'GET',
+      requireAuth: false,
+      includeAuthIfAvailable: true
+    })
+    return { success: true, data }
+  } catch (error: any) {
+    console.error('[getVideoById] 请求失败:', error)
+    return { success: false, message: error?.message || '获取视频失败' }
   }
 }
 

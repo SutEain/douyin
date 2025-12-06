@@ -110,6 +110,8 @@ export const useBaseStore = defineStore('base', {
       loading: false,
       routeData: null,
       users: [],
+      // 🎯 深链接：从 Telegram 启动参数传来的 video_id
+      startVideoId: null as string | null,
       userinfo: {
         nickname: '',
         desc: '',
@@ -166,6 +168,9 @@ export const useBaseStore = defineStore('base', {
   },
   actions: {
     async init() {
+      // 🎯 解析 Telegram 启动参数（深链接）
+      this.parseStartParam()
+
       // 优先从 Supabase 获取用户数据
       try {
         const { getCurrentProfile } = await import('@/api/auth')
@@ -196,6 +201,48 @@ export const useBaseStore = defineStore('base', {
       }
 
       // ✅ 不再调用 mock API，等待用户登录后获取真实数据
+    },
+    // 🎯 解析 Telegram 启动参数
+    parseStartParam() {
+      try {
+        // @ts-ignore
+        const tg = window.Telegram?.WebApp
+        if (!tg) {
+          console.log('[DeepLink] 非 Telegram 环境，跳过解析')
+          return
+        }
+
+        // 方式1: 从 start_param 获取（格式：video_id_abcd）
+        const startParam = tg.initDataUnsafe?.start_param
+        if (startParam) {
+          console.log('[DeepLink] 收到启动参数:', startParam)
+
+          // 解析格式：video_id_xxxxx
+          if (startParam.startsWith('video_')) {
+            const videoId = startParam.replace('video_', '')
+            this.startVideoId = videoId
+            console.log('[DeepLink] ✅ 解析到 video_id:', videoId)
+            return
+          }
+        }
+
+        // 方式2: 从 URL 参数获取（格式：?video_id=abcd）
+        const urlParams = new URLSearchParams(window.location.search)
+        const videoId = urlParams.get('video_id')
+        if (videoId) {
+          this.startVideoId = videoId
+          console.log('[DeepLink] ✅ 从 URL 解析到 video_id:', videoId)
+          return
+        }
+
+        console.log('[DeepLink] 未检测到 video_id 参数')
+      } catch (error) {
+        console.error('[DeepLink] 解析启动参数失败:', error)
+      }
+    },
+    // 🎯 清空启动参数（已使用）
+    clearStartVideoId() {
+      this.startVideoId = null
     },
     setUserinfo(val) {
       this.userinfo = { ...this.userinfo, ...val }

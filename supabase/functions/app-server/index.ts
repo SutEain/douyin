@@ -11,7 +11,8 @@ import {
   handleVideoFeed,
   handleVideoLike,
   handleVideoLikes,
-  handleVideoMy
+  handleVideoMy,
+  handleVideoDetail
 } from './routes/video.ts'
 import { handleVideoComments, handleVideoCreateComment } from './routes/comments.ts'
 import { handleFollowUser, handleGetUserProfile } from './routes/user.ts'
@@ -42,6 +43,10 @@ serve(async (req) => {
     }
     if (route === '/video/author' && method === 'GET') {
       return handleVideoAuthor(req)
+    }
+    // 🎯 获取单个视频详情
+    if (route === '/video/detail' && method === 'GET') {
+      return handleVideoDetail(req)
     }
     if (route === '/video/likes' && method === 'GET') {
       return handleVideoLikes(req)

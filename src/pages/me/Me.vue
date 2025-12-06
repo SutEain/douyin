@@ -134,14 +134,19 @@
         <SlideRowList name="videoList" v-model:active-index="state.contentIndex">
           <!-- Tab 0: 作品 -->
           <SlideItem>
-            <Posters v-if="state.videos.my.total !== -1" :list="state.videos.my.list" />
+            <Posters
+              v-if="state.videos.my.total !== -1"
+              :list="state.videos.my.list"
+              :showLabels="true"
+            />
             <Loading v-if="state.loadings.loading0" :is-full-screen="false" />
             <no-more v-else />
           </SlideItem>
 
           <!-- Tab 1: 喜欢 -->
           <SlideItem>
-            <div class="notice">
+            <!-- 🎯 根据隐私设置显示提示 -->
+            <div class="notice" v-if="userinfo.show_like === false">
               <img src="../../assets/img/icon/me/lock-gray.png" alt="" />
               <span>只有你能看到自己的喜欢列表</span>
             </div>
@@ -152,7 +157,8 @@
 
           <!-- Tab 2: 收藏 -->
           <SlideItem>
-            <div class="notice">
+            <!-- 🎯 根据隐私设置显示提示 -->
+            <div class="notice" v-if="userinfo.show_collect === false">
               <img src="../../assets/img/icon/me/lock-gray.png" alt="" />
               <span>只有你能看到自己的收藏列表</span>
             </div>

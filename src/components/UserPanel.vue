@@ -279,24 +279,40 @@
               </div>
             </SlideItem>
 
-            <!-- Tab 1: 喜欢（根据隐私设置显示） -->
+            <!-- Tab 1: 喜欢 -->
             <SlideItem v-if="shouldShowLikeTab">
               <div class="videos">
-                <Posters v-if="state.videos.like.list.length" :list="state.videos.like.list" />
-                <Loading :isFullScreen="false" v-else-if="state.loadings.like" />
-                <NoMore v-else />
+                <!-- 🎯 未公开提示 -->
+                <div class="privacy-notice" v-if="!isLikePublic">
+                  <img src="@/assets/img/icon/me/lock-gray.png" alt="" />
+                  <span>对方未公开喜欢列表</span>
+                </div>
+                <!-- 已公开，显示内容 -->
+                <template v-else>
+                  <Posters v-if="state.videos.like.list.length" :list="state.videos.like.list" />
+                  <Loading :isFullScreen="false" v-else-if="state.loadings.like" />
+                  <NoMore v-else />
+                </template>
               </div>
             </SlideItem>
 
-            <!-- Tab 2: 收藏（根据隐私设置显示） -->
+            <!-- Tab 2: 收藏 -->
             <SlideItem v-if="shouldShowCollectTab">
               <div class="videos">
-                <Posters
-                  v-if="state.videos.collect.list.length"
-                  :list="state.videos.collect.list"
-                />
-                <Loading :isFullScreen="false" v-else-if="state.loadings.collect" />
-                <NoMore v-else />
+                <!-- 🎯 未公开提示 -->
+                <div class="privacy-notice" v-if="!isCollectPublic">
+                  <img src="@/assets/img/icon/me/lock-gray.png" alt="" />
+                  <span>对方未公开收藏列表</span>
+                </div>
+                <!-- 已公开，显示内容 -->
+                <template v-else>
+                  <Posters
+                    v-if="state.videos.collect.list.length"
+                    :list="state.videos.collect.list"
+                  />
+                  <Loading :isFullScreen="false" v-else-if="state.loadings.collect" />
+                  <NoMore v-else />
+                </template>
               </div>
             </SlideItem>
           </SlideRowList>
@@ -426,31 +442,26 @@ const shouldShowFollowButton = computed(() => {
   return status === 0 || status === 1 || status === 2
 })
 
-// 🎯 根据隐私设置判断是否显示"喜欢"tab
-const shouldShowLikeTab = computed(() => {
+// 🎯 喜欢tab始终显示
+const shouldShowLikeTab = computed(() => true)
+
+// 🎯 收藏tab始终显示
+const shouldShowCollectTab = computed(() => true)
+
+// 🎯 判断对方是否公开了喜欢列表
+const isLikePublic = computed(() => {
   const author = props.currentItem?.author
-  // show_like 为 false 时隐藏，默认为 true（公开）
   return author?.show_like !== false
 })
 
-// 🎯 根据隐私设置判断是否显示"收藏"tab
-const shouldShowCollectTab = computed(() => {
+// 🎯 判断对方是否公开了收藏列表
+const isCollectPublic = computed(() => {
   const author = props.currentItem?.author
-  // show_collect 为 false 时隐藏，默认为 true（公开）
   return author?.show_collect !== false
 })
 
-// 🎯 动态生成可用的tab列表
-const availableTabs = computed(() => {
-  const tabs = ['作品']
-  if (shouldShowLikeTab.value) {
-    tabs.push('喜欢')
-  }
-  if (shouldShowCollectTab.value) {
-    tabs.push('收藏')
-  }
-  return tabs
-})
+// 🎯 固定tab列表
+const availableTabs = computed(() => ['作品', '喜欢', '收藏'])
 
 watch(
   () => props.active,
@@ -798,9 +809,10 @@ watch(
     // 根据可用tab动态判断
     const currentTab = availableTabs.value[newIndex]
 
-    if (currentTab === '喜欢' && shouldShowLikeTab.value) {
+    // 🎯 只有公开了才加载数据
+    if (currentTab === '喜欢' && isLikePublic.value) {
       await loadLikeVideos()
-    } else if (currentTab === '收藏' && shouldShowCollectTab.value) {
+    } else if (currentTab === '收藏' && isCollectPublic.value) {
       await loadCollectVideos()
     }
   }
@@ -971,6 +983,23 @@ onUnmounted(() => {
       img {
         height: 12rem;
         margin-right: 5rem;
+      }
+    }
+
+    // 🎯 隐私未公开提示
+    .privacy-notice {
+      font-size: 12rem;
+      height: 200rem;
+      color: var(--second-text-color);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 10rem;
+
+      img {
+        height: 40rem;
+        width: 40rem;
       }
     }
 
