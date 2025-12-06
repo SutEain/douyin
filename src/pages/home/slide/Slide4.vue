@@ -1,12 +1,12 @@
 <template>
   <SlideItem class="slide-item-class">
-    <div class="video-container" style="background: black;">
+    <div class="video-container" style="background: black">
       <!-- Loading 状态 -->
       <div v-if="store.loading && state.list.length === 0" class="loading-state">
         <div class="loading-spinner"></div>
         <p>加载中...</p>
       </div>
-      
+
       <!-- 视频列表 -->
       <VideoList
         v-else-if="state.list.length > 0"
@@ -16,7 +16,7 @@
         :autoplay="props.active"
         @load-more="loadMore"
       />
-      
+
       <!-- 空状态提示 -->
       <div v-else class="empty-state">
         <p>暂无更多视频</p>
@@ -48,12 +48,29 @@ const state = reactive({
 })
 
 async function loadMore() {
-  console.log('[Slide4] loadMore 被调用', { 
-    listLength: state.list.length, 
+  console.log('[Slide4] loadMore 被调用', {
+    listLength: state.list.length,
     totalSize: state.totalSize,
-    loading: store.loading 
+    loading: store.loading,
+    hasStartVideo: !!store.startVideoData
   })
-  
+
+  // 🎯 首次加载时，检查是否有深链接视频
+  if (state.list.length === 0 && store.startVideoData) {
+    console.log('[Slide4] 🎯 检测到深链接视频，插入到列表开头')
+    console.log('[Slide4] 深链接视频ID:', store.startVideoData.aweme_id)
+    console.log('[Slide4] 深链接视频标题:', store.startVideoData.desc)
+
+    // 将深链接视频插入到列表开头
+    state.list.push(store.startVideoData)
+
+    // 清空深链接数据（已使用）
+    store.clearStartVideoId()
+
+    console.log('[Slide4] ✅ 深链接视频已插入，继续加载更多视频')
+    // 继续加载更多视频
+  }
+
   if (store.loading) {
     console.log('[Slide4] 正在加载中，跳过')
     return
@@ -62,32 +79,32 @@ async function loadMore() {
     console.log('[Slide4] 已加载全部数据，跳过')
     return
   }
-  
+
   store.loading = true
-  console.log('[Slide4] 开始请求 API', { 
-    start: state.list.length, 
-    pageSize: state.pageSize 
+  console.log('[Slide4] 开始请求 API', {
+    start: state.list.length,
+    pageSize: state.pageSize
   })
-  
+
   const res = await recommendedVideo({
     start: state.list.length,
     pageSize: state.pageSize
   })
-  
-  console.log('[Slide4] API 响应', { 
-    success: res.success, 
-    total: res.data?.total, 
-    listLength: res.data?.list?.length 
+
+  console.log('[Slide4] API 响应', {
+    success: res.success,
+    total: res.data?.total,
+    listLength: res.data?.list?.length
   })
-  
+
   store.loading = false
-  
+
   if (res.success) {
     state.totalSize = res.data.total
     state.list.push(...res.data.list)
-    console.log('[Slide4] ✅ 数据加载成功', { 
-      totalSize: state.totalSize, 
-      currentLength: state.list.length 
+    console.log('[Slide4] ✅ 数据加载成功', {
+      totalSize: state.totalSize,
+      currentLength: state.list.length
     })
   } else {
     console.error('[Slide4] ❌ API 调用失败', res)
@@ -103,7 +120,7 @@ onMounted(() => {
 <style scoped lang="less">
 .slide-item-class {
   position: relative;
-  
+
   .video-container {
     position: absolute;
     top: 0;
@@ -111,7 +128,7 @@ onMounted(() => {
     right: 0;
     bottom: 0;
   }
-  
+
   .loading-state,
   .empty-state {
     width: 100%;
@@ -124,7 +141,7 @@ onMounted(() => {
     font-size: 16px;
     background: #000;
   }
-  
+
   .loading-spinner {
     width: 40px;
     height: 40px;
@@ -134,9 +151,11 @@ onMounted(() => {
     animation: spin 1s linear infinite;
     margin-bottom: 15px;
   }
-  
+
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 }
 </style>

@@ -224,25 +224,12 @@ async function checkDeepLink() {
       console.log('[DeepLink][Home] 作者:', res.data.author?.nickname)
       console.log('[DeepLink][Home] 完整视频数据:', JSON.stringify(res.data, null, 2))
 
-      // 保存视频数据到 store
-      const routeData = {
-        items: [res.data],
-        index: 0,
-        item: res.data
-      }
+      // 🎯 不跳转到 Detail，而是保存视频数据，让 Slide4 将其插入到流的第一个位置
+      console.log('[DeepLink][Home] 💾 保存视频数据到 store，等待 Slide4 加载')
+      baseStore.setStartVideoData(res.data)
 
-      console.log('[DeepLink][Home] 📝 保存到 routeData:', routeData)
-      baseStore.routeData = routeData
-
-      console.log('[DeepLink][Home] 🔄 跳转到视频详情页...')
-      // 跳转到视频详情页
-      router.push({ path: '/video-detail' })
-
-      // 清空启动参数（避免重复跳转）
-      console.log('[DeepLink][Home] 🧹 清空 startVideoId')
-      baseStore.clearStartVideoId()
-
-      console.log('[DeepLink][Home] ========== 深链接处理完成 ==========')
+      // 注意：不清空 startVideoId，让 Slide4 知道有深链接视频需要处理
+      console.log('[DeepLink][Home] ========== 深链接视频已准备好 ==========')
     } else {
       console.error('[DeepLink][Home] ❌ 获取视频失败')
       console.error('[DeepLink][Home] 错误信息:', res.message)

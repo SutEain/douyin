@@ -112,6 +112,8 @@ export const useBaseStore = defineStore('base', {
       users: [],
       // 🎯 深链接：从 Telegram 启动参数传来的 video_id
       startVideoId: null as string | null,
+      // 🎯 深链接：预加载的视频数据
+      startVideoData: null as any,
       userinfo: {
         nickname: '',
         desc: '',
@@ -168,8 +170,12 @@ export const useBaseStore = defineStore('base', {
   },
   actions: {
     async init() {
+      console.log('[Store] ========== init() 开始 ==========')
+
       // 🎯 解析 Telegram 启动参数（深链接）
+      console.log('[Store] 准备调用 parseStartParam()')
       this.parseStartParam()
+      console.log('[Store] parseStartParam() 调用完成，startVideoId:', this.startVideoId)
 
       // 优先从 Supabase 获取用户数据
       try {
@@ -271,9 +277,16 @@ export const useBaseStore = defineStore('base', {
         console.error('[DeepLink] 错误堆栈:', error.stack)
       }
     },
+    // 🎯 设置深链接视频数据
+    setStartVideoData(videoData: any) {
+      console.log('[Store] 设置深链接视频数据:', videoData?.aweme_id)
+      this.startVideoData = videoData
+    },
     // 🎯 清空启动参数（已使用）
     clearStartVideoId() {
+      console.log('[Store] 清空深链接参数')
       this.startVideoId = null
+      this.startVideoData = null
     },
     setUserinfo(val) {
       this.userinfo = { ...this.userinfo, ...val }
