@@ -229,19 +229,56 @@
       </div>
       -->
 
-        <div class="total" ref="total">
-          作品 {{ localAuthorStats.aweme_count }}
-          <img class="arrow" src="@/assets/img/icon/arrow-up-white.png" alt="" />
-        </div>
-        <div class="videos">
-          <Posters
-            v-if="props.currentItem.aweme_list && props.currentItem.aweme_list.length"
-            :list="props.currentItem.aweme_list"
-          ></Posters>
-          <Loading :isFullScreen="false" v-else-if="state.loadings.profile" />
-          <NoMore
-            v-else-if="props.currentItem.aweme_list && props.currentItem.aweme_list.length > 0"
+        <!-- 🎯 Tab 指示器 -->
+        <div class="tab-section" ref="total">
+          <Indicator
+            name="userPanelList"
+            :tabStyleWidth="`${100 / availableTabs.length}%`"
+            :tabTexts="availableTabs"
+            v-model:active-index="state.tabIndex"
           />
+        </div>
+
+        <!-- 🎯 Tab 内容区域 -->
+        <div class="tab-content">
+          <SlideRowList name="userPanelList" v-model:active-index="state.tabIndex">
+            <!-- Tab 0: 作品（始终显示） -->
+            <SlideItem>
+              <div class="videos">
+                <Posters
+                  v-if="props.currentItem.aweme_list && props.currentItem.aweme_list.length"
+                  :list="props.currentItem.aweme_list"
+                ></Posters>
+                <Loading :isFullScreen="false" v-else-if="state.loadings.profile" />
+                <NoMore
+                  v-else-if="
+                    props.currentItem.aweme_list && props.currentItem.aweme_list.length > 0
+                  "
+                />
+              </div>
+            </SlideItem>
+
+            <!-- Tab 1: 喜欢（根据隐私设置显示） -->
+            <SlideItem v-if="shouldShowLikeTab">
+              <div class="videos">
+                <Posters v-if="state.videos.like.list.length" :list="state.videos.like.list" />
+                <Loading :isFullScreen="false" v-else-if="state.loadings.like" />
+                <NoMore v-else />
+              </div>
+            </SlideItem>
+
+            <!-- Tab 2: 收藏（根据隐私设置显示） -->
+            <SlideItem v-if="shouldShowCollectTab">
+              <div class="videos">
+                <Posters
+                  v-if="state.videos.collect.list.length"
+                  :list="state.videos.collect.list"
+                />
+                <Loading :isFullScreen="false" v-else-if="state.loadings.collect" />
+                <NoMore v-else />
+              </div>
+            </SlideItem>
+          </SlideRowList>
         </div>
       </div>
     </div>
@@ -260,12 +297,21 @@ import {
   _stopPropagation
 } from '@/utils'
 import { useNav } from '@/utils/hooks/useNav'
+import Indicator from './slide/Indicator.vue'
+import SlideRowList from './slide/SlideRowList.vue'
+import SlideItem from './slide/SlideItem.vue'
 import Posters from '@/components/Posters.vue'
 import { DefaultUser } from '@/utils/const_var'
 import Loading from '@/components/Loading.vue'
 import NoMore from '@/components/NoMore.vue'
 import { useBaseStore } from '@/store/pinia'
-import { authorVideos, toggleFollowUser, getUserProfile } from '@/api/videos'
+import {
+  authorVideos,
+  toggleFollowUser,
+  getUserProfile,
+  likeVideo,
+  collectedVideo
+} from '@/api/videos'
 
 const $nav = useNav()
 const baseStore = useBaseStore()
@@ -306,10 +352,17 @@ const state = reactive({
   floatFixed: false,
   showFollowSetting: false,
   floatHeight: 52,
+  tabIndex: 0, // 🎯 当前tab索引
+  videos: {
+    like: { list: [], total: -1 },
+    collect: { list: [], total: -1 }
+  },
   loadings: {
     showRecommend: false,
     follow: false, // ✅ 关注/取消关注 loading
-    profile: false // ✅ 加载用户信息 loading
+    profile: false, // ✅ 加载用户信息 loading
+    like: false, // 🎯 加载喜欢列表 loading
+    collect: false // 🎯 加载收藏列表 loading
   },
   acceleration: 1.2,
   start: { x: 0, y: 0, time: 0 },
@@ -349,6 +402,32 @@ watch(
 const shouldShowFollowButton = computed(() => {
   const status = props.currentItem?.author?.follow_status
   return status === 0 || status === 1 || status === 2
+})
+
+// 🎯 根据隐私设置判断是否显示"喜欢"tab
+const shouldShowLikeTab = computed(() => {
+  const author = props.currentItem?.author
+  // show_like 为 false 时隐藏，默认为 true（公开）
+  return author?.show_like !== false
+})
+
+// 🎯 根据隐私设置判断是否显示"收藏"tab
+const shouldShowCollectTab = computed(() => {
+  const author = props.currentItem?.author
+  // show_collect 为 false 时隐藏，默认为 true（公开）
+  return author?.show_collect !== false
+})
+
+// 🎯 动态生成可用的tab列表
+const availableTabs = computed(() => {
+  const tabs = ['作品']
+  if (shouldShowLikeTab.value) {
+    tabs.push('喜欢')
+  }
+  if (shouldShowCollectTab.value) {
+    tabs.push('收藏')
+  }
+  return tabs
 })
 
 watch(
@@ -594,6 +673,102 @@ async function loadAuthorVideos() {
     console.error('[UserPanel] loadAuthorVideos 错误:', error)
   }
 }
+
+// 🎯 加载用户喜欢的视频列表
+async function loadLikeVideos() {
+  if (state.loadings.like || state.videos.like.total !== -1) {
+    return // 避免重复加载
+  }
+
+  try {
+    const authorId = props.currentItem.author?.user_id
+    if (!authorId) {
+      console.log('[UserPanel] ❌ authorId 不存在，无法加载喜欢列表')
+      return
+    }
+
+    console.log('[UserPanel] 📡 加载喜欢列表, authorId:', authorId)
+    state.loadings.like = true
+    const res = await likeVideo({ user_id: authorId, pageNo: 0, pageSize: 20 })
+
+    if (res?.success) {
+      const list = (res.data?.list || []).map((a: any) => ({
+        ...a,
+        author: a.author || props.currentItem.author
+      }))
+      state.videos.like.list = list
+      state.videos.like.total = res.data?.total || 0
+      console.log('[UserPanel] ✅ 喜欢列表加载成功, 视频数量:', list.length)
+    } else {
+      console.log('[UserPanel] ❌ 喜欢列表加载失败')
+      state.videos.like.total = 0
+    }
+  } catch (error) {
+    console.error('[UserPanel] loadLikeVideos 错误:', error)
+    state.videos.like.total = 0
+  } finally {
+    state.loadings.like = false
+  }
+}
+
+// 🎯 加载用户收藏的视频列表
+async function loadCollectVideos() {
+  if (state.loadings.collect || state.videos.collect.total !== -1) {
+    return // 避免重复加载
+  }
+
+  try {
+    const authorId = props.currentItem.author?.user_id
+    if (!authorId) {
+      console.log('[UserPanel] ❌ authorId 不存在，无法加载收藏列表')
+      return
+    }
+
+    console.log('[UserPanel] 📡 加载收藏列表, authorId:', authorId)
+    state.loadings.collect = true
+    const res = await collectedVideo({ user_id: authorId, pageNo: 0, pageSize: 20 })
+
+    if (res?.success) {
+      const list = (res.data?.list || []).map((a: any) => ({
+        ...a,
+        author: a.author || props.currentItem.author
+      }))
+      state.videos.collect.list = list
+      state.videos.collect.total = res.data?.total || 0
+      console.log('[UserPanel] ✅ 收藏列表加载成功, 视频数量:', list.length)
+    } else {
+      console.log('[UserPanel] ❌ 收藏列表加载失败')
+      state.videos.collect.total = 0
+    }
+  } catch (error) {
+    console.error('[UserPanel] loadCollectVideos 错误:', error)
+    state.videos.collect.total = 0
+  } finally {
+    state.loadings.collect = false
+  }
+}
+
+// 🎯 监听 tab 切换，按需加载数据
+watch(
+  () => state.tabIndex,
+  async (newIndex) => {
+    console.log('[UserPanel] Tab 切换:', newIndex, availableTabs.value[newIndex])
+
+    // Tab 0: 作品（已在初始化时加载）
+    if (newIndex === 0) {
+      return
+    }
+
+    // 根据可用tab动态判断
+    const currentTab = availableTabs.value[newIndex]
+
+    if (currentTab === '喜欢' && shouldShowLikeTab.value) {
+      await loadLikeVideos()
+    } else if (currentTab === '收藏' && shouldShowCollectTab.value) {
+      await loadCollectVideos()
+    }
+  }
+)
 
 function scroll(e: Event) {
   // ✅ 从滚动容器获取 scrollTop
@@ -1093,23 +1268,24 @@ onUnmounted(() => {
       }
     }
 
-    .total {
+    // 🎯 Tab 指示器区域
+    .tab-section {
       background: var(--main-bg);
-      color: white;
-      display: flex;
-      align-items: center;
-      padding: 15rem 20rem;
-      padding-top: 0rem;
       position: sticky;
       top: 52rem;
       z-index: 2;
+      padding: 0;
+    }
 
-      img {
-        transform: rotate(180deg);
-        margin-left: 5rem;
-        width: 12rem;
-        height: 12rem;
-      }
+    // 🎯 Tab 内容区域
+    .tab-content {
+      min-height: 200px;
+      background: var(--main-bg);
+    }
+
+    .videos {
+      padding: 0;
+      min-height: 50vh;
     }
   }
 

@@ -23,9 +23,11 @@
                 <Icon icon="ic:round-search" />
               </div>
               -->
+              <!-- 🎯 隐藏设置按钮，设置功能移至BOT
               <div class="item" @click.stop="$nav('/me/right-menu/setting')">
                 <Icon icon="ri:settings-line" />
               </div>
+              -->
             </div>
           </div>
           <div class="info">
@@ -36,9 +38,14 @@
             />
             <div class="right">
               <p class="name">{{ userinfo.nickname }}</p>
-              <div class="number mb1r" v-if="userinfo.unique_id">
+              <div class="number mb1r">
+                <!-- 🎯 始终显示数字ID -->
+                <span class="mr1r">ID: {{ userinfo.numeric_id || '...' }}</span>
+                <!-- 🎯 根据隐私设置显示TG用户名 -->
+                <span v-if="userinfo.unique_id && userinfo.show_tg_username !== false"
+                  >TG用户名：@{{ userinfo.unique_id }}</span
+                >
                 <span class="mr1r" v-if="userinfo.is_private">私密账号</span>
-                <span>TG用户名：@{{ userinfo.unique_id }}</span>
               </div>
             </div>
           </div>
@@ -52,7 +59,7 @@
               <span>点击添加介绍，让大家认识你...</span>
               <img src="../../assets/img/icon/me/write-gray.png" alt="" />
             </template>
-            <div v-else class="text" v-html="userinfo.signature"></div>
+            <div v-else class="text signature-text">{{ userinfo.signature }}</div>
           </div>
 
           <!-- ✅ 第2个：年龄、地区等信息 -->
@@ -542,6 +549,12 @@ onMounted(() => {
 
           .text {
             flex: 1;
+          }
+
+          // 🎯 保留换行格式
+          .signature-text {
+            white-space: pre-wrap; // 保留换行和空格
+            word-wrap: break-word; // 长单词换行
           }
         }
 

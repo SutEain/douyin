@@ -56,7 +56,7 @@
               <dy-back scale=".8" direction="right"></dy-back>
             </div>
           </div>
-          <div class="row" @click="nav('/me/choose-location')">
+          <div class="row" @click.stop="handleLocationClick">
             <div class="left">{{ $t('profile.location') }}</div>
             <div class="right">
               <span>{{ isEmpty(store.userinfo.country) }}</span>
@@ -226,6 +226,13 @@ function showBirthdayDialog() {
       _hideLoading()
     }
   }).show()
+}
+
+function handleLocationClick(e: Event) {
+  // 🎯 停止事件冒泡，确保在 Windows MiniApp 中能正常工作
+  e.preventDefault()
+  e.stopPropagation()
+  nav('/me/choose-location')
 }
 </script>
 
