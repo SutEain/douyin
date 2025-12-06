@@ -205,39 +205,70 @@ export const useBaseStore = defineStore('base', {
     // 🎯 解析 Telegram 启动参数
     parseStartParam() {
       try {
+        console.log('[DeepLink] ========== 开始解析启动参数 ==========')
+
         // @ts-ignore
         const tg = window.Telegram?.WebApp
+        console.log('[DeepLink] Telegram WebApp 对象:', tg ? '存在' : '不存在')
+
         if (!tg) {
           console.log('[DeepLink] 非 Telegram 环境，跳过解析')
           return
         }
 
-        // 方式1: 从 start_param 获取（格式：video_id_abcd）
+        // 打印完整的 initDataUnsafe
+        console.log('[DeepLink] initDataUnsafe:', JSON.stringify(tg.initDataUnsafe, null, 2))
+        console.log('[DeepLink] window.location.href:', window.location.href)
+        console.log('[DeepLink] window.location.search:', window.location.search)
+        console.log('[DeepLink] window.location.hash:', window.location.hash)
+
+        // 方式1: 从 start_param 获取（格式：video_xxxxx）
         const startParam = tg.initDataUnsafe?.start_param
+        console.log('[DeepLink] start_param:', startParam)
+
         if (startParam) {
           console.log('[DeepLink] 收到启动参数:', startParam)
 
-          // 解析格式：video_id_xxxxx
+          // 解析格式：video_xxxxx
           if (startParam.startsWith('video_')) {
             const videoId = startParam.replace('video_', '')
             this.startVideoId = videoId
-            console.log('[DeepLink] ✅ 解析到 video_id:', videoId)
+            console.log('[DeepLink] ✅ 方式1成功 - 从 start_param 解析到 video_id:', videoId)
             return
+          } else {
+            console.log('[DeepLink] ⚠️ start_param 格式不匹配，期望 video_xxxxx，实际:', startParam)
           }
         }
 
         // 方式2: 从 URL 参数获取（格式：?video_id=abcd）
         const urlParams = new URLSearchParams(window.location.search)
         const videoId = urlParams.get('video_id')
+        console.log('[DeepLink] URL 参数 video_id:', videoId)
+
         if (videoId) {
           this.startVideoId = videoId
-          console.log('[DeepLink] ✅ 从 URL 解析到 video_id:', videoId)
+          console.log('[DeepLink] ✅ 方式2成功 - 从 URL 解析到 video_id:', videoId)
           return
         }
 
-        console.log('[DeepLink] 未检测到 video_id 参数')
+        // 方式3: 从 hash 中解析（有些情况参数在 hash 中）
+        if (window.location.hash) {
+          const hashParams = new URLSearchParams(window.location.hash.substring(1))
+          const hashVideoId = hashParams.get('video_id')
+          console.log('[DeepLink] Hash 参数 video_id:', hashVideoId)
+
+          if (hashVideoId) {
+            this.startVideoId = hashVideoId
+            console.log('[DeepLink] ✅ 方式3成功 - 从 hash 解析到 video_id:', hashVideoId)
+            return
+          }
+        }
+
+        console.log('[DeepLink] ❌ 未检测到 video_id 参数')
+        console.log('[DeepLink] ========== 解析结束 ==========')
       } catch (error) {
-        console.error('[DeepLink] 解析启动参数失败:', error)
+        console.error('[DeepLink] ❌ 解析启动参数失败:', error)
+        console.error('[DeepLink] 错误堆栈:', error.stack)
       }
     },
     // 🎯 清空启动参数（已使用）

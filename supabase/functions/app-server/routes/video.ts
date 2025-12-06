@@ -147,13 +147,26 @@ export async function handleVideoAuthor(req: Request): Promise<Response> {
 
 // 🎯 根据 video_id 获取单个视频详情
 export async function handleVideoDetail(req: Request): Promise<Response> {
+  console.log('[app-server][VideoDetail] ========== 开始处理视频详情请求 ==========')
+
   const url = new URL(req.url)
   const videoId = url.searchParams.get('video_id')
+
+  console.log('[app-server][VideoDetail] 请求 URL:', req.url)
+  console.log('[app-server][VideoDetail] video_id 参数:', videoId)
+
   if (!videoId) {
+    console.error('[app-server][VideoDetail] ❌ 缺少 video_id 参数')
     throw new HttpError('Missing video_id', 400)
   }
-  const { user } = await tryGetAuth(req)
 
+  console.log('[app-server][VideoDetail] video_id 长度:', videoId.length)
+  console.log('[app-server][VideoDetail] video_id 类型:', typeof videoId)
+
+  const { user } = await tryGetAuth(req)
+  console.log('[app-server][VideoDetail] 当前用户:', user?.id || '未登录')
+
+  console.log('[app-server][VideoDetail] 📡 查询数据库...')
   const { data: row, error: videoError } = await supabaseAdmin
     .from('videos')
     .select('*')
@@ -162,23 +175,52 @@ export async function handleVideoDetail(req: Request): Promise<Response> {
     .maybeSingle()
 
   if (videoError) {
-    console.error('[app-server] Load video failed:', videoError)
+    console.error('[app-server][VideoDetail] ❌ 数据库查询失败:', videoError)
+    console.error('[app-server][VideoDetail] 错误详情:', JSON.stringify(videoError, null, 2))
     return errorResponse('Failed to load video', 1, 500)
   }
 
   if (!row) {
+    console.error('[app-server][VideoDetail] ❌ 视频不存在')
+    console.error('[app-server][VideoDetail] 查询的 video_id:', videoId)
     return errorResponse('Video not found', 1, 404)
   }
 
+  console.log('[app-server][VideoDetail] ✅ 找到视频')
+  console.log('[app-server][VideoDetail] 视频ID:', row.id)
+  console.log('[app-server][VideoDetail] 视频描述:', row.description)
+  console.log('[app-server][VideoDetail] 作者ID:', row.author_id)
+  console.log('[app-server][VideoDetail] 视频状态:', row.status)
+  console.log('[app-server][VideoDetail] 视频原始数据:', JSON.stringify(row, null, 2))
+
+  console.log('[app-server][VideoDetail] 📝 附加用户标记...')
   await attachUserFlags([row], user?.id ?? null)
+
+  console.log('[app-server][VideoDetail] 👤 获取作者信息...')
   const authorProfile = await getVideoAuthorProfile(row, new Map())
+  console.log(
+    '[app-server][VideoDetail] 作者信息:',
+    authorProfile ? `${authorProfile.nickname} (${authorProfile.id})` : '未找到'
+  )
+
+  console.log('[app-server][VideoDetail] 🔄 映射视频数据...')
   const mapped = await mapVideoRow(row, authorProfile)
 
   if (!mapped) {
+    console.error('[app-server][VideoDetail] ❌ 映射视频数据失败')
     return errorResponse('Failed to process video', 1, 500)
   }
 
+  console.log('[app-server][VideoDetail] ✅ 映射成功')
+  console.log('[app-server][VideoDetail] 映射后的 aweme_id:', mapped.aweme_id)
+  console.log('[app-server][VideoDetail] 映射后的描述:', mapped.desc)
+  console.log('[app-server][VideoDetail] 映射后的作者:', mapped.author?.nickname)
+
   applyRowFlags(mapped, row)
+
+  console.log('[app-server][VideoDetail] ✅ 返回视频数据')
+  console.log('[app-server][VideoDetail] 完整映射数据:', JSON.stringify(mapped, null, 2))
+  console.log('[app-server][VideoDetail] ========== 处理完成 ==========')
 
   return successResponse(mapped)
 }
