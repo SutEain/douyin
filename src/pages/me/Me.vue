@@ -201,8 +201,7 @@ import ConfirmDialog from '@/components/dialog/ConfirmDialog.vue'
 import Loading from '@/components/Loading.vue'
 import NoMore from '@/components/NoMore.vue'
 import { _checkImgUrl, _formatNumber, _getUserDouyinId, _no } from '@/utils'
-import { likeVideo, myVideo } from '@/api/videos'
-import { userCollect } from '@/api/user'
+import { likeVideo, myVideo, collectedVideo } from '@/api/videos'
 import { useBaseStore } from '@/store/pinia'
 import { useNav } from '@/utils/hooks/useNav'
 
@@ -345,7 +344,7 @@ async function loadCollectedVideos() {
 
   console.log('[Me] 🚀 开始请求收藏的视频数据...')
   state.loadings.loading2 = true
-  const res = await userCollect({
+  const res = await collectedVideo({
     pageNo: state.videos.collect.video.pageNo,
     pageSize: state.videos.collect.video.pageSize
   })
