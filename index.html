@@ -46,24 +46,86 @@
     </script>
     <!-- Telegram WebApp Script (Telegram 会自动注入，这里作为备用) -->
     <script>
-      // Telegram 会自动注入 window.Telegram.WebApp
-      // 如果检测到 Telegram 环境但脚本未加载，则手动加载
-      (function() {
-        // 检查是否在 Telegram WebApp 环境中（检查 hash、query string、user agent、referrer）
-        const url = window.location.href;
-        const hasTgData = url.includes('tgWebAppData') || 
-                          window.location.hash.includes('tgWebAppData') ||
-                          window.location.search.includes('tgWebAppData');
-        const isTelegram = /Telegram/i.test(navigator.userAgent) || 
-                          document.referrer.includes('telegram.org');
-        
+      // ✅ 在 Telegram 环境中，同步加载 Telegram WebApp 脚本
+      // 这样确保脚本在 Vue 应用初始化前就已经加载完成
+      ;(function () {
+        const url = window.location.href
+        const hasTgData =
+          url.includes('tgWebAppData') ||
+          window.location.hash.includes('tgWebAppData') ||
+          window.location.search.includes('tgWebAppData')
+        const isTelegram =
+          /Telegram/i.test(navigator.userAgent) || document.referrer.includes('telegram.org')
+
         if ((hasTgData || isTelegram) && !window.Telegram?.WebApp) {
-          const script = document.createElement('script');
-          script.src = 'https://telegram.org/js/telegram-web-app.js';
-          script.async = true;
-          document.head.appendChild(script);
+          // ✅ 使用 document.write 同步加载脚本（确保在页面解析时立即加载）
+          document.write(
+            '<scr' + 'ipt src="https://telegram.org/js/telegram-web-app.js"><\/scr' + 'ipt>'
+          )
         }
-      })();
+      })()
+    </script>
+    <script>
+      // ✅ 尽早初始化 Telegram WebApp 并展开窗口
+      ;(function () {
+        // 等待 Telegram WebApp 加载完成
+        const waitForTelegram = () => {
+          return new Promise((resolve) => {
+            if (window.Telegram?.WebApp) {
+              resolve(window.Telegram.WebApp)
+              return
+            }
+
+            // 轮询检查（最多等待 3 秒）
+            let attempts = 0
+            const maxAttempts = 30
+            const checkInterval = setInterval(() => {
+              attempts++
+              if (window.Telegram?.WebApp) {
+                clearInterval(checkInterval)
+                resolve(window.Telegram.WebApp)
+              } else if (attempts >= maxAttempts) {
+                clearInterval(checkInterval)
+                resolve(null)
+              }
+            }, 100)
+          })
+        }
+
+        // 页面加载完成后立即初始化
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', async () => {
+            const tg = await waitForTelegram()
+            if (tg) {
+              try {
+                tg.ready()
+                tg.expand()
+                if (typeof tg.disableVerticalSwipes === 'function') {
+                  tg.disableVerticalSwipes()
+                }
+                console.log('[Telegram] ✅ WebApp 初始化成功')
+              } catch (e) {
+                console.warn('[Telegram] 初始化失败:', e)
+              }
+            }
+          })
+        } else {
+          waitForTelegram().then((tg) => {
+            if (tg) {
+              try {
+                tg.ready()
+                tg.expand()
+                if (typeof tg.disableVerticalSwipes === 'function') {
+                  tg.disableVerticalSwipes()
+                }
+                console.log('[Telegram] ✅ WebApp 初始化成功')
+              } catch (e) {
+                console.warn('[Telegram] 初始化失败:', e)
+              }
+            }
+          })
+        }
+      })()
     </script>
     <!--    <script crossorigin="anonymous"-->
     <!--            integrity="sha512-KkkY/3auRhaXDFzFMpwtZ+BrS8EBQ+GfiBxdJ9jGMi6Gg74/sYbq/IZpY593pkNjTmbeRfBwjpZo+7gcpH45Ww=="-->

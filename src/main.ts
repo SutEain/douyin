@@ -45,12 +45,19 @@ if (typeof window !== 'undefined') {
 
     // ✅ 处理 <source> 标签加载失败（通常是网络问题，不应中断播放）
     if (target instanceof HTMLSourceElement) {
-      console.warn('[GlobalError][source]', target.src, '- 视频源加载失败，浏览器会尝试其他源或重试')
+      console.warn(
+        '[GlobalError][source]',
+        target.src,
+        '- 视频源加载失败，浏览器会尝试其他源或重试'
+      )
       event.preventDefault?.()
       return false
     }
 
-    console.warn('[GlobalError]', (event as ErrorEvent).message || (event as ErrorEvent).error || event)
+    console.warn(
+      '[GlobalError]',
+      (event as ErrorEvent).message || (event as ErrorEvent).error || event
+    )
     event.preventDefault?.()
     return false
   }
@@ -119,24 +126,5 @@ bus.on(EVENT_KEY.REMOVE_MUTED, () => {
   window.isMuted = false
 })
 
-/**
- * 初始化 Telegram WebApp 行为，避免下滑收起小程序
- */
-const initTelegramWebApp = () => {
-  try {
-    // @ts-ignore
-    const tg = window.Telegram?.WebApp
-    if (!tg) return
-    tg.ready?.()
-    tg.expand?.()
-    tg.disableVerticalSwipes?.()
-  } catch (error) {
-    console.warn('[Telegram] 初始化失败', error)
-  }
-}
-
-if (document.readyState === 'complete') {
-  initTelegramWebApp()
-} else {
-  window.addEventListener('DOMContentLoaded', initTelegramWebApp, { once: true })
-}
+// ✅ Telegram WebApp 初始化已经在 index.html 中提前处理
+// 避免重复调用导致问题
