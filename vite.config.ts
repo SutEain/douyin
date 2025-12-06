@@ -50,12 +50,13 @@ export default defineConfig((): Promise<UserConfig> => {
                 name: 'vue-demi',
                 var: 'VueDemi',
                 path: 'https://lib.baomitu.com/vue-demi/0.14.7/index.iife.min.js'
-              },
-              {
-                name: 'mockjs',
-                var: 'Mock',
-                path: 'https://lib.baomitu.com/Mock.js/1.0.1-beta3/mock-min.js'
               }
+              // ❌ 移除 mockjs CDN 引用，生产环境不应该加载 Mock.js
+              // {
+              //   name: 'mockjs',
+              //   var: 'Mock',
+              //   path: 'https://lib.baomitu.com/Mock.js/1.0.1-beta3/mock-min.js'
+              // }
             ]
           })
           // viteCompression({
