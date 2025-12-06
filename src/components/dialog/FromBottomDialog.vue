@@ -1,11 +1,7 @@
 <template>
   <Transition name="test">
     <!-- 遮罩层：点击关闭 -->
-    <div 
-      v-if="modelValue" 
-      class="dialog-mask"
-      @click="onMaskClick"
-    ></div>
+    <div v-if="modelValue" class="dialog-mask" @click="onMaskClick"></div>
   </Transition>
   <Transition name="test">
     <div
@@ -57,7 +53,7 @@ const props = withDefaults(defineProps<FromBottomDialogProps>(), {
   modelValue: false,
   mode: 'dark',
   maskMode: 'dark',
-      height: 'calc(var(--vh, 1vh) * 90)',
+  height: 'calc(var(--vh, 1vh) * 90)',
   showHengGang: true,
   borderRadius: '15rem 15rem 0 0',
   tag: ''
@@ -83,23 +79,23 @@ watch(
   () => props.modelValue,
   (newVal: boolean) => {
     const page = document.getElementById(props.pageId) || document.body
-    
+
     if (!page) {
       console.error('[FromBottomDialog] ❌ 找不到 page 元素:', props.pageId)
       return
     }
-    
+
     console.log('[FromBottomDialog] 状态变化:', {
       newVal,
       pageId: props.pageId,
       tag: props.tag
     })
-    
+
     if (newVal) {
       // ✅ 打开时：固定页面位置
       pagePosition.value = _css(page, 'position')
       scroll.value = document.documentElement.scrollTop || window.pageYOffset
-      
+
       console.log('[FromBottomDialog] 📌 打开前状态:', {
         scrollTop: scroll.value,
         pageYOffset: window.pageYOffset,
@@ -107,12 +103,12 @@ watch(
         bodyPosition: document.body.style.position,
         bodyTop: document.body.style.top
       })
-      
+
       document.body.style.position = 'fixed'
       document.body.style.top = `-${scroll.value}px`
       document.body.style.width = '100%'
       page.style.position = 'absolute'
-      
+
       console.log('[FromBottomDialog] ✅ 打开后状态:', {
         bodyPosition: document.body.style.position,
         bodyTop: document.body.style.top,
@@ -127,16 +123,16 @@ watch(
         bodyTop: document.body.style.top,
         pagePosition: page.style.position
       })
-      
+
       document.body.style.position = ''
       document.body.style.top = ''
       document.body.style.width = ''
       page.style.position = pagePosition.value || ''
-      
+
       // 恢复滚动位置
       window.scrollTo(0, scroll.value)
       document.documentElement.scrollTop = scroll.value
-      
+
       console.log('[FromBottomDialog] ✅ 关闭后状态:', {
         restoredScroll: scroll.value,
         actualScrollTop: document.documentElement.scrollTop,
