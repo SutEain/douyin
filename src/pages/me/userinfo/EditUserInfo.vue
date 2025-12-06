@@ -173,7 +173,7 @@ function showBirthdayDialog() {
   top: 0;
   overflow: auto;
   font-size: 14rem;
-  background-color: #151723;
+  background-color: #000;
 }
 
 .preview-img {
