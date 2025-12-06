@@ -179,6 +179,9 @@ const touch = reactive({
   threshold: 50 // 触发切换的阈值
 })
 let wheelLock = false
+let wheelDeltaY = 0 // 🎯 累积的滚轮 deltaY（用于 Mac 触控板）
+let wheelTimeout: number | null = null // 🎯 滚轮超时计时器
+let wheelUnlockTime = 0 // 🎯 记录解锁时间，用于冷却期
 
 // 🎯 滑动状态：实现跟手滑动和吸附效果
 const slideState = reactive({
@@ -194,7 +197,7 @@ const slideState = reactive({
 const slideContainerStyle = computed(() => {
   return {
     transform: `translateY(${slideState.offsetY}px)`,
-    transition: slideState.isTransitioning ? 'transform 250ms ease-out' : 'none'
+    transition: slideState.isTransitioning ? 'transform 350ms ease-out' : 'none'
   }
 })
 
@@ -467,12 +470,6 @@ function rotateToNext() {
   current.role = 'prev'
   next.role = 'current'
 
-  console.log('[视频切换] slot轮转后', {
-    prev: { key: prev.key, role: prev.role, idx: prev.videoIndex },
-    current: { key: current.key, role: current.role, idx: current.videoIndex },
-    next: { key: next.key, role: next.role, idx: next.videoIndex }
-  })
-
   currentIndex.value += 1
   emit('update:index', currentIndex.value)
   videoStore.setCurrentVideo(props.items[currentIndex.value], currentIndex.value)
@@ -710,53 +707,123 @@ function onMouseUp() {
   }
 }
 
-// 🎯 滚轮事件：模拟触摸滑动
+// 🎯 滚轮事件：支持鼠标滚轮和 Mac 触控板
 function onWheel(e: WheelEvent) {
-  if (wheelLock) return
+  const now = Date.now()
+  const timeSinceUnlock = now - wheelUnlockTime
+
+  if (wheelLock) {
+    // 🎯 在锁定期间，重置累积值，防止累积后跳2个
+    wheelDeltaY = 0
+    if (wheelTimeout) {
+      clearTimeout(wheelTimeout)
+      wheelTimeout = null
+    }
+    return
+  }
+
+  // 🎯 冷却期：解锁后 400ms 内忽略惯性滚动
+  if (wheelUnlockTime > 0 && timeSinceUnlock < 400) {
+    wheelDeltaY = 0
+    if (wheelTimeout) {
+      clearTimeout(wheelTimeout)
+      wheelTimeout = null
+    }
+    return
+  }
+
   if (slideState.isTransitioning) return
 
   const deltaY = e.deltaY
   const threshold = touch.threshold
 
-  if (deltaY > threshold && currentIndex.value < props.items.length - 1) {
-    wheelLock = true
-    snapToNext()
-    // 等待动画完成后再解锁（250ms 动画 + 50ms 缓冲）
-    setTimeout(() => {
-      wheelLock = false
-    }, 300)
-  } else if (deltaY < -threshold && currentIndex.value > 0) {
-    wheelLock = true
-    snapToPrev()
-    // 等待动画完成后再解锁
-    setTimeout(() => {
-      wheelLock = false
-    }, 300)
+  // 🎯 累积 deltaY（用于 Mac 触控板的小幅度滑动）
+  wheelDeltaY += deltaY
+
+  // 清除之前的超时，重新开始计时
+  if (wheelTimeout) {
+    clearTimeout(wheelTimeout)
+  }
+
+  // 150ms 内没有新的滚轮事件，重置累积值
+  wheelTimeout = window.setTimeout(() => {
+    wheelDeltaY = 0
+  }, 150)
+
+  // 判断是否达到阈值
+  if (Math.abs(wheelDeltaY) > threshold) {
+    if (wheelDeltaY > 0 && currentIndex.value < props.items.length - 1) {
+      // 向下滚动（切换到下一个）
+      wheelLock = true
+      wheelDeltaY = 0 // 重置累积值
+      if (wheelTimeout) {
+        clearTimeout(wheelTimeout)
+        wheelTimeout = null
+      }
+      snapToNext()
+      // 等待动画完成后再解锁（350ms 动画 + 50ms 缓冲）
+      setTimeout(() => {
+        wheelLock = false
+        wheelUnlockTime = Date.now() // 🎯 记录解锁时间
+      }, 400)
+    } else if (wheelDeltaY < 0 && currentIndex.value > 0) {
+      // 向上滚动（切换到上一个）
+      wheelLock = true
+      wheelDeltaY = 0 // 重置累积值
+      if (wheelTimeout) {
+        clearTimeout(wheelTimeout)
+        wheelTimeout = null
+      }
+      snapToPrev()
+      // 等待动画完成后再解锁
+      setTimeout(() => {
+        wheelLock = false
+        wheelUnlockTime = Date.now() // 🎯 记录解锁时间
+      }, 400)
+    }
   }
 }
 
-// 🎯 吸附到下一个视频
+// 🎯 吸附到下一个视频（新方案：动画开始时就轮转）
 function snapToNext() {
-  slideState.isTransitioning = true
-  slideState.offsetY = -window.innerHeight
+  // 🎯 先轮转 slot，然后从 100vh 位置开始动画
+  const currentOffsetY = slideState.offsetY
+  rotateToNext()
 
-  setTimeout(() => {
-    rotateToNext()
+  // 轮转后，新的 current 在 100vh 下方，我们需要把它移到正确位置
+  slideState.offsetY = currentOffsetY + window.innerHeight
+
+  // 等待一帧确保 DOM 更新
+  requestAnimationFrame(() => {
+    slideState.isTransitioning = true
     slideState.offsetY = 0
-    slideState.isTransitioning = false
-  }, 250)
+
+    // 动画结束后关闭 transition
+    setTimeout(() => {
+      slideState.isTransitioning = false
+    }, 350)
+  })
 }
 
-// 🎯 吸附到上一个视频
+// 🎯 吸附到上一个视频（新方案：动画开始时就轮转）
 function snapToPrev() {
-  slideState.isTransitioning = true
-  slideState.offsetY = window.innerHeight
+  // 🎯 先轮转 slot，然后从 -100vh 位置开始动画
+  const currentOffsetY = slideState.offsetY
+  rotateToPrev()
 
-  setTimeout(() => {
-    rotateToPrev()
+  // 轮转后，新的 current 在 -100vh 上方，我们需要把它移到正确位置
+  slideState.offsetY = currentOffsetY - window.innerHeight
+
+  // 等待一帧确保 DOM 更新
+  requestAnimationFrame(() => {
+    slideState.isTransitioning = true
     slideState.offsetY = 0
-    slideState.isTransitioning = false
-  }, 250)
+
+    // 动画结束后关闭 transition
+    setTimeout(() => {
+      slideState.isTransitioning = false
+    }, 350)
+  })
 }
 
 // 🎯 弹回当前位置
@@ -766,7 +833,7 @@ function snapBack() {
 
   setTimeout(() => {
     slideState.isTransitioning = false
-  }, 250)
+  }, 350)
 }
 
 watch(
