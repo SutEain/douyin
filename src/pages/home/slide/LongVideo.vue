@@ -189,7 +189,7 @@ function onAvatarError(e) {
   font-size: 14rem;
   color: white;
   padding-top: var(--home-header-height);
-  background: rgb(21, 23, 36);
+  background: #000;
 
   .Scroll {
     height: calc(

@@ -197,10 +197,9 @@ import Indicator from '@/components/slide/Indicator.vue'
 import SlideRowList from '@/components/slide/SlideRowList.vue'
 import SlideItem from '@/components/slide/SlideItem.vue'
 import BaseFooter from '@/components/BaseFooter.vue'
-import ConfirmDialog from '@/components/dialog/ConfirmDialog.vue'
 import Loading from '@/components/Loading.vue'
 import NoMore from '@/components/NoMore.vue'
-import { _checkImgUrl, _formatNumber, _getUserDouyinId, _no } from '@/utils'
+import { _checkImgUrl, _formatNumber, _no } from '@/utils'
 import { likeVideo, myVideo, collectedVideo } from '@/api/videos'
 import { useBaseStore } from '@/store/pinia'
 import { useNav } from '@/utils/hooks/useNav'
@@ -397,7 +396,7 @@ onMounted(() => {
 .Me {
   height: 100vh;
   width: 100%;
-  background: rgb(21, 23, 36);
+  background: #000; // ✅ 改为纯黑
   position: relative;
   overflow: hidden;
 
@@ -419,7 +418,7 @@ onMounted(() => {
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
-        background-color: rgb(21, 23, 36);
+        background-color: #000; // ✅ 改为纯黑
 
         // 顶部按钮栏 - 贴在背景图顶部
         .header-actions {
@@ -577,7 +576,7 @@ onMounted(() => {
       position: sticky;
       top: 0;
       z-index: 50;
-      background: rgb(21, 23, 36);
+      background: #000; // ✅ 改为纯黑
     }
 
     .tab-content-wrapper {
@@ -691,7 +690,7 @@ onMounted(() => {
     flex-direction: column;
     align-items: center;
     padding: 30px 20px;
-    background: rgb(21, 23, 36);
+    background: #000; // ✅ 改为纯黑
 
     img {
       width: 60px;

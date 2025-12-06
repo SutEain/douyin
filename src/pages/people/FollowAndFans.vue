@@ -27,10 +27,7 @@
             >
             </Indicator>
           </div>
-          <SlideHorizontal
-            v-model:index="data.slideIndex"
-            style="height: calc(var(--vh, 1vh) * 100 - 111rem)"
-          >
+          <SlideHorizontal v-model:index="data.slideIndex">
             <SlideItem class="tab1">
               <Search
                 v-model="data.searchKey"
@@ -166,11 +163,11 @@ function handleScroll() {
 }
 
 onMounted(async () => {
-  // 添加触摸事件监听
-  if (mainContent.value) {
-    mainContent.value.addEventListener('touchstart', handleTouchStart, { passive: true })
-    mainContent.value.addEventListener('touchmove', handleTouchMove, { passive: false })
-    mainContent.value.addEventListener('touchend', handleTouchEnd, { passive: true })
+  // ✅ 添加触摸事件监听到 scroll-container
+  if (scrollContainer.value) {
+    scrollContainer.value.addEventListener('touchstart', handleTouchStart, { passive: true })
+    scrollContainer.value.addEventListener('touchmove', handleTouchMove, { passive: false })
+    scrollContainer.value.addEventListener('touchend', handleTouchEnd, { passive: true })
   }
 
   data.slideIndex = ~~route.query.type
@@ -179,11 +176,11 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  // 清理触摸事件监听
-  if (mainContent.value) {
-    mainContent.value.removeEventListener('touchstart', handleTouchStart)
-    mainContent.value.removeEventListener('touchmove', handleTouchMove)
-    mainContent.value.removeEventListener('touchend', handleTouchEnd)
+  // ✅ 清理触摸事件监听
+  if (scrollContainer.value) {
+    scrollContainer.value.removeEventListener('touchstart', handleTouchStart)
+    scrollContainer.value.removeEventListener('touchmove', handleTouchMove)
+    scrollContainer.value.removeEventListener('touchend', handleTouchEnd)
   }
 })
 
@@ -275,6 +272,7 @@ watch(
   font-size: 14rem;
   height: 100vh;
   overflow: hidden; // ✅ 外层禁止滚动
+  overscroll-behavior-y: contain; // ✅ 防止过度滚动传播
 
   // ✅ 内层滚动容器
   .scroll-container {
@@ -315,7 +313,8 @@ watch(
 
   .tab1,
   .tab2 {
-    overflow: auto;
+    // ✅ 移除 overflow: auto，让外层的 scroll-container 处理滚动
+    overflow: visible;
     padding: 0 var(--page-padding);
     box-sizing: border-box;
   }
