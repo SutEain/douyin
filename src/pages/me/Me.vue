@@ -58,17 +58,15 @@
           <!-- ✅ 第2个：年龄、地区等信息 -->
           <div class="more">
             <div class="age item" v-if="userinfo.user_age !== -1">
-              <img
-                v-if="userinfo.gender == 2"
-                src="../../assets/img/icon/me/woman.png"
-                alt=""
-              />
+              <img v-if="userinfo.gender == 2" src="../../assets/img/icon/me/woman.png" alt="" />
               <img v-if="userinfo.gender == 1" src="../../assets/img/icon/me/man.png" alt="" />
               <span>{{ userinfo.user_age }}岁</span>
             </div>
             <div class="item" v-if="userinfo.country || userinfo.province || userinfo.city">
               <template v-if="userinfo.country">{{ userinfo.country }}</template>
-              <template v-if="userinfo.country && (userinfo.province || userinfo.city)"> · </template>
+              <template v-if="userinfo.country && (userinfo.province || userinfo.city)">
+                ·
+              </template>
               <template v-if="userinfo.province">{{ userinfo.province }}</template>
               <template v-if="userinfo.province && userinfo.city"> - </template>
               <template v-if="userinfo.city">{{ userinfo.city }}</template>
@@ -110,74 +108,71 @@
 
       <!-- Tab 内容区域 -->
       <div class="tab-content-wrapper" :style="{ height: tabContentHeight }">
-        <SlideRowList
-          name="videoList"
-          v-model:active-index="state.contentIndex"
-        >
-        <!-- Tab 0: 作品 -->
-        <SlideItem>
-          <Posters v-if="state.videos.my.total !== -1" :list="state.videos.my.list" />
-          <Loading v-if="state.loadings.loading0" :is-full-screen="false" />
-          <no-more v-else />
-        </SlideItem>
+        <SlideRowList name="videoList" v-model:active-index="state.contentIndex">
+          <!-- Tab 0: 作品 -->
+          <SlideItem>
+            <Posters v-if="state.videos.my.total !== -1" :list="state.videos.my.list" />
+            <Loading v-if="state.loadings.loading0" :is-full-screen="false" />
+            <no-more v-else />
+          </SlideItem>
 
-        <!-- Tab 1: 喜欢 -->
-        <SlideItem>
-          <div class="notice">
-            <img src="../../assets/img/icon/me/lock-gray.png" alt="" />
-            <span>只有你能看到自己的喜欢列表</span>
-          </div>
-          <Posters v-if="state.videos.like.total !== -1" :list="state.videos.like.list" />
-          <Loading v-if="state.loadings.loading1" :is-full-screen="false" />
-          <no-more v-else />
-        </SlideItem>
-
-        <!-- Tab 2: 收藏 -->
-        <SlideItem>
-          <div class="notice">
-            <img src="../../assets/img/icon/me/lock-gray.png" alt="" />
-            <span>只有你能看到自己的收藏列表</span>
-          </div>
-          <div class="collect">
-            <!-- 视频收藏 -->
-            <div class="video" v-if="state.videos.collect.video.total !== -1">
-              <div class="top" @click="$nav('/me/collect/video-collect')">
-                <div class="left">
-                  <img src="../../assets/img/icon/me/video-whitegray.png" alt="" />
-                  <span>视频</span>
-                </div>
-                <div class="right">
-                  <span>全部</span>
-                  <Icon icon="mdi:chevron-right" />
-                </div>
-              </div>
-              <Posters
-                v-if="state.videos.collect.video.total !== -1"
-                :list="state.videos.collect.video.list"
-              />
+          <!-- Tab 1: 喜欢 -->
+          <SlideItem>
+            <div class="notice">
+              <img src="../../assets/img/icon/me/lock-gray.png" alt="" />
+              <span>只有你能看到自己的喜欢列表</span>
             </div>
+            <Posters v-if="state.videos.like.total !== -1" :list="state.videos.like.list" />
+            <Loading v-if="state.loadings.loading1" :is-full-screen="false" />
+            <no-more v-else />
+          </SlideItem>
 
-            <!-- 音乐收藏 -->
-            <div class="music" v-if="state.videos.collect.music.total !== -1">
-              <div class="top" @click="$nav('/me/collect/music-collect')">
-                <div class="left">
-                  <img src="../../assets/img/icon/me/music-whitegray.png" alt="" />
-                  <span>音乐</span>
-                </div>
-                <div class="right">
-                  <span>全部</span>
-                  <Icon icon="mdi:chevron-right" />
-                </div>
-              </div>
-              <Posters
-                v-if="state.videos.collect.music.total !== -1"
-                :list="state.videos.collect.music.list"
-              />
+          <!-- Tab 2: 收藏 -->
+          <SlideItem>
+            <div class="notice">
+              <img src="../../assets/img/icon/me/lock-gray.png" alt="" />
+              <span>只有你能看到自己的收藏列表</span>
             </div>
-          </div>
-          <Loading v-if="state.loadings.loading2" :is-full-screen="false" />
-          <no-more v-else />
-        </SlideItem>
+            <div class="collect">
+              <!-- 视频收藏 -->
+              <div class="video" v-if="state.videos.collect.video.total !== -1">
+                <div class="top" @click="$nav('/me/collect/video-collect')">
+                  <div class="left">
+                    <img src="../../assets/img/icon/me/video-whitegray.png" alt="" />
+                    <span>视频</span>
+                  </div>
+                  <div class="right">
+                    <span>全部</span>
+                    <Icon icon="mdi:chevron-right" />
+                  </div>
+                </div>
+                <Posters
+                  v-if="state.videos.collect.video.total !== -1"
+                  :list="state.videos.collect.video.list"
+                />
+              </div>
+
+              <!-- 音乐收藏 -->
+              <div class="music" v-if="state.videos.collect.music.total !== -1">
+                <div class="top" @click="$nav('/me/collect/music-collect')">
+                  <div class="left">
+                    <img src="../../assets/img/icon/me/music-whitegray.png" alt="" />
+                    <span>音乐</span>
+                  </div>
+                  <div class="right">
+                    <span>全部</span>
+                    <Icon icon="mdi:chevron-right" />
+                  </div>
+                </div>
+                <Posters
+                  v-if="state.videos.collect.music.total !== -1"
+                  :list="state.videos.collect.music.list"
+                />
+              </div>
+            </div>
+            <Loading v-if="state.loadings.loading2" :is-full-screen="false" />
+            <no-more v-else />
+          </SlideItem>
         </SlideRowList>
       </div>
     </div>
@@ -187,20 +182,15 @@
 
     <!-- 图片预览 -->
     <transition name="fade">
-      <div
-        v-if="state.previewImg"
-        class="fixed-preview-image"
-        @click="state.previewImg = ''"
-      >
+      <div v-if="state.previewImg" class="fixed-preview-image" @click="state.previewImg = ''">
         <img :src="state.previewImg" alt="" />
       </div>
     </transition>
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, onMounted } from 'vue'
+import { reactive, computed, onMounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import Posters from '@/components/Posters.vue'
 import Indicator from '@/components/slide/Indicator.vue'
@@ -229,7 +219,7 @@ const baseStore = useBaseStore()
 const state = reactive({
   previewImg: '',
   contentIndex: 0,
-  
+
   videos: {
     my: { list: [], total: -1, pageNo: 0, pageSize: 15 },
     like: { list: [], total: -1, pageNo: 0, pageSize: 15 },
@@ -238,7 +228,7 @@ const state = reactive({
       music: { list: [], total: -1, pageNo: 0, pageSize: 15 }
     }
   },
-  
+
   loadings: {
     loading0: false,
     loading1: false,
@@ -247,7 +237,7 @@ const state = reactive({
 })
 
 // ========== Computed ==========
-const userinfo = computed(() => baseStore.userinfo || {} as any)
+const userinfo = computed(() => baseStore.userinfo || ({} as any))
 
 const headerBackgroundStyle = computed(() => {
   const userCoverUrl = userinfo.value.cover_url?.[0]?.url_list?.[0]
@@ -261,7 +251,6 @@ const tabContentHeight = computed(() => {
   // 计算 Tab 内容区域的高度，给足够的空间
   return 'auto'
 })
-
 
 // ========== Methods ==========
 
@@ -281,14 +270,14 @@ async function loadMyVideos() {
   if (state.videos.my.total !== -1 && state.videos.my.list.length >= state.videos.my.total) {
     return
   }
-  
+
   state.loadings.loading0 = true
   const res = await myVideo({
     pageNo: state.videos.my.pageNo,
     pageSize: state.videos.my.pageSize
   })
   state.loadings.loading0 = false
-  
+
   if (res.success) {
     state.videos.my.total = res.data.total
     state.videos.my.list.push(...res.data.list)
@@ -298,42 +287,105 @@ async function loadMyVideos() {
 
 // 加载喜欢的视频
 async function loadLikedVideos() {
-  if (state.loadings.loading1) return
-  if (state.videos.like.total !== -1 && state.videos.like.list.length >= state.videos.like.total) {
+  console.log('[Me] 🔍 loadLikedVideos 被调用')
+  console.log('[Me] 当前状态:', {
+    loading: state.loadings.loading1,
+    total: state.videos.like.total,
+    listLength: state.videos.like.list.length,
+    pageNo: state.videos.like.pageNo
+  })
+
+  if (state.loadings.loading1) {
+    console.log('[Me] ⏸️ 正在加载中，跳过')
     return
   }
-  
+  if (state.videos.like.total !== -1 && state.videos.like.list.length >= state.videos.like.total) {
+    console.log('[Me] ⏸️ 已加载全部数据，跳过')
+    return
+  }
+
+  console.log('[Me] 🚀 开始请求喜欢的视频数据...')
   state.loadings.loading1 = true
   const res = await likeVideo({
     pageNo: state.videos.like.pageNo,
     pageSize: state.videos.like.pageSize
   })
   state.loadings.loading1 = false
-  
+
+  console.log('[Me] 📦 API 响应:', res)
+
   if (res.success) {
     state.videos.like.total = res.data.total
     state.videos.like.list.push(...res.data.list)
     state.videos.like.pageNo++
+    console.log('[Me] ✅ 喜欢的视频加载成功:', {
+      total: res.data.total,
+      newCount: res.data.list.length,
+      currentTotal: state.videos.like.list.length
+    })
+  } else {
+    console.error('[Me] ❌ 喜欢的视频加载失败:', res)
   }
 }
 
 // 加载收藏的视频
 async function loadCollectedVideos() {
-  if (state.loadings.loading2) return
-  
+  console.log('[Me] 🔍 loadCollectedVideos 被调用')
+  console.log('[Me] 当前状态:', {
+    loading: state.loadings.loading2,
+    total: state.videos.collect.video.total,
+    listLength: state.videos.collect.video.list.length,
+    pageNo: state.videos.collect.video.pageNo
+  })
+
+  if (state.loadings.loading2) {
+    console.log('[Me] ⏸️ 正在加载中，跳过')
+    return
+  }
+
+  console.log('[Me] 🚀 开始请求收藏的视频数据...')
   state.loadings.loading2 = true
   const res = await userCollect({
     pageNo: state.videos.collect.video.pageNo,
     pageSize: state.videos.collect.video.pageSize
   })
   state.loadings.loading2 = false
-  
+
+  console.log('[Me] 📦 API 响应:', res)
+
   if (res.success) {
     state.videos.collect.video.total = res.data.total
     state.videos.collect.video.list.push(...res.data.list)
     state.videos.collect.video.pageNo++
+    console.log('[Me] ✅ 收藏的视频加载成功:', {
+      total: res.data.total,
+      newCount: res.data.list.length,
+      currentTotal: state.videos.collect.video.list.length
+    })
+  } else {
+    console.error('[Me] ❌ 收藏的视频加载失败:', res)
   }
 }
+
+// ========== Watch ==========
+// 监听 tab 切换，加载对应数据
+watch(
+  () => state.contentIndex,
+  (newIndex) => {
+    console.log('[Me] 📌 Tab 切换到:', newIndex, ['作品', '喜欢', '收藏'][newIndex])
+
+    if (newIndex === 0 && state.videos.my.list.length === 0) {
+      console.log('[Me] 加载作品数据')
+      loadMyVideos()
+    } else if (newIndex === 1 && state.videos.like.list.length === 0) {
+      console.log('[Me] 加载喜欢数据')
+      loadLikedVideos()
+    } else if (newIndex === 2 && state.videos.collect.video.list.length === 0) {
+      console.log('[Me] 加载收藏数据')
+      loadCollectedVideos()
+    }
+  }
+)
 
 // ========== 生命周期 ==========
 onMounted(() => {
@@ -356,7 +408,7 @@ onMounted(() => {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     padding-bottom: var(--footer-height);
-    
+
     &::-webkit-scrollbar {
       display: none;
     }
@@ -369,7 +421,7 @@ onMounted(() => {
         background-position: center;
         background-repeat: no-repeat;
         background-color: rgb(21, 23, 36);
-        
+
         // 顶部按钮栏 - 贴在背景图顶部
         .header-actions {
           position: absolute;
@@ -476,9 +528,9 @@ onMounted(() => {
         }
 
         .signature {
-          padding: 0 0 15px 15px;  // ✅ 上 右 下 左
+          padding: 0 0 15px 15px; // ✅ 上 右 下 左
           font-size: 14px;
-          font-family: "Microsoft YaHei", "微软雅黑", sans-serif;  // ✅ 雅黑字体
+          font-family: 'Microsoft YaHei', '微软雅黑', sans-serif; // ✅ 雅黑字体
           color: rgba(255, 255, 255, 0.8);
           cursor: pointer;
           display: flex;
@@ -499,7 +551,7 @@ onMounted(() => {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
-          padding: 0 0 10px 10px;  // ✅ 上 右 下 左
+          padding: 0 0 10px 10px; // ✅ 上 右 下 左
           font-size: 13px;
           color: rgba(255, 255, 255, 0.8);
           cursor: pointer;
@@ -520,7 +572,7 @@ onMounted(() => {
         }
       }
     }
-    
+
     // Tab 区域
     .tab-section {
       position: sticky;
@@ -528,40 +580,41 @@ onMounted(() => {
       z-index: 50;
       background: rgb(21, 23, 36);
     }
-    
+
     .tab-content-wrapper {
       // 让内容自然显示
       position: relative;
       min-height: 60vh;
       padding-bottom: 80px;
-      
+
       // SlideRowList 内容
       :deep(.slide-row-list) {
         width: 100%;
         height: auto;
         min-height: 60vh;
       }
-      
+
       :deep(#base-slide-wrapper) {
         height: auto;
         min-height: 60vh;
-        overflow: hidden;  // ✅ 恢复 hidden，防止内容溢出
+        overflow: hidden; // ✅ 恢复 hidden，防止内容溢出
       }
-      
+
       :deep(#base-slide-list) {
         height: auto;
         min-height: 60vh;
       }
-      
+
       // SlideItem 内容样式
       :deep(.slide-item) {
-        padding: 0;  // ✅ 去掉左右padding
+        padding: 0; // ✅ 去掉左右padding
         min-height: 60vh;
+        background-color: #151723; // ✅ 三个 tab 的背景色
         width: 100%;
         box-sizing: border-box;
       }
     }
-    
+
     .notice {
       display: flex;
       align-items: center;
@@ -675,4 +728,3 @@ onMounted(() => {
   opacity: 0;
 }
 </style>
-
