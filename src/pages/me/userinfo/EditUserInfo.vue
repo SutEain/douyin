@@ -8,7 +8,11 @@
     <div class="userinfo">
       <div class="change-avatar">
         <div class="avatar-ctn" @click="viewAvatarOnly">
-          <img class="avatar" :src="_checkImgUrl(store.userinfo.avatar_300x300.url_list[0])" alt="" />
+          <img
+            class="avatar"
+            :src="_checkImgUrl(store.userinfo.avatar_300x300.url_list[0])"
+            alt=""
+          />
         </div>
         <span>{{ $t('profile.avatar') }}</span>
       </div>
@@ -128,7 +132,7 @@ function showSexDialog() {
 
 function viewAvatarOnly() {
   // 只查看头像，不能更换（使用 TG 头像）
-        data.previewImg = _checkImgUrl(store.userinfo.avatar_300x300.url_list[0])
+  data.previewImg = _checkImgUrl(store.userinfo.avatar_300x300.url_list[0])
 }
 
 function showBirthdayDialog() {
@@ -169,8 +173,8 @@ function showBirthdayDialog() {
   top: 0;
   overflow: auto;
   font-size: 14rem;
+  background-color: #151723;
 }
-
 
 .preview-img {
   z-index: 9;

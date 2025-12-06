@@ -607,7 +607,7 @@ onMounted(() => {
       // SlideItem 内容样式
       :deep(.slide-item) {
         padding: 0; // ✅ 去掉左右padding
-        min-height: 60vh;
+        min-height: 110vh;
         background-color: #151723; // ✅ 三个 tab 的背景色
         width: 100%;
         box-sizing: border-box;
