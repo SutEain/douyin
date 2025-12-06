@@ -13,11 +13,18 @@ export function recommendedVideo(params?: any) {
   const pageSize = params?.pageSize ?? 10
   const start = params?.start ?? 0
   const pageNo = Math.floor(start / pageSize)
-  return requestSupabaseVideoList(
-    `${getAppServerBase()}/video/feed`,
-    { pageNo, pageSize },
-    { requireAuth: false, includeAuthIfAvailable: true }
-  )
+
+  // 🎯 传递深链接视频ID（如果有的话）
+  const requestParams: any = { pageNo, pageSize }
+  if (params?.start_video_id) {
+    requestParams.start_video_id = params.start_video_id
+    console.log('[API] recommendedVideo 带深链接参数:', params.start_video_id)
+  }
+
+  return requestSupabaseVideoList(`${getAppServerBase()}/video/feed`, requestParams, {
+    requireAuth: false,
+    includeAuthIfAvailable: true
+  })
 }
 
 export function recommendedLongVideo(params?: any) {

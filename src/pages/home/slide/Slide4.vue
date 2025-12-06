@@ -52,24 +52,9 @@ async function loadMore() {
     listLength: state.list.length,
     totalSize: state.totalSize,
     loading: store.loading,
-    hasStartVideo: !!store.startVideoData
+    hasStartVideoId: !!store.startVideoId,
+    hasStartVideoData: !!store.startVideoData
   })
-
-  // 🎯 首次加载时，检查是否有深链接视频
-  if (state.list.length === 0 && store.startVideoData) {
-    console.log('[Slide4] 🎯 检测到深链接视频，插入到列表开头')
-    console.log('[Slide4] 深链接视频ID:', store.startVideoData.aweme_id)
-    console.log('[Slide4] 深链接视频标题:', store.startVideoData.desc)
-
-    // 将深链接视频插入到列表开头
-    state.list.push(store.startVideoData)
-
-    // 清空深链接数据（已使用）
-    store.clearStartVideoId()
-
-    console.log('[Slide4] ✅ 深链接视频已插入，继续加载更多视频')
-    // 继续加载更多视频
-  }
 
   if (store.loading) {
     console.log('[Slide4] 正在加载中，跳过')
@@ -81,15 +66,25 @@ async function loadMore() {
   }
 
   store.loading = true
-  console.log('[Slide4] 开始请求 API', {
-    start: state.list.length,
-    pageSize: state.pageSize
-  })
 
-  const res = await recommendedVideo({
+  // 🎯 首次加载时，如果有深链接视频ID，传递给后端API
+  const requestParams: any = {
     start: state.list.length,
     pageSize: state.pageSize
-  })
+  }
+
+  if (state.list.length === 0 && store.startVideoId) {
+    console.log('[Slide4] 🎯 检测到深链接参数，传递给API')
+    console.log('[Slide4] start_video_id:', store.startVideoId)
+    requestParams.start_video_id = store.startVideoId
+
+    // 清空深链接数据（已使用）
+    store.clearStartVideoId()
+  }
+
+  console.log('[Slide4] 开始请求 API', requestParams)
+
+  const res = await recommendedVideo(requestParams)
 
   console.log('[Slide4] API 响应', {
     success: res.success,

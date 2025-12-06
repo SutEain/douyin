@@ -60,28 +60,75 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
+  // 🎯 检查是否有深链接视频ID
+  const startVideoId = url.searchParams.get('start_video_id')
+  console.log('[app-server][Feed] 请求参数:', { pageNo, pageSize, startVideoId })
+
+  let startVideo: any = null
+  const adjustedFrom = from
+  let adjustedTo = to
+
+  // 🎯 如果是首次加载（pageNo=0）且有 start_video_id
+  if (pageNo === 0 && startVideoId) {
+    console.log('[app-server][Feed] 🎯 检测到深链接视频ID:', startVideoId)
+
+    // 获取深链接视频
+    const { data: startRow, error: startError } = await supabaseAdmin
+      .from('videos')
+      .select('*')
+      .eq('id', startVideoId)
+      .eq('status', 'published')
+      .maybeSingle()
+
+    if (startError) {
+      console.error('[app-server][Feed] 获取深链接视频失败:', startError)
+    } else if (startRow) {
+      console.log('[app-server][Feed] ✅ 获取到深链接视频:', startRow.description)
+      startVideo = startRow
+
+      // 🎯 调整推荐视频的数量：总共返回 pageSize 个，深链接占1个，推荐占 pageSize-1 个
+      adjustedTo = from + pageSize - 2 // -1 是因为 range 包含结束位置，再 -1 是因为深链接占1个
+      console.log('[app-server][Feed] 调整推荐视频范围: from=', adjustedFrom, 'to=', adjustedTo)
+    } else {
+      console.log('[app-server][Feed] ⚠️ 深链接视频不存在或未发布')
+    }
+  }
+
+  // 🎯 构建查询，如果有深链接视频则排除它（避免重复）
+  let query = supabaseAdmin.from('videos').select('*', { count: 'exact' }).eq('status', 'published')
+
+  if (startVideo) {
+    console.log('[app-server][Feed] 🎯 排除深链接视频ID，避免重复:', startVideoId)
+    query = query.neq('id', startVideoId)
+  }
+
   const {
     data: rows,
     error: videoError,
     count
-  } = await supabaseAdmin
-    .from('videos')
-    .select('*', { count: 'exact' })
-    .eq('status', 'published')
+  } = await query
     .order('is_top', { ascending: false })
     .order('created_at', { ascending: false })
-    .range(from, to)
+    .range(adjustedFrom, adjustedTo)
 
   if (videoError) {
     console.error('[app-server] Load feed failed:', videoError)
     return errorResponse('Failed to load feed', 1, 500)
   }
 
-  await attachUserFlags(rows ?? [], user?.id ?? null)
+  // 🎯 合并深链接视频和推荐视频
+  const allRows = startVideo ? [startVideo, ...(rows ?? [])] : (rows ?? [])
+  console.log('[app-server][Feed] 视频列表:', {
+    有深链接: !!startVideo,
+    推荐视频数: rows?.length || 0,
+    总数: allRows.length
+  })
+
+  await attachUserFlags(allRows, user?.id ?? null)
 
   const profileCache = new Map<string, any>()
   const list = []
-  for (const row of rows ?? []) {
+  for (const row of allRows) {
     const authorProfile = await getVideoAuthorProfile(row, profileCache)
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
@@ -89,6 +136,8 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
       list.push(mapped)
     }
   }
+
+  console.log('[app-server][Feed] 返回视频列表，第一个视频ID:', list[0]?.aweme_id)
 
   return successResponse({
     list,

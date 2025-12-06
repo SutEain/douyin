@@ -193,58 +193,19 @@ function handleCloseUserPanel() {
   state.showUserPanel = false
 }
 
-// 🎯 检查深链接参数
+// 🎯 检查深链接参数（简化版 - 让后端API处理）
 async function checkDeepLink() {
-  console.log('[DeepLink][Home] ========== 开始检查深链接 ==========')
+  console.log('[DeepLink][Home] ========== 检查深链接参数 ==========')
   console.log('[DeepLink][Home] baseStore.startVideoId:', baseStore.startVideoId)
 
-  const videoId = baseStore.startVideoId
-  if (!videoId) {
-    console.log('[DeepLink][Home] ❌ 无深链接参数，跳过')
-    return
+  if (baseStore.startVideoId) {
+    console.log('[DeepLink][Home] ✅ 检测到深链接参数:', baseStore.startVideoId)
+    console.log('[DeepLink][Home] 等待 Slide4 调用 API 时处理（后端会将深链接视频插入列表首位）')
+  } else {
+    console.log('[DeepLink][Home] 无深链接参数，正常加载推荐流')
   }
 
-  console.log('[DeepLink][Home] ✅ 检测到 video_id:', videoId)
-  console.log('[DeepLink][Home] video_id 长度:', videoId.length)
-  console.log('[DeepLink][Home] video_id 类型:', typeof videoId)
-
-  try {
-    console.log('[DeepLink][Home] 📡 开始调用 getVideoById API...')
-
-    // 获取视频详情
-    const { getVideoById } = await import('@/api/videos')
-    const res = await getVideoById(videoId)
-
-    console.log('[DeepLink][Home] 📦 API 响应:', JSON.stringify(res, null, 2))
-
-    if (res.success && res.data) {
-      console.log('[DeepLink][Home] ✅ 获取视频成功')
-      console.log('[DeepLink][Home] 视频标题:', res.data.desc || res.data.description || '无标题')
-      console.log('[DeepLink][Home] 视频ID:', res.data.aweme_id)
-      console.log('[DeepLink][Home] 作者:', res.data.author?.nickname)
-      console.log('[DeepLink][Home] 完整视频数据:', JSON.stringify(res.data, null, 2))
-
-      // 🎯 不跳转到 Detail，而是保存视频数据，让 Slide4 将其插入到流的第一个位置
-      console.log('[DeepLink][Home] 💾 保存视频数据到 store，等待 Slide4 加载')
-      baseStore.setStartVideoData(res.data)
-
-      // 注意：不清空 startVideoId，让 Slide4 知道有深链接视频需要处理
-      console.log('[DeepLink][Home] ========== 深链接视频已准备好 ==========')
-    } else {
-      console.error('[DeepLink][Home] ❌ 获取视频失败')
-      console.error('[DeepLink][Home] 错误信息:', res.message)
-      console.error('[DeepLink][Home] 完整响应:', res)
-      _notice('视频不存在或已删除')
-      baseStore.clearStartVideoId()
-    }
-  } catch (error) {
-    console.error('[DeepLink][Home] ❌ 捕获异常:', error)
-    console.error('[DeepLink][Home] 错误类型:', error.constructor.name)
-    console.error('[DeepLink][Home] 错误消息:', error.message)
-    console.error('[DeepLink][Home] 错误堆栈:', error.stack)
-    _notice('加载视频失败')
-    baseStore.clearStartVideoId()
-  }
+  console.log('[DeepLink][Home] ========== 检查完成 ==========')
 }
 
 // ========== 生命周期 ==========
