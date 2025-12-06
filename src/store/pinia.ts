@@ -21,6 +21,10 @@ type SupabaseProfile = {
   birthday?: string | null
   tg_username?: string | null
   lang?: string | null
+  numeric_id?: number | null
+  show_collect?: boolean | null
+  show_like?: boolean | null
+  show_tg_username?: boolean | null
 }
 
 function normalizeLang(lang?: string | null) {
@@ -60,7 +64,9 @@ function mapProfileToUserinfo(profile: SupabaseProfile, current: any) {
   return {
     ...current,
     uid: profile.id || current.uid,
-    nickname: profile.nickname || (profile.tg_username ? `@${profile.tg_username}` : current.nickname || '抖音用户'),
+    nickname:
+      profile.nickname ||
+      (profile.tg_username ? `@${profile.tg_username}` : current.nickname || '抖音用户'),
     unique_id: profile.username || profile.tg_username || current.unique_id,
     signature: profile.bio || '',
     gender: profile.gender ?? current.gender ?? 0,
@@ -73,6 +79,12 @@ function mapProfileToUserinfo(profile: SupabaseProfile, current: any) {
     aweme_count: profile.video_count ?? current.aweme_count ?? 0,
     following_count: profile.following_count ?? current.following_count ?? 0,
     follower_count: profile.follower_count ?? current.follower_count ?? 0,
+    // 🎯 数字ID
+    numeric_id: profile.numeric_id ?? current.numeric_id ?? null,
+    // 🎯 隐私设置
+    show_collect: profile.show_collect !== false,
+    show_like: profile.show_like !== false,
+    show_tg_username: profile.show_tg_username === true,
     avatar_168x168: {
       url_list: [avatar]
     },
@@ -114,6 +126,10 @@ export const useBaseStore = defineStore('base', {
         following_count: 0,
         follower_count: 0,
         is_private: false,
+        numeric_id: null,
+        show_collect: true,
+        show_like: true,
+        show_tg_username: false,
         school: {
           name: '',
           department: null,
@@ -144,7 +160,7 @@ export const useBaseStore = defineStore('base', {
   },
   getters: {
     selectFriends() {
-      const allFriends = ((this as any).friends?.all) ?? []
+      const allFriends = (this as any).friends?.all ?? []
       return allFriends.filter((v: any) => v.select)
     }
   },
@@ -171,8 +187,8 @@ export const useBaseStore = defineStore('base', {
       const tgLang = window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code
       if (tgLang) {
         const lang = normalizeLang(tgLang)
-            this.userinfo.lang = lang
-            i18n.global.locale.value = lang
+        this.userinfo.lang = lang
+        i18n.global.locale.value = lang
       } else {
         const fallback = normalizeLang()
         this.userinfo.lang = fallback

@@ -57,7 +57,14 @@
             </div>
           </div>
           <div class="row" @click.stop="handleLocationClick">
-            <div class="left">{{ $t('profile.location') }}</div>
+            <div class="left" style="display: flex; align-items: center">
+              <img
+                src="/images/icon/ditu.png"
+                alt=""
+                style="width: 18px; height: 18px; margin-right: 5px"
+              />
+              {{ $t('profile.location') }}
+            </div>
             <div class="right">
               <span>{{ isEmpty(store.userinfo.country) }}</span>
               <dy-back scale=".8" direction="right"></dy-back>

@@ -38,14 +38,29 @@
             />
             <div class="right">
               <p class="name">{{ userinfo.nickname }}</p>
-              <div class="number mb1r">
-                <!-- 🎯 始终显示数字ID -->
-                <span class="mr1r">ID: {{ userinfo.numeric_id || '...' }}</span>
-                <!-- 🎯 根据隐私设置显示TG用户名 -->
-                <span v-if="userinfo.unique_id && userinfo.show_tg_username !== false"
-                  >TG用户名：@{{ userinfo.unique_id }}</span
-                >
-                <span class="mr1r" v-if="userinfo.is_private">私密账号</span>
+              <!-- 🎯 TG用户名第1排 -->
+              <div
+                class="number"
+                style="margin-bottom: 5px; display: flex; align-items: center; gap: 5px"
+                v-if="userinfo.unique_id && userinfo.show_tg_username === true"
+              >
+                <span>TG用户名：@{{ userinfo.unique_id }}</span>
+                <Icon
+                  icon="mdi:content-copy"
+                  style="font-size: 14px; cursor: pointer; opacity: 0.7"
+                  @click.stop="copyTgUsername"
+                />
+                <span style="margin-left: 5px" v-if="userinfo.is_private">私密账号</span>
+              </div>
+              <!-- 🎯 数字ID第2排 -->
+              <div class="number" style="display: flex; align-items: center; gap: 5px">
+                <span>ID: {{ userinfo.numeric_id || '加载中...' }}</span>
+                <Icon
+                  v-if="userinfo.numeric_id"
+                  icon="mdi:content-copy"
+                  style="font-size: 14px; cursor: pointer; opacity: 0.7"
+                  @click.stop="copyNumericId"
+                />
               </div>
             </div>
           </div>
@@ -70,6 +85,7 @@
               <span>{{ userinfo.user_age }}岁</span>
             </div>
             <div class="item" v-if="userinfo.country || userinfo.province || userinfo.city">
+              <img src="../../assets/img/icon/me/ditu.png" alt="" />
               <template v-if="userinfo.country">{{ userinfo.country }}</template>
               <template v-if="userinfo.country && (userinfo.province || userinfo.city)">
                 ·
@@ -206,7 +222,7 @@ import SlideItem from '@/components/slide/SlideItem.vue'
 import BaseFooter from '@/components/BaseFooter.vue'
 import Loading from '@/components/Loading.vue'
 import NoMore from '@/components/NoMore.vue'
-import { _checkImgUrl, _formatNumber, _no } from '@/utils'
+import { _checkImgUrl, _formatNumber, _no, _copy } from '@/utils'
 import { likeVideo, myVideo, collectedVideo } from '@/api/videos'
 import { useBaseStore } from '@/store/pinia'
 import { useNav } from '@/utils/hooks/useNav'
@@ -266,6 +282,20 @@ function handleHeaderClick() {
     state.previewImg = _checkImgUrl(userCoverUrl)
   } else {
     state.previewImg = '/images/profile/default_bg.png'
+  }
+}
+
+// 🎯 复制数字ID
+function copyNumericId() {
+  if (userinfo.value.numeric_id) {
+    _copy(String(userinfo.value.numeric_id))
+  }
+}
+
+// 🎯 复制TG用户名
+function copyTgUsername() {
+  if (userinfo.value.unique_id) {
+    _copy('@' + userinfo.value.unique_id)
   }
 }
 

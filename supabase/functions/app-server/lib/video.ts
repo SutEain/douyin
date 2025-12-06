@@ -27,7 +27,7 @@ export async function mapVideoRow(row: any, profile: any) {
   const coverUrl = await buildCoverUrl(row, profile)
   const avatar = profile?.avatar_url || DEFAULT_AVATAR
   const videoUrl = await buildVideoUrl(row)
-  
+
   if (!videoUrl) return null
 
   const authorCoverList = Array.isArray(profile?.cover_url)
@@ -42,8 +42,8 @@ export async function mapVideoRow(row: any, profile: any) {
   return {
     aweme_id: typeof row.id === 'string' ? row.id : String(row.id),
     is_top: !!row.is_top,
-    status: row.status || 'published',  // ✅ 添加视频状态 (draft/ready/published)
-    is_private: !!row.is_private,  // ✅ 添加私密标记
+    status: row.status || 'published', // ✅ 添加视频状态 (draft/ready/published)
+    is_private: !!row.is_private, // ✅ 添加私密标记
     desc: row.description || '',
     tags: row.tags || [],
     create_time: Math.floor(new Date(row.created_at).getTime() / 1000),
@@ -89,24 +89,30 @@ export async function mapVideoRow(row: any, profile: any) {
         url_list: Array.isArray(entry?.url_list)
           ? entry.url_list
           : entry?.url_list
-          ? [entry.url_list]
-          : []
+            ? [entry.url_list]
+            : []
       })),
       card_entries: authorCardEntries,
       // ✅ UserPanel 需要的额外字段（使用数据库实际字段名）
-      signature: profile?.bio || '',  // bio 就是签名
+      signature: profile?.bio || '', // bio 就是签名
       total_favorited: profile?.total_likes || 0,
       following_count: profile?.following_count || 0,
-      mplatform_followers_count: profile?.follower_count || 0,  // 正确字段名：follower_count
-      follower_count: profile?.follower_count || 0,  // 正确字段名：follower_count
+      mplatform_followers_count: profile?.follower_count || 0, // 正确字段名：follower_count
+      follower_count: profile?.follower_count || 0, // 正确字段名：follower_count
       follow_status: 0, // 0=未关注, 1=已关注, 2=互相关注 (由 applyRowFlags 更新)
       is_follow: false,
       // ✅ 年龄、性别、地区等信息
-      user_age: profile?.birthday ? calculateAge(profile.birthday) : -1,  // 从 birthday 计算年龄
+      user_age: profile?.birthday ? calculateAge(profile.birthday) : -1, // 从 birthday 计算年龄
       gender: profile?.gender || 0, // 0=未知, 1=男, 2=女
       ip_location: profile?.country || '',
       province: profile?.province || '',
-      city: profile?.city || ''
+      city: profile?.city || '',
+      country: profile?.country || '',
+      // 🎯 数字ID和隐私设置
+      numeric_id: profile?.numeric_id || null,
+      show_collect: profile?.show_collect !== false,
+      show_like: profile?.show_like !== false,
+      show_tg_username: profile?.show_tg_username === true
     }
   }
 }
@@ -141,7 +147,9 @@ export async function buildTelegramFileUrl(fileId?: string): Promise<string | nu
   if (!fileId) return null
 
   if (TG_FILE_PROXY_URL) {
-    const base = TG_FILE_PROXY_URL.endsWith('/') ? TG_FILE_PROXY_URL.slice(0, -1) : TG_FILE_PROXY_URL
+    const base = TG_FILE_PROXY_URL.endsWith('/')
+      ? TG_FILE_PROXY_URL.slice(0, -1)
+      : TG_FILE_PROXY_URL
     return `${base}?file_id=${encodeURIComponent(fileId)}`
   }
 
@@ -181,11 +189,7 @@ export async function getVideoAuthorProfile(row: any, cache: Map<string, any>) {
 
   let query
   if (row.author_id) {
-    query = supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', row.author_id)
-      .maybeSingle()
+    query = supabaseAdmin.from('profiles').select('*').eq('id', row.author_id).maybeSingle()
   } else if (row.tg_user_id) {
     query = supabaseAdmin
       .from('profiles')
@@ -203,18 +207,14 @@ export async function getVideoAuthorProfile(row: any, cache: Map<string, any>) {
 
 export async function getProfileById(id: string) {
   if (!id) return null
-  const { data } = await supabaseAdmin
-    .from('profiles')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle()
+  const { data } = await supabaseAdmin.from('profiles').select('*').eq('id', id).maybeSingle()
   return data
 }
 
 export function applyRowFlags(mapped: any, row: any) {
   const flags = row?.__userFlags
   if (!flags) return
-  
+
   if (typeof flags.isLoved === 'boolean') {
     mapped.isLoved = flags.isLoved
   }
@@ -233,14 +233,14 @@ export function applyRowFlags(mapped: any, row: any) {
 
 export async function attachUserFlags(rows: any[], userId?: string | null) {
   if (!userId || !rows?.length) return
-  
+
   // 获取当前用户的 profile 信息（需要知道 tg_user_id）
   const { data: currentUserProfile } = await supabaseAdmin
     .from('profiles')
     .select('id, tg_user_id')
     .eq('id', userId)
     .maybeSingle()
-  
+
   const videoIds = rows.map((row) => row.id).filter(Boolean)
   const authorIds = rows.map((row) => row.author_id).filter(Boolean)
 
@@ -286,20 +286,21 @@ export async function attachUserFlags(rows: any[], userId?: string | null) {
   rows.forEach((row) => {
     // 判断是否是自己的视频
     const isOwnVideoByAuthorId = row.author_id === userId
-    const isOwnVideoByTgId = currentUserProfile?.tg_user_id && row.tg_user_id === currentUserProfile.tg_user_id
+    const isOwnVideoByTgId =
+      currentUserProfile?.tg_user_id && row.tg_user_id === currentUserProfile.tg_user_id
     const isOwnVideo = isOwnVideoByAuthorId || isOwnVideoByTgId
-    
+
     // 判断关注状态
     const isFollowing = row.author_id ? followSet.has(row.author_id) : false
     const isFollowedBy = row.author_id ? followedBySet.has(row.author_id) : false
     const isMutualFollow = isFollowing && isFollowedBy
-    
+
     row.__userFlags = {
       isLoved: likeSet.has(row.id),
       isCollect: collectSet.has(row.id),
       isAttention: isOwnVideo || isFollowing,
       // ✅ 关注状态：0=未关注, 1=已关注, 2=互相关注
-      followStatus: isOwnVideo ? -1 : (isMutualFollow ? 2 : (isFollowing ? 1 : 0))
+      followStatus: isOwnVideo ? -1 : isMutualFollow ? 2 : isFollowing ? 1 : 0
     }
   })
 }
@@ -321,4 +322,3 @@ export function formatCommentRow(row: any) {
     user_id: row.user_id
   }
 }
-

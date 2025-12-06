@@ -661,7 +661,7 @@ async function handleCallback(
         .eq('tg_user_id', chatId)
         .single()
 
-      const newValue = !(profile?.show_tg_username !== false)
+      const newValue = !(profile?.show_tg_username === true)
       await supabase
         .from('profiles')
         .update({ show_tg_username: newValue })
@@ -746,14 +746,17 @@ async function handleCallback(
       const videoId = data.split(':')[1]
       await answerCallbackQuery(callbackQueryId)
       await updateUserState(chatId, {
-        state: 'editing_location',
+        state: 'editing_location_detail',
         draft_video_id: videoId,
         current_message_id: messageId
       })
       await editMessage(
         chatId,
         messageId,
-        '📍 请发送位置信息\n\n格式1：城市 国家\n例如：上海 中国\n\n格式2：仅国家\n例如：美国\n\n💡 发送 /cancel 可取消编辑',
+        '📍 <b>编辑位置</b>\n\n' +
+          '请点击下方的 📎 附件按钮，选择"位置"，发送您的实时位置或选择一个位置\n\n' +
+          '💡 系统将自动识别国家和城市\n\n' +
+          '发送 /cancel 可取消编辑',
         {
           reply_markup: {
             inline_keyboard: [[{ text: '← 返回', callback_data: `view_video_${videoId}` }]]
@@ -1207,6 +1210,28 @@ async function handleText(chatId: number, text: string, userMessageId: number) {
     }
 
     // 🎯 从视频详情页编辑位置
+    // 🎯 editing_location_detail 现在使用位置消息，不再处理文本
+    case 'editing_location_detail': {
+      await deleteMessage(chatId, userMessageId)
+      await sendSelfDestructMessage(
+        chatId,
+        '❌ 请发送位置信息（不是文本）\n\n点击下方的 📎 附件按钮选择"位置"',
+        5
+      )
+      return
+    }
+
+    // 🎯 waiting_location 状态已在 handleLocation 中处理
+    case 'waiting_location': {
+      await deleteMessage(chatId, userMessageId)
+      await sendSelfDestructMessage(
+        chatId,
+        '❌ 请发送位置信息（不是文本）\n\n点击下方的 📎 附件按钮选择"位置"',
+        5
+      )
+      return
+    }
+
     case 'editing_location': {
       await deleteMessage(chatId, userMessageId)
 
@@ -1258,10 +1283,12 @@ async function handleLocation(chatId: number, location: any, userMessageId: numb
   if (
     !userState.draft_video_id ||
     !userState.current_message_id ||
-    userState.state !== 'waiting_location'
+    (userState.state !== 'waiting_location' && userState.state !== 'editing_location_detail')
   ) {
     return
   }
+
+  const isEditingDetail = userState.state === 'editing_location_detail'
 
   try {
     // 删除用户位置消息
@@ -1285,16 +1312,23 @@ async function handleLocation(chatId: number, location: any, userMessageId: numb
     // 重置状态
     await updateUserState(chatId, { state: 'idle' })
 
-    // 重新获取视频并更新主消息
+    // 重新获取视频
     const { data: updatedVideo } = await supabase
       .from('videos')
       .select('*')
       .eq('id', userState.draft_video_id)
       .single()
 
-    await editMessage(chatId, userState.current_message_id, getEditMenuText(updatedVideo), {
-      reply_markup: getEditKeyboard(updatedVideo)
-    })
+    // 🎯 根据来源返回不同页面
+    if (isEditingDetail) {
+      // 从视频详情页编辑：返回详情页
+      await handleViewVideo(chatId, userState.current_message_id, userState.draft_video_id)
+    } else {
+      // 从草稿编辑：返回编辑菜单
+      await editMessage(chatId, userState.current_message_id, getEditMenuText(updatedVideo), {
+        reply_markup: getEditKeyboard(updatedVideo)
+      })
+    }
   } catch (error) {
     console.error('位置识别失败:', error)
     await sendSelfDestructMessage(
@@ -1306,7 +1340,7 @@ async function handleLocation(chatId: number, location: any, userMessageId: numb
         '请稍后重试'
     )
 
-    // 恢复编辑菜单
+    // 重新获取视频
     const { data: video } = await supabase
       .from('videos')
       .select('*')
@@ -1316,9 +1350,14 @@ async function handleLocation(chatId: number, location: any, userMessageId: numb
     await updateUserState(chatId, { state: 'idle' })
 
     if (video && userState.current_message_id) {
-      await editMessage(chatId, userState.current_message_id, getEditMenuText(video), {
-        reply_markup: getEditKeyboard(video)
-      })
+      // 🎯 根据来源恢复不同页面
+      if (isEditingDetail) {
+        await handleViewVideo(chatId, userState.current_message_id, userState.draft_video_id)
+      } else {
+        await editMessage(chatId, userState.current_message_id, getEditMenuText(video), {
+          reply_markup: getEditKeyboard(video)
+        })
+      }
     }
   }
 }
@@ -1586,7 +1625,7 @@ async function handleMyPublished(chatId: number, messageId: number) {
   try {
     const { data: videos, error } = await supabase
       .from('videos')
-      .select('id, description, like_count, comment_count, view_count')
+      .select('id, description, like_count, comment_count, view_count, is_private')
       .eq('tg_user_id', chatId)
       .eq('status', 'published')
       .order('published_at', { ascending: false })
@@ -1615,13 +1654,14 @@ async function handleMyPublished(chatId: number, messageId: number) {
 
     const lines = ['📺 <b>我发布的视频</b>', '']
 
-    // 🎯 构建按钮（每个视频一个按钮：查看详情）
+    // 🎯 构建按钮（每个视频一个按钮：查看详情，私密视频显示🔒）
     const keyboard = videos.map((v) => {
+      const privacyIcon = v.is_private ? '🔒 ' : ''
       const desc = v.description ? safeTruncate(v.description, 20) : '无描述'
       const stats = `👀${v.view_count || 0} ❤️${v.like_count || 0}`
       return [
         {
-          text: `${desc}  ${stats}`,
+          text: `${privacyIcon}${desc}  ${stats}`,
           callback_data: `view_video_${v.id}`
         }
       ]
@@ -2073,7 +2113,7 @@ async function handlePrivacySettings(chatId: number) {
 
     const showCollect = profile.show_collect !== false // 默认公开
     const showLike = profile.show_like !== false // 默认公开
-    const showTgUsername = profile.show_tg_username !== false // 默认显示
+    const showTgUsername = profile.show_tg_username === true // 默认隐藏
 
     const lines = [
       '⚙️ <b>隐私设置</b>',
@@ -2136,7 +2176,7 @@ async function handlePrivacySettingsEdit(chatId: number, messageId: number) {
 
     const showCollect = profile.show_collect !== false
     const showLike = profile.show_like !== false
-    const showTgUsername = profile.show_tg_username !== false
+    const showTgUsername = profile.show_tg_username === true
 
     const lines = [
       '⚙️ <b>隐私设置</b>',

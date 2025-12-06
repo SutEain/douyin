@@ -38,8 +38,8 @@ export async function handleFollowUser(req: Request): Promise<Response> {
   }
 
   // ✅ 查询关注状态（检查对方是否也关注了我）
-  let followStatus = 0  // 0=未关注
-  
+  let followStatus = 0 // 0=未关注
+
   if (body.follow) {
     // 如果我刚关注了对方，检查对方是否也关注了我
     const { data: isFollowedBy } = await supabaseAdmin
@@ -48,8 +48,8 @@ export async function handleFollowUser(req: Request): Promise<Response> {
       .eq('follower_id', body.target_id)
       .eq('followee_id', user.id)
       .maybeSingle()
-    
-    followStatus = isFollowedBy ? 2 : 1  // 2=互相关注, 1=已关注
+
+    followStatus = isFollowedBy ? 2 : 1 // 2=互相关注, 1=已关注
   }
 
   const { data: targetProfile } = await supabaseAdmin
@@ -61,7 +61,7 @@ export async function handleFollowUser(req: Request): Promise<Response> {
   return successResponse({
     follow: body.follow,
     follower_count: targetProfile?.follower_count ?? null,
-    follow_status: followStatus  // ✅ 返回关注状态
+    follow_status: followStatus // ✅ 返回关注状态
   })
 }
 
@@ -69,7 +69,7 @@ export async function handleFollowUser(req: Request): Promise<Response> {
 export async function handleGetUserProfile(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const targetUserId = url.searchParams.get('user_id')
-  
+
   if (!targetUserId) {
     throw new HttpError('Missing user_id parameter', 400)
   }
@@ -99,7 +99,7 @@ export async function handleGetUserProfile(req: Request): Promise<Response> {
 
   // 3️⃣ 查询关注状态（如果当前用户已登录）
   let followStatus = 0 // 0=未关注, 1=已关注, 2=互相关注, -1=自己
-  
+
   if (currentUserId) {
     if (currentUserId === targetUserId) {
       // 自己
@@ -143,16 +143,23 @@ export async function handleGetUserProfile(req: Request): Promise<Response> {
     country: profile.country || '',
     province: profile.province || '',
     city: profile.city || '',
-    
+
+    // 🎯 数字ID
+    numeric_id: profile.numeric_id || null,
+
+    // 🎯 隐私设置
+    show_collect: profile.show_collect !== false, // 默认公开
+    show_like: profile.show_like !== false, // 默认公开
+    show_tg_username: profile.show_tg_username === true, // 默认隐藏
+
     // 统计数据
     total_favorited: profile.total_likes || 0,
     following_count: profile.following_count || 0,
     followers_count: profile.follower_count || 0,
     follower_count: profile.follower_count || 0,
     aweme_count: awemeCount || 0,
-    
+
     // 关系状态
     follow_status: followStatus
   })
 }
-

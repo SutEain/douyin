@@ -72,15 +72,34 @@
                 <img src="@/assets/img/icon/me/certification.webp" />
                 {{ props.currentItem.author.certification }}
               </div>
-              <!-- ✅ TG用户名（没有则不显示） -->
-              <div class="number" v-else-if="props.currentItem.author.unique_id">
-                <span>TG用户名：@{{ props.currentItem.author.unique_id }}</span>
-                <img
-                  src="@/assets/img/icon/me/copy.png"
-                  alt=""
-                  @click.stop="_copy('@' + props.currentItem.author.unique_id)"
-                />
-              </div>
+              <template v-else>
+                <!-- 🎯 TG用户名第1排（根据隐私设置显示） -->
+                <div
+                  class="number"
+                  style="margin-bottom: 5px; display: flex; align-items: center; gap: 5px"
+                  v-if="
+                    props.currentItem.author.unique_id &&
+                    props.currentItem.author.show_tg_username === true
+                  "
+                >
+                  <span>TG用户名：@{{ props.currentItem.author.unique_id }}</span>
+                  <Icon
+                    icon="mdi:content-copy"
+                    style="font-size: 14px; cursor: pointer; opacity: 0.7"
+                    @click.stop="copyAuthorTgUsername"
+                  />
+                </div>
+                <!-- 🎯 数字ID第2排 -->
+                <div class="number" style="display: flex; align-items: center; gap: 5px">
+                  <span>ID: {{ props.currentItem.author.numeric_id || '加载中...' }}</span>
+                  <Icon
+                    v-if="props.currentItem.author.numeric_id"
+                    icon="mdi:content-copy"
+                    style="font-size: 14px; cursor: pointer; opacity: 0.7"
+                    @click.stop="copyAuthorNumericId"
+                  />
+                </div>
+              </template>
             </div>
           </div>
         </header>
@@ -114,12 +133,14 @@
               <span>{{ props.currentItem.author.user_age }}岁</span>
             </div>
             <div class="item" v-if="props.currentItem.author.ip_location">
+              <img src="@/assets/img/icon/me/ditu.png" alt="" />
               {{ props.currentItem.author.ip_location }}
             </div>
             <div
               class="item"
               v-if="props.currentItem.author.province || props.currentItem.author.city"
             >
+              <img src="@/assets/img/icon/me/ditu.png" alt="" />
               {{ props.currentItem.author.province }}
               <template v-if="props.currentItem.author.province && props.currentItem.author.city">
                 ·
@@ -288,6 +309,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, watch, computed, onMounted, onUnmounted } from 'vue'
+import { Icon } from '@iconify/vue'
 import {
   _checkImgUrl,
   _copy,
@@ -554,6 +576,20 @@ async function handleFollowClick() {
 function followButton() {}
 
 function cancelFollow() {}
+
+// 🎯 复制作者的数字ID
+function copyAuthorNumericId() {
+  if (props.currentItem?.author?.numeric_id) {
+    _copy(String(props.currentItem.author.numeric_id))
+  }
+}
+
+// 🎯 复制作者的TG用户名
+function copyAuthorTgUsername() {
+  if (props.currentItem?.author?.unique_id) {
+    _copy('@' + props.currentItem.author.unique_id)
+  }
+}
 
 defineExpose({ cancelFollow })
 

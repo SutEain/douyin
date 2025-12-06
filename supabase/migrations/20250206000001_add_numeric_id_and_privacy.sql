@@ -15,7 +15,7 @@ CREATE SEQUENCE IF NOT EXISTS profile_numeric_id_seq
 ALTER TABLE public.profiles
 ADD COLUMN IF NOT EXISTS show_collect BOOLEAN DEFAULT TRUE,
 ADD COLUMN IF NOT EXISTS show_like BOOLEAN DEFAULT TRUE,
-ADD COLUMN IF NOT EXISTS show_tg_username BOOLEAN DEFAULT TRUE;
+ADD COLUMN IF NOT EXISTS show_tg_username BOOLEAN DEFAULT FALSE;
 
 -- 4. 为现有用户分配数字ID（按创建时间顺序）
 WITH numbered_profiles AS (
