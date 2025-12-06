@@ -75,6 +75,29 @@ const vIsCanPlay = {
 }
 
 const nav = useNav()
+const fallbackAvatar = new URL('@/assets/img/icon/avatar/0.png', import.meta.url).href
+const fallbackCover = new URL('@/assets/img/icon/me/code-bg.png', import.meta.url).href
+
+function onVideoError(e) {
+  const video = e.target
+  if (video) {
+    video.removeAttribute('src')
+    video.load()
+    video.parentNode?.parentNode?.classList.add('pause')
+  }
+}
+
+function onCoverError(e) {
+  if (e?.target) {
+    e.target.src = fallbackCover
+  }
+}
+
+function onAvatarError(e) {
+  if (e?.target) {
+    e.target.src = fallbackAvatar
+  }
+}
 </script>
 
 <template>
@@ -107,6 +130,7 @@ const nav = useNav()
                 v-is-can-play
                 :poster="_checkImgUrl(item.video.cover.url_list[0])"
                 :src="item.video.play_addr.url_list[0]"
+                @error="onVideoError"
               ></video>
               <div class="options">
                 <div class="left"></div>
@@ -125,7 +149,13 @@ const nav = useNav()
                 </div>
               </div>
             </div>
-            <img v-else v-lazy="_checkImgUrl(item.video.cover.url_list[0])" alt="" class="poster" />
+            <img
+              v-else
+              v-lazy="_checkImgUrl(item.video.cover.url_list[0])"
+              alt=""
+              class="poster"
+              @error="onCoverError"
+            />
             <div class="duration">{{ _duration(item.duration / 1000) }}</div>
             <div class="title">
               {{ item.desc }}
@@ -136,6 +166,7 @@ const nav = useNav()
                   v-lazy="_checkImgUrl(item.author.avatar_168x168.url_list[0])"
                   alt=""
                   class="avatar"
+                  @error="onAvatarError"
                 />
                 <div class="name">{{ item.author.nickname }}</div>
               </div>

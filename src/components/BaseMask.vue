@@ -17,8 +17,8 @@ export default {
 
 <style lang="less">
 .Mask {
-  z-index: 3;
-  position: fixed;
+  z-index: 50; // ✅ 提高 z-index，但仍低于输入框
+  position: absolute; // ✅ 改为 absolute，相对于父容器定位
   top: 0;
   bottom: 0;
   left: 0;

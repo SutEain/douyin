@@ -81,7 +81,7 @@
 - 文件结构（Edge Functions 分文件，便于维护）：
   - `supabase/functions/auth-signup/index.ts`：邮箱注册。
   - `supabase/functions/auth-login/index.ts`：邮箱登录。
-  - `supabase/functions/auth-tg-login/index.ts`：TG token 免登。
+  - `supabase/functions/server/index.ts`：TG token 免登。
   - `supabase/functions/auth-bind-email/index.ts`：TG 用户绑定邮箱。
   - 公共工具文件：`supabase/functions/_shared/` 存放校验、签名校验、响应封装等。
 

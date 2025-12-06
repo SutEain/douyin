@@ -4,7 +4,6 @@
     :modelValue="modelValue"
     @update:modelValue="(e) => $emit('update:modelValue', e)"
     @cancel="closeShare1"
-    :touch-moved="false"
     maskMode="light"
     height="60vh"
     mode="light"

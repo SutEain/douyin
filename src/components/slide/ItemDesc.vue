@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { inject, reactive } from 'vue'
+import { computed, inject, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   isMy: {
@@ -18,10 +19,40 @@ const props = defineProps({
 
 const item = inject<any>('item')
 
+const { t } = useI18n()
+
 const state = reactive({
   isAttention: false,
-  test: [1, 2]
+  test: [1, 2],
+  expanded: false
 })
+
+const currentItem = computed(() => {
+  if (!item) return {}
+  return 'value' in (item as any) ? (item as any).value || {} : item
+})
+
+const normalizedTags = computed(() => {
+  const tags = currentItem.value?.tags || []
+  if (!Array.isArray(tags)) return []
+  return tags
+    .map((tag: string) => String(tag || '').trim())
+    .filter(Boolean)
+    .map((tag: string) => (tag.startsWith('#') ? tag : `#${tag}`))
+})
+
+const fullDescription = computed(() => {
+  const desc = currentItem.value?.desc ?? ''
+  const parts = [desc?.trim()]
+  if (normalizedTags.value.length) {
+    parts.push(normalizedTags.value.join(' '))
+  }
+  const fullText = parts.filter(Boolean).join(' ').trim()
+  // ✅ 限制最多 300 字
+  return fullText.length > 300 ? fullText.substring(0, 300) + '...' : fullText
+})
+
+const showToggle = computed(() => fullDescription.value.length > 100)
 </script>
 <template>
   <div class="item-desc ml1r mb1r">
@@ -40,8 +71,21 @@ const state = reactive({
       <div class="name mb1r f18 fb" @click.stop="$emit('goUserInfo')">
         @{{ item?.author?.nickname }}
       </div>
-      <div class="description">
-        {{ item.desc }}
+      <div 
+        class="description-wrapper" 
+        v-if="fullDescription"
+      >
+        <div class="description" :class="{ collapsed: !state.expanded && showToggle }">
+          {{ fullDescription }}
+        </div>
+        <span 
+          class="toggle-desc" 
+          v-if="showToggle" 
+          @click.stop.prevent="state.expanded = !state.expanded"
+          @touchend.stop.prevent="state.expanded = !state.expanded"
+        >
+          {{ state.expanded ? '收起 ▲' : '展开 ▼' }}
+        </span>
       </div>
       <!--      <div class="music" @click.stop="bus.emit('nav','/home/music')">-->
       <!--        <img src="../../assets/img/icon/music.svg" alt="" class="music-image">-->
@@ -118,6 +162,49 @@ const state = reactive({
       color: white;
     }
 
+    .description-wrapper {
+      position: relative;
+      margin-bottom: 8rem;
+      padding-right: 80rem; // ✅ 给按钮留出空间
+    }
+
+    .description {
+      font-size: 14rem;
+      line-height: 1.4;
+      white-space: pre-line;
+      word-break: break-word;
+
+      &.collapsed {
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+    }
+
+    .toggle-desc {
+      position: absolute;
+      right: 0;
+      bottom: 0; // ✅ 固定在底部（折叠后的4行文字底部）
+      font-size: 13rem;
+      color: rgba(255, 255, 255, 0.9);
+      cursor: pointer;
+      padding: 8rem 12rem;
+      white-space: nowrap;
+      user-select: none;
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 4rem;
+      min-width: 64rem;
+      text-align: center;
+      z-index: 60; // ✅ 高于进度条热区(50)，与静音icon同级
+      
+      &:active {
+        opacity: 0.8;
+        background: rgba(0, 0, 0, 0.3);
+      }
+    }
+
     .music {
       position: relative;
       display: flex;
@@ -160,9 +247,6 @@ const state = reactive({
             color: white;
           }
         }
-      }
-
-      .loveds {
       }
 
       .type-loved {

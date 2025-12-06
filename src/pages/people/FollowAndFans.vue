@@ -34,8 +34,15 @@
             :is-show-right-text="false"
           />
           <div class="is-search" v-if="data.searchKey">
-            <div class="search-result" v-if="data.searchFriends.length">
-              <People :key="i" v-for="(item, i) in data.searchFriends" :people="item"></People>
+            <div class="search-result" v-if="data.searchFollowing.length">
+              <People 
+                :key="i" 
+                v-for="(item, i) in data.searchFollowing" 
+                :people="item"
+                :show-unfollow="true"
+                @unfollow="handleUnfollow(item.user_id)"
+                @clickAvatar="handleClickAvatar(item)"
+              ></People>
             </div>
             <div class="no-result" v-else>
               <img src="../../assets/img/icon/no-result.png" alt="" />
@@ -44,29 +51,54 @@
             </div>
           </div>
           <div class="no-search" v-else>
-            <div class="title">我的关注</div>
-            <People :key="i" v-for="(item, i) in store.friends.all" :people="item"></People>
+            <People 
+              :key="i" 
+              v-for="(item, i) in data.following" 
+              :people="item"
+              :show-unfollow="true"
+              @unfollow="handleUnfollow(item.user_id)"
+              @clickAvatar="handleClickAvatar(item)"
+            ></People>
+            <NoMore v-if="data.following.length" />
           </div>
         </SlideItem>
         <SlideItem class="tab2">
-          <People :key="i" v-for="(item, i) in store.friends.all" :people="item"></People>
-          <NoMore />
+          <People 
+            :key="i" 
+            v-for="(item, i) in data.followers" 
+            :people="item"
+            @clickAvatar="handleClickAvatar(item)"
+          ></People>
+          <NoMore v-if="data.followers.length" />
         </SlideItem>
       </SlideHorizontal>
     </div>
+    
+    <!-- 用户资料页 -->
+    <UserPanel
+      v-if="showUserPanel && selectedUser"
+      :currentItem="selectedUser"
+      :active="showUserPanel"
+      @back="showUserPanel = false"
+      @update:currentItem="(item) => selectedUser = item"
+    />
   </div>
 </template>
 <script setup lang="ts">
 import People from './components/People.vue'
 import Search from '../../components/Search.vue'
 import Indicator from '../../components/slide/Indicator.vue'
+import UserPanel from '@/components/UserPanel.vue'
 import { useBaseStore } from '@/store/pinia'
-import { onMounted, reactive, watch } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNav } from '@/utils/hooks/useNav'
+import { getFollowingList, getFollowersList } from '@/api/user'
+import { toggleFollowUser } from '@/api/videos'
+import { _notice } from '@/utils'
 
 defineOptions({
-  name: 'FindAcquaintance'
+  name: 'FollowAndFans'
 })
 
 const route = useRoute()
@@ -75,26 +107,90 @@ const store = useBaseStore()
 const data = reactive({
   isSearch: false,
   searchKey: '',
-
   slideIndex: 0,
-  searchFriends: []
+  following: [] as any[],
+  followers: [] as any[],
+  searchFollowing: [] as any[]
 })
 
-onMounted(() => {
+// ✅ UserPanel 相关状态
+const showUserPanel = ref(false)
+const selectedUser = ref<any>(null)
+
+onMounted(async () => {
   data.slideIndex = ~~route.query.type
+  await loadFollowing()
+  await loadFollowers()
 })
+
+async function loadFollowing() {
+  const res = await getFollowingList()
+  if (res.success) {
+    data.following = res.data.list
+  }
+}
+
+async function loadFollowers() {
+  const res = await getFollowersList()
+  if (res.success) {
+    data.followers = res.data.list
+  }
+}
+
+async function handleUnfollow(userId: string) {
+  try {
+    await toggleFollowUser(userId, false)
+    _notice('已取消关注')
+    await loadFollowing()
+  } catch (error: any) {
+    _notice(error?.message || '取消关注失败')
+  }
+}
+
+// ✅ 处理头像点击，打开用户资料页
+function handleClickAvatar(user: any) {
+  console.log('[FollowAndFans] 点击头像:', user)
+  
+  // 转换数据格式为 UserPanel 需要的格式
+  selectedUser.value = {
+    aweme_id: user.user_id || user.uid,
+    author: {
+      user_id: user.user_id || user.uid,
+      uid: user.uid || user.user_id,
+      nickname: user.name || user.nickname,
+      unique_id: user.unique_id,
+      avatar_168x168: {
+        url_list: [user.avatar || user.avatar_url]
+      },
+      avatar_300x300: {
+        url_list: [user.avatar || user.avatar_url]
+      },
+      signature: user.signature,
+      follow_status: user.follow_status || 0,
+      is_follow: user.follow_status > 0, // ✅ 根据 follow_status 设置 is_follow
+      follower_count: user.follower_count || 0,
+      following_count: user.following_count || 0,
+      aweme_count: user.aweme_count || 0,
+      cover_url: user.cover_url || []
+    },
+    aweme_list: [] // 会自动加载
+  }
+  
+  showUserPanel.value = true
+  console.log('[FollowAndFans] ✅ 打开 UserPanel')
+}
 
 watch(
   () => data.searchKey,
   (newVal) => {
     if (newVal) {
-      //TODO 搜索时仅仅判断是否包含了对应字符串，抖音做了拼音判断的
-      data.searchFriends = store.friends.all.filter((v) => {
-        if (v.name.includes(newVal)) return true
-        return v.account.includes(newVal)
+      const keyword = newVal.toLowerCase()
+      data.searchFollowing = data.following.filter((v) => {
+        return v.nickname?.toLowerCase().includes(keyword) || 
+               v.unique_id?.toLowerCase().includes(keyword)
       })
     } else {
-      data.searchFriends = []
+      data.searchFollowing = []
     }
   }
 )

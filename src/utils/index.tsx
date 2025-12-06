@@ -45,15 +45,16 @@ export function _copy(val) {
   document.body.removeChild(textarea)
 }
 
-export function _formatNumber(num) {
-  if (!num) return
-  if (num > 100000000) {
-    return (num / 100000000).toFixed(1) + '亿'
-  } else if (num > 10000) {
-    return (num / 10000).toFixed(1) + '万'
-  } else {
-    return num
+export function _formatNumber(num?: number | string) {
+  if (num === '' || num === null || num === undefined) return '0'
+  const value = typeof num === 'number' ? num : Number(num)
+  if (!Number.isFinite(value) || value <= 0) return '0'
+  if (value >= 100000000) {
+    return (value / 100000000).toFixed(1).replace(/\.0$/, '') + '亿'
+  } else if (value >= 10000) {
+    return (value / 10000).toFixed(1).replace(/\.0$/, '') + '万'
   }
+  return value.toString()
 }
 
 export function _dateFormat(val, type?): string {

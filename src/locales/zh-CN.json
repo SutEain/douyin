@@ -38,5 +38,52 @@
         "language": "语言设置",
         "logout": "退出登录",
         "version": "抖音 {version}"
+    },
+    "profile": {
+        "editProfile": "编辑资料",
+        "completed": "已完成{percent}%",
+        "avatar": "头像",
+        "name": "名字",
+        "douyinId": "抖音号",
+        "bio": "简介",
+        "gender": "性别",
+        "birthday": "生日",
+        "location": "所在地",
+        "clickToSet": "点击设置",
+        "male": "男",
+        "female": "女",
+        "notShow": "不展示",
+        "viewAvatar": "查看头像",
+        "editName": "修改名字",
+        "editDouyinId": "修改抖音号",
+        "editBio": "修改简介",
+        "save": "保存",
+        "myName": "我的名字",
+        "myDouyinId": "我的抖音号",
+        "myBio": "个人简介",
+        "namePlaceholder": "记得填写名字哦",
+        "bioPlaceholder": "你可以填写兴趣爱好、心情愿望，有趣的介绍能让被关注的概率变高噢！",
+        "douyinIdRule": "最多16个字，只允许包含字母、数字、下划线和点，30天内仅能修改一次",
+        "saveConfirm": "是否保存修改",
+        "nameRequired": "名字不能为空",
+        "saveFailed": "保存失败，请稍后再试",
+        "saveSuccess": "新签名保存成功"
+    },
+    "location": {
+        "choose": "选择地区",
+        "notSet": "暂不设置",
+        "chooseCountry": "选择国家/地区"
+    },
+    "home": {
+        "longVideo": "长视频",
+        "following": "关注",
+        "recommended": "推荐",
+        "home": "首页",
+        "me": "我",
+        "refreshContent": "下拉刷新内容"
+    },
+    "video": {
+        "expand": "展开",
+        "collapse": "收起"
     }
 }

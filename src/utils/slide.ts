@@ -174,28 +174,40 @@ export function slideTouchMove(
 export function slideTouchEnd(e, state, canNextCb = null, nextCb = null, notNextCb = null) {
   if (!checkEvent(e)) return
   if (!state.isDown) return
-  // console.log('end', state.name)
 
   if (state.next) {
     const isHorizontal = state.type === SlideType.HORIZONTAL
     const isNext = isHorizontal ? state.move.x < 0 : state.move.y < 0
-    //同move事件
+    
     if (!canNextCb) canNextCb = canNext
     if (canNextCb(state, isNext)) {
-      //2024-04-25：换成pointer事件之后不能捕获了，需要让父组件重置自己的isDown，不然PC上move事件会一直触发
-      // _stopPropagation(e)
-
-      //结合时间、距离来判断是否成功滑动
+      // 结合时间、距离来判断是否成功滑动
       const endTime = Date.now()
-      let gapTime = endTime - state.start.time
+      const gapTime = endTime - state.start.time
       const distance = isHorizontal ? state.move.x : state.move.y
       const judgeValue = isHorizontal ? state.wrapper.width : state.wrapper.height
-      //1、距离太短，直接不通过
-      if (Math.abs(distance) < 20) gapTime = 1000
-      //2、距离太长，直接通过
-      if (Math.abs(distance) > judgeValue / 3) gapTime = 100
-      //3、若不在上述两种情况，那么只需要判断时间即可
-      if (gapTime < 150) {
+      
+      // ✅ 距离阈值（已调整：更容易切换视频）
+      const MIN_DISTANCE = 15 // 从 30 改成 15，更容易触发
+      const QUICK_SWIPE_MIN_DISTANCE = judgeValue / 6 // 从 1/5 改成 1/6，快速滑动更敏感
+      const NORMAL_SWIPE_MIN_DISTANCE = judgeValue / 4 // 从 1/3 改成 1/4，普通滑动更容易
+      
+      if (Math.abs(distance) < MIN_DISTANCE) {
+        return // 距离太短，不切换
+      }
+      
+      if (Math.abs(distance) > NORMAL_SWIPE_MIN_DISTANCE) {
+        // 距离很长，切换
+        if (isNext) {
+          state.localIndex++
+        } else {
+          state.localIndex--
+        }
+        return nextCb?.(isNext)
+      }
+      
+      if (gapTime < 150 && Math.abs(distance) >= QUICK_SWIPE_MIN_DISTANCE) {
+        // 快速滑动 + 中等距离，切换
         if (isNext) {
           state.localIndex++
         } else {
@@ -220,7 +232,13 @@ export function slideTouchEnd(e, state, canNextCb = null, nextCb = null, notNext
 export function slideReset(e, el, state, emit = null) {
   if (!checkEvent(e)) return
 
+  // ✅ 记录切换前的 index，用于动画结束后验证
+  const indexBeforeReset = state.localIndex
+  
   _css(el, 'transition-duration', `300ms`)
+  
+  // ✅ 统一在这里计算并设置 offset（带动画）
+  // handleSlideChange 只管理 DOM，不设置 transform
   const t = getSlideOffset(state, el)
   let dx1 = 0
   let dx2 = 0
@@ -232,15 +250,22 @@ export function slideReset(e, el, state, emit = null) {
     dx2 = t
   }
   _css(el, 'transform', `translate3d(${dx1}px, ${dx2}px, 0)`)
+  
+  // VERTICAL_INFINITE 类型的虚拟列表，不需要特殊处理
+  
   state.start.x = state.start.y = state.start.time = state.move.x = state.move.y = 0
   state.next = false
   state.needCheck = true
   state.isDown = false
-  // e.target.style.pointerEvents = null
+  
   setTimeout(() => {
     window.isMoved = false
   }, 200)
+  
+  // ✅ 立即发送 update:index
   emit?.('update:index', state.localIndex)
+  
+  // ✅ 不再需要 DOM 同步检测，播放由 IntersectionObserver 控制
 }
 
 //根据当前index，获取slide偏移距离
@@ -262,8 +287,10 @@ export function getSlideOffset(state: any, el: HTMLDivElement) {
     return 0
     // return -state.localIndex * state.wrapper.width
   } else {
-    //VERTICAL_INFINITE 列表只需要计算index * 高就行
+    //VERTICAL_INFINITE 列表需要基于每个元素的绝对 top 位置计算
     if (state.type === SlideType.VERTICAL_INFINITE) {
+      // 每个元素的 top = index * height（绝对定位）
+      // 容器的 offset 让 localIndex 对应的元素在屏幕顶部
       return -state.localIndex * state.wrapper.height
     } else {
       //同上

@@ -5,7 +5,6 @@
     @update:modelValue="(e) => $emit('update:modelValue', e)"
     @cancel="closeShare"
     :show-heng-gang="false"
-    :touch-moved="false"
     maskMode="light"
     height="320rem"
     mode="dark"

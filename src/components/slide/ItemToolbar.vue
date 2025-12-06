@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import BaseMusic from '../BaseMusic.vue'
-import { _formatNumber, cloneDeep } from '@/utils'
+import { _formatNumber, cloneDeep, _notice } from '@/utils'
 import bus, { EVENT_KEY } from '@/utils/bus'
-import { Icon } from '@iconify/vue'
 import { useClick } from '@/utils/hooks/useClick'
-import { inject } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref } from 'vue'
+import { Icon } from '@iconify/vue'
+import { toggleVideoLike, toggleVideoCollect, toggleFollowUser } from '@/api/videos'
+import { useVideoStore } from '@/stores/video'
 
 const props = defineProps({
   isMy: {
@@ -22,50 +23,154 @@ const props = defineProps({
 })
 
 const position = inject<any>('position')
+const videoStore = useVideoStore()
 
 const emit = defineEmits(['update:item', 'goUserInfo', 'showComments', 'showShare', 'goMusic'])
 
-function _updateItem(props, key, val) {
-  const old = cloneDeep(props.item)
-  old[key] = val
-  emit('update:item', old)
-  bus.emit(EVENT_KEY.UPDATE_ITEM, { position: position.value, item: old })
+function syncItemState() {
+  const snapshot = cloneDeep(props.item)
+  emit('update:item', snapshot)
+  bus.emit(EVENT_KEY.UPDATE_ITEM, { position: position.value, item: snapshot })
 }
 
-function loved() {
-  setTimeout(() => {
-    _updateItem(props, 'isLoved', !props.item.isLoved)
-  }, 100)
-  if (!props.item.isLoved) {
+let likeLoading = $ref(false)
+let collectLoading = $ref(false)
+let followLoading = $ref(false)
+
+// 静音状态（全局同步，Pinia 为主，兼容旧 bus）
+const isMuted = computed(() => videoStore.isMuted)
+
+// 切换静音
+function toggleMute() {
+  const next = !videoStore.isMuted
+  videoStore.toggleMuted(next)
+  // 兼容旧的全局变量/事件
+  window.isMuted = next
+  bus.emit(next ? EVENT_KEY.ADD_MUTED : EVENT_KEY.REMOVE_MUTED)
+}
+
+// 监听全局静音事件，同步图标状态
+function onAddMuted() {
+  videoStore.toggleMuted(true)
+}
+
+function onRemoveMuted() {
+  videoStore.toggleMuted(false)
+}
+
+onMounted(() => {
+  bus.on(EVENT_KEY.ADD_MUTED, onAddMuted)
+  bus.on(EVENT_KEY.REMOVE_MUTED, onRemoveMuted)
+})
+
+onUnmounted(() => {
+  bus.off(EVENT_KEY.ADD_MUTED, onAddMuted)
+  bus.off(EVENT_KEY.REMOVE_MUTED, onRemoveMuted)
+})
+
+function ensureStatistics() {
+  if (!props.item.statistics) {
     // eslint-disable-next-line vue/no-mutating-props
-    props.item.statistics.digg_count++
-  } else {
-    // eslint-disable-next-line vue/no-mutating-props
-    props.item.statistics.digg_count--
+    props.item.statistics = {
+      digg_count: 0,
+      comment_count: 0,
+      collect_count: 0,
+      share_count: 0
+    }
   }
 }
 
-function collected() {
-  setTimeout(() => {
-    _updateItem(props, 'isCollect', !props.item.isCollect)
-  }, 100)
-  if (!props.item.isCollect) {
-    // eslint-disable-next-line vue/no-mutating-props
-    props.item.statistics.collect_count++
-  } else {
-    // eslint-disable-next-line vue/no-mutating-props
-    props.item.statistics.collect_count--
+async function loved() {
+  if (likeLoading || !props.item?.aweme_id) return
+  ensureStatistics()
+  const previous = cloneDeep(props.item)
+  const next = !props.item.isLoved
+  // eslint-disable-next-line vue/no-mutating-props
+  props.item.isLoved = next
+  // eslint-disable-next-line vue/no-mutating-props
+  props.item.statistics.digg_count = Math.max(
+    0,
+    (props.item.statistics.digg_count ?? 0) + (next ? 1 : -1)
+  )
+  syncItemState()
+  likeLoading = true
+  try {
+    const res = await toggleVideoLike(props.item.aweme_id, next)
+    if (typeof res?.like_count === 'number') {
+      // eslint-disable-next-line vue/no-mutating-props
+      props.item.statistics.digg_count = res.like_count
+      syncItemState()
+    }
+  } catch (error: any) {
+    Object.assign(props.item, previous)
+    syncItemState()
+    _notice(error?.message || '操作失败')
+  } finally {
+    likeLoading = false
   }
 }
 
-function attention(e) {
-  e.currentTarget.classList.add('attention')
-  setTimeout(() => {
-    _updateItem(props, 'isAttention', true)
-  }, 1000)
+async function collected() {
+  if (collectLoading || !props.item?.aweme_id) return
+  ensureStatistics()
+  const previous = cloneDeep(props.item)
+  const next = !props.item.isCollect
+  // eslint-disable-next-line vue/no-mutating-props
+  props.item.isCollect = next
+  // eslint-disable-next-line vue/no-mutating-props
+  props.item.statistics.collect_count = Math.max(
+    0,
+    (props.item.statistics.collect_count ?? 0) + (next ? 1 : -1)
+  )
+  syncItemState()
+  collectLoading = true
+  try {
+    const res = await toggleVideoCollect(props.item.aweme_id, next)
+    if (typeof res?.collect_count === 'number') {
+      // eslint-disable-next-line vue/no-mutating-props
+      props.item.statistics.collect_count = res.collect_count
+      syncItemState()
+    }
+  } catch (error: any) {
+    Object.assign(props.item, previous)
+    syncItemState()
+    _notice(error?.message || '操作失败')
+  } finally {
+    collectLoading = false
+  }
+}
+
+async function attention(e) {
+  if (followLoading) return
+  const targetId = props.item.author?.user_id
+  if (!targetId) {
+    _notice('暂不支持关注该作者')
+    return
+  }
+  const previous = cloneDeep(props.item)
+  // eslint-disable-next-line vue/no-mutating-props
+  props.item.isAttention = true
+  syncItemState()
+  followLoading = true
+  e?.currentTarget?.classList.add('attention')
+  try {
+    await toggleFollowUser(targetId, true)
+  } catch (error: any) {
+    Object.assign(props.item, previous)
+    e?.currentTarget?.classList.remove('attention')
+    syncItemState()
+    _notice(error?.message || '关注失败')
+  } finally {
+    followLoading = false
+  }
 }
 
 function showComments() {
+  // ✅ 直接调用 videoStore 打开评论区
+  const videoStore = useVideoStore()
+  videoStore.openComments(props.item.aweme_id)
+  
+  // ✅ 发送事件调整视频高度（只有匹配的视频会响应）
   bus.emit(EVENT_KEY.OPEN_COMMENTS, props.item.aweme_id)
 }
 
@@ -79,7 +184,11 @@ const vClick = useClick()
         class="avatar"
         :src="item.author?.avatar_168x168?.url_list?.[0]"
         alt=""
-        v-click="() => bus.emit(EVENT_KEY.GO_USERINFO)"
+        v-click="() => {
+          console.log('[ItemToolbar] 🖱️ 头像被点击了！')
+          console.log('[ItemToolbar] 发送 GO_USERINFO 事件')
+          bus.emit(EVENT_KEY.GO_USERINFO)
+        }"
       />
       <transition name="fade">
         <div v-if="!item.isAttention" v-click="attention" class="options">
@@ -117,11 +226,22 @@ const vClick = useClick()
     <div v-else class="share mb2r" v-click="() => bus.emit(EVENT_KEY.SHOW_SHARE)">
       <img src="../../assets/img/icon/menu-white.png" alt="" class="share-image" />
     </div>
-    <!--    <BaseMusic-->
-    <!--        :cover="item.music.cover"-->
-    <!--        v-click="$router.push('/home/music')"-->
-    <!--    /> -->
-    <BaseMusic />
+    
+    <!-- 静音开关 -->
+    <div class="mute-toggle mb2r" v-click="toggleMute" @click.stop>
+      <Icon 
+        v-if="isMuted" 
+        icon="ph:speaker-simple-slash-fill" 
+        class="icon"
+        style="color: white"
+      />
+      <Icon 
+        v-else 
+        icon="ph:speaker-simple-high-fill" 
+        class="icon"
+        style="color: white"
+      />
+    </div>
   </div>
 </template>
 
@@ -131,6 +251,7 @@ const vClick = useClick()
   position: absolute;
   bottom: 0;
   right: 10rem;
+  z-index: 10;
   color: #fff;
   display: flex;
   flex-direction: column;

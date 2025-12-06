@@ -117,8 +117,7 @@ async function fetchData() {
     r.json().then(async (v) => {
       let userList = cloneDeep(baseStore.users)
       if (!userList.length) {
-        await baseStore.init()
-        userList = cloneDeep(baseStore.users)
+        userList = cloneDeep(resource.users || [])
       }
       v = v.map((w) => {
         w.type = 'recommend-video'

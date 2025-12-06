@@ -1,13 +1,25 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
+// 安全获取环境变量
+const getEnv = (key: string) => {
+  try {
+    return import.meta.env[key]
+  } catch (e) {
+    console.error(`Error accessing env var ${key}:`, e)
+    return undefined
+  }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+const supabaseUrl = getEnv('VITE_SUPABASE_URL')
+const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY')
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Missing Supabase environment variables')
+  // 不抛出错误，而是创建一个虚构的 client 避免应用崩溃
+  // 在实际调用时会失败，但至少 UI 能显示出来
+}
+
+export const supabase = createClient(supabaseUrl || 'https://example.supabase.co', supabaseAnonKey || 'anon-key', {
   auth: {
     autoRefreshToken: true,
     persistSession: true,

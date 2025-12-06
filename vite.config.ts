@@ -18,7 +18,7 @@ export default defineConfig((): Promise<UserConfig> => {
         latestCommitHash = commit.shortHash
       }
       resolve({
-        base: './',
+        base: process.env.VITE_ENV === 'GITEE_PAGES' ? '/douyin' : '/',
         envDir: 'env',
         plugins: [
           VueMacros({
@@ -169,9 +169,23 @@ export default defineConfig((): Promise<UserConfig> => {
           port: 3000,
           open: true,
           host: '0.0.0.0',
-          allowedHosts: ['.ngrok-free.app', '.ngrok.io', 'localhost'],
+          allowedHosts: [
+            '.ngrok-free.app',
+            '.ngrok-free.dev',
+            '.ngrok.io',
+            '.ngrok.app',
+            'localhost',
+            'app.reol-dev.com'
+          ],
           fs: {
             strict: false
+          },
+          proxy: {
+            '/api': {
+              target: process.env.VITE_SUPABASE_URL || 'http://localhost:54321',
+              changeOrigin: true,
+              rewrite: (path) => path.replace(/^\/api/, '/functions/v1')
+            }
           }
         },
         preview: {

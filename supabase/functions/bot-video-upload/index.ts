@@ -1,0 +1,1790 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const BOT_TOKEN = Deno.env.get('TG_BOT_TOKEN')!
+// 本地开发用 SB_ 前缀，生产环境用 SUPABASE_ 前缀
+const SUPABASE_URL = Deno.env.get('SB_URL') || Deno.env.get('SUPABASE_URL')!
+const SUPABASE_SERVICE_KEY = Deno.env.get('SB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+// 用户状态存储（使用数据库）
+interface UserState {
+  state: 'idle' | 'waiting_description' | 'waiting_tags' | 'waiting_location'
+  draft_video_id?: string // UUID
+  current_message_id?: number // 当前编辑的消息ID
+}
+
+// Telegram API 调用
+async function sendMessage(chatId: number, text: string, options: any = {}) {
+  console.log('[sendMessage] chatId:', chatId, 'textLength:', text.length)
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        ...options
+      })
+    })
+    const result = await response.json()
+    if (!result.ok) {
+      console.error('[sendMessage] 失败:', result)
+    } else {
+      console.log('[sendMessage] 成功, message_id:', result.result?.message_id)
+    }
+    return result
+  } catch (error) {
+    console.error('[sendMessage] 异常:', error)
+    throw error
+  }
+}
+
+async function editMessage(chatId: number, messageId: number, text: string, options: any = {}) {
+  console.log('[editMessage] chatId:', chatId, 'messageId:', messageId, 'textLength:', text.length)
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`
+  try {
+    const payload = {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: 'HTML',
+      ...options
+    }
+    console.log('[editMessage] payload键盘:', options.reply_markup ? 'yes' : 'no')
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const result = await response.json()
+    if (!result.ok) {
+      console.error('[editMessage] 失败:', JSON.stringify(result))
+      console.error('[editMessage] 请求payload:', JSON.stringify(payload).substring(0, 500))
+    } else {
+      console.log('[editMessage] 成功')
+    }
+    return result
+  } catch (error) {
+    console.error('[editMessage] 异常:', error)
+    throw error
+  }
+}
+
+async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      callback_query_id: callbackQueryId,
+      text
+    })
+  })
+}
+
+// 删除消息
+async function deleteMessage(chatId: number, messageId: number) {
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: messageId
+      })
+    })
+  } catch (error) {
+    console.error('删除消息失败:', error)
+  }
+}
+
+// 发送自毁消息（3秒后删除）
+async function sendSelfDestructMessage(chatId: number, text: string, seconds: number = 3) {
+  const result = await sendMessage(chatId, text)
+  if (result.ok) {
+    const messageId = result.result.message_id
+    setTimeout(() => {
+      deleteMessage(chatId, messageId)
+    }, seconds * 1000)
+  }
+  return result
+}
+
+// 获取持久化键盘（只有"我的视频"按钮）
+function getPersistentKeyboard() {
+  return {
+    keyboard: [
+      [
+        { text: '📹 我的视频' }
+      ]
+    ],
+    resize_keyboard: true,
+    persistent: true
+  }
+}
+
+// Nominatim 地理编码（返回国家+城市）
+async function getLocationFromCoords(lat: number, lon: number) {
+  const url = `https://nominatim.openstreetmap.org/reverse?` +
+    `lat=${lat}&lon=${lon}&format=json&accept-language=zh&addressdetails=1`
+  
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'DouyinClone/1.0 (supabase-edge-function)'
+    }
+  })
+  
+  if (!response.ok) {
+    throw new Error('地理编码失败')
+  }
+  
+  const data = await response.json()
+  const address = data.address || {}
+  
+  return {
+    country: address.country || '未知',
+    country_code: (address.country_code || 'XX').toUpperCase(),
+    city: address.city || address.town || address.village || address.state || null
+  }
+}
+
+// 获取国旗 Emoji
+function getFlag(countryCode: string): string {
+  if (!countryCode || countryCode.length !== 2) return '🌍'
+  const codePoints = countryCode
+    .toUpperCase()
+    .split('')
+    .map(char => 127397 + char.charCodeAt(0))
+  return String.fromCodePoint(...codePoints)
+}
+
+// 安全截断字符串（避免在emoji中间截断）
+function safeTruncate(str: string, maxLength: number): string {
+  if (!str) return str
+  // 使用Array.from来正确处理emoji和其他Unicode字符
+  const chars = Array.from(str)
+  if (chars.length <= maxLength) {
+    return str
+  }
+  return chars.slice(0, maxLength).join('') + '...'
+}
+
+// 生成编辑菜单
+function getEditKeyboard(video: any) {
+  const keyboard = []
+  
+  // 第一行：描述和标签
+  keyboard.push([
+    {
+      text: video.description ? '✏️ 修改描述' : '📝 添加描述',
+      callback_data: 'edit_description'
+    },
+    {
+      text: video.tags && video.tags.length > 0 ? '✏️ 修改标签' : '🏷️ 添加标签',
+      callback_data: 'edit_tags'
+    }
+  ])
+  
+  // 第二行：位置和隐私
+  keyboard.push([
+    {
+      text: video.location_country ? '✏️ 修改位置' : '📍 添加位置',
+      callback_data: 'edit_location'
+    },
+    {
+      text: video.is_private ? '🔒 私密' : '🌍 公开',
+      callback_data: 'toggle_privacy'
+    }
+  ])
+
+  // 第三行：置顶设置（仅已发布视频可置顶）
+  if (video.status === 'published') {
+    keyboard.push([
+      {
+        text: video.is_top ? '📍 取消置顶' : '📌 置顶该视频',
+        callback_data: 'toggle_pin'
+      }
+    ])
+  }
+  
+  // 发布和草稿
+  keyboard.push([
+    {
+      text: '✅ 立即发布',
+      callback_data: 'publish'
+    },
+    {
+      text: '💾 保存草稿',
+      callback_data: 'save_draft'
+    }
+  ])
+
+  // 删除按钮
+  keyboard.push([
+    {
+      text: '🗑️ 删除视频',
+      callback_data: `delete_video_${video.id}`
+    }
+  ])
+
+  if (video.status !== 'published') {
+    keyboard.push([
+      {
+        text: '⬅️ 返回草稿列表',
+        callback_data: 'back_my_drafts'
+      }
+    ])
+  }
+  
+  return { inline_keyboard: keyboard }
+}
+
+// 生成编辑菜单文本
+function getEditMenuText(video: any): string {
+  // 描述
+  let descText = '未设置'
+  if (video.description) {
+    descText = safeTruncate(video.description, 100)
+  }
+  
+  // 标签
+  let tagsText = '未设置'
+  if (video.tags && video.tags.length > 0) {
+    tagsText = video.tags.map((t: string) => '#' + t).join(' ')
+  }
+  
+  // 位置
+  let locationText = '未设置'
+  if (video.location_country) {
+    locationText = getFlag(video.location_country_code!) + ' ' + video.location_country
+    if (video.location_city) {
+      locationText += ' · ' + video.location_city
+    }
+  }
+  
+  // 隐私
+  const privacyText = video.is_private ? '🔒 私密' : '🌍 公开'
+  
+  const lines = [
+    `✅ <b>视频已就绪</b>`,
+    ``,
+    `📝 描述：${descText}`,
+    `🏷️ 标签：${tagsText}`,
+    `📍 位置：${locationText}`,
+    `🔐 隐私：${privacyText}`,
+    `📌 置顶：${video.is_top ? '已置顶' : '未置顶'}`
+  ]
+  
+  return lines.join('\n')
+}
+
+// 获取或创建用户状态
+async function getUserState(userId: number): Promise<UserState> {
+  const { data } = await supabase
+    .from('user_bot_states')
+    .select('*')
+    .eq('user_id', userId)
+    .single()
+  
+  if (data) {
+    return data as UserState
+  }
+  
+  // 创建新状态
+  const { data: newState } = await supabase
+    .from('user_bot_states')
+    .insert({ user_id: userId, state: 'idle' })
+    .select()
+    .single()
+  
+  return newState as UserState
+}
+
+// 更新用户状态
+async function updateUserState(userId: number, updates: Partial<UserState>) {
+  await supabase
+    .from('user_bot_states')
+    .upsert({
+      user_id: userId,
+      ...updates
+    })
+}
+
+// 从文本中提取标签（#开头，最多5个）
+function extractTags(text: string): string[] {
+  if (!text) return []
+  // 匹配 #标签（中文、英文、数字、下划线）
+  const matches = text.match(/#[\w\u4e00-\u9fa5]+/g) || []
+  // 去掉#号，去重，最多5个
+  const tags = [...new Set(matches.map(t => t.substring(1)))].slice(0, 5)
+  return tags
+}
+
+// 获取 Telegram 用户信息
+async function getTelegramUserInfo(userId: number) {
+  try {
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChat`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: userId })
+    })
+    
+    const result = await response.json()
+    if (!result.ok) {
+      console.error('获取 Telegram 用户信息失败:', result)
+      return null
+    }
+    
+    return {
+      id: result.result.id,
+      first_name: result.result.first_name || '用户',
+      last_name: result.result.last_name,
+      username: result.result.username,
+      language_code: result.result.language_code
+    }
+  } catch (error) {
+    console.error('获取 Telegram 用户信息异常:', error)
+    return null
+  }
+}
+
+// 获取或创建 Profile（在 /start 时调用）
+// tgUserInfo: Telegram message.from 对象，包含用户完整信息
+async function getOrCreateProfile(
+  tgUserId: number, 
+  tgUserInfo?: { first_name: string; last_name?: string; username?: string; language_code?: string }
+): Promise<{ id: string } | null> {
+  try {
+    // 1. 先查找是否已存在
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', tgUserId)
+      .maybeSingle()
+    
+    if (existingProfile) {
+      console.log('找到已存在的 profile:', existingProfile.id)
+      return { id: existingProfile.id }
+    }
+    
+    // 2. 不存在则创建
+    console.log('Profile 不存在，开始创建...')
+    
+    // 优先使用传入的 tgUserInfo，如果没有则调用 API 获取
+    let tgUser = tgUserInfo ? {
+      id: tgUserId,
+      first_name: tgUserInfo.first_name,
+      last_name: tgUserInfo.last_name,
+      username: tgUserInfo.username,
+      language_code: tgUserInfo.language_code
+    } : await getTelegramUserInfo(tgUserId)
+    
+    if (!tgUser) {
+      console.error('无法获取 Telegram 用户信息')
+      return null
+    }
+    
+    // 3. 创建 auth 用户
+    const uniqueEmail = `tg_${tgUser.id}@telegram.user`
+    let userId: string
+    
+    try {
+      const { data: authData, error } = await supabase.auth.admin.createUser({
+        email: uniqueEmail,
+        email_confirm: true,
+        user_metadata: {
+          tg_user_id: tgUser.id,
+          tg_username: tgUser.username,
+          tg_first_name: tgUser.first_name,
+          tg_last_name: tgUser.last_name
+        }
+      })
+      
+      if (error) {
+        // 如果邮箱已存在，获取已有用户
+        if (error.status === 422 || error.message?.includes('email')) {
+          const { data: users } = await supabase.auth.admin.listUsers()
+          const existingUser = users?.users?.find(u => u.email === uniqueEmail)
+          if (existingUser) {
+            userId = existingUser.id
+            console.log('找到已存在的 auth 用户:', userId)
+          } else {
+            console.error('创建 auth 用户失败:', error)
+            return null
+          }
+        } else {
+          console.error('创建 auth 用户失败:', error)
+          return null
+        }
+      } else {
+        userId = authData.user.id
+        console.log('成功创建 auth 用户:', userId)
+      }
+    } catch (err) {
+      console.error('创建 auth 用户异常:', err)
+      return null
+    }
+    
+    // 4. 构建头像 URL
+    // 使用 Telegram 公开 API（支持真实照片和默认 SVG）
+    const avatarUrl = `https://t.me/i/userpic/320/${tgUser.id}.jpg`
+    
+    // 5. 创建或更新 profile
+    const { data: profile, error: upsertError } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: userId!,
+          tg_user_id: tgUser.id,
+          tg_username: tgUser.username || null,
+          nickname: tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : ''),
+          username: tgUser.username || `user_${tgUser.id}`,
+          avatar_url: avatarUrl,  // ✅ 存储公开头像 URL
+          auth_provider: 'tg',
+          lang: tgUser.language_code || 'zh-CN'
+        },
+        { onConflict: 'id' }
+      )
+      .select('id')
+      .single()
+    
+    if (upsertError) {
+      console.error('创建 profile 失败:', upsertError)
+      return null
+    }
+    
+    console.log('✅ 成功创建 profile:', profile.id)
+    return profile
+    
+  } catch (error) {
+    console.error('getOrCreateProfile 异常:', error)
+    return null
+  }
+}
+
+// 处理视频上传
+async function handleVideo(chatId: number, video: any, caption?: string, from?: any) {
+  console.log('[handleVideo] 开始处理视频')
+  console.log('[handleVideo] chatId:', chatId)
+  console.log('[handleVideo] video:', JSON.stringify(video).substring(0, 200))
+  console.log('[handleVideo] caption:', caption)
+  
+  try {
+    // 处理 caption（转发视频可能带有文案）
+    let description = null
+    let tags: string[] = []
+    
+    if (caption && caption.length > 0) {
+      // 截取前300字作为描述（安全截断，不破坏emoji）
+      description = safeTruncate(caption, 300)
+      // 自动提取标签
+      tags = extractTags(caption)
+    }
+    
+    // 查找或创建用户的 profile，获取 author_id
+    const profile = await getOrCreateProfile(chatId, from)
+    
+    if (!profile) {
+      console.error('无法创建或获取用户 profile')
+      await sendMessage(chatId, 
+        '❌ 账号初始化失败\n\n' +
+        '请先发送 /start 命令初始化账号'
+      )
+      return
+    }
+    
+    // ✅ 根据文件大小决定处理方式
+    const videoSize = video.file_size || 0
+    const sizeMB = (videoSize / 1024 / 1024).toFixed(1)
+    const isLargeFile = videoSize > 19.8 * 1024 * 1024  // 19.8MB 阈值（TG Bot API 限制 20MB，留 0.2MB 缓冲）
+    
+    console.log(`[handleVideo] 视频大小: ${sizeMB} MB, 是否大文件: ${isLargeFile}`)
+    
+    // 保存到数据库
+    const { data: draftVideo, error } = await supabase
+      .from('videos')
+      .insert({
+        tg_user_id: chatId,
+        author_id: profile.id,
+        title: video.file_name || '未命名视频',
+        description: description,
+        tags: tags.length > 0 ? tags : null,
+        play_url: isLargeFile ? null : video.file_id,  // 大文件暂时不设置 play_url
+        cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '',
+        tg_file_id: video.file_id,
+        tg_thumbnail_file_id: video.thumbnail?.file_id || video.thumb?.file_id,
+        tg_unique_id: video.file_unique_id,
+        storage_type: isLargeFile ? 'pending' : 'telegram',  // ✅ 大文件标记为 pending
+        duration: video.duration,
+        width: video.width,
+        height: video.height,
+        file_size: videoSize,  // ✅ 记录文件大小
+        is_private: false,
+        status: isLargeFile ? 'processing' : 'draft'  // ✅ 大文件标记为 processing
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('保存视频记录失败:', error)
+      await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + error.message)
+      return
+    }
+    
+    console.log(`[handleVideo] 视频记录已保存: ${draftVideo.id}, 状态: ${draftVideo.status}`)
+    
+    // ✅ 根据文件大小显示不同消息
+    if (isLargeFile) {
+      // 大文件：显示处理中消息
+      await sendMessage(chatId,
+        `✅ 视频已接收！\n\n` +
+        `📦 文件大小：${sizeMB} MB\n` +
+        `🔄 正在后台处理中...\n` +
+        `⏱️ 预计 2-5 分钟完成\n\n` +
+        `💡 处理完成后会自动通知您\n` +
+        `您可以继续发送其他视频`
+      )
+      
+      // 不更新用户状态，允许继续上传
+      
+    } else {
+      // 小文件：显示编辑菜单
+      const menuResult = await sendMessage(chatId, getEditMenuText(draftVideo), {
+        reply_markup: getEditKeyboard(draftVideo)
+      })
+      
+      const messageId = menuResult.ok ? menuResult.result.message_id : null
+      
+      // 更新用户状态（保存消息ID）
+      await updateUserState(chatId, {
+        state: 'idle',
+        draft_video_id: draftVideo.id,
+        current_message_id: messageId
+      })
+    }
+    
+  } catch (error) {
+    console.error('[handleVideo] 处理视频失败:', error)
+    console.error('[handleVideo] 错误堆栈:', error instanceof Error ? error.stack : String(error))
+    try {
+      await sendMessage(chatId, '❌ 处理失败，请重试\n\n错误: ' + (error instanceof Error ? error.message : String(error)))
+    } catch (sendError) {
+      console.error('[handleVideo] 发送错误消息也失败了:', sendError)
+    }
+  }
+}
+
+// 处理回调按钮
+async function handleCallback(chatId: number, messageId: number, data: string, callbackQueryId: string) {
+  console.log('[handleCallback] 开始处理回调')
+  console.log('[handleCallback] chatId:', chatId, 'messageId:', messageId, 'data:', data)
+  
+  try {
+    if (data.startsWith('toggle_pin_detail:')) {
+      const videoId = data.split(':')[1]
+      const { data: detailVideo } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', videoId)
+        .single()
+      
+      if (!detailVideo) {
+        await answerCallbackQuery(callbackQueryId, '视频不存在')
+        return
+      }
+      
+      const updatedVideo = await toggleVideoPin(detailVideo)
+      await answerCallbackQuery(callbackQueryId, updatedVideo.is_top ? '已置顶' : '已取消置顶')
+      await handleViewVideo(chatId, messageId, videoId)
+      return
+    }
+    // ===== "我的视频"相关回调 =====
+    
+    // 返回"我的视频"概览（编辑消息而不是删除重发）
+    if (data === 'back_my_videos') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleMyVideosEdit(chatId, messageId)
+      return
+    }
+    
+    // ✅ 查看上传中的视频列表
+    if (data === 'my_processing') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleMyProcessing(chatId, messageId)
+      return
+    }
+    
+    // 查看已发布视频列表
+    if (data === 'my_published') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleMyPublished(chatId, messageId)
+      return
+    }
+    
+    // 查看草稿列表
+    if (data === 'my_drafts') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleMyDrafts(chatId, messageId)
+      return
+    }
+    
+    // ✅ 返回我的视频（用于从上传中列表返回）
+    if (data === 'my_videos') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleMyVideosEdit(chatId, messageId)
+      return
+    }
+    
+    // ✅ 删除视频
+    if (data.startsWith('delete_video_')) {
+      const videoId = data.replace('delete_video_', '')
+      await handleDeleteVideo(chatId, messageId, videoId, callbackQueryId)
+      return
+    }
+    
+    // 查看视频详情
+    if (data.startsWith('view_video_')) {
+      const videoId = data.replace('view_video_', '')
+      await answerCallbackQuery(callbackQueryId)
+      await handleViewVideo(chatId, messageId, videoId)
+      return
+    }
+    
+    // 编辑草稿（从草稿列表点击）
+    if (data.startsWith('edit_draft_')) {
+      console.log('[handleCallback] 处理 edit_draft_')
+      const draftId = data.replace('edit_draft_', '')
+      console.log('[handleCallback] draftId:', draftId)
+      
+      console.log('[handleCallback] 查询草稿...')
+      const { data: draft, error: draftError } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', draftId)
+        .eq('tg_user_id', chatId)
+        .single()
+      
+      console.log('[handleCallback] 查询结果:', { hasDraft: !!draft, error: draftError?.message })
+      
+      if (draftError) {
+        console.error('[handleCallback] 查询草稿失败:', draftError)
+        await answerCallbackQuery(callbackQueryId, '查询失败: ' + draftError.message)
+        return
+      }
+      
+      if (!draft) {
+        console.log('[handleCallback] 草稿不存在')
+        await answerCallbackQuery(callbackQueryId, '草稿不存在或已删除')
+        return
+      }
+      
+      console.log('[handleCallback] 回复callback...')
+      await answerCallbackQuery(callbackQueryId)
+      
+      console.log('[handleCallback] 生成编辑菜单文本...')
+      const menuText = getEditMenuText(draft)
+      console.log('[handleCallback] 菜单文本长度:', menuText.length)
+      
+      console.log('[handleCallback] 生成编辑键盘...')
+      const keyboard = getEditKeyboard(draft)
+      console.log('[handleCallback] 键盘按钮数:', keyboard.inline_keyboard.length)
+      
+      console.log('[handleCallback] 编辑消息...')
+      const editResult = await editMessage(chatId, messageId, menuText, {
+        reply_markup: keyboard
+      })
+      console.log('[handleCallback] 编辑消息结果:', { ok: editResult.ok, error: editResult.description })
+      
+      if (!editResult.ok) {
+        console.error('[handleCallback] 编辑消息失败，尝试发送新消息...')
+        const sendResult = await sendMessage(chatId, menuText, {
+          reply_markup: keyboard
+        })
+        console.log('[handleCallback] 发送新消息结果:', { ok: sendResult.ok })
+        if (sendResult.ok) {
+          messageId = sendResult.result.message_id
+        }
+      }
+      
+      console.log('[handleCallback] 更新用户状态...')
+      await updateUserState(chatId, {
+        state: 'idle',
+        draft_video_id: draft.id,
+        current_message_id: messageId
+      })
+      
+      console.log('[handleCallback] edit_draft 处理完成')
+      return
+    }
+    
+    // 继续编辑草稿（旧的回调，保持兼容）
+    if (data.startsWith('continue_draft_')) {
+      const draftId = data.replace('continue_draft_', '')
+      
+      const { data: draft } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', draftId)
+        .eq('tg_user_id', chatId)
+        .single()
+      
+      if (!draft) {
+        await answerCallbackQuery(callbackQueryId, '草稿不存在或已删除')
+        return
+      }
+      
+      await answerCallbackQuery(callbackQueryId)
+      
+      const menuResult = await sendMessage(chatId, getEditMenuText(draft), {
+        reply_markup: getEditKeyboard(draft)
+      })
+      
+      const newMessageId = menuResult.ok ? menuResult.result.message_id : null
+      
+      await updateUserState(chatId, {
+        state: 'idle',
+        draft_video_id: draft.id,
+        current_message_id: newMessageId
+      })
+      return
+    }
+    
+    // 从数据库获取用户状态
+    const userState = await getUserState(chatId)
+    
+    if (!userState.draft_video_id) {
+      await answerCallbackQuery(callbackQueryId, '会话已过期，请重新上传视频')
+      return
+    }
+    
+    // 获取草稿视频
+    const { data: video } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('id', userState.draft_video_id)
+      .single()
+    
+    if (!video) {
+      await answerCallbackQuery(callbackQueryId, '视频不存在，请重新上传')
+      return
+    }
+    
+    switch (data) {
+      case 'edit_description':
+        await updateUserState(chatId, { state: 'waiting_description' })
+        await answerCallbackQuery(callbackQueryId)
+        
+        // 在主消息上显示提示
+        await editMessage(chatId, messageId,
+          '✏️ <b>编辑描述</b>\n\n' +
+          '请输入视频描述（最多300字）\n' +
+          '发送文字即可设置',
+          {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '← 返回', callback_data: 'cancel_edit' }
+              ]]
+            }
+          }
+        )
+        break
+        
+      case 'edit_tags':
+        await updateUserState(chatId, { state: 'waiting_tags' })
+        await answerCallbackQuery(callbackQueryId)
+        
+        await editMessage(chatId, messageId,
+          '🏷️ <b>编辑标签</b>\n\n' +
+          '请输入标签，用空格分隔（3-5个）\n' +
+          '例如: 旅游 风景 爬山',
+          {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '← 返回', callback_data: 'cancel_edit' }
+              ]]
+            }
+          }
+        )
+        break
+        
+      case 'edit_location':
+        await updateUserState(chatId, { state: 'waiting_location' })
+        await answerCallbackQuery(callbackQueryId)
+        
+        await editMessage(chatId, messageId,
+          '📍 <b>设置位置</b>\n\n' +
+          '请发送位置信息\n' +
+          '点击输入框左侧 📎 → 位置',
+          {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '← 返回', callback_data: 'cancel_edit' }
+              ]]
+            }
+          }
+        )
+        break
+        
+      case 'toggle_privacy': {
+        // 切换隐私设置
+        await supabase
+          .from('videos')
+          .update({ is_private: !video.is_private })
+          .eq('id', video.id)
+        
+        await answerCallbackQuery(callbackQueryId, 
+          !video.is_private ? '已设置为私密' : '已设置为公开'
+        )
+        
+        // 重新获取更新后的视频
+        const { data: updatedVideo } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('id', video.id)
+          .single()
+        
+        await editMessage(chatId, messageId, getEditMenuText(updatedVideo), {
+          reply_markup: getEditKeyboard(updatedVideo)
+        })
+        break
+      }
+        
+      case 'toggle_pin': {
+        await answerCallbackQuery(callbackQueryId)
+        const videoAfterToggle = await toggleVideoPin(video)
+        await editMessage(chatId, messageId, getEditMenuText(videoAfterToggle), {
+          reply_markup: getEditKeyboard(videoAfterToggle)
+        })
+        break
+      }
+        
+      case 'publish':
+        await answerCallbackQuery(callbackQueryId)
+        await publishVideo(chatId, messageId, video.id)
+        break
+        
+      case 'save_draft':
+        await answerCallbackQuery(callbackQueryId)
+        await editMessage(chatId, messageId,
+          '💾 <b>已保存为草稿</b>\n\n' +
+          '点击底部「📹 我的视频」继续编辑'
+        )
+        // 清除用户状态
+        await updateUserState(chatId, { state: 'idle', draft_video_id: null, current_message_id: null })
+        break
+        
+      case 'cancel_edit':
+        // 取消编辑，恢复主菜单
+        await updateUserState(chatId, { state: 'idle' })
+        await answerCallbackQuery(callbackQueryId, '✅ 已取消')
+        
+        // 重新显示编辑菜单
+        await editMessage(chatId, messageId, getEditMenuText(video), {
+          reply_markup: getEditKeyboard(video)
+        })
+        break
+
+      case 'back_my_drafts':
+        await answerCallbackQuery(callbackQueryId)
+        await handleMyDrafts(chatId, messageId)
+        break
+    }
+  } catch (error) {
+    console.error('[handleCallback] 处理回调失败:', error)
+    console.error('[handleCallback] 错误堆栈:', error instanceof Error ? error.stack : String(error))
+    console.error('[handleCallback] data:', data)
+    try {
+      await answerCallbackQuery(callbackQueryId, '操作失败: ' + (error instanceof Error ? error.message : String(error)))
+    } catch (answerError) {
+      console.error('[handleCallback] 回复callback也失败了:', answerError)
+    }
+  }
+}
+
+// 处理文本消息
+async function handleText(chatId: number, text: string, userMessageId: number) {
+  const userState = await getUserState(chatId)
+  
+  if (!userState.draft_video_id || !userState.current_message_id) return
+  
+  // 获取草稿视频
+  const { data: video } = await supabase
+    .from('videos')
+    .select('*')
+    .eq('id', userState.draft_video_id)
+    .single()
+  
+  if (!video) return
+  
+  switch (userState.state) {
+    case 'waiting_description': {
+      // 删除用户消息
+      await deleteMessage(chatId, userMessageId)
+      
+      if (text.length > 300) {
+        await sendSelfDestructMessage(chatId, '❌ 描述最多 300 字，请重新输入')
+        return
+      }
+      
+      // 更新描述
+      await supabase
+        .from('videos')
+        .update({ description: text })
+        .eq('id', video.id)
+      
+      // 重置状态
+      await updateUserState(chatId, { state: 'idle' })
+      
+      // 重新获取视频并更新主消息
+      const { data: updatedVideo } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', video.id)
+        .single()
+      
+      await editMessage(chatId, userState.current_message_id, getEditMenuText(updatedVideo), {
+        reply_markup: getEditKeyboard(updatedVideo)
+      })
+      break
+    }
+      
+    case 'waiting_tags': {
+      // 删除用户消息
+      await deleteMessage(chatId, userMessageId)
+      
+      const tags = text.trim().split(/\s+/).filter(t => t.length > 0)
+      if (tags.length < 3 || tags.length > 5) {
+        await sendSelfDestructMessage(chatId, '❌ 请输入 3-5 个标签，用空格分隔')
+        return
+      }
+      
+      // 更新标签
+      await supabase
+        .from('videos')
+        .update({ tags })
+        .eq('id', video.id)
+      
+      // 重置状态
+      await updateUserState(chatId, { state: 'idle' })
+      
+      // 重新获取视频并更新主消息
+      const { data: updatedVideo2 } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', video.id)
+        .single()
+      
+      await editMessage(chatId, userState.current_message_id, getEditMenuText(updatedVideo2), {
+        reply_markup: getEditKeyboard(updatedVideo2)
+      })
+      break
+    }
+  }
+}
+
+// 处理位置消息
+async function handleLocation(chatId: number, location: any, userMessageId: number) {
+  const userState = await getUserState(chatId)
+  
+  if (!userState.draft_video_id || !userState.current_message_id || userState.state !== 'waiting_location') {
+    return
+  }
+  
+  try {
+    // 删除用户位置消息
+    await deleteMessage(chatId, userMessageId)
+    
+    // 在主消息上显示"识别中"
+    await editMessage(chatId, userState.current_message_id,
+      '🔄 正在识别位置...'
+    )
+    
+    const locationData = await getLocationFromCoords(location.latitude, location.longitude)
+    
+    // 更新视频位置
+    await supabase
+      .from('videos')
+      .update({
+        location_country: locationData.country,
+        location_country_code: locationData.country_code,
+        location_city: locationData.city
+      })
+      .eq('id', userState.draft_video_id)
+    
+    // 重置状态
+    await updateUserState(chatId, { state: 'idle' })
+    
+    // 重新获取视频并更新主消息
+    const { data: updatedVideo } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('id', userState.draft_video_id)
+      .single()
+    
+    await editMessage(chatId, userState.current_message_id, getEditMenuText(updatedVideo), {
+      reply_markup: getEditKeyboard(updatedVideo)
+    })
+    
+  } catch (error) {
+    console.error('位置识别失败:', error)
+    await sendSelfDestructMessage(chatId,
+      '❌ 位置识别失败\n\n' +
+      '可能原因：\n' +
+      '• 位置在海洋/无人区\n' +
+      '• 地理服务暂时不可用\n\n' +
+      '请稍后重试'
+    )
+    
+    // 恢复编辑菜单
+    const { data: video } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('id', userState.draft_video_id)
+      .single()
+    
+    await updateUserState(chatId, { state: 'idle' })
+    
+    if (video && userState.current_message_id) {
+      await editMessage(chatId, userState.current_message_id, getEditMenuText(video), {
+        reply_markup: getEditKeyboard(video)
+      })
+    }
+  }
+}
+
+// 处理"我的视频"- 概览页
+async function handleMyVideos(chatId: number) {
+  try {
+    // 获取用户的所有视频统计
+    const { data: videos, error } = await supabase
+      .from('videos')
+      .select('id, status, like_count, comment_count, view_count')
+      .eq('tg_user_id', chatId)
+    
+    if (error) {
+      console.error('获取视频列表失败:', error)
+      await sendMessage(chatId, '❌ 获取视频列表失败', {
+        reply_markup: getPersistentKeyboard()
+      })
+      return
+    }
+    
+    if (!videos || videos.length === 0) {
+      await sendMessage(chatId,
+        '📹 <b>我的视频</b>\n\n' +
+        '暂无视频\n\n' +
+        '<i>发送或转发视频即可上传</i>',
+        {
+          reply_markup: getPersistentKeyboard()
+        }
+      )
+      return
+    }
+    
+    // ✅ 分类统计（包括 processing, draft, ready, published）
+    const processing = videos.filter(v => v.status === 'processing')
+    const drafts = videos.filter(v => v.status === 'draft' || v.status === 'ready')
+    const published = videos.filter(v => v.status === 'published')
+    
+    // 总数据统计（已发布的视频）
+    const totalPlays = published.reduce((sum, v) => sum + (v.view_count || 0), 0)
+    const totalLikes = published.reduce((sum, v) => sum + (v.like_count || 0), 0)
+    const totalComments = published.reduce((sum, v) => sum + (v.comment_count || 0), 0)
+    
+    const lines = [
+      `📹 <b>我的视频</b>`,
+      ``,
+      `共 ${videos.length} 个视频`
+    ]
+    
+    // ✅ 添加上传中统计（如果有）
+    if (processing.length > 0) {
+      lines.push(`📤 上传中 ${processing.length} · 草稿 ${drafts.length} · 已发布 ${published.length}`)
+    } else {
+      lines.push(`草稿 ${drafts.length} · 已发布 ${published.length}`)
+    }
+    
+    lines.push(``)
+    lines.push(`📊 <b>数据总览</b>`)
+    lines.push(`👀 浏览 ${totalPlays}    ❤️ 点赞 ${totalLikes}    💬 评论 ${totalComments}`)
+    
+    // ✅ 构建按钮（如果有上传中的视频，优先显示）
+    const keyboard = []
+    
+    if (processing.length > 0) {
+      keyboard.push([{
+        text: `📤 查看上传中的视频 (${processing.length})`,
+        callback_data: 'my_processing'
+      }])
+    }
+    
+    if (drafts.length > 0) {
+      keyboard.push([{
+        text: `📝 继续编辑草稿 (${drafts.length})`,
+        callback_data: 'my_drafts'
+      }])
+    }
+    
+    if (published.length > 0) {
+      keyboard.push([{
+        text: `📺 我发布的视频 (${published.length})`,
+        callback_data: 'my_published'
+      }])
+    }
+    
+    await sendMessage(chatId, lines.join('\n'), {
+      reply_markup: { inline_keyboard: keyboard }
+    })
+    
+  } catch (error) {
+    console.error('获取视频列表错误:', error)
+    await sendMessage(chatId, '❌ 获取视频列表时出错', {
+      reply_markup: getPersistentKeyboard()
+    })
+  }
+}
+
+// ✅ 新增：查看上传中的视频列表
+async function handleMyProcessing(chatId: number, messageId: number) {
+  try {
+    const { data: videos, error } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('tg_user_id', chatId)
+      .eq('status', 'processing')
+      .order('created_at', { ascending: false })
+    
+    if (error) {
+      console.error('查询上传中视频失败:', error)
+      await editMessage(chatId, messageId, '❌ 查询失败', {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '⬅️ 返回', callback_data: 'my_videos' }
+          ]]
+        }
+      })
+      return
+    }
+    
+    if (!videos || videos.length === 0) {
+      await editMessage(chatId, messageId, 
+        `暂无上传中的视频`,
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: '⬅️ 返回', callback_data: 'my_videos' }
+            ]]
+          }
+        }
+      )
+      return
+    }
+    
+    // 构建消息
+    const lines = [`📤 <b>上传中的视频 (${videos.length})</b>`, ``]
+    
+    // 构建按钮（每个视频一个删除按钮）
+    const keyboard = videos.map((video, index) => {
+      const sizeMB = (video.file_size / 1024 / 1024).toFixed(1)
+      const timeAgo = getTimeAgo(video.created_at)
+      const desc = video.description ? safeTruncate(video.description, 25) : '未命名视频'
+      
+      lines.push(`${index + 1}. ${desc}`)
+      lines.push(`   📦 ${sizeMB} MB · ⏱️ ${timeAgo}`)
+      lines.push(``)
+      
+      return [
+        {
+          text: `${index + 1}. ${desc} (${sizeMB} MB)`,
+          callback_data: `view_processing_${video.id}`
+        },
+        {
+          text: '🗑️',
+          callback_data: `delete_video_${video.id}`
+        }
+      ]
+    })
+    
+    keyboard.push([
+      { text: '⬅️ 返回', callback_data: 'my_videos' }
+    ])
+    
+    lines.push(`💡 视频处理完成后会自动通知您`)
+    
+    await editMessage(chatId, messageId, lines.join('\n'), {
+      reply_markup: {
+        inline_keyboard: keyboard
+      }
+    })
+    
+  } catch (error) {
+    console.error('处理上传中列表失败:', error)
+    await editMessage(chatId, messageId, '❌ 查询失败', {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '⬅️ 返回', callback_data: 'my_videos' }
+        ]]
+      }
+    })
+  }
+}
+
+// 辅助函数：计算时间差
+function getTimeAgo(dateStr: string): string {
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diff = Math.floor((now - then) / 1000) // 秒
+  
+  if (diff < 60) return '刚刚'
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
+  return `${Math.floor(diff / 86400)} 天前`
+}
+
+// 处理"我的视频"- 编辑模式（用于返回时）
+async function handleMyVideosEdit(chatId: number, messageId: number) {
+  try {
+    const { data: videos } = await supabase
+      .from('videos')
+      .select('id, status, like_count, comment_count, view_count')
+      .eq('tg_user_id', chatId)
+    
+    if (!videos || videos.length === 0) {
+      await editMessage(chatId, messageId,
+        '📼 <b>我的影片</b>\n\n暂无视频\n\n<i>发送或转发视频即可上传</i>'
+      )
+      return
+    }
+    
+    // ✅ 分类统计（与 handleMyVideos 保持一致）
+    const processing = videos.filter(v => v.status === 'processing')
+    const drafts = videos.filter(v => v.status === 'draft' || v.status === 'ready')
+    const published = videos.filter(v => v.status === 'published')
+    
+    const totalPlays = published.reduce((sum, v) => sum + (v.view_count || 0), 0)
+    const totalLikes = published.reduce((sum, v) => sum + (v.like_count || 0), 0)
+    const totalComments = published.reduce((sum, v) => sum + (v.comment_count || 0), 0)
+    
+    const lines = [
+      `📹 <b>我的视频</b>`,
+      ``,
+      `共 ${videos.length} 个视频`
+    ]
+    
+    if (processing.length > 0) {
+      lines.push(`📤 上传中 ${processing.length} · 草稿 ${drafts.length} · 已发布 ${published.length}`)
+    } else {
+      lines.push(`草稿 ${drafts.length} · 已发布 ${published.length}`)
+    }
+    
+    lines.push(``)
+    lines.push(`📊 <b>数据总览</b>`)
+    lines.push(`👀 浏览 ${totalPlays}    ❤️ 点赞 ${totalLikes}    💬 评论 ${totalComments}`)
+    
+    const keyboard = []
+    
+    if (processing.length > 0) {
+      keyboard.push([{
+        text: `📤 查看上传中的视频 (${processing.length})`,
+        callback_data: 'my_processing'
+      }])
+    }
+    
+    if (drafts.length > 0) {
+      keyboard.push([{
+        text: `📝 继续编辑草稿 (${drafts.length})`,
+        callback_data: 'my_drafts'
+      }])
+    }
+    
+    if (published.length > 0) {
+      keyboard.push([{
+        text: `📺 我发布的视频 (${published.length})`,
+        callback_data: 'my_published'
+      }])
+    }
+    
+    await editMessage(chatId, messageId, lines.join('\n'), {
+      reply_markup: { inline_keyboard: keyboard }
+    })
+    
+  } catch (error) {
+    console.error('获取视频列表错误:', error)
+  }
+}
+
+// 处理"我发布的视频"列表
+async function handleMyPublished(chatId: number, messageId: number) {
+  console.log('[handleMyPublished] 开始获取已发布视频, chatId:', chatId, 'messageId:', messageId)
+  
+  try {
+    const { data: videos, error } = await supabase
+      .from('videos')
+      .select('id, description, like_count, comment_count, view_count')
+      .eq('tg_user_id', chatId)
+      .eq('status', 'published')
+      .order('published_at', { ascending: false })
+      .limit(10)
+    
+    console.log('[handleMyPublished] 查询结果:', { 
+      videosCount: videos?.length || 0, 
+      error: error?.message 
+    })
+    
+    if (error) {
+      console.error('[handleMyPublished] 查询失败:', error)
+      await editMessage(chatId, messageId, '❌ 获取视频失败\n\n' + error.message, {
+        reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'back_my_videos' }]] }
+      })
+      return
+    }
+    
+    if (!videos || videos.length === 0) {
+      console.log('[handleMyPublished] 无已发布视频')
+      await editMessage(chatId, messageId, '📺 暂无已发布的视频', {
+        reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'back_my_videos' }]] }
+      })
+      return
+    }
+    
+    const lines = ['📺 <b>我发布的视频</b>', '']
+    
+    // ✅ 构建按钮（每个视频两个按钮：查看和删除）
+    const keyboard = videos.map(v => {
+      const desc = v.description ? safeTruncate(v.description, 15) : '无描述'
+      const stats = `👀${v.view_count || 0} ❤️${v.like_count || 0}`
+      return [
+        {
+          text: `${desc}  ${stats}`,
+          callback_data: `view_video_${v.id}`
+        },
+        {
+          text: '🗑️',
+          callback_data: `delete_video_${v.id}`
+        }
+      ]
+    })
+    
+    keyboard.push([{ text: '← 返回', callback_data: 'back_my_videos' }])
+    
+    console.log('[handleMyPublished] 准备编辑消息, 按钮数:', keyboard.length)
+    
+    await editMessage(chatId, messageId, lines.join('\n'), {
+      reply_markup: { inline_keyboard: keyboard }
+    })
+    
+    console.log('[handleMyPublished] 完成')
+  } catch (error) {
+    console.error('[handleMyPublished] 发生错误:', error)
+    console.error('[handleMyPublished] 错误堆栈:', error instanceof Error ? error.stack : String(error))
+    try {
+      await editMessage(chatId, messageId, '❌ 发生错误\n\n' + (error instanceof Error ? error.message : String(error)), {
+        reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'back_my_videos' }]] }
+      })
+    } catch (editError) {
+      console.error('[handleMyPublished] 编辑消息也失败了:', editError)
+    }
+  }
+}
+
+// 处理"我的草稿"列表
+async function handleMyDrafts(chatId: number, messageId: number) {
+  console.log('[handleMyDrafts] 开始获取草稿列表, chatId:', chatId, 'messageId:', messageId)
+  
+  try {
+    // ✅ 查询草稿和就绪状态的视频（不包括 processing）
+    const { data: videos, error } = await supabase
+      .from('videos')
+      .select('id, description, created_at, status')
+      .eq('tg_user_id', chatId)
+      .in('status', ['draft', 'ready'])
+      .order('created_at', { ascending: false })
+      .limit(10)
+    
+    console.log('[handleMyDrafts] 查询结果:', { 
+      videosCount: videos?.length || 0, 
+      error: error?.message 
+    })
+    
+    if (error) {
+      console.error('[handleMyDrafts] 查询失败:', error)
+      await editMessage(chatId, messageId, '❌ 获取草稿失败\n\n' + error.message, {
+        reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'back_my_videos' }]] }
+      })
+      return
+    }
+    
+    if (!videos || videos.length === 0) {
+      console.log('[handleMyDrafts] 无草稿')
+      await editMessage(chatId, messageId, '📝 暂无草稿', {
+        reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'back_my_videos' }]] }
+      })
+      return
+    }
+    
+    const lines = ['📝 <b>我的草稿</b>', '']
+    
+    // ✅ 构建按钮（每个草稿两个按钮：编辑和删除）
+    const keyboard = videos.map(v => {
+      const desc = v.description ? safeTruncate(v.description, 20) : '无描述'
+      return [
+        {
+          text: `📝 ${desc}`,
+          callback_data: `edit_draft_${v.id}`
+        },
+        {
+          text: '🗑️',
+          callback_data: `delete_video_${v.id}`
+        }
+      ]
+    })
+    
+    keyboard.push([{ text: '← 返回', callback_data: 'back_my_videos' }])
+    
+    console.log('[handleMyDrafts] 准备编辑消息, 按钮数:', keyboard.length)
+    
+    await editMessage(chatId, messageId, lines.join('\n'), {
+      reply_markup: { inline_keyboard: keyboard }
+    })
+    
+    console.log('[handleMyDrafts] 完成')
+  } catch (error) {
+    console.error('[handleMyDrafts] 发生错误:', error)
+    console.error('[handleMyDrafts] 错误堆栈:', error instanceof Error ? error.stack : String(error))
+    try {
+      await editMessage(chatId, messageId, '❌ 发生错误\n\n' + (error instanceof Error ? error.message : String(error)), {
+        reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'back_my_videos' }]] }
+      })
+    } catch (editError) {
+      console.error('[handleMyDrafts] 编辑消息也失败了:', editError)
+    }
+  }
+}
+
+// 处理"查看视频详情"
+async function handleViewVideo(chatId: number, messageId: number, videoId: string) {
+  console.log('[handleViewVideo] 开始获取视频详情, chatId:', chatId, 'videoId:', videoId)
+  
+  try {
+    const { data: video, error } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('id', videoId)
+      .single()
+    
+    console.log('[handleViewVideo] 查询结果:', { hasVideo: !!video, error: error?.message })
+    
+    if (error) {
+      console.error('[handleViewVideo] 查询失败:', error)
+      await editMessage(chatId, messageId, '❌ 获取视频失败\n\n' + error.message, {
+        reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'my_published' }]] }
+      })
+      return
+    }
+    
+    if (!video) {
+      console.log('[handleViewVideo] 视频不存在')
+      await editMessage(chatId, messageId, '❌ 视频不存在', {
+        reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'my_published' }]] }
+      })
+      return
+    }
+    
+    // 描述
+    let descText = '未设置'
+    if (video.description) {
+      descText = safeTruncate(video.description, 200)
+    }
+    
+    // 标签
+    let tagsText = '未设置'
+    if (video.tags && video.tags.length > 0) {
+      tagsText = video.tags.map((t: string) => '#' + t).join(' ')
+    }
+    
+    // 位置
+    let locationText = '未设置'
+    if (video.location_country) {
+      locationText = getFlag(video.location_country_code!) + ' ' + video.location_country
+      if (video.location_city) {
+        locationText += ' · ' + video.location_city
+      }
+    }
+    
+    const lines = [
+      `📺 <b>视频详情</b>`,
+      ``,
+      `📝 描述：${descText}`,
+      `🏷️ 标签：${tagsText}`,
+      `📍 位置：${locationText}`,
+      ``,
+      `📊 <b>数据统计</b>`,
+      `👀 浏览：${video.view_count || 0}`,
+      `❤️ 点赞：${video.like_count || 0}`,
+      `💬 评论：${video.comment_count || 0}`
+    ]
+    
+    const inlineRow = [{ text: '← 返回', callback_data: 'my_published' }]
+    if (video.status === 'published') {
+      inlineRow.push({
+        text: video.is_top ? '📍 取消置顶' : '📌 置顶此视频',
+        callback_data: `toggle_pin_detail:${video.id}`
+      })
+    }
+    
+    console.log('[handleViewVideo] 准备编辑消息')
+    
+    await editMessage(chatId, messageId, lines.join('\n'), {
+      reply_markup: { inline_keyboard: [inlineRow] }
+    })
+    
+    console.log('[handleViewVideo] 完成')
+  } catch (error) {
+    console.error('[handleViewVideo] 发生错误:', error)
+    console.error('[handleViewVideo] 错误堆栈:', error instanceof Error ? error.stack : String(error))
+    try {
+      await editMessage(chatId, messageId, '❌ 发生错误\n\n' + (error instanceof Error ? error.message : String(error)), {
+        reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'my_published' }]] }
+      })
+    } catch (editError) {
+      console.error('[handleViewVideo] 编辑消息也失败了:', editError)
+    }
+  }
+}
+
+// 发布视频
+async function publishVideo(chatId: number, messageId: number, videoId: string) {
+  try {
+    // 更新状态为已发布
+    const { data: video, error } = await supabase
+      .from('videos')
+      .update({
+        status: 'published',
+        published_at: new Date().toISOString()
+      })
+      .eq('id', videoId)
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('发布失败:', error)
+      await editMessage(chatId, messageId, 
+        '❌ 发布失败\n\n' +
+        '错误: ' + error.message
+      )
+      return
+    }
+    
+    // 清除用户状态
+    await updateUserState(chatId, { state: 'idle', draft_video_id: null, current_message_id: null })
+    
+    // 构建成功消息
+    const lines = [
+      '🎉 <b>发布成功！</b>',
+      '',
+      '视频已发布到首页'
+    ]
+    
+    if (video.description) {
+      const desc = safeTruncate(video.description, 50)
+      lines.push(`📝 ${desc}`)
+    }
+    if (video.tags && video.tags.length > 0) {
+      lines.push(`🏷️ ${video.tags.map((t: string) => '#' + t).join(' ')}`)
+    }
+    if (video.location_country) {
+      let loc = getFlag(video.location_country_code!) + ' ' + video.location_country
+      if (video.location_city) loc += ' · ' + video.location_city
+      lines.push(`📍 ${loc}`)
+    }
+    
+    await editMessage(chatId, messageId, lines.join('\n'))
+    
+  } catch (error) {
+    console.error('发布错误:', error)
+    await editMessage(chatId, messageId, '❌ 发布时发生错误，请重试')
+  }
+}
+
+async function toggleVideoPin(video: any) {
+  if (video.is_top) {
+    await supabase.from('videos').update({ is_top: false }).eq('id', video.id)
+  } else {
+    const filterField = video.tg_user_id ? 'tg_user_id' : 'author_id'
+    const filterValue = video.tg_user_id ?? video.author_id
+    if (filterField && filterValue) {
+      await supabase.from('videos').update({ is_top: false }).eq(filterField, filterValue)
+    }
+    await supabase.from('videos').update({ is_top: true }).eq('id', video.id)
+  }
+
+  const { data: refreshed } = await supabase
+    .from('videos')
+    .select('*')
+    .eq('id', video.id)
+    .single()
+
+  return refreshed
+}
+
+// 删除视频
+async function handleDeleteVideo(chatId: number, messageId: number, videoId: string, callbackQueryId: string) {
+  try {
+    // 查询视频状态，确定返回哪个列表
+    const { data: video } = await supabase
+      .from('videos')
+      .select('status')
+      .eq('id', videoId)
+      .eq('tg_user_id', chatId)
+      .maybeSingle()
+    
+    if (!video) {
+      await answerCallbackQuery(callbackQueryId, '视频不存在或无权限')
+      return
+    }
+    
+    const status = video.status
+    
+    // 删除视频
+    const { error } = await supabase
+      .from('videos')
+      .delete()
+      .eq('id', videoId)
+      .eq('tg_user_id', chatId)
+    
+    if (error) {
+      console.error('删除视频失败:', error)
+      await answerCallbackQuery(callbackQueryId, '删除失败，请重试')
+      return
+    }
+    
+    await answerCallbackQuery(callbackQueryId, '已删除')
+    
+    // 根据原视频状态返回对应列表
+    if (status === 'published') {
+      await handleMyPublished(chatId, messageId)
+    } else if (status === 'processing') {
+      await handleMyProcessing(chatId, messageId)
+    } else {
+      // draft 或 ready
+      await handleMyDrafts(chatId, messageId)
+    }
+  } catch (error) {
+    console.error('删除视频错误:', error)
+    await answerCallbackQuery(callbackQueryId, '删除失败')
+  }
+}
+
+// 主服务
+serve(async (req) => {
+  try {
+    const url = new URL(req.url)
+    
+    // 健康检查
+    if (url.pathname.includes('/health')) {
+      return new Response(JSON.stringify({ status: 'ok' }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+    
+    // 处理 Webhook
+    if (req.method === 'POST') {
+      const update = await req.json()
+      console.log('收到更新:', JSON.stringify(update).substring(0, 200))
+      
+      // 处理消息
+      if (update.message) {
+        const message = update.message
+        const chatId = message.chat.id
+        
+        console.log('[DEBUG] 消息类型:', {
+          hasText: !!message.text,
+          hasVideo: !!message.video,
+          hasLocation: !!message.location,
+          text: message.text
+        })
+        
+        // /start 命令 - 创建用户并显示欢迎消息
+        if (message.text === '/start') {
+          // 创建或获取用户 profile（直接使用 message.from 数据，无需额外 API 调用）
+          const profile = await getOrCreateProfile(chatId, message.from)
+          
+          if (profile) {
+            await sendMessage(chatId,
+              '👋 <b>欢迎使用视频上传</b>\n\n' +
+              '✅ 账号已准备就绪\n\n' +
+              '直接发送或转发视频即可上传\n\n' +
+              '支持功能：\n' +
+              '• 自动识别转发文案\n' +
+              '• 描述、标签、位置\n' +
+              '• 隐私设置\n' +
+              '• 草稿保存',
+              {
+                reply_markup: getPersistentKeyboard()
+              }
+            )
+          } else {
+            await sendMessage(chatId,
+              '❌ 初始化失败，请稍后重试\n\n' +
+              '如果问题持续，请联系管理员'
+            )
+          }
+        }
+        // "我的视频"按钮
+        else if (message.text === '📹 我的视频') {
+          await handleMyVideos(chatId)
+        }
+        // 视频消息（直接处理，caption 作为描述）
+        else if (message.video) {
+          await handleVideo(chatId, message.video, message.caption, message.from)
+        }
+        // 位置消息
+        else if (message.location) {
+          await handleLocation(chatId, message.location, message.message_id)
+        }
+        // 文本消息
+        else if (message.text) {
+          await handleText(chatId, message.text, message.message_id)
+        }
+      }
+      // 处理回调查询
+      else if (update.callback_query) {
+        const callback = update.callback_query
+        const chatId = callback.message.chat.id
+        const messageId = callback.message.message_id
+        const data = callback.data
+        
+        console.log('[DEBUG] 收到回调查询:', {
+          chatId,
+          messageId,
+          data
+        })
+        
+        await handleCallback(chatId, messageId, data, callback.id)
+      }
+      
+      return new Response('OK', { status: 200 })
+    }
+    
+    return new Response('Bot is running', { status: 200 })
+    
+  } catch (error) {
+    console.error('[MAIN] 处理请求时发生错误:', error)
+    console.error('[MAIN] 错误堆栈:', error instanceof Error ? error.stack : String(error))
+    return new Response(JSON.stringify({ 
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : String(error)
+    }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+})
+

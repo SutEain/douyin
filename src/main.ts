@@ -1,13 +1,73 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import './assets/less/index.less'
-import { startMock } from '@/mock'
 import router from './router'
 import mixin from './utils/mixin'
 import VueLazyload from '@jambonn/vue-lazyload'
 import { createPinia } from 'pinia'
 import { useClick } from '@/utils/hooks/useClick'
 import bus, { EVENT_KEY } from '@/utils/bus'
+import i18n from '@/locales'
+
+declare global {
+  interface Window {
+    TelegramGameProxy?: {
+      receiveEvent?: (...args: any[]) => void
+    }
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.TelegramGameProxy = window.TelegramGameProxy || {}
+  if (typeof window.TelegramGameProxy.receiveEvent !== 'function') {
+    window.TelegramGameProxy.receiveEvent = () => {}
+  }
+
+  const fallbackImage = new URL('./assets/img/icon/img-loading.png', import.meta.url).href
+
+  const handleGlobalError = (event: Event | ErrorEvent) => {
+    const target = event?.target
+
+    if (target instanceof HTMLImageElement) {
+      if (!target.dataset.fallbackApplied) {
+        target.dataset.fallbackApplied = '1'
+        target.src = fallbackImage
+      }
+      event.preventDefault?.()
+      return false
+    }
+
+    if (target instanceof HTMLVideoElement) {
+      console.warn('[GlobalError][video]', target.currentSrc || target.src)
+      event.preventDefault?.()
+      return false
+    }
+
+    // ✅ 处理 <source> 标签加载失败（通常是网络问题，不应中断播放）
+    if (target instanceof HTMLSourceElement) {
+      console.warn('[GlobalError][source]', target.src, '- 视频源加载失败，浏览器会尝试其他源或重试')
+      event.preventDefault?.()
+      return false
+    }
+
+    console.warn('[GlobalError]', (event as ErrorEvent).message || (event as ErrorEvent).error || event)
+    event.preventDefault?.()
+    return false
+  }
+
+  const handleRejection = (event: PromiseRejectionEvent) => {
+    // Ignore AbortError as it's usually intentional (e.g. cancelling a fetch or play() interrupted)
+    if (event.reason?.name === 'AbortError' || event.reason?.message?.includes('aborted')) {
+      event.preventDefault?.()
+      return
+    }
+    console.warn('[UnhandledRejection]', event.reason)
+    event.preventDefault?.()
+  }
+
+  window.addEventListener('error', handleGlobalError, true)
+  window.addEventListener('unhandledrejection', handleRejection)
+}
 
 window.isMoved = false
 window.isMuted = true
@@ -46,11 +106,11 @@ app.use(VueLazyload, {
 })
 app.use(pinia)
 app.use(router)
+app.use(i18n)
 app.mount('#app')
 app.directive('click', vClick)
 
 //放到最后才可以使用pinia
-startMock()
 setTimeout(() => {
   bus.emit(EVENT_KEY.HIDE_MUTED_NOTICE)
   window.showMutedNotice = false
@@ -58,3 +118,25 @@ setTimeout(() => {
 bus.on(EVENT_KEY.REMOVE_MUTED, () => {
   window.isMuted = false
 })
+
+/**
+ * 初始化 Telegram WebApp 行为，避免下滑收起小程序
+ */
+const initTelegramWebApp = () => {
+  try {
+    // @ts-ignore
+    const tg = window.Telegram?.WebApp
+    if (!tg) return
+    tg.ready?.()
+    tg.expand?.()
+    tg.disableVerticalSwipes?.()
+  } catch (error) {
+    console.warn('[Telegram] 初始化失败', error)
+  }
+}
+
+if (document.readyState === 'complete') {
+  initTelegramWebApp()
+} else {
+  window.addEventListener('DOMContentLoaded', initTelegramWebApp, { once: true })
+}

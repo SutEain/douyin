@@ -89,11 +89,13 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/me/right-menu/setting',
-    component: () => import('@/pages/me/rightMenu/Setting.vue')
+    component: () => import('@/pages/me/rightMenu/Setting.vue'),
+    meta: { keepAlive: false }
   },
   {
     path: '/me/right-menu/language-setting',
-    component: () => import('@/pages/me/rightMenu/LanguageSetting.vue')
+    component: () => import('@/pages/me/rightMenu/LanguageSetting.vue'),
+    meta: { keepAlive: false }
   },
   {
     path: '/me/collect/music-collect',

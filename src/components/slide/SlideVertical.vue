@@ -1,12 +1,13 @@
-<script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+<script setup lang="ts">
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   getSlideOffset,
   slideInit,
   slideReset,
   slideTouchEnd,
   slideTouchMove,
-  slideTouchStart
+  slideTouchStart,
+  canSlide
 } from '@/utils/slide'
 import { SlideType } from '@/utils/const_var'
 import { _css } from '@/utils/dom'
@@ -69,9 +70,47 @@ watch(
   }
 )
 
+const isDesktop = !/Mobi|Android|iPhone/i.test(navigator.userAgent)
+const wheelState = {
+  lock: false,
+  active: false,
+  accum: 0,
+  timeout: null
+}
+
 onMounted(() => {
   slideInit(slideListEl.value, state)
+  if (isDesktop && slideListEl.value) {
+    slideListEl.value.addEventListener('wheel', handleWheel, { passive: false })
+  }
 })
+
+onUnmounted(() => {
+  slideListEl.value?.removeEventListener('wheel', handleWheel)
+})
+
+function createWheelEvent(e: WheelEvent, deltaY = 0) {
+  const clientX = e.clientX || 0
+  const baseY = e.clientY || 0
+  const pageX = e.pageX ?? clientX
+  const pageY = e.pageY ?? baseY
+  const nextY = baseY - deltaY
+  const nextPageY = pageY - deltaY
+  return {
+    clientX,
+    clientY: nextY,
+    pageX,
+    pageY: nextPageY,
+    touches: [
+      {
+        clientX,
+        clientY: nextY,
+        pageX,
+        pageY: nextPageY
+      }
+    ]
+  } as any
+}
 
 function touchStart(e) {
   slideTouchStart(e, slideListEl.value, state)
@@ -84,6 +123,54 @@ function touchMove(e) {
 function touchEnd(e) {
   slideTouchEnd(e, state)
   slideReset(e, slideListEl.value, state, emit)
+}
+
+function canNext(state, isNext) {
+  return !(
+    (state.localIndex === 0 && !isNext) ||
+    (state.localIndex === state.wrapper.childrenLength - 1 && isNext)
+  )
+}
+
+function handleWheel(e: WheelEvent) {
+  if (!isDesktop) return
+  if (!slideListEl.value) return
+  if (!e.deltaY) return
+  if (wheelState.lock) return
+  
+  wheelState.accum += e.deltaY
+  
+  if (wheelState.timeout) {
+    clearTimeout(wheelState.timeout)
+  }
+  wheelState.timeout = window.setTimeout(() => {
+    wheelState.accum = 0
+    wheelState.timeout = null
+  }, 100)
+
+  const threshold = 60
+  if (Math.abs(wheelState.accum) >= threshold) {
+    const isNext = wheelState.accum > 0
+    if (canNext(state, isNext)) {
+      if (wheelState.timeout) clearTimeout(wheelState.timeout)
+      
+      state.localIndex += isNext ? 1 : -1
+      
+      const mockEvent = {
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        stopImmediatePropagation: () => {},
+        touches: []
+      }
+      slideReset(mockEvent, slideListEl.value, state, emit)
+      
+      wheelState.lock = true
+      wheelState.accum = 0
+      setTimeout(() => { wheelState.lock = false }, 1000)
+    } else {
+        wheelState.accum = 0
+    }
+  }
 }
 </script>
 

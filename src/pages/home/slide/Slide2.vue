@@ -1,5 +1,6 @@
 <template>
   <SlideItem class="slide-item-class">
+    <!-- 直播列表卡片 -->
     <div class="sub-type" :class="state.subTypeIsTop ? 'top' : ''" ref="subTypeRef">
       <div class="card" @touchmove="_stop">
         <div class="nav-item" @click="goLive(i)" :key="j" v-for="(i, j) in store.users">
@@ -8,6 +9,8 @@
         </div>
       </div>
     </div>
+    
+    <!-- 直播数量提示 -->
     <div
       class="sub-type-notice"
       v-if="state.subType === -1 && !state.subTypeVisible"
@@ -15,28 +18,37 @@
     >
       {{ store.users.length }}个直播
     </div>
-    <SlideList
-      :cbs="{ isLive: true }"
-      :active="props.active"
-      uniqueId="live"
+    
+    <!-- 视频列表 -->
+    <div
+      class="video-container"
       :style="{
         background: 'black',
         marginTop: state.subTypeVisible ? state.subTypeHeight : 0
       }"
-      :api="recommendedVideo"
       @touchstart="pageClick"
-    />
+    >
+      <VideoList
+        v-if="state.list.length > 0"
+        :items="state.list"
+        page="home"
+        :initial-index="0"
+        :autoplay="props.active"
+        @load-more="loadMore"
+      />
+    </div>
   </SlideItem>
 </template>
 
-<script setup lang="jsx">
-import SlideItem from '@/components/slide/SlideItem.vue'
+<script setup lang="ts">
 import { onMounted, onUnmounted, reactive, ref } from 'vue'
-import bus, { EVENT_KEY } from '@/utils/bus'
-import { _checkImgUrl, _stop, _stopPropagation } from '@/utils'
-import SlideList from './SlideList.vue'
+import SlideItem from '@/components/slide/SlideItem.vue'
+import VideoList from '@/components/video/VideoList.vue'
+import { _checkImgUrl, _stop } from '@/utils'
 import { recommendedVideo } from '@/api/videos'
 import { useBaseStore } from '@/store/pinia'
+import bus, { EVENT_KEY } from '@/utils/bus'
+import type { VideoItem } from '@/types'
 
 const store = useBaseStore()
 const props = defineProps({
@@ -48,108 +60,128 @@ const props = defineProps({
 
 const subTypeRef = ref(null)
 const state = reactive({
-  index: 0,
-  subType: -1,
+  list: [] as VideoItem[],
+  totalSize: 0,
+  pageSize: 10,
   subTypeVisible: false,
-  subTypeHeight: '0',
-  //用于改变zindex的层级到上层，反正比slide高就行。不然摸不到subType.
-  subTypeIsTop: false
+  subTypeIsTop: false,
+  subTypeHeight: '0px',
+  subType: -1
 })
 
-function showSubType(e) {
-  _stopPropagation(e)
-  console.log('subTypeRef')
-  state.subTypeHeight = subTypeRef.value.getBoundingClientRect().height + 'px'
-  state.subTypeVisible = true
-  setTimeout(() => (state.subTypeIsTop = true), 300)
-  bus.emit(EVENT_KEY.OPEN_SUB_TYPE)
-}
-
-function pageClick(e) {
-  // console.log('pageClick')
-  if (state.subTypeVisible) {
-    state.subTypeIsTop = state.subTypeVisible = false
-    bus.emit(EVENT_KEY.CLOSE_SUB_TYPE)
-    _stopPropagation(e)
+// ========== Methods ==========
+async function loadMore() {
+  if (store.loading) return
+  if (state.totalSize > 0 && state.list.length >= state.totalSize) return
+  
+  store.loading = true
+  const res = await recommendedVideo({
+    start: state.list.length,
+    pageSize: state.pageSize
+  })
+  store.loading = false
+  
+  if (res.success) {
+    state.totalSize = res.data.total
+    state.list.push(...res.data.list)
   }
 }
 
-function goLive(item) {
-  bus.emit(EVENT_KEY.NAV, {
-    path: '/home/live',
-    query: { id: item.id }
-  })
+function showSubType() {
+  state.subTypeVisible = true
+  bus.emit(EVENT_KEY.OPEN_SUB_TYPE)
 }
 
+function closeSubType() {
+  state.subTypeVisible = false
+  bus.emit(EVENT_KEY.CLOSE_SUB_TYPE)
+}
+
+function pageClick() {
+  if (state.subTypeVisible) {
+    closeSubType()
+  }
+}
+
+function goLive(user: any) {
+  console.log('进入直播间', user)
+  // TODO: 实现进入直播间逻辑
+}
+
+// ========== 生命周期 ==========
 onMounted(() => {
-  // getData()
+  // 初始加载
+  loadMore()
+  
+  // 计算直播卡片高度
+  if (subTypeRef.value) {
+    state.subTypeHeight = (subTypeRef.value as HTMLElement).offsetHeight + 'px'
+  }
 })
-onUnmounted(() => {})
 </script>
 
 <style scoped lang="less">
 .slide-item-class {
   position: relative;
-
-  .sub-type {
-    width: 100%;
+  
+  .video-container {
     position: absolute;
     top: 0;
-    font-size: 12rem;
-    color: white;
-
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  
+  .sub-type {
+    position: absolute;
+    top: -100%;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 10;
+    transition: top 0.3s;
+    
     &.top {
-      z-index: 2;
+      top: 0;
     }
-
+    
     .card {
-      margin-top: var(--common-header-height);
-      padding: 20rem 5rem;
-      width: 100%;
-      background: rgba(black, 0.4);
-      box-sizing: border-box;
       display: flex;
-      overflow: auto;
-      gap: 10rem;
-      padding-left: 20rem;
-    }
-
-    .nav-item {
-      @width: 50rem;
-      width: @width + 5rem;
-      margin: 0 5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      flex-shrink: 0;
-
-      span {
-        width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      img {
-        width: @width;
-        height: @width;
-        border-radius: 50%;
+      flex-wrap: wrap;
+      padding: 10px;
+      
+      .nav-item {
+        width: 25%;
+        padding: 10px;
+        text-align: center;
+        
+        img {
+          width: 50px;
+          height: 50px;
+          border-radius: 50%;
+        }
+        
+        span {
+          display: block;
+          color: white;
+          font-size: 12px;
+          margin-top: 5px;
+        }
       }
     }
   }
-
+  
   .sub-type-notice {
     position: absolute;
-    background: rgba(black, 0.4);
-    top: 100rem;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 3rem 12rem;
-    border-radius: 10rem;
-    z-index: 3;
-    font-size: 12rem;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.6);
     color: white;
+    padding: 5px 15px;
+    border-radius: 15px;
+    font-size: 12px;
+    z-index: 11;
   }
 }
 </style>
+

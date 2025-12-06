@@ -2,50 +2,46 @@
   <div class="edit">
     <BaseHeader>
       <template v-slot:center>
-        <div class="title">
-          <span class="f16">编辑资料</span>
-          <span class="sub f10">已完成85%</span>
-        </div>
+        <span class="f16">{{ $t('profile.editProfile') }}</span>
       </template>
     </BaseHeader>
     <div class="userinfo">
       <div class="change-avatar">
-        <div class="avatar-ctn" @click="showAvatarDialog">
-          <img class="avatar" :src="_checkImgUrl(store.userinfo.cover_url[0].url_list[0])" alt="" />
-          <img class="change" src="../../../assets/img/icon/me/camera-light.png" alt="" />
+        <div class="avatar-ctn" @click="viewAvatarOnly">
+          <img class="avatar" :src="_checkImgUrl(store.userinfo.avatar_300x300.url_list[0])" alt="" />
         </div>
-        <span>点击更换头像</span>
+        <span>{{ $t('profile.avatar') }}</span>
       </div>
       <div class="row" @click="nav('/me/edit-userinfo-item', { type: 1 })">
-        <div class="left">名字</div>
+        <div class="left">{{ $t('profile.name') }}</div>
         <div class="right">
           <span>{{ isEmpty(store.userinfo.nickname) }}</span>
           <dy-back scale=".8" direction="right"></dy-back>
         </div>
       </div>
       <div class="row" @click="nav('/me/edit-userinfo-item', { type: 2 })">
-        <div class="left">抖音号</div>
+        <div class="left">{{ $t('profile.douyinId') }}</div>
         <div class="right">
           <span>{{ isEmpty(_getUserDouyinId({ author: store.userinfo })) }}</span>
           <dy-back scale=".8" direction="right"></dy-back>
         </div>
       </div>
       <div class="row" @click="nav('/me/edit-userinfo-item', { type: 3 })">
-        <div class="left">简介</div>
+        <div class="left">{{ $t('profile.bio') }}</div>
         <div class="right">
           <span>{{ isEmpty(store.userinfo.signature) }}</span>
           <dy-back scale=".8" direction="right"></dy-back>
         </div>
       </div>
       <div class="row" @click="showSexDialog">
-        <div class="left">性别</div>
+        <div class="left">{{ $t('profile.gender') }}</div>
         <div class="right">
           <span>{{ sex }}</span>
           <dy-back scale=".8" direction="right"></dy-back>
         </div>
       </div>
       <div class="row" @click="showBirthdayDialog">
-        <div class="left">生日</div>
+        <div class="left">{{ $t('profile.birthday') }}</div>
         <div class="right">
           <span>{{ isEmpty(store.userinfo.user_age) }}</span>
           <div v-show="false" id="trigger1"></div>
@@ -53,20 +49,9 @@
         </div>
       </div>
       <div class="row" @click="nav('/me/choose-location')">
-        <div class="left">所在地</div>
+        <div class="left">{{ $t('profile.location') }}</div>
         <div class="right">
-          <span v-if="store.userinfo.province || store.userinfo.city">
-            {{ store.userinfo.province }}
-            <template v-if="store.userinfo.province && store.userinfo.city"> - </template>
-            {{ store.userinfo.city }}
-          </span>
-          <dy-back scale=".8" direction="right"></dy-back>
-        </div>
-      </div>
-      <div class="row" @click="nav('/me/add-school')">
-        <div class="left">学校</div>
-        <div class="right">
-          <span>{{ isEmpty(store.userinfo.school?.name) }}</span>
+          <span>{{ isEmpty(store.userinfo.country) }}</span>
           <dy-back scale=".8" direction="right"></dy-back>
         </div>
       </div>
@@ -99,33 +84,30 @@ import {
 } from '@/utils'
 import { computed, reactive } from 'vue'
 import { useNav } from '@/utils/hooks/useNav'
+import { useI18n } from 'vue-i18n'
 
 defineOptions({
   name: 'EditUserInfo'
 })
 const store = useBaseStore()
 const nav = useNav()
+const { t } = useI18n()
 const data = reactive({
-  sexList: [
-    { id: 1, name: '男' },
-    { id: 2, name: '女' },
-    { id: 3, name: '不展示' }
-  ],
-  avatarList: [
-    { id: 1, name: '拍一张' },
-    { id: 2, name: '从相册选择' },
-    { id: 3, name: '查看大图' },
-    { id: 4, name: '取消' }
-  ],
   previewImg: ''
 })
+
+const sexList = computed(() => [
+  { id: 1, name: t('profile.male') },
+  { id: 2, name: t('profile.female') },
+  { id: 3, name: t('profile.notShow') }
+])
 
 const sex = computed(() => {
   switch (Number(store.userinfo.gender)) {
     case 1:
-      return '男'
+      return t('profile.male')
     case 2:
-      return '女'
+      return t('profile.female')
     default:
       return ''
   }
@@ -133,36 +115,27 @@ const sex = computed(() => {
 
 function isEmpty(val) {
   if (val && val !== -1) return val
-  return '点击设置'
+  return t('profile.clickToSet')
 }
 
 function showSexDialog() {
-  _showSelectDialog(data.sexList, async (e) => {
+  _showSelectDialog(sexList.value, async (e) => {
     _showLoading()
-    await _sleep(500)
-    store.setUserinfo({ ...store.userinfo, gender: e.id })
+    await store.updateProfileFields({ gender: e.id })
     _hideLoading()
   })
 }
 
-function showAvatarDialog() {
-  _showSelectDialog(data.avatarList, (e) => {
-    switch (e.id) {
-      case 1:
-      case 2:
-        return _no()
-      case 3:
-        data.previewImg = _checkImgUrl(store.userinfo.cover_url[0].url_list[0])
-        break
-    }
-  })
+function viewAvatarOnly() {
+  // 只查看头像，不能更换（使用 TG 头像）
+        data.previewImg = _checkImgUrl(store.userinfo.avatar_300x300.url_list[0])
 }
 
 function showBirthdayDialog() {
   new MobileSelect({
     trigger: '#trigger1',
-    title: '生日',
-    connector: '生日',
+    title: t('profile.birthday'),
+    connector: t('profile.birthday'),
     wheels: [
       {
         data: Array.apply(null, { length: 100 }).map((v, i) => new Date().getFullYear() - i)
@@ -174,12 +147,10 @@ function showBirthdayDialog() {
         data: Array.apply(null, { length: 31 }).map((v, i) => 31 - i)
       }
     ],
-    callback: async (indexArr, data) => {
+    callback: async (indexArr, pickerData) => {
       _showLoading()
-      await _sleep(500)
-      store.setUserinfo({
-        ...store.userinfo,
-        birthday: data.join('-')
+      await store.updateProfileFields({
+        birthday: pickerData.join('-')
       })
       _hideLoading()
     }
@@ -200,15 +171,6 @@ function showBirthdayDialog() {
   font-size: 14rem;
 }
 
-.title {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-
-  .sub {
-    color: var(--second-text-color);
-  }
-}
 
 .preview-img {
   z-index: 9;
@@ -255,22 +217,16 @@ function showBirthdayDialog() {
       justify-content: center;
       align-items: center;
       margin-bottom: 10rem;
+      cursor: pointer;
 
       width: @avatar-width;
       height: @avatar-width;
 
       .avatar {
-        opacity: 0.5;
-        position: absolute;
         width: @avatar-width;
         height: @avatar-width;
         border-radius: 50%;
-      }
-
-      .change {
-        width: 28rem;
-        z-index: 9;
-        position: relative;
+        object-fit: cover;
       }
     }
   }

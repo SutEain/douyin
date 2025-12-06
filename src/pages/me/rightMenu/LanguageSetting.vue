@@ -2,7 +2,7 @@
   <div class="language-setting">
     <BaseHeader>
       <template v-slot:center>
-        <span class="f16">语言设置</span>
+        <span class="f16">{{ $t('settings.language') }}</span>
       </template>
     </BaseHeader>
     <div class="content">
@@ -12,7 +12,7 @@
           :key="lang.code"
           class="language-item"
           :class="{ active: currentLang === lang.code }"
-          @click="selectLanguage(lang.code)"
+          @click.stop="selectLanguage(lang.code)"
         >
           <div class="left">
             <span class="flag">{{ lang.flag }}</span>
@@ -29,63 +29,44 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { Icon } from '@iconify/vue'
-import { supabase } from '@/utils/supabase'
 import { useBaseStore } from '@/store/pinia'
 import { useI18n } from 'vue-i18n'
+import BaseHeader from '@/components/BaseHeader.vue'
 
-const router = useRouter()
+defineOptions({
+  name: 'LanguageSetting'
+})
+
 const baseStore = useBaseStore()
 const { locale } = useI18n()
 
-const currentLang = ref('zh-CN')
+const currentLang = ref(baseStore.userinfo.lang || 'en-US')
 
 const languages = [
   { code: 'zh-CN', name: '简体中文', flag: '🇨🇳' },
-  { code: 'en-US', name: 'English', flag: '🇺🇸' },
-  { code: 'zh-TW', name: '繁體中文', flag: '🇹🇼' },
-  { code: 'ja', name: '日本語', flag: '🇯🇵' },
-  { code: 'ko', name: '한국어', flag: '🇰🇷' }
+  { code: 'en-US', name: 'English', flag: '🇺🇸' }
+  // 暂时只开放支持的语言
+  // { code: 'zh-TW', name: '繁體中文', flag: '🇹🇼' },
+  // { code: 'ja', name: '日本語', flag: '🇯🇵' },
+  // { code: 'ko', name: '한국어', flag: '🇰🇷' }
 ]
 
 onMounted(async () => {
-  // 获取当前用户的语言设置
-  const {
-    data: { user }
-  } = await supabase.auth.getUser()
-
-  if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('lang')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.lang) {
-      currentLang.value = profile.lang
-      locale.value = profile.lang
-    }
+  if (baseStore.userinfo.lang) {
+    currentLang.value = baseStore.userinfo.lang
   }
 })
 
 const selectLanguage = async (langCode: string) => {
+  console.log('selectLanguage', langCode)
   currentLang.value = langCode
   locale.value = langCode
 
-  // 更新数据库
-  const {
-    data: { user }
-  } = await supabase.auth.getUser()
-
-  if (user) {
-    const { error } = await supabase.from('profiles').update({ lang: langCode }).eq('id', user.id)
-
-    if (!error) {
-      // 显示成功提示
-      console.log('语言设置已更新')
-      // 可以添加 Toast 提示
-    }
+  // 更新 Store 和 数据库
+  try {
+    await baseStore.updateProfileFields({ lang: langCode })
+  } catch (e) {
+    console.error('update lang failed', e)
   }
 }
 </script>
@@ -97,7 +78,9 @@ const selectLanguage = async (langCode: string) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: #fff;
+  background: black;
+  color: white;
+  z-index: 2000;
 
   .content {
     padding-top: 50rem;
@@ -111,19 +94,19 @@ const selectLanguage = async (langCode: string) => {
       align-items: center;
       justify-content: space-between;
       padding: 15rem 20rem;
-      border-bottom: 1rem solid #f5f5f5;
+      border-bottom: 1px solid #333;
       cursor: pointer;
       transition: background 0.2s;
 
       &:active {
-        background: #f5f5f5;
+        background: #222;
       }
 
       &.active {
-        background: #f0f9ff;
+        // background: #222;
 
         .name {
-          color: #1890ff;
+          color: var(--primary-color);
           font-weight: 600;
         }
       }
@@ -139,14 +122,14 @@ const selectLanguage = async (langCode: string) => {
 
         .name {
           font-size: 16rem;
-          color: #333;
+          color: white;
         }
       }
 
       .right {
         .check-icon {
           font-size: 24rem;
-          color: #1890ff;
+          color: var(--primary-color);
         }
       }
     }

@@ -64,7 +64,7 @@ help - 帮助信息
 
 在浏览器中访问：
 ```
-https://zhlkanxfucnsatafeqdp.supabase.co/functions/v1/auth-tg-login
+https://zhlkanxfucnsatafeqdp.supabase.co/functions/v1/server
 ```
 
 应该看到 CORS 错误或 400 错误（这是正常的，说明 Function 在运行）
@@ -104,7 +104,7 @@ LIMIT 1;
 
 ### 查看 Edge Function 日志
 
-访问: https://supabase.com/dashboard/project/zhlkanxfucnsatafeqdp/functions/auth-tg-login
+访问: https://supabase.com/dashboard/project/zhlkanxfucnsatafeqdp/functions/server
 
 点击 "Logs" 标签查看实时日志
 

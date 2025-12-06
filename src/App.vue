@@ -1,8 +1,13 @@
 <template>
-  <router-view v-slot="{ Component }">
+  <router-view v-slot="{ Component, route }">
     <transition :name="transitionName">
-      <keep-alive :exclude="store.excludeNames">
-        <component :is="Component" />
+      <component
+        v-if="route?.meta?.keepAlive === false"
+        :is="Component"
+        :key="route.fullPath"
+      />
+      <keep-alive v-else :exclude="store.excludeNames">
+        <component :is="Component" :key="route.fullPath" />
       </keep-alive>
     </transition>
   </router-view>

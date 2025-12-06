@@ -1,10 +1,19 @@
 <template>
   <div class="People">
-    <img :src="_checkImgUrl(people.avatar)" alt="" class="head-image pull-left" />
+    <img 
+      :src="_checkImgUrl(people.avatar || people.avatar_url)" 
+      alt="" 
+      class="head-image pull-left" 
+      @click.stop="$emit('clickAvatar', people)"
+    />
     <div class="content">
       <template v-if="mode === 'normal'">
         <div class="left">
-          <div class="name">{{ people.name }}</div>
+          <div class="name">{{ people.name || people.nickname }}</div>
+          <div class="detail" v-if="people.signature">{{ people.signature }}</div>
+        </div>
+        <div class="right" v-if="showUnfollow">
+          <div class="l-button" @click.stop="$emit('unfollow')">取消关注</div>
         </div>
       </template>
       <template v-if="mode === 'normal-add-button'">
@@ -179,6 +188,10 @@ export default {
     searchKey: {
       type: String,
       default: ''
+    },
+    showUnfollow: {
+      type: Boolean,
+      default: false
     }
   },
   data() {

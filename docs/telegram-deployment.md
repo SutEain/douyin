@@ -6,7 +6,7 @@
 - ✅ `_shared/cors.ts` - CORS 配置
 - ✅ `_shared/response.ts` - 统一响应格式
 - ✅ `_shared/telegram.ts` - TG 签名验证
-- ✅ `auth-tg-login/index.ts` - TG 登录主逻辑
+- ✅ `server/index.ts` - TG 登录主逻辑
 
 ### 2. 前端集成
 - ✅ `src/utils/supabase.ts` - Supabase 客户端
@@ -63,7 +63,7 @@ npx supabase login
 npx supabase link --project-ref zhlkanxfucnsatafeqdp
 
 # 部署 Edge Functions
-npx supabase functions deploy auth-tg-login
+npx supabase functions deploy server
 ```
 
 ### 步骤 4: 添加路由
@@ -163,7 +163,7 @@ vercel --prod
 
 ```bash
 # 测试 Edge Function 是否部署成功
-curl -X POST https://zhlkanxfucnsatafeqdp.supabase.co/functions/v1/auth-tg-login \
+curl -X POST https://zhlkanxfucnsatafeqdp.supabase.co/functions/v1/server \
   -H "Content-Type: application/json" \
   -d '{"initData": "test"}'
 
@@ -232,7 +232,7 @@ WHERE auth_provider = 'tg';
 **解决**:
 ```bash
 # 查看部署日志
-npx supabase functions deploy auth-tg-login --debug
+npx supabase functions deploy server --debug
 
 # 检查函数状态
 npx supabase functions list
@@ -247,7 +247,7 @@ npx supabase functions list
 ### 查看 Edge Function 日志
 
 1. 访问 https://supabase.com/dashboard/project/zhlkanxfucnsatafeqdp/functions
-2. 点击 `auth-tg-login`
+2. 点击 `server`
 3. 查看 "Logs" 标签
 
 ### 查看认证日志

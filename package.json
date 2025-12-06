@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "dev:tg": "bash scripts/dev-tg.sh",
+    "check:tg": "bash scripts/check-tg-config.sh",
     "start": "vite --host",
     "serve": "vite --host",
     "build": "vite build",
@@ -33,7 +35,8 @@
     "pinia": "^2.1.7",
     "vue": "^3.5.13",
     "vue-i18n": "^9.14.5",
-    "vue-router": "4.3.0"
+    "vue-router": "4.3.0",
+    "vue-virtual-scroller": "^2.0.0-beta.8"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.2.1",

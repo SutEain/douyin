@@ -8,6 +8,10 @@
           <span>{{ _formatNumber(i.statistics.digg_count) }}</span>
         </div>
         <div class="top" v-if="i.is_top">置顶</div>
+        <!-- ✅ 草稿标签 (status = draft 或 ready) -->
+        <div class="draft" v-if="i.status === 'draft' || i.status === 'ready'">草稿</div>
+        <!-- ✅ 私密标签 (is_private = true) -->
+        <div class="private" v-if="i.is_private">私密</div>
       </template>
       <div class="date" v-if="mode === 'date'">
         <div class="day">{{ getDay(i.create_time) }}</div>
@@ -46,7 +50,9 @@ defineOptions({
 })
 
 function goDetail(index) {
-  store.routeData = cloneDeep({ list: props.list, index })
+  // 传递列表和当前位置，便于详情页三槽位滑动
+  const videoItem = props.list[index]
+  store.routeData = cloneDeep({ items: props.list, index, item: videoItem })
   nav.push({ path: '/video-detail' })
 }
 
@@ -108,14 +114,34 @@ function getMonth(time) {
   }
 
   .top,
-  .music {
+  .music,
+  .draft,
+  .private {
     position: absolute;
     font-size: 12rem;
-    background: gold;
-    color: black;
     padding: 2rem 3rem;
     border-radius: 2rem;
+  }
+  
+  .top,
+  .music {
+    background: gold;
+    color: black;
     top: 7rem;
+    left: 7rem;
+  }
+  
+  .draft {
+    background: rgba(255, 165, 0, 0.9);  // 橙色背景 - 草稿
+    color: white;
+    top: 7rem;
+    right: 7rem;
+  }
+  
+  .private {
+    background: rgba(128, 128, 128, 0.9);  // 灰色背景 - 私密
+    color: white;
+    bottom: 35rem;
     left: 7rem;
   }
 

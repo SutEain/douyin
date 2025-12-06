@@ -98,7 +98,6 @@ import SlideHorizontal from '@/components/slide/SlideHorizontal.vue'
 import SlideItem from '@/components/slide/SlideItem.vue'
 import { reactive, ref } from 'vue'
 import { useNav } from '@/utils/hooks/useNav'
-import { Icon } from '@iconify/vue'
 import { _checkImgUrl, _stopPropagation } from '@/utils'
 
 const nav = useNav()

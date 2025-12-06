@@ -205,76 +205,10 @@
     }
   }
 
-  .float {
-    position: fixed;
-    box-sizing: border-box;
-    width: 100%;
-    z-index: 2;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    height: 46rem;
-    padding: 0 15rem;
-    background: transparent;
-    transition: all 0.2s;
-    text-align: center;
-
-    .center {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      color: white;
-    }
-
-    &.fixed {
-      background: var(--main-bg);
-
-      .item {
-        background: var(--main-bg) !important;
-      }
-    }
-
-    @h: 30rem;
-
-    .left {
-      font-size: 14rem;
-      height: @h;
-      display: flex;
-      gap: 6rem;
-      padding: 0 10rem;
-      align-items: center;
-      border-radius: 20rem;
-      background: rgba(82, 80, 80, 0.5);
-      color: white;
-
-      svg {
-        font-size: 16rem;
-      }
-    }
-
-    .right {
-      display: flex;
-
-      .item {
-        height: @h;
-        width: @h;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background: rgba(82, 80, 80, 0.5);
-        border-radius: 50%;
-        margin-left: 10rem;
-
-        svg {
-          color: white;
-          font-size: 22rem;
-        }
-
-        .finger {
-          transform: rotate(90deg);
-        }
-      }
-    }
+  .scroll {
+    height: calc(100vh - 46rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .desc {
@@ -322,6 +256,33 @@
           }
         }
       }
+
+      .header-actions {
+        position: absolute;
+        top: 12rem;
+        right: 15rem;
+        display: flex;
+        gap: 10rem;
+
+        .action {
+          height: 30rem;
+          width: 30rem;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          background: rgba(82, 80, 80, 0.5);
+          border-radius: 50%;
+
+          svg {
+            color: white;
+            font-size: 18rem;
+          }
+
+          .finger {
+            transform: rotate(90deg);
+          }
+        }
+      }
     }
 
     @p: 15rem;
@@ -343,9 +304,14 @@
         .heat {
           color: var(--second-text-color);
           display: flex;
-          gap: 26rem;
           align-items: center;
           justify-content: space-between;
+          width: 100%;
+
+          .heat-metrics {
+            display: flex;
+            gap: 26rem;
+            align-items: center;
 
           .num {
             color: white;
@@ -358,6 +324,25 @@
             display: flex;
             align-items: center;
             flex-direction: column;
+            }
+          }
+
+          .edit-btn {
+            display: flex;
+            align-items: center;
+            gap: 6rem;
+            padding: 6rem 14rem;
+            border-radius: 22rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 13rem;
+            background: rgba(82, 80, 80, 0.5);
+            cursor: pointer;
+            margin-right: 10rem;
+
+            svg {
+              font-size: 16rem;
+            }
           }
         }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   getSlideOffset,
   slideInit,
@@ -64,6 +64,7 @@ const state = reactive({
 watch(
   () => props.index,
   (newVal) => {
+    if (!slideListEl.value || !(slideListEl.value instanceof HTMLElement)) return
     if (state.localIndex !== newVal) {
       state.localIndex = newVal
       if (props.changeActiveIndexUseAnim) {
@@ -78,8 +79,12 @@ watch(
   }
 )
 
-onMounted(() => {
-  slideInit(slideListEl.value, state)
+onMounted(async () => {
+  await nextTick()
+
+  if (slideListEl.value) {
+    slideInit(slideListEl.value, state)
+  }
 
   if (props.autoplay) {
     setInterval(() => {
@@ -93,27 +98,40 @@ onMounted(() => {
 
   //观察子元素数量变动，获取最新数量
   //childrenLength用于canNext方法判断当前页是否是最后一页，是则不能滑动，不捕获事件
-  ob = new MutationObserver(() => {
-    state.wrapper.childrenLength = slideListEl.value.children.length
-  })
-  ob.observe(slideListEl.value, { childList: true })
+  if (slideListEl.value instanceof HTMLElement) {
+    ob = new MutationObserver(() => {
+      if (slideListEl.value) {
+        state.wrapper.childrenLength = slideListEl.value.children.length
+      }
+    })
+    ob.observe(slideListEl.value, { childList: true })
+  }
 })
 
 onUnmounted(() => {
-  ob.disconnect()
+  if (ob) {
+    ob.disconnect()
+    ob = null
+  }
 })
 
 function touchStart(e) {
-  slideTouchStart(e, slideListEl.value, state)
+  if (slideListEl.value) {
+    slideTouchStart(e, slideListEl.value, state)
+  }
 }
 
 function touchMove(e) {
-  slideTouchMove(e, slideListEl.value, state)
+  if (slideListEl.value) {
+    slideTouchMove(e, slideListEl.value, state)
+  }
 }
 
 function touchEnd(e) {
   slideTouchEnd(e, state)
-  slideReset(e, slideListEl.value, state, emit)
+  if (slideListEl.value) {
+    slideReset(e, slideListEl.value, state, emit)
+  }
 }
 </script>
 

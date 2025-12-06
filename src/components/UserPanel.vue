@@ -1,5 +1,6 @@
 <template>
-  <div id="UserPanel" @scroll="scroll" @dragstart="(e) => _stopPropagation(e)" ref="page">
+  <div id="UserPanel" @dragstart="(e) => _stopPropagation(e)" ref="page">
+    <!-- ✅ 固定顶部栏 - 移到滚动容器外面 -->
     <div ref="float" class="float" :class="state.floatFixed ? 'fixed' : ''">
       <div class="left">
         <Icon @click="emit('back')" class="icon" icon="eva:arrow-ios-back-fill" />
@@ -23,43 +24,48 @@
       </div>
       <div class="right">
         <transition name="fade">
-          <div class="request" v-if="!state.floatFixed && props.currentItem.author.is_follow">
+          <div class="request" v-if="!state.floatFixed">
             <img
-              @click="$nav('/me/request-update')"
+              @click="_no"
               src="@/assets/img/icon/me/finger-right.png"
               alt=""
             />
             <span>求更新</span>
           </div>
         </transition>
+        <!-- ✅ 隐藏搜索和三个点按钮
         <Icon class="icon" icon="ion:search" @click.stop="_no" />
         <Icon class="icon" icon="ri:more-line" @click.stop="emit('showFollowSetting')" />
+        -->
       </div>
     </div>
+    
+    <!-- ✅ 内层滚动容器 -->
+    <div class="scroll-container" @scroll="scroll" ref="scrollContainer">
     <div
       class="main"
       ref="main"
-      @touchstart="touchStart"
-      @touchmove="touchMove"
-      @touchend="touchEnd"
     >
       <!--   src="@/assets/img/header-bg.png"   -->
       <header>
+        <!-- ✅ 背景图：优先显示用户设置的背景，否则显示默认背景 -->
         <img
-          :style="{
-            opacity: props.currentItem.author.cover_url[0].url_list.length ? 1 : 0
-          }"
           ref="cover"
-          :src="_checkImgUrl(props.currentItem.author.cover_url[0].url_list[0])"
+          :src="props.currentItem?.author?.cover_url?.[0]?.url_list?.[0] 
+            ? _checkImgUrl(props.currentItem.author.cover_url[0].url_list[0]) 
+            : '/images/profile/default_bg.png'"
           @click="
-            state.previewImg = _checkImgUrl(props.currentItem.author.cover_url[0].url_list[0])
+            state.previewImg = props.currentItem?.author?.cover_url?.[0]?.url_list?.[0]
+              ? _checkImgUrl(props.currentItem.author.cover_url[0].url_list[0])
+              : '/images/profile/default_bg.png'
           "
           alt=""
           class="cover"
         />
         <div class="avatar-wrapper">
+          <!-- ✅ 头像：必须显示 -->
           <img
-            v-lazy="_checkImgUrl(props.currentItem.author.avatar_168x168.url_list[0])"
+            :src="_checkImgUrl(props.currentItem.author.avatar_168x168.url_list[0])"
             class="avatar"
             @click="
               state.previewImg = _checkImgUrl(props.currentItem.author.avatar_300x300.url_list[0])
@@ -71,40 +77,28 @@
               <img src="@/assets/img/icon/me/certification.webp" />
               {{ props.currentItem.author.certification }}
             </div>
-            <div class="number" v-else>
-              <span>抖音号：{{ _getUserDouyinId(props.currentItem) }}</span>
+            <!-- ✅ TG用户名（没有则不显示） -->
+            <div class="number" v-else-if="props.currentItem.author.unique_id">
+              <span>TG用户名：@{{ props.currentItem.author.unique_id }}</span>
               <img
                 src="@/assets/img/icon/me/copy.png"
                 alt=""
-                @click.stop="_copy(_getUserDouyinId(props.currentItem))"
+                @click.stop="_copy('@' + props.currentItem.author.unique_id)"
               />
             </div>
           </div>
         </div>
       </header>
       <div class="info">
-        <div class="heat">
-          <div class="text">
-            <span class="num">{{ _formatNumber(props.currentItem.author.total_favorited) }}</span>
-            <span>获赞</span>
-          </div>
-          <div class="text">
-            <span class="num">{{ _formatNumber(props.currentItem.author.following_count) }}</span>
-            <span>关注</span>
-          </div>
-          <div class="text">
-            <span class="num">{{
-              _formatNumber(props.currentItem.author.mplatform_followers_count)
-            }}</span>
-            <span>粉丝</span>
-          </div>
+        <!-- ✅ 第1个：个性签名 -->
+        <div class="signature">
+          <div class="text" v-if="props.currentItem.author.signature" v-html="props.currentItem.author.signature"></div>
+          <div class="text empty" v-else>这个人很神秘，什么都没留下</div>
         </div>
 
-        <div class="signature f12" v-if="props.currentItem.author.signature">
-          <div class="text" v-html="props.currentItem.author.signature"></div>
-        </div>
+        <!-- ✅ 第2个：年龄、地区等信息 -->
         <div class="more">
-          <div class="age item" v-if="props.currentItem.author.user_age !== -1">
+          <div class="age item" v-if="props.currentItem.author.user_age && props.currentItem.author.user_age !== -1">
             <img
               v-if="props.currentItem.author.gender == 1"
               src="@/assets/img/icon/me/man.png"
@@ -134,41 +128,60 @@
             {{ props.currentItem.author.school?.name }}
           </div>
         </div>
-      </div>
-      <div class="other">
-        <div class="scroll-x" @touchmove="stop">
-          <div class="item" :key="i" v-for="(item, i) in props.currentItem.author.card_entries">
-            <img :src="_checkImgUrl(item.icon_dark.url_list[0])" alt="" />
-            <div class="right">
-              <div class="top">{{ item.title }}</div>
-              <div class="bottom">{{ item.sub_title }}</div>
-            </div>
+
+        <!-- ✅ 第3个：获赞/关注/粉丝 -->
+        <div class="heat">
+          <div class="text">
+            <span class="num">{{ _formatNumber(props.currentItem.author.total_favorited) }}</span>
+            <span>获赞</span>
+          </div>
+          <div class="text">
+            <span class="num">{{ _formatNumber(props.currentItem.author.following_count) }}</span>
+            <span>关注</span>
+          </div>
+          <div class="text">
+            <span class="num">{{
+              _formatNumber(props.currentItem.author.mplatform_followers_count)
+            }}</span>
+            <span>粉丝</span>
           </div>
         </div>
       </div>
 
-      <div class="my-buttons">
-        <div class="follow-display">
-          <div
-            class="follow-wrapper"
-            :class="props.currentItem.author.follow_status ? 'follow-wrapper-followed' : ''"
-          >
-            <!--            eslint-disable-next-line vue/no-mutating-props-->
-            <div class="no-follow" @click="props.currentItem.author.follow_status = 1">
-              <img src="@/assets/img/icon/add-white.png" alt="" />
-              <span>关注</span>
-            </div>
-            <div class="followed">
-              <div class="l-button" @click="emit('showFollowSetting2')">
-                <span>已关注</span>
-                <Icon icon="bxs:down-arrow" class="arrow" />
-              </div>
-              <div class="l-button" @click="$nav('/message/chat')">
-                <span>私信</span>
-              </div>
-            </div>
-          </div>
+      <!-- ✅ 第4个：关注按钮 -->
+      <div v-if="shouldShowFollowButton" class="my-buttons">
+        <!-- ✅ 单按钮：未关注(0) / 已关注(1) / 互相关注(2) -->
+        <div 
+          class="follow-button"
+          :class="{
+            'follow-button-unfollow': props.currentItem.author.follow_status === 0,
+            'follow-button-followed': props.currentItem.author.follow_status === 1,
+            'follow-button-mutual': props.currentItem.author.follow_status === 2,
+            'follow-button-loading': state.loadings.follow
+          }"
+          @click="handleFollowClick"
+        >
+          <!-- Loading 状态 -->
+          <Loading v-if="state.loadings.follow" :isFullScreen="false" type="small" />
+          
+          <!-- 未关注：显示 +关注 -->
+          <template v-else-if="props.currentItem.author.follow_status === 0">
+            <img src="@/assets/img/icon/add-white.png" alt="" />
+            <span>关注</span>
+          </template>
+          <!-- 已关注：显示 已关注 -->
+          <template v-else-if="props.currentItem.author.follow_status === 1">
+            <span>已关注</span>
+          </template>
+          <!-- 互相关注：显示 ♥ 互相关注 -->
+          <template v-else-if="props.currentItem.author.follow_status === 2">
+            <span>♥ 互相关注</span>
+          </template>
         </div>
+      </div>
+      
+      <!-- ✅ 去掉推荐同类型作者功能
+      <div class="my-buttons">
         <div
           class="option"
           :class="state.isShowRecommend ? 'option-recommend' : ''"
@@ -212,6 +225,7 @@
           </div>
         </div>
       </div>
+      -->
 
       <div class="total" ref="total">
         作品 {{ props.currentItem.author.aweme_count }}
@@ -219,17 +233,19 @@
       </div>
       <div class="videos">
         <Posters
-          v-if="props.currentItem.aweme_list.length"
+          v-if="props.currentItem.aweme_list && props.currentItem.aweme_list.length"
           :list="props.currentItem.aweme_list"
         ></Posters>
-        <Loading :isFullScreen="false" v-else />
+        <Loading :isFullScreen="false" v-else-if="state.loadings.profile" />
+        <NoMore v-else-if="props.currentItem.aweme_list && props.currentItem.aweme_list.length > 0" />
       </div>
     </div>
+    </div><!-- ✅ 关闭 scroll-container -->
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { reactive, ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import {
   _checkImgUrl,
   _copy,
@@ -242,8 +258,9 @@ import { useNav } from '@/utils/hooks/useNav'
 import Posters from '@/components/Posters.vue'
 import { DefaultUser } from '@/utils/const_var'
 import Loading from '@/components/Loading.vue'
+import NoMore from '@/components/NoMore.vue'
 import { useBaseStore } from '@/store/pinia'
-import { userVideoList } from '@/api/user'
+import { authorVideos, toggleFollowUser, getUserProfile } from '@/api/videos'
 
 const $nav = useNav()
 const baseStore = useBaseStore()
@@ -262,7 +279,8 @@ const props = defineProps({
         author: DefaultUser,
         aweme_list: []
       }
-    }
+    },
+    required: true
   },
   active: {
     type: Boolean,
@@ -273,6 +291,7 @@ const props = defineProps({
 })
 const main = ref(null)
 const page = ref(null)
+const scrollContainer = ref<HTMLElement | null>(null)
 const cover = ref(null)
 const total = ref(null)
 
@@ -283,7 +302,9 @@ const state = reactive({
   showFollowSetting: false,
   floatHeight: 52,
   loadings: {
-    showRecommend: false
+    showRecommend: false,
+    follow: false,  // ✅ 关注/取消关注 loading
+    profile: false  // ✅ 加载用户信息 loading
   },
   acceleration: 1.2,
   start: { x: 0, y: 0, time: 0 },
@@ -297,32 +318,52 @@ const state = reactive({
   uid: null
 })
 
+// ✅ 判断是否显示关注按钮：只有 follow_status 是 0/1/2 时才显示
+const shouldShowFollowButton = computed(() => {
+  const status = props.currentItem?.author?.follow_status
+  return status === 0 || status === 1 || status === 2
+})
+
 watch(
   () => props.active,
-  async (newVal) => {
-    if (newVal && !props.currentItem.aweme_list.length) {
-      // console.log('props.currentItem',props.currentItem)
-      let id = _getUserDouyinId(props.currentItem)
-      let r: any = await userVideoList({ id })
-      if (r.success) {
-        setTimeout(() => {
-          r.data = r.data.map((a) => {
-            a.author = props.currentItem.author
-            return a
-          })
-          emit('update:currentItem', Object.assign(props.currentItem, { aweme_list: r.data }))
-        }, 300)
+  async (newVal, oldVal) => {
+    console.log('[UserPanel] 🔍 active watch 触发:', { newVal, oldVal, immediate: oldVal === undefined })
+    console.log('[UserPanel] 🔍 props.active 值:', props.active)
+    console.log('[UserPanel] 🔍 props.currentItem:', props.currentItem)
+    
+    if (newVal) {
+      console.log('[UserPanel] ✅ 面板激活，开始加载数据')
+      
+      // ✅ 1. 先加载作者详细信息（名字、签名、统计数据等）
+      await loadAuthorInfo()
+      
+      // ✅ 2. 再加载作者视频列表
+      if (!props.currentItem.aweme_list || !props.currentItem.aweme_list.length) {
+        console.log('[UserPanel] ⚡ aweme_list 为空，立即调用 loadAuthorVideos()')
+        await loadAuthorVideos()
+      } else {
+        console.log('[UserPanel] ⏭️ aweme_list 已有数据，跳过加载')
       }
+    } else {
+      console.log('[UserPanel] ⏸️ 面板未激活')
     }
-  }
+  },
+  { immediate: true } // ✅ 立即执行，确保首次加载
 )
 
 watch(
   () => props.currentItem.author.uid,
-  async () => {
+  async (newUid) => {
+    console.log('[UserPanel] author.uid 变化:', {
+      newUid,
+      oldUid: state.uid,
+      changed: newUid !== state.uid
+    })
     if (props.currentItem.author.uid !== state.uid) {
+      console.log('[UserPanel] UID 改变，重新加载视频')
       state.uid = props.currentItem.author.uid
       emit('update:currentItem', Object.assign(props.currentItem, { aweme_list: [] }))
+      await loadAuthorVideos()
     }
   }
 )
@@ -331,15 +372,176 @@ function stop(e) {
   e.stopPropagation()
 }
 
+// ✅ 处理关注/取消关注
+async function handleFollowClick() {
+  const status = props.currentItem.author.follow_status
+  const authorId = props.currentItem.author.user_id
+  
+  if (!authorId) {
+    console.error('[UserPanel] authorId is missing')
+    return
+  }
+  
+  // ✅ 防止重复点击
+  if (state.loadings.follow) {
+    return
+  }
+  
+  try {
+    state.loadings.follow = true
+    
+    if (status === 0) {
+      // 未关注 → 关注
+      console.log('[UserPanel] 关注用户:', authorId)
+      const result = await toggleFollowUser(authorId, true)
+      
+      // ✅ 使用后端返回的关注状态（1=已关注, 2=互相关注）
+      const newStatus = result?.follow_status ?? 1
+      const updatedAuthor = {
+        ...props.currentItem.author,
+        follow_status: newStatus,
+        is_follow: newStatus > 0
+      }
+      emit('update:currentItem', { ...props.currentItem, author: updatedAuthor })
+      console.log('[UserPanel] ✅ 关注成功, 状态:', result?.follow_status === 2 ? '互相关注' : '已关注')
+    } else {
+      // 已关注(1) 或 互相关注(2) → 取消关注
+      console.log('[UserPanel] 取消关注用户:', authorId)
+      await toggleFollowUser(authorId, false)
+      
+      // 取消关注后状态为0
+      const updatedAuthor = {
+        ...props.currentItem.author,
+        follow_status: 0,
+        is_follow: false
+      }
+      emit('update:currentItem', { ...props.currentItem, author: updatedAuthor })
+      console.log('[UserPanel] ✅ 取消关注成功')
+    }
+  } catch (error: any) {
+    console.error('[UserPanel] ❌ 关注操作失败:', error?.message || error)
+    // TODO: 显示错误提示给用户
+  } finally {
+    state.loadings.follow = false
+  }
+}
+
 function followButton() {}
 
 function cancelFollow() {}
 
 defineExpose({ cancelFollow })
 
-function scroll() {
-  // console.log('scroll', page.value.scrollTop)
-  let scrollTop = page.value.scrollTop
+// ✅ 加载作者详细信息（个人信息 + 统计数据）
+async function loadAuthorInfo() {
+  try {
+    console.log('[UserPanel] 📡 loadAuthorInfo 开始')
+    state.loadings.profile = true
+    
+    const authorId = props.currentItem.author?.user_id
+    if (!authorId) {
+      console.log('[UserPanel] ❌ authorId 不存在，无法加载用户信息')
+      return
+    }
+
+    console.log('[UserPanel] 📡 调用 getUserProfile API, authorId:', authorId)
+    const res = await getUserProfile(authorId)
+    console.log('[UserPanel] API 响应:', res)
+
+    if (res?.success && res.data) {
+      const profile = res.data
+      console.log('[UserPanel] ✅ 获取到用户信息:', {
+        nickname: profile.nickname,
+        username: profile.username,
+        followStatus: profile.follow_status,
+        totalFavorited: profile.total_favorited,
+        followingCount: profile.following_count,
+        followersCount: profile.followers_count,
+        awemeCount: profile.aweme_count
+      })
+
+      // ✅ 更新 author 信息
+      const followStatus = profile.follow_status ?? props.currentItem.author.follow_status
+      const updatedAuthor = {
+        ...props.currentItem.author,
+        // 个人信息
+        nickname: profile.nickname || props.currentItem.author.nickname,
+        unique_id: profile.username || props.currentItem.author.unique_id,
+        signature: profile.bio || profile.signature || props.currentItem.author.signature,
+        gender: profile.gender,
+        birthday: profile.birthday,
+        // 统计数据
+        total_favorited: profile.total_favorited ?? props.currentItem.author.total_favorited,
+        following_count: profile.following_count ?? props.currentItem.author.following_count,
+        mplatform_followers_count: profile.followers_count ?? props.currentItem.author.mplatform_followers_count,
+        aweme_count: profile.aweme_count ?? props.currentItem.author.aweme_count,
+        // 关注状态
+        follow_status: followStatus,
+        is_follow: followStatus > 0, // ✅ 根据 follow_status 设置 is_follow
+        // 头像（如果有新的）
+        avatar_168x168: profile.avatar_url 
+          ? { url_list: [profile.avatar_url] }
+          : props.currentItem.author.avatar_168x168
+      }
+
+      console.log('[UserPanel] 📝 更新 author 数据')
+      emit('update:currentItem', {
+        ...props.currentItem,
+        author: updatedAuthor
+      })
+    } else {
+      console.log('[UserPanel] ⚠️ 获取用户信息失败，使用传入的数据')
+    }
+  } catch (error) {
+    console.error('[UserPanel] loadAuthorInfo 错误:', error)
+  } finally {
+    state.loadings.profile = false
+  }
+}
+
+async function loadAuthorVideos() {
+  try {
+    console.log('[UserPanel] loadAuthorVideos 开始')
+    console.log('[UserPanel] currentItem:', {
+      hasAuthor: !!props.currentItem?.author,
+      authorId: props.currentItem?.author?.user_id,
+      nickname: props.currentItem?.author?.nickname
+    })
+    
+    const authorId = props.currentItem.author?.user_id
+    
+    if (!authorId) {
+      console.log('[UserPanel] ❌ authorId 不存在，无法加载视频')
+      return
+    }
+
+    console.log('[UserPanel] 📡 调用 authorVideos API, authorId:', authorId)
+    // ✅ 统一使用 authorVideos，不再区分自己还是别人
+    const res = await authorVideos(authorId, { pageNo: 0, pageSize: 20 })
+    console.log('[UserPanel] API 响应:', {
+      success: res?.success,
+      listLength: res?.data?.list?.length || 0
+    })
+
+    if (res?.success) {
+      const list = (res.data?.list || []).map((a: any) => ({
+        ...a,
+        author: props.currentItem.author
+      }))
+      console.log('[UserPanel] ✅ 设置 aweme_list, 视频数量:', list.length)
+      emit('update:currentItem', Object.assign(props.currentItem, { aweme_list: list }))
+    } else {
+      console.log('[UserPanel] ❌ API 调用失败或返回空')
+    }
+  } catch (error) {
+    console.error('[UserPanel] loadAuthorVideos 错误:', error)
+  }
+}
+
+function scroll(e: Event) {
+  // ✅ 从滚动容器获取 scrollTop
+  const scrollTop = (e.target as HTMLElement)?.scrollTop || 0
+  // console.log('scroll', scrollTop)
   let totalY = total.value.getBoundingClientRect().y
   state.floatFixed = totalY <= state.floatHeight
   let isTop = scrollTop === 0
@@ -358,11 +560,12 @@ function touchStart(e: TouchEvent) {
   state.start.x = e.touches[0].pageX
   state.start.y = e.touches[0].pageY
   state.start.time = Date.now()
-  state.isTop = page.value.scrollTop === 0
+  // ✅ 从滚动容器获取 scrollTop
+  state.isTop = scrollContainer.value?.scrollTop === 0
   if (state.isTop) {
     cover.value.style.transition = 'none'
   }
-  // console.log('touchStart', page.value.scrollTop)
+  // console.log('touchStart', scrollContainer.value?.scrollTop)
 }
 
 function touchMove(e: TouchEvent) {
@@ -370,10 +573,11 @@ function touchMove(e: TouchEvent) {
   state.move.y = e.touches[0].pageY - state.start.y
   let isNext = state.move.y < 0
 
-  // console.log('touchMove', page.value.scrollTop)
+  // console.log('touchMove', scrollContainer.value?.scrollTop)
   //todo 有空了加个，越滑越紧的效果
   if (state.isTop && !isNext && document.body.clientHeight / 4 > state.move.y) {
-    // if (state.isTop && !isNext) {
+    // ✅ 在顶部下拉时，阻止默认行为，防止拉动整个 miniApp
+    e.preventDefault()
     let scrollHeight = state.move.y
     cover.value.style.height = `calc(${state.coverHeight}rem + ${scrollHeight}px)`
   }
@@ -389,6 +593,23 @@ function touchEnd() {
   state.isAutoScaleCover = endTime - state.start.time < 100
   // console.log('touchEnd')
 }
+
+// ✅ 在 mounted 时手动添加触摸事件监听器，以便控制 passive 属性
+onMounted(() => {
+  if (main.value) {
+    main.value.addEventListener('touchstart', touchStart, { passive: true })
+    main.value.addEventListener('touchmove', touchMove, { passive: false }) // ✅ 非 passive，允许 preventDefault
+    main.value.addEventListener('touchend', touchEnd, { passive: true })
+  }
+})
+
+onUnmounted(() => {
+  if (main.value) {
+    main.value.removeEventListener('touchstart', touchStart)
+    main.value.removeEventListener('touchmove', touchMove)
+    main.value.removeEventListener('touchend', touchEnd)
+  }
+})
 </script>
 
 <style scoped lang="less">
@@ -408,13 +629,29 @@ function touchEnd() {
 }
 
 #UserPanel {
-  touch-action: pan-y;
   position: fixed;
+  top: 0;
+  left: 0;
   background: var(--color-user);
-  height: 100%;
+  height: 100vh;
   width: 100%;
-  overflow: auto;
+  overflow: hidden; // ✅ 外层阻止滚动
   font-size: 14rem;
+  z-index: 10000; // ✅ 确保在最上层
+
+  .scroll-container {
+    height: 100vh;
+    overflow-y: auto; // ✅ 内层可滚动
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain; // ✅ 防止下拉时拉动整个 miniApp
+    overscroll-behavior-y: contain; // ✅ 明确指定 Y 轴
+    touch-action: pan-y; // ✅ 只允许垂直平移
+    
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
 
   .preview-img {
     z-index: 3;
@@ -452,6 +689,9 @@ function touchEnd() {
   }
 
   .main {
+    // ✅ 添加 touch-action，允许垂直滚动但拦截其他触摸行为
+    touch-action: pan-y;
+    
     .notice {
       font-size: 12rem;
       height: 40rem;
@@ -661,32 +901,13 @@ function touchEnd() {
       border-radius: 10rem 10rem 0 0;
       margin-top: -20rem;
 
-      .heat {
-        padding: 15rem 0;
-        color: var(--second-text-color);
-        display: flex;
-        align-items: center;
-
-        .text {
-          font-size: 12rem;
-          margin-right: 18rem;
-          display: flex;
-          align-items: center;
-
-          .num {
-            color: white;
-            font-size: 16rem;
-            font-weight: bold;
-            margin-right: 5rem;
-          }
-        }
-      }
-
       .signature {
         color: white;
         display: flex;
         align-items: center;
-        margin-bottom: 5rem;
+        padding: 15rem;  // ✅ 上下左右都是 15rem
+        font-family: "Microsoft YaHei", "微软雅黑", sans-serif;  // ✅ 雅黑字体
+        font-size: 14rem;  // ✅ 和 Me 页面一致
 
         img {
           height: 12rem;
@@ -695,12 +916,16 @@ function touchEnd() {
 
         .text {
           white-space: pre-wrap;
+          
+          // ✅ 空简介样式
+          &.empty {
+            color: rgba(255, 255, 255, 0.5);
+          }
         }
       }
 
       .more {
-        margin-top: 10rem;
-        margin-bottom: 20rem;
+        padding: 0 0 10rem 10rem;  // ✅ 上 右 下 左
         color: var(--second-text-color);
         display: flex;
 
@@ -719,43 +944,27 @@ function touchEnd() {
           }
         }
       }
-    }
 
-    .other {
-      display: flex;
-      margin-bottom: 20rem;
-      overflow: hidden;
-
-      .scroll-x {
-        padding-left: 20rem;
+      .heat {
         display: flex;
-        overflow-x: scroll;
-      }
+        justify-content: space-around;  // ✅ 平分3等份，和Me页面一样
+        padding: 10rem 0;
 
-      .item {
-        margin-right: 25rem;
-        display: flex;
-        flex-shrink: 0;
+        .text {
+          text-align: center;  // ✅ 居中显示
+          cursor: pointer;
 
-        img {
-          margin-right: 8rem;
-          border-radius: 4rem;
-          height: 40rem;
-        }
-
-        .right {
-          display: flex;
-          justify-content: space-between;
-          flex-direction: column;
-
-          .top {
-            color: white;
-            font-size: 14rem;
+          .num {
+            display: block;  // ✅ 数字独占一行
+            font-size: 18rem;  // ✅ 字体更大
+            font-weight: bold;
+            margin-bottom: 5rem;
+            color: #fff;
           }
 
-          .bottom {
-            color: var(--second-text-color);
-            font-size: 12rem;
+          span:last-child {
+            font-size: 14rem;  // ✅ 文字更大
+            color: rgba(255, 255, 255, 0.6);
           }
         }
       }
@@ -763,197 +972,66 @@ function touchEnd() {
 
     .my-buttons {
       margin: 20rem;
-      overflow: hidden;
       display: flex;
-      justify-content: flex-end;
+      justify-content: center;
       align-items: center;
-      @width: 36rem;
-      @gap: 6rem;
-      gap: @gap;
 
-      .follow-display {
-        flex: 1;
-        overflow: hidden;
-
-        .follow-wrapper {
-          width: 200%;
-          display: flex;
-          flex-wrap: nowrap;
-          transition: all 0.3s ease;
-
-          &.follow-wrapper-followed {
-            transform: translate3d(-50%, 0, 0);
-          }
-
-          .no-follow {
-            width: calc(100% - 5rem);
-            color: white;
-            border-radius: 4rem;
-            background: var(--primary-btn-color);
-            height: @width;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-sizing: border-box;
-
-            span {
-              margin-left: 2rem;
-            }
-          }
-
-          .followed {
-            width: 100%;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            gap: @gap;
-
-            .l-button {
-              color: white;
-              border-radius: 5rem;
-              background: var(--second-btn-color);
-              height: @width;
-              width: 50%;
-              box-sizing: border-box;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              gap: @gap;
-            }
-          }
-        }
-
-        img {
-          @width: 14rem;
-          width: @width;
-          height: @width;
-        }
-      }
-
-      .option {
-        position: relative;
-        width: @width;
-        height: @width;
-        font-size: 12rem;
+      // ✅ 单个关注按钮（3种状态）
+      .follow-button {
+        width: 100%;
+        height: 40rem;
+        border-radius: 4rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 4rem;
-        background: var(--second-btn-color);
-        color: white;
-
-        &.option-recommend {
-          .arrow {
-            transform: rotate(180deg);
-          }
-        }
-      }
-
-      .loading {
-        @width: 12rem;
-        width: @width;
-        height: @width;
-        animation: rotate 0.6s linear infinite;
-
-        @keyframes rotate {
-          from {
-            transform: rotate(0deg);
-          }
-          to {
-            transform: rotate(360deg);
-          }
-        }
-      }
-
-      .arrow {
-        transition: transform 0.3s ease;
-        font-size: 13rem;
-      }
-    }
-
-    .recommend {
-      transition: all 0.3s ease;
-      height: 250rem;
-      overflow: hidden;
-
-      &.hidden {
-        height: 0;
-      }
-
-      .title {
-        padding-left: 20rem;
-        font-size: 12rem;
-        color: var(--second-text-color);
-        display: flex;
-        align-items: center;
-
+        gap: 8rem;
+        font-size: 16rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        
         img {
-          margin-left: 3rem;
-          width: 13rem;
-          height: 13rem;
+          width: 16rem;
+          height: 16rem;
         }
-      }
 
-      .friends {
-        padding-left: 20rem;
-        margin-top: 10rem;
-        display: flex;
-        overflow-x: scroll;
-        margin-bottom: 20rem;
-
-        .friend {
-          position: relative;
-          background: var(--second-btn-color-tran);
-          margin-right: 10rem;
-          padding: 10rem;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          border-radius: 10rem;
-
-          .avatar {
-            @width: 100rem;
-            border-radius: 50%;
-            width: @width;
-            height: @width;
-          }
-
-          .name {
-            margin-top: 10rem;
-            font-size: 12rem;
-            color: white;
-          }
-
-          .tips {
-            margin-top: 5rem;
-            font-size: 12rem;
-            color: var(--second-text-color);
-          }
-
-          .button {
-            margin-top: 10rem;
-            width: 150rem;
-            height: 26rem;
-            font-size: 12rem;
-          }
-
-          .close {
-            position: absolute;
-            top: 2rem;
-            right: 2rem;
+        // 未关注：粉色背景
+        &.follow-button-unfollow {
+          background: var(--primary-btn-color); // #FE2C55
+          color: white;
+          
+          &:active {
+            opacity: 0.8;
           }
         }
 
-        .more {
-          .notice {
-            width: 100rem;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: var(--second-text-color);
+        // 已关注：白色背景 + 灰色文字
+        &.follow-button-followed {
+          background: white;
+          color: #666;
+          border: 1rem solid #E8E8E8;
+          
+          &:active {
+            background: #F5F5F5;
           }
+        }
+
+        // 互相关注：浅绿色背景 + 白色文字
+        &.follow-button-mutual {
+          background: #52C41A; // 浅绿色
+          color: white;
+          font-weight: 600;
+          
+          &:active {
+            opacity: 0.8;
+          }
+        }
+
+        // Loading 状态：禁用点击，半透明
+        &.follow-button-loading {
+          opacity: 0.6;
+          pointer-events: none;
+          cursor: not-allowed;
         }
       }
     }

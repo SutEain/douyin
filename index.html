@@ -6,10 +6,65 @@
     <meta name="referrer" content="no-referrer" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0,user-scalable=no"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
       id="viewport"
     />
     <title>Douyin</title>
+    <script>
+      ;(function () {
+        const host = window.location.hostname
+        const isDev =
+          host === 'localhost' ||
+          host === '127.0.0.1' ||
+          host.endsWith('.test') ||
+          host.endsWith('.local')
+        if (isDev) return
+
+        const url = window.location.href
+        const hasTgData =
+          url.includes('tgWebAppData') ||
+          window.location.hash.includes('tgWebAppData') ||
+          window.location.search.includes('tgWebAppData')
+        const uaTelegram = /Telegram/i.test(navigator.userAgent)
+        const refTelegram = /t\.me|telegram\.org|telegram\.me|web\.telegram\.org/i.test(
+          document.referrer || ''
+        )
+        const hasTelegramObj = !!(window.Telegram && window.Telegram.WebApp)
+
+        if (!(hasTgData || uaTelegram || refTelegram || hasTelegramObj)) {
+          document.documentElement.innerHTML = ''
+          window.stop()
+        }
+      })()
+    </script>
+    <script>
+      // 兜底 TelegramGameProxy，避免第三方脚本提前读取时报错
+      window.TelegramGameProxy = window.TelegramGameProxy || {}
+      if (typeof window.TelegramGameProxy.receiveEvent !== 'function') {
+        window.TelegramGameProxy.receiveEvent = function () {}
+      }
+    </script>
+    <!-- Telegram WebApp Script (Telegram 会自动注入，这里作为备用) -->
+    <script>
+      // Telegram 会自动注入 window.Telegram.WebApp
+      // 如果检测到 Telegram 环境但脚本未加载，则手动加载
+      (function() {
+        // 检查是否在 Telegram WebApp 环境中（检查 hash、query string、user agent、referrer）
+        const url = window.location.href;
+        const hasTgData = url.includes('tgWebAppData') || 
+                          window.location.hash.includes('tgWebAppData') ||
+                          window.location.search.includes('tgWebAppData');
+        const isTelegram = /Telegram/i.test(navigator.userAgent) || 
+                          document.referrer.includes('telegram.org');
+        
+        if ((hasTgData || isTelegram) && !window.Telegram?.WebApp) {
+          const script = document.createElement('script');
+          script.src = 'https://telegram.org/js/telegram-web-app.js';
+          script.async = true;
+          document.head.appendChild(script);
+        }
+      })();
+    </script>
     <!--    <script crossorigin="anonymous"-->
     <!--            integrity="sha512-KkkY/3auRhaXDFzFMpwtZ+BrS8EBQ+GfiBxdJ9jGMi6Gg74/sYbq/IZpY593pkNjTmbeRfBwjpZo+7gcpH45Ww=="-->
     <!--            src="https://lib.baomitu.com/eruda/3.0.1/eruda.min.js"></script>-->

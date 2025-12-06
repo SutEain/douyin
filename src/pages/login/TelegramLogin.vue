@@ -1,31 +1,14 @@
 <template>
   <div class="telegram-login">
     <div class="container">
-      <div class="logo">
-        <h1>🎬 Douyin</h1>
-        <p>短视频分享平台</p>
+      <div v-if="isLoading" class="logo">
+        <img src="/images/icon/logo.svg" alt="Logo" class="logo-img" />
       </div>
 
-      <div v-if="loading" class="loading">
-        <div class="spinner"></div>
-        <p>正在登录...</p>
-      </div>
-
-      <div v-else-if="error" class="error">
-        <p>{{ error }}</p>
-        <button @click="retryLogin" class="retry-btn">重试</button>
-      </div>
-
-      <div v-else class="welcome">
-        <p>欢迎使用 Telegram 登录</p>
-        <button @click="handleLogin" class="login-btn">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"
-            />
-          </svg>
-          使用 Telegram 登录
-        </button>
+      <div v-if="errorMessage" class="error-box">
+        <p class="error-icon">⚠️</p>
+        <p class="error-text">{{ errorMessage }}</p>
+        <button @click="retry" class="retry-btn">重试</button>
       </div>
     </div>
   </div>
@@ -39,83 +22,90 @@ import { useBaseStore } from '@/store/pinia'
 
 const router = useRouter()
 const baseStore = useBaseStore()
+const isLoading = ref(true)
+const errorMessage = ref('')
 
-const loading = ref(false)
-const error = ref('')
+onMounted(() => {
+  initTelegramLogin()
+})
 
-// 检查是否在 Telegram WebApp 中
-const isTelegramWebApp = () => {
-  return window.Telegram?.WebApp !== undefined
-}
-
-// 获取 Telegram InitData
-const getTelegramInitData = () => {
-  if (!isTelegramWebApp()) {
-    return null
-  }
-  return window.Telegram.WebApp.initData
-}
-
-// 处理登录
-const handleLogin = async () => {
-  loading.value = true
-  error.value = ''
-
+const initTelegramLogin = async () => {
   try {
-    const initData = getTelegramInitData()
+    // 检查 Telegram 环境
+    // @ts-ignore
+    const tg = window.Telegram?.WebApp
+    if (!tg) {
+      errorMessage.value = '请在 Telegram 中打开此应用'
+      isLoading.value = false
+      return
+    }
 
+    // 初始化 Telegram WebApp
+    try {
+      tg.ready()
+      tg.expand()
+      // 禁止用户下滑收起 WebApp（支持的客户端会生效）
+      if (typeof tg.disableVerticalSwipes === 'function') {
+        tg.disableVerticalSwipes()
+      }
+    } catch (e) {
+      // 初始化失败不影响登录
+    }
+
+    // 获取 initData
+    const initData = getInitData()
+    
     if (!initData) {
-      // 不在 Telegram 环境中，显示提示
-      error.value = '请在 Telegram 中打开此应用'
-      loading.value = false
+      errorMessage.value = '无法获取 Telegram 用户信息'
+      isLoading.value = false
       return
     }
 
     // 调用登录 API
     const result = await loginWithTelegram(initData)
 
-    // 更新用户状态
-    baseStore.setUserinfo(result.user)
-
-    // 跳转到首页
-    router.push('/home')
-  } catch (err: any) {
-    console.error('Login error:', err)
-    error.value = err.message || '登录失败，请重试'
-    loading.value = false
-  }
-}
-
-// 重试登录
-const retryLogin = () => {
-  error.value = ''
-  handleLogin()
-}
-
-// 自动登录（如果在 Telegram 环境中）
-onMounted(() => {
-  if (isTelegramWebApp()) {
-    // 扩展 Telegram WebApp
-    window.Telegram.WebApp.expand()
-
-    // 自动尝试登录
-    handleLogin()
-  }
-})
-
-// TypeScript 类型声明
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp: {
-        initData: string
-        initDataUnsafe: any
-        expand: () => void
-        close: () => void
-        ready: () => void
-      }
+    if (result?.user) {
+      baseStore.applyProfile(result.user)
     }
+
+    // 登录成功，跳转到首页
+      router.replace('/')
+  } catch (error: any) {
+    errorMessage.value = error?.message || '登录失败，请重试'
+    isLoading.value = false
   }
+}
+
+const getInitData = (): string | null => {
+  // 优先使用早期捕获的 initData
+  try {
+    // @ts-ignore
+    if (window.__TG_INIT_DATA__?.raw) {
+      // @ts-ignore
+      return window.__TG_INIT_DATA__.raw
+    }
+  } catch (e) {
+    // Ignore
+  }
+
+  // 从 Telegram WebApp 获取
+  try {
+    // @ts-ignore
+    const tg = window.Telegram?.WebApp
+    if (tg?.initData) {
+      return tg.initData
+    }
+  } catch (e) {
+    // Ignore
+  }
+
+  return null
+}
+
+const retry = () => {
+  errorMessage.value = ''
+  isLoading.value = true
+  initTelegramLogin()
 }
 </script>
 
@@ -126,120 +116,78 @@ declare global {
   left: 0;
   right: 0;
   bottom: 0;
+  background: #111111;
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-
+  
   .container {
+    width: 90%;
+    max-width: 400px;
     text-align: center;
-    padding: 40rem;
-    max-width: 400rem;
   }
-
+  
   .logo {
-    margin-bottom: 40rem;
-
-    h1 {
-      font-size: 48rem;
-      margin: 0 0 10rem 0;
-      font-weight: bold;
-    }
-
-    p {
-      font-size: 16rem;
-      opacity: 0.9;
-      margin: 0;
+    display: flex;
+    justify-content: center;
+    
+    .logo-img {
+      width: 180px;
+      height: 180px;
+      object-fit: contain;
+      animation: breathe 2s ease-in-out infinite;
     }
   }
-
-  .loading {
-    .spinner {
-      width: 40rem;
-      height: 40rem;
-      border: 4rem solid rgba(255, 255, 255, 0.3);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 20rem;
+  
+  @keyframes breathe {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
     }
-
-    p {
-      font-size: 16rem;
-      opacity: 0.9;
+    50% {
+      transform: scale(1.1);
+      opacity: 0.8;
     }
   }
-
-  .error {
-    p {
-      color: #ffeb3b;
-      font-size: 16rem;
-      margin-bottom: 20rem;
+  
+  .error-box {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    padding: 30px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    
+    .error-icon {
+      font-size: 48px;
+      margin: 0 0 15px 0;
     }
-
+    
+    .error-text {
+      font-size: 16px;
+      margin: 0 0 25px 0;
+      opacity: 0.9;
+      line-height: 1.5;
+    }
+    
     .retry-btn {
       background: white;
-      color: #667eea;
+      color: #000000;
       border: none;
-      padding: 12rem 30rem;
-      border-radius: 25rem;
-      font-size: 16rem;
+      padding: 12px 30px;
+      border-radius: 25px;
+      font-size: 16px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.3s;
-
+      transition: transform 0.2s;
+      
       &:hover {
         transform: scale(1.05);
-        box-shadow: 0 4rem 12rem rgba(0, 0, 0, 0.2);
       }
-
+      
       &:active {
         transform: scale(0.95);
       }
-    }
-  }
-
-  .welcome {
-    p {
-      font-size: 18rem;
-      margin-bottom: 30rem;
-      opacity: 0.9;
-    }
-
-    .login-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 10rem;
-      background: white;
-      color: #667eea;
-      border: none;
-      padding: 15rem 40rem;
-      border-radius: 30rem;
-      font-size: 18rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s;
-      box-shadow: 0 4rem 12rem rgba(0, 0, 0, 0.15);
-
-      svg {
-        flex-shrink: 0;
-      }
-
-      &:hover {
-        transform: translateY(-2rem);
-        box-shadow: 0 6rem 20rem rgba(0, 0, 0, 0.2);
-      }
-
-      &:active {
-        transform: translateY(0);
-      }
-    }
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
     }
   }
 }

@@ -1,24 +1,23 @@
 <template>
   <div class="indicator-home" :class="{ isLight }">
-    <div class="notice" :style="noticeStyle"><span>下拉刷新内容</span></div>
+    <div class="notice" :style="noticeStyle"><span>{{ $t('home.refreshContent') }}</span></div>
     <div class="toolbar" ref="toolbar" :style="toolbarStyle">
       <div class="tab-ctn">
         <div class="tabs" ref="tabs">
-          <!-- <div class="tab" :class="{ active: index === 0 }" @click.stop="change(0)">
-            <span>热点</span>
-          </div> -->
-          <div class="tab" :class="{ active: index === 0 }" @click.stop="change(0)">
-            <span>长视频</span>
+          <!-- 长视频 - 禁用 -->
+          <div class="tab disabled">
+            <span style="opacity: 0.3;">{{ $t('home.longVideo') }}</span>
           </div>
-          <div class="tab" :class="{ active: index === 1 }" @click.stop="change(1)">
-            <span>关注</span>
-            <img src="../../../assets/img/icon/live.webp" class="tab2-img" />
+          
+          <!-- 关注 - 禁用 -->
+          <div class="tab disabled">
+            <span style="opacity: 0.3;">{{ $t('home.following') }}</span>
+            <img src="../../../assets/img/icon/live.webp" class="tab2-img" style="opacity: 0.3;" />
           </div>
-          <!-- <div class="tab" :class="{ active: index === 3 }" @click.stop="change(3)">
-            <span>经验</span>
-          </div> -->
-          <div class="tab" :class="{ active: index === 2 }" @click.stop="change(2)">
-            <span>推荐</span>
+          
+          <!-- 推荐 - 唯一可用的 tab -->
+          <div class="tab active" @click.stop="change(2)">
+            <span>{{ $t('home.recommended') }}</span>
           </div>
         </div>
         <div class="indicator" ref="indicator"></div>
@@ -234,21 +233,23 @@ export default {
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
-      width: 70%; // Expanded to take more space
+      width: 75%;
 
       .tabs {
         display: flex;
         justify-content: center;
         align-items: center;
-        gap: 52rem; // Increased gap to spread tabs wider
+        gap: 30rem;
 
         .tab {
           transition: color 0.3s;
           color: rgba(white, 0.7);
           position: relative;
-          font-size: 17rem;
+          font-size: 15rem;
           cursor: pointer;
-          font-weight: 600; // Make it slightly bolder
+          font-weight: 600;
+          white-space: nowrap;
+          min-width: fit-content;
 
           .tab1-img {
             position: absolute;
@@ -257,19 +258,19 @@ export default {
             height: @width;
             margin-left: 4rem;
             transition: all 0.3s;
-            // margin-top: 7rem;
           }
 
           .tab2-img {
             position: absolute;
             height: 15rem;
-            left: 24rem;
+            left: 100%;
+            margin-left: 2rem;
             top: -5rem;
           }
 
           &.active {
             color: white;
-            font-size: 18rem; // Slightly larger active font
+            font-size: 16rem;
           }
         }
       }

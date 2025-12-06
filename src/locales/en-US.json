@@ -38,5 +38,52 @@
         "language": "Language Settings",
         "logout": "Log Out",
         "version": "Douyin {version}"
+    },
+    "profile": {
+        "editProfile": "Edit Profile",
+        "completed": "{percent}% completed",
+        "avatar": "Avatar",
+        "name": "Name",
+        "douyinId": "Douyin ID",
+        "bio": "Bio",
+        "gender": "Gender",
+        "birthday": "Birthday",
+        "location": "Location",
+        "clickToSet": "Tap to set",
+        "male": "Male",
+        "female": "Female",
+        "notShow": "Not shown",
+        "viewAvatar": "View Avatar",
+        "editName": "Edit Name",
+        "editDouyinId": "Edit Douyin ID",
+        "editBio": "Edit Bio",
+        "save": "Save",
+        "myName": "My Name",
+        "myDouyinId": "My Douyin ID",
+        "myBio": "Bio",
+        "namePlaceholder": "Please enter your name",
+        "bioPlaceholder": "Share your interests, feelings, and wishes. An interesting bio can increase your chances of being followed!",
+        "douyinIdRule": "Max 16 characters, letters, numbers, underscores and dots only. Can only be modified once every 30 days",
+        "saveConfirm": "Save changes?",
+        "nameRequired": "Name cannot be empty",
+        "saveFailed": "Save failed, please try again later",
+        "saveSuccess": "New bio saved successfully"
+    },
+    "location": {
+        "choose": "Choose Region",
+        "notSet": "Not set now",
+        "chooseCountry": "Choose Country/Region"
+    },
+    "home": {
+        "longVideo": "Long Video",
+        "following": "Following",
+        "recommended": "For You",
+        "home": "Home",
+        "me": "Me",
+        "refreshContent": "Pull to refresh"
+    },
+    "video": {
+        "expand": "More",
+        "collapse": "Less"
     }
 }

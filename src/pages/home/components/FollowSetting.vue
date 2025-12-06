@@ -88,6 +88,7 @@ export default {
     FromBottomDialog,
     Switches
   },
+  emits: ['update:modelValue', 'showShare', 'showBlockDialog', 'showChangeNote', 'cancelFollow'],
   props: {
     currentItem: {
       type: Object,
