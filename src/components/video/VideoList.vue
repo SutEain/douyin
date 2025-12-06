@@ -8,7 +8,7 @@
     @touchend.stop="onTouchEnd"
     @wheel.prevent="onWheel"
   >
-    <div 
+    <div
       v-for="slot in slots"
       :key="slot.key"
       class="slot"
@@ -39,10 +39,10 @@
     <div class="overlay" v-if="currentItem">
       <ItemToolbar v-model:item="currentItemLocal" @update:item="handleItemUpdate" />
       <ItemDesc v-model:item="currentItemLocal" @update:item="handleItemUpdate" />
-      
+
       <!-- 进度条：直接放在 overlay 内的最上层 -->
-      <div 
-        class="video-progress" 
+      <div
+        class="video-progress"
         @pointerdown.stop.prevent="handleProgressStart"
         data-progress="video-progress"
       >
@@ -50,8 +50,16 @@
           {{ formatTime(playState.currentTime) }} / {{ formatTime(playState.duration) }}
         </div>
         <div class="progress-track" :ref="setProgressRef" data-progress="track">
-          <div class="progress-bar" :style="{ width: progressPercent + '%' }" data-progress="bar"></div>
-          <div class="progress-thumb" :style="{ left: progressPercent + '%' }" data-progress="thumb"></div>
+          <div
+            class="progress-bar"
+            :style="{ width: progressPercent + '%' }"
+            data-progress="bar"
+          ></div>
+          <div
+            class="progress-thumb"
+            :style="{ left: progressPercent + '%' }"
+            data-progress="thumb"
+          ></div>
         </div>
       </div>
     </div>
@@ -90,7 +98,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'update:index': [index: number]
-  'loadMore': []
+  loadMore: []
 }>()
 
 const videoStore = useVideoStore()
@@ -99,9 +107,19 @@ const containerRef = ref<HTMLDivElement>()
 const currentIndex = ref(props.initialIndex)
 const userRequestedSound = ref(!videoStore.isMuted)
 const slots = reactive<SlotState[]>([
-  { key: 'slotA', role: 'prev', videoIndex: props.initialIndex - 1 >= 0 ? props.initialIndex - 1 : null, muted: true },
+  {
+    key: 'slotA',
+    role: 'prev',
+    videoIndex: props.initialIndex - 1 >= 0 ? props.initialIndex - 1 : null,
+    muted: true
+  },
   { key: 'slotB', role: 'current', videoIndex: props.initialIndex, muted: true },
-  { key: 'slotC', role: 'next', videoIndex: props.initialIndex + 1 < props.items.length ? props.initialIndex + 1 : null, muted: true }
+  {
+    key: 'slotC',
+    role: 'next',
+    videoIndex: props.initialIndex + 1 < props.items.length ? props.initialIndex + 1 : null,
+    muted: true
+  }
 ])
 const slotRefs = new Map<string, HTMLVideoElement>()
 const boundVideos = new WeakSet<HTMLVideoElement>()
@@ -139,13 +157,25 @@ const progressPercent = computed(() => {
   return Math.min(100, Math.max(0, (playState.currentTime / playState.duration) * 100))
 })
 
-provide('item', computed(() => currentItemLocal.value))
-provide('position', computed(() => ({
-  uniqueId: props.page,
-  index: currentIndex.value
-})))
-provide('isPlaying', computed(() => isPlaying.value))
-provide('isMuted', computed(() => videoStore.isMuted))
+provide(
+  'item',
+  computed(() => currentItemLocal.value)
+)
+provide(
+  'position',
+  computed(() => ({
+    uniqueId: props.page,
+    index: currentIndex.value
+  }))
+)
+provide(
+  'isPlaying',
+  computed(() => isPlaying.value)
+)
+provide(
+  'isMuted',
+  computed(() => videoStore.isMuted)
+)
 
 function setSlotRef(key: string) {
   return (el: HTMLVideoElement | null) => {
@@ -159,15 +189,20 @@ function setSlotRef(key: string) {
             slot: slot?.role,
             key,
             videoIndex: slot?.videoIndex,
-            id: slot?.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8) : 'none',
+            id:
+              slot?.videoIndex != null
+                ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8)
+                : 'none',
             readyState: el.readyState,
             paused: el.paused,
             muted: el.muted
           })
         }
-        ;['loadstart', 'loadeddata', 'canplay', 'playing', 'waiting', 'stalled', 'ended'].forEach((evt) => {
-          el.addEventListener(evt, () => log(evt))
-        })
+        ;['loadstart', 'loadeddata', 'canplay', 'playing', 'waiting', 'stalled', 'ended'].forEach(
+          (evt) => {
+            el.addEventListener(evt, () => log(evt))
+          }
+        )
         boundVideos.add(el)
       }
     } else {
@@ -187,7 +222,7 @@ function setProgressRef(el: HTMLElement | null) {
 function updateSlotSource(slot: SlotState, preloadOnly = false) {
   const video = slotRefs.get(slot.key)
   if (!video) return
-  
+
   // 如果不是current，先暂停
   if (slot.role !== 'current' && !video.paused) {
     console.log('[updateSlotSource] 暂停非current视频', {
@@ -197,7 +232,7 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     })
     video.pause()
   }
-  
+
   const idx = slot.videoIndex
   if (idx == null || !props.items[idx]) {
     video.removeAttribute('src')
@@ -272,46 +307,55 @@ function playCurrent() {
     paused: video.paused
   })
 
-  video.play().then(() => {
-    // 再次检查role，防止异步过程中角色已改变
-    const currentSlot = getSlotByRole('current')
-    if (currentSlot?.key !== slot.key) {
-      console.warn(`${DEBUG_PREFIX} play成功但已不是current，暂停`, {
-        slotKey: slot.key,
-        currentSlotKey: currentSlot?.key
-      })
-      video.pause()
-      return
-    }
-    isPlaying.value = true
-    tryUnmute(video)
-  }).catch((err) => {
-    console.warn(`${DEBUG_PREFIX} play:error`, {
-      id: slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8) : 'none',
-      page: props.page,
-      error: err?.name
-    })
-    // 错误也要检查role
-    const currentSlot = getSlotByRole('current')
-    if (currentSlot?.key !== slot.key) {
-      console.warn(`${DEBUG_PREFIX} play失败且已不是current，放弃重试`)
-      return
-    }
-    video.muted = true
-    slot.muted = true
-    video.play().then(() => {
-      // 重试成功后也要检查
-      const currentSlot2 = getSlotByRole('current')
-      if (currentSlot2?.key !== slot.key) {
+  video
+    .play()
+    .then(() => {
+      // 再次检查role，防止异步过程中角色已改变
+      const currentSlot = getSlotByRole('current')
+      if (currentSlot?.key !== slot.key) {
+        console.warn(`${DEBUG_PREFIX} play成功但已不是current，暂停`, {
+          slotKey: slot.key,
+          currentSlotKey: currentSlot?.key
+        })
         video.pause()
         return
       }
       isPlaying.value = true
       tryUnmute(video)
-    }).catch((err2) => {
-      console.error(`${DEBUG_PREFIX} play:retry-fail`, err2)
     })
-  })
+    .catch((err) => {
+      console.warn(`${DEBUG_PREFIX} play:error`, {
+        id:
+          slot.videoIndex != null
+            ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8)
+            : 'none',
+        page: props.page,
+        error: err?.name
+      })
+      // 错误也要检查role
+      const currentSlot = getSlotByRole('current')
+      if (currentSlot?.key !== slot.key) {
+        console.warn(`${DEBUG_PREFIX} play失败且已不是current，放弃重试`)
+        return
+      }
+      video.muted = true
+      slot.muted = true
+      video
+        .play()
+        .then(() => {
+          // 重试成功后也要检查
+          const currentSlot2 = getSlotByRole('current')
+          if (currentSlot2?.key !== slot.key) {
+            video.pause()
+            return
+          }
+          isPlaying.value = true
+          tryUnmute(video)
+        })
+        .catch((err2) => {
+          console.error(`${DEBUG_PREFIX} play:retry-fail`, err2)
+        })
+    })
 }
 
 function prepareSlots(initial = false) {
@@ -328,13 +372,13 @@ function rotateToNext() {
     emit('loadMore')
     return
   }
-  
+
   console.log('[视频切换] 切换到下一个 START', {
     from: currentIndex.value,
     to: currentIndex.value + 1,
     timestamp: Date.now()
   })
-  
+
   const prev = getSlotByRole('prev')
   const current = getSlotByRole('current')
   const next = getSlotByRole('next')
@@ -345,7 +389,7 @@ function rotateToNext() {
     if (!video.paused) {
       console.log('[视频切换] 暂停视频', {
         key,
-        videoIndex: slots.find(s => s.key === key)?.videoIndex
+        videoIndex: slots.find((s) => s.key === key)?.videoIndex
       })
       video.pause()
     }
@@ -368,7 +412,7 @@ function rotateToNext() {
   })
 
   currentIndex.value += 1
-    emit('update:index', currentIndex.value)
+  emit('update:index', currentIndex.value)
   videoStore.setCurrentVideo(props.items[currentIndex.value], currentIndex.value)
   videoStore.setCurrentPlaying(props.items[currentIndex.value].aweme_id, props.page)
   // ✅ 深拷贝确保每个视频的统计数据独立
@@ -381,22 +425,22 @@ function rotateToNext() {
   console.log('[视频切换] 切换到下一个 END', {
     newIndex: currentIndex.value,
     timestamp: Date.now()
-    })
-    
-    if (currentIndex.value >= props.items.length - 3) {
-      emit('loadMore')
-    }
+  })
+
+  if (currentIndex.value >= props.items.length - 3) {
+    emit('loadMore')
   }
+}
 
 function rotateToPrev() {
   if (currentIndex.value <= 0) return
-  
+
   console.log('[视频切换] 切换到上一个 START', {
     from: currentIndex.value,
     to: currentIndex.value - 1,
     timestamp: Date.now()
   })
-  
+
   const prev = getSlotByRole('prev')
   const current = getSlotByRole('current')
   const next = getSlotByRole('next')
@@ -407,7 +451,7 @@ function rotateToPrev() {
     if (!video.paused) {
       console.log('[视频切换] 暂停视频', {
         key,
-        videoIndex: slots.find(s => s.key === key)?.videoIndex
+        videoIndex: slots.find((s) => s.key === key)?.videoIndex
       })
       video.pause()
     }
@@ -463,14 +507,14 @@ function onTouchEnd() {
   if (videoStore.showComments) return
   if (!touch.active) return
   const threshold = touch.threshold
-  
+
   console.log('[触摸] touchEnd', {
     deltaY: touch.deltaY,
     threshold,
     willRotate: Math.abs(touch.deltaY) > threshold,
     direction: touch.deltaY < 0 ? 'next' : 'prev'
   })
-  
+
   if (touch.deltaY < -threshold) {
     rotateToNext()
   } else if (touch.deltaY > threshold) {
@@ -482,59 +526,53 @@ function onTouchEnd() {
 
 function onWheel(e: WheelEvent) {
   if (wheelLock) {
-    console.log('[滚轮] 被锁定，忽略')
     return
   }
   const deltaY = e.deltaY
   const threshold = touch.threshold
-  
-  console.log('[滚轮] wheel事件', {
-    deltaY,
-    threshold,
-    wheelLock,
-    currentIndex: currentIndex.value
-  })
-  
+
   if (deltaY > threshold && currentIndex.value < props.items.length - 1) {
     wheelLock = true
-    console.log('[滚轮] 触发向下切换')
     rotateToNext()
   } else if (deltaY < -threshold && currentIndex.value > 0) {
     wheelLock = true
-    console.log('[滚轮] 触发向上切换')
     rotateToPrev()
   }
-      setTimeout(() => {
+  setTimeout(() => {
     wheelLock = false
-    console.log('[滚轮] 解锁')
-      }, 200)
-    }
+  }, 200)
+}
 
-watch(() => videoStore.isMuted, (muted) => {
-  userRequestedSound.value = !muted
-  if (!slotRefs.size) return
-  slotRefs.forEach((video, key) => {
-    video.muted = muted || !userRequestedSound.value
-    const slot = slots.find((s) => s.key === key)
-    if (slot) slot.muted = video.muted
-  })
-  if (!muted) {
-    const currentSlot = getSlotByRole('current')
-    if (currentSlot) {
-      const video = slotRefs.get(currentSlot.key)
-      video && tryUnmute(video)
+watch(
+  () => videoStore.isMuted,
+  (muted) => {
+    userRequestedSound.value = !muted
+    if (!slotRefs.size) return
+    slotRefs.forEach((video, key) => {
+      video.muted = muted || !userRequestedSound.value
+      const slot = slots.find((s) => s.key === key)
+      if (slot) slot.muted = video.muted
+    })
+    if (!muted) {
+      const currentSlot = getSlotByRole('current')
+      if (currentSlot) {
+        const video = slotRefs.get(currentSlot.key)
+        video && tryUnmute(video)
+      }
     }
   }
-})
-  
+)
 
-watch(() => props.items.length, () => {
-  const nextSlot = getSlotByRole('next')
-  if (nextSlot && nextSlot.videoIndex == null && currentIndex.value + 1 < props.items.length) {
-    nextSlot.videoIndex = currentIndex.value + 1
-    updateSlotSource(nextSlot, true)
-        }
-})
+watch(
+  () => props.items.length,
+  () => {
+    const nextSlot = getSlotByRole('next')
+    if (nextSlot && nextSlot.videoIndex == null && currentIndex.value + 1 < props.items.length) {
+      nextSlot.videoIndex = currentIndex.value + 1
+      updateSlotSource(nextSlot, true)
+    }
+  }
+)
 
 // ✅ 处理 ItemToolbar/ItemDesc 的数据更新，同步回原始数组
 function handleItemUpdate(updatedItem: VideoItem) {
@@ -548,16 +586,20 @@ function handleItemUpdate(updatedItem: VideoItem) {
   currentItemLocal.value = updatedItem
 }
 
-watch(currentItem, (val) => {
-  if (val) {
-    // ✅ 深拷贝确保每个视频的数据独立，避免统计数据互相影响
-    currentItemLocal.value = JSON.parse(JSON.stringify(val))
+watch(
+  currentItem,
+  (val) => {
+    if (val) {
+      // ✅ 深拷贝确保每个视频的数据独立，避免统计数据互相影响
+      currentItemLocal.value = JSON.parse(JSON.stringify(val))
     }
-  }, { deep: true })
+  },
+  { deep: true }
+)
 
 onMounted(() => {
   prepareSlots(true)
-  
+
   // ✅ 设置初始视频到 videoStore
   if (props.items[currentIndex.value]) {
     videoStore.setCurrentVideo(props.items[currentIndex.value], currentIndex.value)
@@ -582,10 +624,11 @@ function onPlay(slot: SlotState) {
     slotKey: slot.key,
     role: slot.role,
     videoIndex: slot.videoIndex,
-    videoId: slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8) : 'none',
+    videoId:
+      slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8) : 'none',
     isCurrent: slot.role === 'current'
   })
-  
+
   if (slot.role === 'current') {
     isPlaying.value = true
     playState.isMoving = false
@@ -607,10 +650,11 @@ function onPause(slot: SlotState) {
     slotKey: slot.key,
     role: slot.role,
     videoIndex: slot.videoIndex,
-    videoId: slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8) : 'none',
+    videoId:
+      slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8) : 'none',
     isCurrent: slot.role === 'current'
   })
-  
+
   if (slot.role === 'current') {
     isPlaying.value = false
     playState.isMoving = false
@@ -621,9 +665,12 @@ function togglePlay(slot: SlotState) {
   const video = slotRefs.get(slot.key)
   if (!video) return
   if (video.paused) {
-    video.play().then(() => {
-      isPlaying.value = slot.role === 'current'
-    }).catch(() => {})
+    video
+      .play()
+      .then(() => {
+        isPlaying.value = slot.role === 'current'
+      })
+      .catch(() => {})
   } else {
     video.pause()
     if (slot.role === 'current') {
@@ -647,9 +694,9 @@ function bindCurrentVideoEvents(video: HTMLVideoElement) {
   if (currentBoundVideo && currentBoundVideo !== video) {
     unbindVideoEvents(currentBoundVideo)
   }
-  
+
   currentBoundVideo = video
-  
+
   const computeStep = () => {
     const el = progressRef.value
     if (!el || typeof (el as any).getBoundingClientRect !== 'function') {
@@ -659,31 +706,31 @@ function bindCurrentVideoEvents(video: HTMLVideoElement) {
     const dur = playState.duration || video.duration || 1
     playState.step = rect.width / Math.max(0.001, dur)
   }
-  
+
   video.onloadedmetadata = () => {
     // 确保只有当前视频才更新进度条
     if (video !== currentBoundVideo) {
       return
     }
-    
+
     playState.duration = video.duration
     playState.currentTime = video.currentTime || 0
     computeStep()
     updateProgressFromVideo(video)
   }
-  
+
   video.ontimeupdate = () => {
     // 确保只有当前视频才更新进度条
     if (video !== currentBoundVideo) return
     if (playState.isMoving) return // 拖动中不被 timeupdate 干扰
-    
+
     if (!playState.duration && video.duration) {
       playState.duration = video.duration
       computeStep()
     }
     updateProgressFromVideo(video)
   }
-  
+
   nextTick(computeStep)
 }
 
@@ -699,21 +746,21 @@ function handleProgressStart(e: PointerEvent) {
   const video = getCurrentVideo()
   const track = progressRef.value
   if (!video || !track) return
-  
+
   isDragging = true
   playState.isMoving = true
   video.pause()
-  
+
   updateProgressFromPointer(e, track, video)
 
   const onMove = (ev: PointerEvent) => {
     if (!isDragging) return
     ev.preventDefault()
     updateProgressFromPointer(ev, track, video)
-}
+  }
 
   const onEnd = () => {
-  isDragging = false
+    isDragging = false
     playState.isMoving = false
     video.currentTime = playState.currentTime
     video.play().catch(() => {})
@@ -721,7 +768,7 @@ function handleProgressStart(e: PointerEvent) {
     window.removeEventListener('pointerup', onEnd)
     window.removeEventListener('pointercancel', onEnd)
   }
-  
+
   window.addEventListener('pointermove', onMove, { passive: false })
   window.addEventListener('pointerup', onEnd)
   window.addEventListener('pointercancel', onEnd)
@@ -789,8 +836,8 @@ defineExpose({
 .tri-video-list.comments-open {
   z-index: 200;
   overscroll-behavior: contain;
-  touch-action: auto;      // 允许评论区域自身滚动
-  overflow: visible;       // 避免评论弹层被父容器裁剪
+  touch-action: auto; // 允许评论区域自身滚动
+  overflow: visible; // 避免评论弹层被父容器裁剪
 }
 
 .slot {
@@ -816,7 +863,7 @@ defineExpose({
   z-index: 200; // 超高优先级，确保在最上层
   pointer-events: auto;
   padding: 20px 0 20px 0; // 上20px 下10px，增加可拖动区域高度（方便手指点击）
-  
+
   .progress-time {
     position: absolute;
     bottom: 30px; // 向上移一点，避免和进度条重叠
@@ -839,7 +886,7 @@ defineExpose({
     background: rgba(255, 255, 255, 0.3);
     border-radius: 2px;
     cursor: pointer;
-    
+
     &:hover {
       height: 4px;
     }
@@ -867,7 +914,7 @@ defineExpose({
     box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
   }
 }
-  
+
 .pause-layer {
   position: absolute;
   left: 0;
@@ -879,8 +926,8 @@ defineExpose({
   justify-content: center;
   pointer-events: none;
   z-index: 11;
-  }
-  
+}
+
 .pause-icon {
   font-size: 80rem;
   color: rgba(255, 255, 255, 0.5);
@@ -914,4 +961,3 @@ defineExpose({
   }
 }
 </style>
-

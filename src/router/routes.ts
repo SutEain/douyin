@@ -214,6 +214,10 @@ const routes: RouteRecordRaw[] = [
     path: '/login/telegram',
     component: () => import('@/pages/login/TelegramLogin.vue')
   },
+  {
+    path: '/login/dev',
+    component: () => import('@/pages/login/DevLogin.vue')
+  },
 
   //前面的要跳到这些页面，所以放后面
   {
