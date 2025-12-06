@@ -1,6 +1,6 @@
 /**
  * 统一的视频播放管理器
- * 
+ *
  * 职责：
  * 1. 确保同一时间只有一个视频播放
  * 2. 管理视频的播放/暂停状态
@@ -64,30 +64,26 @@ class VideoManager {
     }, 700)
     this.stallTimers.set(id, timer)
   }
-  private readonly DEBUG_PREFIX = '[AutoPlayDebug]'
 
   /**
    * 注册视频元素
    */
   register(id: string, element: HTMLVideoElement, page: string) {
     this.videoElements.set(id, element)
-    
+
     // 确保初始静音状态与全局一致，避免自动播放被拦截
     if (typeof window !== 'undefined' && typeof (window as any).isMuted !== 'undefined') {
       element.muted = (window as any).isMuted
     }
 
-    console.log(
-      `${this.DEBUG_PREFIX} register`,
-      {
-        id: id.substring(0, 8),
-        page,
-        muted: element.muted,
-        globalMuted: (window as any)?.isMuted,
-        readyState: element.readyState
-      }
-    )
-    
+    console.log(`${this.DEBUG_PREFIX} register`, {
+      id: id.substring(0, 8),
+      page,
+      muted: element.muted,
+      globalMuted: (window as any)?.isMuted,
+      readyState: element.readyState
+    })
+
     // 监听视频播放事件
     element.addEventListener('play', () => {
       // 如果不是当前视频发起的播放，自动设为当前视频
@@ -108,7 +104,7 @@ class VideoManager {
       element.currentTime = 0
     }
     this.videoElements.delete(id)
-    
+
     if (this.currentVideo?.id === id) {
       this.currentVideo = null
     }
@@ -129,7 +125,7 @@ class VideoManager {
 
     // 设置当前视频
     this.currentVideo = { id, element, page }
-    
+
     // 播放前保证静音状态与全局一致，降低浏览器拦截概率
     const globalMuted = typeof window !== 'undefined' ? (window as any)?.isMuted : undefined
     const needForceMute = globalMuted === false && element.muted === false
@@ -148,32 +144,26 @@ class VideoManager {
       })
     }
 
-    console.log(
-      `${this.DEBUG_PREFIX} play:start`,
-      {
+    console.log(`${this.DEBUG_PREFIX} play:start`, {
+      id: id.substring(0, 8),
+      page,
+      muted: element.muted,
+      globalMuted,
+      readyState: element.readyState,
+      paused: element.paused
+    })
+
+    // 播放
+    try {
+      await element.play()
+      console.log(`${this.DEBUG_PREFIX} play:success`, {
         id: id.substring(0, 8),
         page,
         muted: element.muted,
         globalMuted,
         readyState: element.readyState,
         paused: element.paused
-      }
-    )
-
-    // 播放
-    try {
-      await element.play()
-      console.log(
-        `${this.DEBUG_PREFIX} play:success`,
-        {
-          id: id.substring(0, 8),
-          page,
-          muted: element.muted,
-          globalMuted,
-          readyState: element.readyState,
-          paused: element.paused
-        }
-      )
+      })
       // 如果是强制静音启动，且全局原本未静音，播放成功后尝试恢复
       if (needForceMute) {
         setTimeout(() => {
@@ -196,18 +186,15 @@ class VideoManager {
 
       // 浏览器自动播放限制：自动切换为静音重试一次
       if (error.name === 'NotAllowedError') {
-        console.warn(
-          `${this.DEBUG_PREFIX} play:not-allowed`,
-          {
-            id: id.substring(0, 8),
-            page,
-            muted: element.muted,
-            globalMuted: (window as any)?.isMuted,
-            readyState: element.readyState,
-            paused: element.paused,
-            error
-          }
-        )
+        console.warn(`${this.DEBUG_PREFIX} play:not-allowed`, {
+          id: id.substring(0, 8),
+          page,
+          muted: element.muted,
+          globalMuted: (window as any)?.isMuted,
+          readyState: element.readyState,
+          paused: element.paused,
+          error
+        })
         try {
           const prevMuted = element.muted
           element.muted = true
@@ -222,33 +209,27 @@ class VideoManager {
           this.scheduleStallCheck(id, page, element)
           return
         } catch (err) {
-          console.error(
-            `${this.DEBUG_PREFIX} play:retry-muted-fail`,
-            {
-              id: id.substring(0, 8),
-              page,
-              muted: element.muted,
-              globalMuted: (window as any)?.isMuted,
-              readyState: element.readyState,
-              paused: element.paused,
-              error: err
-            }
-          )
+          console.error(`${this.DEBUG_PREFIX} play:retry-muted-fail`, {
+            id: id.substring(0, 8),
+            page,
+            muted: element.muted,
+            globalMuted: (window as any)?.isMuted,
+            readyState: element.readyState,
+            paused: element.paused,
+            error: err
+          })
         }
       }
 
-      console.error(
-        `${this.DEBUG_PREFIX} play:fail`,
-        {
-          id: id.substring(0, 8),
-          page,
-          muted: element.muted,
-          globalMuted: (window as any)?.isMuted,
-          readyState: element.readyState,
-          paused: element.paused,
-          error
-        }
-      )
+      console.error(`${this.DEBUG_PREFIX} play:fail`, {
+        id: id.substring(0, 8),
+        page,
+        muted: element.muted,
+        globalMuted: (window as any)?.isMuted,
+        readyState: element.readyState,
+        paused: element.paused,
+        error
+      })
     }
   }
 
@@ -305,7 +286,7 @@ class VideoManager {
    */
   clearPage(page: string) {
     const toRemove: string[] = []
-    
+
     this.videoElements.forEach((element, id) => {
       // 检查是否属于该页面（通过 DOM 结构判断）
       const wrapper = element.closest('[data-page]')
@@ -316,8 +297,8 @@ class VideoManager {
       }
     })
 
-    toRemove.forEach(id => this.videoElements.delete(id))
-    
+    toRemove.forEach((id) => this.videoElements.delete(id))
+
     if (this.currentVideo && toRemove.includes(this.currentVideo.id)) {
       this.currentVideo = null
     }
@@ -335,4 +316,3 @@ class VideoManager {
 
 // 导出单例
 export const videoManager = new VideoManager()
-
