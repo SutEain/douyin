@@ -93,6 +93,15 @@ async function handleRequest(request) {
         const resp = await fetchFromTelegram(fileId, TG_BOT_TOKEN, rangeHeader)
         // 🎯 正确复制响应头
         const newHeaders = new Headers(resp.headers)
+
+        // 🎯 修复 Content-Type
+        let ct = newHeaders.get('Content-Type')
+        if (ct === 'application/octet-stream') {
+          const cl = parseInt(newHeaders.get('Content-Length') || '0')
+          ct = cl > 0 && cl < 5 * 1024 * 1024 ? 'image/jpeg' : 'video/mp4'
+          newHeaders.set('Content-Type', ct)
+        }
+
         newHeaders.set('Content-Disposition', 'inline')
         newHeaders.set('Access-Control-Allow-Origin', '*')
 
@@ -106,6 +115,15 @@ async function handleRequest(request) {
       // 返回完整文件（不缓存）
       // 🎯 正确复制响应头
       const newHeaders = new Headers(originResp.headers)
+
+      // 🎯 修复 Content-Type
+      let ct = newHeaders.get('Content-Type')
+      if (ct === 'application/octet-stream') {
+        const cl = parseInt(newHeaders.get('Content-Length') || '0')
+        ct = cl > 0 && cl < 5 * 1024 * 1024 ? 'image/jpeg' : 'video/mp4'
+        newHeaders.set('Content-Type', ct)
+      }
+
       newHeaders.set('Content-Disposition', 'inline')
       newHeaders.set('Access-Control-Allow-Origin', '*')
 
@@ -118,8 +136,25 @@ async function handleRequest(request) {
 
     // 缓存完整文件
     if (originResp.status === 200) {
-      // 🎯 智能检测 Content-Type（优先 Telegram，默认视频）
-      const contentType = originResp.headers.get('Content-Type') || 'video/mp4'
+      // 🎯 智能检测 Content-Type
+      let contentType = originResp.headers.get('Content-Type') || 'video/mp4'
+
+      // 🎯 修复：Telegram 返回 application/octet-stream 时，根据文件大小判断类型
+      if (contentType === 'application/octet-stream') {
+        const contentLength = parseInt(originResp.headers.get('Content-Length') || '0')
+        // 小于 5MB 的文件通常是图片缩略图
+        if (contentLength > 0 && contentLength < 5 * 1024 * 1024) {
+          contentType = 'image/jpeg'
+          console.log(
+            `[Content-Type Fix] Changed from octet-stream to image/jpeg (size: ${contentLength})`
+          )
+        } else {
+          contentType = 'video/mp4'
+          console.log(
+            `[Content-Type Fix] Changed from octet-stream to video/mp4 (size: ${contentLength})`
+          )
+        }
+      }
 
       const responseToCache = new Response(originResp.body, {
         status: 200,
@@ -185,11 +220,17 @@ async function handleRangeRequest(response, rangeHeader) {
     const end = match[2] ? parseInt(match[2]) : totalSize - 1
 
     if (start >= totalSize || end >= totalSize || start > end) {
+      // 🎯 修复 Content-Type
+      let contentType = response.headers.get('Content-Type') || 'video/mp4'
+      if (contentType === 'application/octet-stream') {
+        contentType = totalSize > 0 && totalSize < 5 * 1024 * 1024 ? 'image/jpeg' : 'video/mp4'
+      }
+
       return new Response('Range Not Satisfiable', {
         status: 416,
         headers: {
           'Content-Range': `bytes */${totalSize}`,
-          'Content-Type': response.headers.get('Content-Type') || 'video/mp4',
+          'Content-Type': contentType,
           'Content-Disposition': 'inline'
         }
       })
@@ -199,13 +240,19 @@ async function handleRangeRequest(response, rangeHeader) {
 
     console.log(`[Range Request] bytes ${start}-${end}/${totalSize}`)
 
+    // 🎯 修复 Content-Type
+    let contentType = response.headers.get('Content-Type') || 'video/mp4'
+    if (contentType === 'application/octet-stream') {
+      contentType = totalSize > 0 && totalSize < 5 * 1024 * 1024 ? 'image/jpeg' : 'video/mp4'
+    }
+
     return new Response(slice, {
       status: 206,
       statusText: 'Partial Content',
       headers: {
         'Content-Range': `bytes ${start}-${end}/${totalSize}`,
         'Content-Length': slice.byteLength.toString(),
-        'Content-Type': response.headers.get('Content-Type') || 'video/mp4',
+        'Content-Type': contentType,
         'Content-Disposition': 'inline', // 🎯 强制浏览器内联显示
         'Accept-Ranges': 'bytes',
         'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
