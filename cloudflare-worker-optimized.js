@@ -27,11 +27,18 @@ async function handleRequest(request) {
 
     // 🎯 检查是否需要强制刷新缓存
     const forceRefresh = url.searchParams.has('nocache') || url.searchParams.has('refresh')
+    if (forceRefresh) {
+      console.log(`[Force Refresh] fileId: ${fileId}`)
+    }
 
     // 检查缓存是否过期
     const lastAccessStr = await TG_FILE_CACHE.get(fileId)
     const lastAccess = lastAccessStr ? Number(lastAccessStr) : 0
     const shouldRefresh = forceRefresh || now - lastAccess > CACHE_TTL_SECONDS * 1000
+
+    console.log(
+      `[Cache Check] fileId: ${fileId}, shouldRefresh: ${shouldRefresh}, forceRefresh: ${forceRefresh}`
+    )
 
     // 构建统一的缓存键
     const baseCacheKey = new Request(`${url.origin}${url.pathname}?file_id=${fileId}`, {
@@ -64,7 +71,9 @@ async function handleRequest(request) {
       }
     }
 
-    console.log(`[Cache Miss] fileId: ${fileId}`)
+    console.log(
+      `[Cache Miss] fileId: ${fileId}, reason: ${forceRefresh ? 'force refresh' : 'expired'}`
+    )
 
     // 从Telegram获取完整文件
     const originResp = await fetchFromTelegram(fileId, TG_BOT_TOKEN)
@@ -82,26 +91,28 @@ async function handleRequest(request) {
       const rangeHeader = request.headers.get('Range')
       if (rangeHeader) {
         const resp = await fetchFromTelegram(fileId, TG_BOT_TOKEN, rangeHeader)
+        // 🎯 正确复制响应头
+        const newHeaders = new Headers(resp.headers)
+        newHeaders.set('Content-Disposition', 'inline')
+        newHeaders.set('Access-Control-Allow-Origin', '*')
+
         return new Response(resp.body, {
           status: resp.status,
           statusText: resp.statusText,
-          headers: {
-            ...Object.fromEntries(resp.headers),
-            'Content-Disposition': 'inline',
-            'Access-Control-Allow-Origin': '*'
-          }
+          headers: newHeaders
         })
       }
 
       // 返回完整文件（不缓存）
+      // 🎯 正确复制响应头
+      const newHeaders = new Headers(originResp.headers)
+      newHeaders.set('Content-Disposition', 'inline')
+      newHeaders.set('Access-Control-Allow-Origin', '*')
+
       return new Response(originResp.body, {
         status: originResp.status,
         statusText: originResp.statusText,
-        headers: {
-          ...Object.fromEntries(originResp.headers),
-          'Content-Disposition': 'inline',
-          'Access-Control-Allow-Origin': '*'
-        }
+        headers: newHeaders
       })
     }
 
@@ -122,6 +133,8 @@ async function handleRequest(request) {
           'Access-Control-Allow-Origin': '*'
         }
       })
+
+      console.log(`[Response Headers] Content-Type: ${contentType}, Content-Disposition: inline`)
 
       // ✅ 存储到缓存（异步执行，不阻塞响应）
       cache
