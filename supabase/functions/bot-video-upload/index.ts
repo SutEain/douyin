@@ -170,7 +170,7 @@ async function handleInlineQuery(inlineQuery: any) {
   console.log('[InlineQuery] 开始查询数据库...')
   const { data: video, error } = await supabase
     .from('videos')
-    .select('id, description, cover_dynamic_url, cover_url, status')
+    .select('id, description, cover_url, status')
     .eq('id', videoId)
     .single()
 
@@ -210,7 +210,7 @@ async function handleInlineQuery(inlineQuery: any) {
     id: '1',
     title: '🎬 分享视频',
     description: fullDesc.substring(0, 100),
-    thumb_url: video.cover_url || video.cover_dynamic_url || '',
+    thumb_url: video.cover_url || '',
     input_message_content: {
       message_text: `<a href="${deepLink}">${linkText}</a>`,
       parse_mode: 'HTML'
