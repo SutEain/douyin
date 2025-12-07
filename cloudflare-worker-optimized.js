@@ -3,7 +3,7 @@
 
 const CACHE_TTL_SECONDS = 259200 // 3 天
 const FETCH_TIMEOUT_MS = 30000 // 30秒超时
-const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+const MAX_FILE_SIZE = 200 * 1024 * 1024 // 50MB
 const KV_UPDATE_INTERVAL = 3600 // ✅ 1小时才更新一次访问时间（减少KV写入）
 
 addEventListener('fetch', (event) => {
@@ -104,8 +104,8 @@ async function handleRequest(request) {
 
     // 缓存完整文件
     if (originResp.status === 200) {
-      // 🎯 智能检测 Content-Type（支持图片和视频）
-      const contentType = originResp.headers.get('Content-Type') || 'application/octet-stream'
+      // 🎯 智能检测 Content-Type（优先 Telegram，默认视频）
+      const contentType = originResp.headers.get('Content-Type') || 'video/mp4'
 
       const responseToCache = new Response(originResp.body, {
         status: 200,
@@ -173,7 +173,7 @@ async function handleRangeRequest(response, rangeHeader) {
         status: 416,
         headers: {
           'Content-Range': `bytes */${totalSize}`,
-          'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream',
+          'Content-Type': response.headers.get('Content-Type') || 'video/mp4',
           'Content-Disposition': 'inline'
         }
       })
@@ -189,7 +189,7 @@ async function handleRangeRequest(response, rangeHeader) {
       headers: {
         'Content-Range': `bytes ${start}-${end}/${totalSize}`,
         'Content-Length': slice.byteLength.toString(),
-        'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream',
+        'Content-Type': response.headers.get('Content-Type') || 'video/mp4',
         'Content-Disposition': 'inline', // 🎯 强制浏览器内联显示
         'Accept-Ranges': 'bytes',
         'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
