@@ -182,11 +182,11 @@ async function handleInlineQuery(inlineQuery: any) {
   const videoId = query.replace('video_', '')
   console.log('[InlineQuery] ✅ 提取视频ID:', videoId)
 
-  // 从数据库获取视频信息（包含 tg_thumbnail_file_id 用于构建 CDN URL）
+  // 从数据库获取视频信息
   console.log('[InlineQuery] 开始查询数据库...')
   const { data: video, error } = await supabase
     .from('videos')
-    .select('id, description, cover_url, tg_thumbnail_file_id, status')
+    .select('id, description, status')
     .eq('id', videoId)
     .single()
 
@@ -220,27 +220,8 @@ async function handleInlineQuery(inlineQuery: any) {
   console.log('[InlineQuery] 超链接文字:', linkText)
   console.log('[InlineQuery] 完整描述:', fullDesc.substring(0, 100))
 
-  // 🎯 构建缩略图 URL（使用 CF Worker CDN）
-  let thumbUrl: string | null = null
-
-  // 优先使用 cover_url（如果是 HTTP URL）
-  if (
-    video.cover_url &&
-    (video.cover_url.startsWith('http://') || video.cover_url.startsWith('https://'))
-  ) {
-    thumbUrl = video.cover_url
-    console.log('[InlineQuery] 使用 cover_url:', thumbUrl)
-  }
-  // 否则尝试从 tg_thumbnail_file_id 构建 CDN URL
-  else if (video.tg_thumbnail_file_id) {
-    thumbUrl = buildTelegramFileUrl(video.tg_thumbnail_file_id)
-    console.log('[InlineQuery] 从 tg_thumbnail_file_id 构建 CDN URL:', thumbUrl)
-  } else {
-    console.log('[InlineQuery] 无可用缩略图')
-  }
-
-  // 构建分享卡片
-  const result: any = {
+  // 🎯 构建分享卡片（暂不支持缩略图）
+  const result = {
     type: 'article',
     id: '1',
     title: '🎬 分享视频',
@@ -249,12 +230,7 @@ async function handleInlineQuery(inlineQuery: any) {
       message_text: `<a href="${deepLink}">${linkText}</a>`,
       parse_mode: 'HTML'
     }
-  }
-
-  // 🎯 只在有有效 URL 时才传递 thumb_url
-  if (thumbUrl) {
-    result.thumb_url = thumbUrl
-    console.log('[InlineQuery] 添加缩略图到卡片:', thumbUrl)
+    // 暂不添加 thumb_url（Telegram API 对缩略图格式要求严格）
   }
 
   console.log('[InlineQuery] 构建的卡片数据:', JSON.stringify(result, null, 2))
