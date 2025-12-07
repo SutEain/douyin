@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { _formatNumber, cloneDeep, _notice } from '@/utils'
+import { _formatNumber, cloneDeep, _notice, _copy } from '@/utils'
 import bus, { EVENT_KEY } from '@/utils/bus'
 import { useClick } from '@/utils/hooks/useClick'
 import { computed, inject, onMounted, onUnmounted, ref } from 'vue'
@@ -177,30 +177,24 @@ function showComments() {
 // 🎯 分享到 Telegram
 function shareToTelegram() {
   try {
-    console.log('[分享] 开始分享视频:', props.item.aweme_id)
-
-    // @ts-ignore
-    const tgWebApp = window.Telegram?.WebApp
-
-    if (!tgWebApp) {
-      console.error('[分享] Telegram WebApp 不存在')
-      _notice('当前环境不支持分享')
+    if (!props.item?.aweme_id) {
+      _notice('视频ID缺失，无法分享')
       return
     }
 
-    // 🎯 调起 Telegram 联系人选择器
-    // 参数1: 查询文本（会传递给 BOT 的 inline query）
-    // 参数2: 允许分享到的对话类型
-    const shareQuery = `video_${props.item.aweme_id}`
+    // 🎯 复制分享链接到剪贴板
+    const shareText = `@tg_douyin_bot video_${props.item.aweme_id}`
 
-    console.log('[分享] 调用 switchInlineQuery:', shareQuery)
+    console.log('[分享] 复制分享链接:', shareText)
 
-    tgWebApp.switchInlineQuery(shareQuery, ['users', 'groups', 'channels'])
+    _copy(shareText)
 
-    console.log('[分享] ✅ switchInlineQuery 调用成功')
+    _notice('已复制链接，返回Telegram，分享吧～')
+
+    console.log('[分享] ✅ 复制成功')
   } catch (error) {
-    console.error('[分享] 调用失败:', error)
-    _notice('分享失败，请重试')
+    console.error('[分享] 复制失败:', error)
+    _notice('复制失败，请重试')
   }
 }
 
