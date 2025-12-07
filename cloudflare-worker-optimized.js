@@ -3,7 +3,7 @@
 
 const CACHE_TTL_SECONDS = 259200 // 3 天
 const FETCH_TIMEOUT_MS = 30000 // 30秒超时
-const MAX_FILE_SIZE = 200 * 1024 * 1024 // 50MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024 // 200MB
 const KV_UPDATE_INTERVAL = 3600 // ✅ 1小时才更新一次访问时间（减少KV写入）
 
 addEventListener('fetch', (event) => {
@@ -25,10 +25,13 @@ async function handleRequest(request) {
     const cache = caches.default
     const now = Date.now()
 
+    // 🎯 检查是否需要强制刷新缓存
+    const forceRefresh = url.searchParams.has('nocache') || url.searchParams.has('refresh')
+
     // 检查缓存是否过期
     const lastAccessStr = await TG_FILE_CACHE.get(fileId)
     const lastAccess = lastAccessStr ? Number(lastAccessStr) : 0
-    const shouldRefresh = now - lastAccess > CACHE_TTL_SECONDS * 1000
+    const shouldRefresh = forceRefresh || now - lastAccess > CACHE_TTL_SECONDS * 1000
 
     // 构建统一的缓存键
     const baseCacheKey = new Request(`${url.origin}${url.pathname}?file_id=${fileId}`, {
