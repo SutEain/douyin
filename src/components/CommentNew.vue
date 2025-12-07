@@ -113,8 +113,34 @@
                     {{ child.content }}
                   </div>
                   <div class="reply-footer">
-                    <span class="time">{{ _time(child.create_time) }}</span>
-                    <span v-if="child.ip_location" class="location">{{ child.ip_location }}</span>
+                    <div class="footer-left">
+                      <span class="time">{{ _time(child.create_time) }}</span>
+                      <span v-if="child.ip_location" class="location">{{ child.ip_location }}</span>
+                      <span class="reply-btn" @click="handleReply(item)">回复</span>
+                    </div>
+                    <div class="footer-right">
+                      <div
+                        class="action-btn"
+                        :class="{ active: child.user_digged }"
+                        @click="handleLike(child)"
+                      >
+                        <Icon
+                          :icon="
+                            child.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
+                          "
+                        />
+                        <span v-if="child.digg_count">{{ _formatNumber(child.digg_count) }}</span>
+                      </div>
+                      <div class="action-btn" @click="child.user_buried = !child.user_buried">
+                        <Icon
+                          :icon="
+                            child.user_buried
+                              ? 'icon-park-solid:dislike-two'
+                              : 'icon-park-outline:dislike'
+                          "
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -734,10 +760,63 @@ watch(
     }
 
     .reply-footer {
-      font-size: 11px;
-      color: #c4c3c3;
       display: flex;
-      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 3px;
+
+      .footer-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+
+        .time {
+          font-size: 11px;
+          color: #c4c3c3;
+        }
+
+        .location {
+          font-size: 11px;
+          color: #c4c3c3;
+        }
+
+        .reply-btn {
+          font-size: 11px;
+          color: #999;
+          cursor: pointer;
+
+          &:active {
+            opacity: 0.6;
+          }
+        }
+      }
+
+      .footer-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+
+        .action-btn {
+          display: flex;
+          align-items: center;
+          gap: 3px;
+          color: gray;
+          cursor: pointer;
+          font-size: 14px;
+
+          &:active {
+            opacity: 0.6;
+          }
+
+          &.active {
+            color: rgb(231, 58, 87);
+          }
+
+          span {
+            font-size: 11px;
+          }
+        }
+      }
     }
   }
 }
