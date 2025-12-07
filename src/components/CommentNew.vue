@@ -6,9 +6,21 @@
 
   <!-- 评论区 Dialog -->
   <Transition name="fade">
-    <div v-if="modelValue" class="comment-dialog">
+    <div
+      v-if="modelValue"
+      class="comment-dialog"
+      :style="{ transform: `translateY(${pullDistance}px)` }"
+    >
       <!-- 顶部标题栏 -->
-      <div class="comment-header">
+      <div
+        class="comment-header"
+        @touchstart="handleHeaderTouchStart"
+        @touchmove="handleHeaderTouchMove"
+        @touchend="handleHeaderTouchEnd"
+      >
+        <!-- 下拉指示器 -->
+        <div class="pull-indicator" :style="{ opacity: pullDistance / 80 }"></div>
+
         <div class="comment-title">
           <span v-if="commentsLoading">加载中...</span>
           <span v-else>{{ _formatNumber(comments.length) }}条评论</span>
@@ -19,7 +31,12 @@
       </div>
 
       <!-- 输入框区域（移到顶部） -->
-      <div class="comment-input-bar">
+      <div
+        class="comment-input-bar"
+        @touchstart="handleHeaderTouchStart"
+        @touchmove="handleHeaderTouchMove"
+        @touchend="handleHeaderTouchEnd"
+      >
         <!-- 回复提示 -->
         <div v-if="replyingTo" class="reply-hint">
           <span>回复 @{{ replyingTo.nickname }}</span>
@@ -211,6 +228,10 @@ const pageSize = 20
 const total = ref(0)
 const hasMore = computed(() => comments.value.length < total.value)
 const isLoadingMore = ref(false)
+// 🎯 下拉关闭手势
+const pullDistance = ref(0)
+let headerStartY = 0
+let headerStartTime = 0
 
 // 计算属性
 const canSend = computed(() => commentText.value.trim().length > 0)
@@ -420,6 +441,54 @@ const handleInputBlur = () => {
   console.log('[Comment] 输入框失去焦点')
 }
 
+// 🎯 头部下拉关闭手势
+const handleHeaderTouchStart = (e: TouchEvent) => {
+  // 🎯 如果触摸目标是输入框，不处理手势
+  const target = e.target as HTMLElement
+  if (target.tagName === 'INPUT' || target.classList.contains('comment-input')) {
+    return
+  }
+
+  headerStartY = e.touches[0].clientY
+  headerStartTime = Date.now()
+  pullDistance.value = 0
+}
+
+const handleHeaderTouchMove = (e: TouchEvent) => {
+  // 🎯 如果触摸目标是输入框，不处理手势
+  const target = e.target as HTMLElement
+  if (target.tagName === 'INPUT' || target.classList.contains('comment-input')) {
+    return
+  }
+
+  if (headerStartY === 0) return // 未初始化
+
+  const currentY = e.touches[0].clientY
+  const deltaY = currentY - headerStartY
+
+  // 只处理向下拉（deltaY > 0）
+  if (deltaY > 0) {
+    e.preventDefault() // 阻止页面滚动
+    pullDistance.value = Math.min(deltaY, 100) // 最大100px
+  }
+}
+
+const handleHeaderTouchEnd = () => {
+  if (headerStartY === 0) return // 未初始化
+
+  const duration = Date.now() - headerStartTime
+
+  // 🎯 下拉超过80px 或 快速下拉（速度判断）则关闭评论区
+  if (pullDistance.value > 80 || (pullDistance.value > 40 && duration < 200)) {
+    handleClose()
+  }
+
+  // 重置
+  pullDistance.value = 0
+  headerStartY = 0
+  headerStartTime = 0
+}
+
 // 🎯 防止空评论或少量评论时下拉导致 miniapp 关闭
 let startY = 0
 const handleTouchStart = (e: TouchEvent) => {
@@ -550,6 +619,9 @@ watch(
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  // 🎯 下拉手势的过渡效果
+  transition: transform 0.2s ease-out;
+  will-change: transform;
 }
 
 // 顶部标题栏
@@ -561,6 +633,22 @@ watch(
   justify-content: center;
   position: relative;
   border-bottom: 1px solid #f0f0f0;
+  // 🎯 禁止触摸选择，优化手势体验
+  user-select: none;
+  -webkit-user-select: none;
+
+  // 🎯 下拉指示器
+  .pull-indicator {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    background: #ddd;
+    border-radius: 2px;
+    transition: opacity 0.2s;
+  }
 
   .comment-title {
     font-size: 14px;
@@ -873,6 +961,9 @@ watch(
   gap: 8px;
   position: relative;
   z-index: 10;
+  // 🎯 禁止触摸选择，优化手势体验（但不影响输入框）
+  user-select: none;
+  -webkit-user-select: none;
 
   // 🎯 回复提示
   .reply-hint {
