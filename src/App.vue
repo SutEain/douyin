@@ -1,11 +1,7 @@
 <template>
   <router-view v-slot="{ Component, route }">
     <transition :name="transitionName">
-      <component
-        v-if="route?.meta?.keepAlive === false"
-        :is="Component"
-        :key="route.fullPath"
-      />
+      <component v-if="route?.meta?.keepAlive === false" :is="Component" :key="route.fullPath" />
       <keep-alive v-else :exclude="store.excludeNames">
         <component :is="Component" :key="route.fullPath" />
       </keep-alive>
@@ -64,7 +60,16 @@ function resetVhAndPx() {
   //document.documentElement.style.fontSize = document.documentElement.clientWidth / 375 + 'px'
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 🎯 1️⃣ 先初始化用户（等待）
+  try {
+    await store.autoInitUser()
+    console.log('[App] 用户初始化完成')
+  } catch (error) {
+    console.error('[App] 用户初始化失败:', error)
+  }
+
+  // 🎯 2️⃣ 再初始化其他数据
   store.init()
   resetVhAndPx()
   // 监听resize事件 视图大小发生变化就重新计算1vh的值

@@ -163,3 +163,97 @@ export async function handleGetUserProfile(req: Request): Promise<Response> {
     follow_status: followStatus
   })
 }
+
+// 🎯 自动初始化用户（用于深链接等场景）
+export async function handleAutoInit(req: Request): Promise<Response> {
+  console.log('[AutoInit] 开始自动初始化用户')
+
+  try {
+    // 解析 Telegram initData
+    const initData = req.headers.get('X-Telegram-Init-Data')
+    if (!initData) {
+      return errorResponse('缺少 Telegram 用户信息', 400)
+    }
+
+    const params = new URLSearchParams(initData)
+    const userStr = params.get('user')
+    if (!userStr) {
+      return errorResponse('无法解析用户信息', 400)
+    }
+
+    const tgUser = JSON.parse(userStr)
+    console.log('[AutoInit] Telegram 用户ID:', tgUser.id)
+
+    // 查询用户是否已存在
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('tg_user_id', tgUser.id)
+      .maybeSingle()
+
+    if (existingProfile) {
+      console.log('[AutoInit] ✅ 用户已存在:', existingProfile.id)
+      return successResponse({
+        id: existingProfile.id,
+        tg_user_id: existingProfile.tg_user_id,
+        username: existingProfile.username,
+        nickname: existingProfile.nickname,
+        avatar: existingProfile.avatar_url,
+        numeric_id: existingProfile.numeric_id
+      })
+    }
+
+    // 用户不存在，创建新用户
+    console.log('[AutoInit] 用户不存在，开始创建')
+
+    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: `tg_${tgUser.id}@telegram.placeholder`,
+      password: crypto.randomUUID(),
+      email_confirm: true,
+      user_metadata: {
+        tg_user_id: tgUser.id,
+        username: tgUser.username || '',
+        first_name: tgUser.first_name || '',
+        last_name: tgUser.last_name || ''
+      }
+    })
+
+    if (authError || !authUser.user) {
+      console.error('[AutoInit] ❌ 创建 auth 用户失败:', authError)
+      return errorResponse('创建用户失败', 500)
+    }
+
+    // 创建 profile
+    const nickname = tgUser.first_name || tgUser.username || 'Telegram 用户'
+    const { data: newProfile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .insert({
+        id: authUser.user.id,
+        tg_user_id: tgUser.id,
+        username: tgUser.username || '',
+        nickname: nickname,
+        avatar_url: DEFAULT_AVATAR
+      })
+      .select()
+      .single()
+
+    if (profileError) {
+      console.error('[AutoInit] ❌ 创建 profile 失败:', profileError)
+      return errorResponse('创建用户资料失败', 500)
+    }
+
+    console.log('[AutoInit] ✅ 用户创建成功:', newProfile.id)
+
+    return successResponse({
+      id: newProfile.id,
+      tg_user_id: newProfile.tg_user_id,
+      username: newProfile.username,
+      nickname: newProfile.nickname,
+      avatar: newProfile.avatar_url,
+      numeric_id: newProfile.numeric_id
+    })
+  } catch (error) {
+    console.error('[AutoInit] ❌ 初始化失败:', error)
+    return errorResponse('初始化失败', 500)
+  }
+}

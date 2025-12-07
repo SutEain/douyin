@@ -208,6 +208,41 @@ export const useBaseStore = defineStore('base', {
 
       // ✅ 不再调用 mock API，等待用户登录后获取真实数据
     },
+
+    // 🎯 自动初始化用户（用于深链接等场景）
+    async autoInitUser() {
+      console.log('[Store] autoInitUser: 开始')
+
+      try {
+        const { callAppServer } = await import('@/api/videos')
+        const res = await callAppServer('/user/auto-init', {
+          method: 'POST'
+        })
+
+        if (res.code === 0) {
+          console.log('[Store] autoInitUser: 成功', res.data)
+          // 更新用户信息到 store
+          this.userinfo = {
+            ...this.userinfo,
+            id: res.data.id,
+            uid: res.data.id,
+            short_id: res.data.numeric_id || '',
+            unique_id: res.data.username || '',
+            nickname: res.data.nickname || 'Telegram 用户',
+            avatar_168x168: {
+              url_list: [res.data.avatar || '']
+            }
+          }
+          return res.data
+        } else {
+          throw new Error(res.msg || '初始化失败')
+        }
+      } catch (error) {
+        console.error('[Store] autoInitUser: 失败', error)
+        throw error
+      }
+    },
+
     // 🎯 解析 Telegram 启动参数
     parseStartParam() {
       try {

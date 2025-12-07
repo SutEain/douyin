@@ -15,7 +15,7 @@ import {
   handleVideoDetail
 } from './routes/video.ts'
 import { handleVideoComments, handleVideoCreateComment } from './routes/comments.ts'
-import { handleFollowUser, handleGetUserProfile } from './routes/user.ts'
+import { handleFollowUser, handleGetUserProfile, handleAutoInit } from './routes/user.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -71,6 +71,10 @@ serve(async (req) => {
     }
     if (route === '/user/profile' && method === 'GET') {
       return handleGetUserProfile(req)
+    }
+    // 🎯 自动初始化用户
+    if (route === '/user/auto-init' && method === 'POST') {
+      return handleAutoInit(req)
     }
 
     return errorResponse('Not found', 1, 404)
