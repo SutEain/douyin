@@ -180,7 +180,9 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
 
     // 🎯 步骤3: 补充 profile 完整信息（与 Bot 逻辑一致）
     const nickname = user.first_name + (user.last_name ? ` ${user.last_name}` : '')
-    const avatarUrl = `https://t.me/i/userpic/320/${user.id}.jpg` // ✅ 使用与 Bot 相同的头像 URL
+    // 优先使用 Telegram 提供的头像 URL，否则使用公开 API
+    const avatarUrl = user.photo_url || `https://t.me/i/userpic/320/${user.id}.jpg`
+    console.log('[app-server] 头像 URL:', avatarUrl)
 
     console.log('[app-server] 触发器已创建基础 profile，使用 upsert 补充完整信息')
     const { data: profile, error: upsertError } = await supabaseAdmin
