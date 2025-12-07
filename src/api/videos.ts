@@ -96,10 +96,22 @@ export async function videoComments(params: {
   }
 }
 
-export async function sendVideoComment(videoId: string, content: string) {
+export async function sendVideoComment(videoId: string, content: string, replyTo?: string | null) {
+  const body: any = { video_id: videoId, content }
+  if (replyTo) {
+    body.reply_to = replyTo
+  }
   return callAppServer('/video/comments', {
     method: 'POST',
-    body: { video_id: videoId, content }
+    body
+  })
+}
+
+// 🎯 评论点赞/取消点赞
+export async function toggleCommentLike(commentId: string, liked: boolean) {
+  return callAppServer('/comment/like', {
+    method: 'POST',
+    body: { comment_id: commentId, liked }
   })
 }
 

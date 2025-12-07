@@ -14,7 +14,11 @@ import {
   handleVideoMy,
   handleVideoDetail
 } from './routes/video.ts'
-import { handleVideoComments, handleVideoCreateComment } from './routes/comments.ts'
+import {
+  handleVideoComments,
+  handleVideoCreateComment,
+  handleCommentLike
+} from './routes/comments.ts'
 import { handleFollowUser, handleGetUserProfile, handleAutoInit } from './routes/user.ts'
 
 serve(async (req) => {
@@ -65,6 +69,9 @@ serve(async (req) => {
     }
     if (route === '/video/comments' && method === 'POST') {
       return handleVideoCreateComment(req)
+    }
+    if (route === '/comment/like' && method === 'POST') {
+      return handleCommentLike(req)
     }
     if (route === '/user/follow' && method === 'POST') {
       return handleFollowUser(req)

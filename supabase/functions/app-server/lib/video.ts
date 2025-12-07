@@ -307,6 +307,17 @@ export async function attachUserFlags(rows: any[], userId?: string | null) {
 
 export function formatCommentRow(row: any) {
   const profile = row.profiles || {}
+
+  // 🎯 格式化地理位置信息
+  let ipLocation = ''
+  if (profile.country && profile.city) {
+    ipLocation = `${profile.country} · ${profile.city}`
+  } else if (profile.country) {
+    ipLocation = profile.country
+  } else if (profile.city) {
+    ipLocation = profile.city
+  }
+
   return {
     comment_id: row.id,
     content: row.content,
@@ -319,6 +330,7 @@ export function formatCommentRow(row: any) {
     children: [],
     nickname: profile.nickname || profile.username || '用户',
     avatar: profile.avatar_url || DEFAULT_AVATAR,
-    user_id: row.user_id
+    user_id: row.user_id,
+    ip_location: ipLocation // 🎯 添加地理位置
   }
 }

@@ -26,7 +26,9 @@ export async function handleVideoComments(req: Request): Promise<Response> {
         id,
         nickname,
         username,
-        avatar_url
+        avatar_url,
+        country,
+        city
       )
     `,
       { count: 'exact' }
@@ -86,3 +88,57 @@ export async function handleVideoCreateComment(req: Request): Promise<Response> 
   return successResponse(comment)
 }
 
+// 🎯 评论点赞/取消点赞
+export async function handleCommentLike(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+  const body = await parseJsonBody<{ comment_id?: string; liked?: boolean }>(req)
+
+  if (!body.comment_id || typeof body.liked !== 'boolean') {
+    throw new HttpError('Missing comment_id or liked flag', 400)
+  }
+
+  if (body.liked) {
+    // 点赞
+    const { error } = await supabaseAdmin
+      .from('comment_likes')
+      .upsert(
+        { user_id: user.id, comment_id: body.comment_id },
+        { onConflict: 'user_id,comment_id' }
+      )
+
+    if (error) {
+      console.error('[app-server] Like comment failed:', error)
+      return errorResponse('Failed to like comment', 1, 500)
+    }
+
+    // 更新点赞数
+    await supabaseAdmin.rpc('increment_comment_likes', { comment_id: body.comment_id })
+  } else {
+    // 取消点赞
+    const { error } = await supabaseAdmin
+      .from('comment_likes')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('comment_id', body.comment_id)
+
+    if (error) {
+      console.error('[app-server] Unlike comment failed:', error)
+      return errorResponse('Failed to unlike comment', 1, 500)
+    }
+
+    // 更新点赞数
+    await supabaseAdmin.rpc('decrement_comment_likes', { comment_id: body.comment_id })
+  }
+
+  // 查询更新后的点赞数
+  const { data: comment } = await supabaseAdmin
+    .from('video_comments')
+    .select('like_count')
+    .eq('id', body.comment_id)
+    .single()
+
+  return successResponse({
+    liked: body.liked,
+    like_count: comment?.like_count ?? 0
+  })
+}

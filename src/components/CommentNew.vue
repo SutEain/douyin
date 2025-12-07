@@ -9,7 +9,10 @@
     <div v-if="modelValue" class="comment-dialog">
       <!-- 顶部标题栏 -->
       <div class="comment-header">
-        <div class="comment-title">{{ _formatNumber(comments.length) }}条评论</div>
+        <div class="comment-title">
+          <span v-if="commentsLoading">加载中...</span>
+          <span v-else>{{ _formatNumber(comments.length) }}条评论</span>
+        </div>
         <div class="close-btn" @click="handleClose">
           <Icon icon="ic:round-close" />
         </div>
@@ -17,30 +20,39 @@
 
       <!-- 输入框区域（移到顶部） -->
       <div class="comment-input-bar">
-        <input
-          v-model="commentText"
-          class="comment-input"
-          type="text"
-          placeholder="善语结善缘，恶言伤人心"
-          @focus="handleInputFocus"
-          @blur="handleInputBlur"
-        />
-        <div class="send-btn" :class="{ active: canSend }" @click="handleSend">
-          发送
+        <!-- 回复提示 -->
+        <div v-if="replyingTo" class="reply-hint">
+          <span>回复 @{{ replyingTo.nickname }}</span>
+          <Icon icon="ic:round-close" @click="cancelReply" />
+        </div>
+        <div class="input-wrapper">
+          <input
+            v-model="commentText"
+            class="comment-input"
+            type="text"
+            :placeholder="replyingTo ? `回复 @${replyingTo.nickname}` : '善语结善缘，恶言伤人心'"
+            @focus="handleInputFocus"
+            @blur="handleInputBlur"
+          />
+          <div class="send-btn" :class="{ active: canSend }" @click="handleSend">发送</div>
         </div>
       </div>
 
       <!-- 评论列表区域 -->
-      <div class="comment-list" ref="listRef">
+      <div
+        class="comment-list"
+        ref="listRef"
+        @touchstart="handleTouchStart"
+        @touchmove="handleTouchMove"
+        @scroll="handleScroll"
+      >
         <!-- 加载中 -->
         <div v-if="commentsLoading" class="loading-container">
           <Loading />
         </div>
 
         <!-- 空状态 -->
-        <div v-else-if="!comments.length" class="empty-container">
-          暂无评论，快来抢沙发～
-        </div>
+        <div v-else-if="!comments.length" class="empty-container">暂无评论，快来抢沙发～</div>
 
         <!-- 评论列表 -->
         <div v-else class="comment-items">
@@ -57,15 +69,27 @@
                   <div class="footer-left">
                     <span class="time">{{ _time(item.create_time) }}</span>
                     <span v-if="item.ip_location" class="location">{{ item.ip_location }}</span>
-                    <span class="reply-btn">回复</span>
+                    <span class="reply-btn" @click="handleReply(item)">回复</span>
                   </div>
                   <div class="footer-right">
-                    <div class="action-btn" :class="{ active: item.user_digged }" @click="handleLike(item)">
-                      <Icon :icon="item.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'" />
+                    <div
+                      class="action-btn"
+                      :class="{ active: item.user_digged }"
+                      @click="handleLike(item)"
+                    >
+                      <Icon
+                        :icon="item.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'"
+                      />
                       <span v-if="item.digg_count">{{ _formatNumber(item.digg_count) }}</span>
                     </div>
                     <div class="action-btn" @click="item.user_buried = !item.user_buried">
-                      <Icon :icon="item.user_buried ? 'icon-park-solid:dislike-two' : 'icon-park-outline:dislike'" />
+                      <Icon
+                        :icon="
+                          item.user_buried
+                            ? 'icon-park-solid:dislike-two'
+                            : 'icon-park-outline:dislike'
+                        "
+                      />
                     </div>
                   </div>
                 </div>
@@ -74,7 +98,11 @@
 
             <!-- 回复列表 -->
             <div v-if="item.showChildren && item.children?.length" class="reply-list">
-              <div v-for="(child, j) in item.children" :key="child.comment_id || j" class="reply-item">
+              <div
+                v-for="(child, j) in item.children"
+                :key="child.comment_id || j"
+                class="reply-item"
+              >
                 <img :src="_checkImgUrl(child.avatar)" class="avatar" />
                 <div class="reply-body">
                   <div class="username">{{ child.nickname }}</div>
@@ -88,7 +116,11 @@
             </div>
 
             <!-- 展开更多回复 -->
-            <div v-if="Number(item.sub_comment_count)" class="expand-replies" @click="handleExpandReplies(item)">
+            <div
+              v-if="Number(item.sub_comment_count)"
+              class="expand-replies"
+              @click="handleExpandReplies(item)"
+            >
               <div class="expand-line"></div>
               <span class="expand-text">
                 展开{{ item.showChildren ? '更多' : `${item.sub_comment_count}条` }}回复
@@ -97,8 +129,11 @@
             </div>
           </div>
 
-          <!-- 已加载完毕 -->
-          <div class="no-more">没有更多了</div>
+          <!-- 加载更多 / 已加载完毕 -->
+          <div v-if="isLoadingMore" class="loading-more">
+            <Loading />
+          </div>
+          <div v-else-if="!hasMore" class="no-more">没有更多了</div>
         </div>
       </div>
     </div>
@@ -109,7 +144,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import Loading from './Loading.vue'
-import { videoComments, sendVideoComment } from '@/api/videos'
+import { videoComments, sendVideoComment, toggleCommentLike } from '@/api/videos'
 import { _formatNumber, _time, _checkImgUrl, _notice, sampleSize } from '@/utils'
 
 interface Props {
@@ -135,6 +170,13 @@ const comments = ref<any[]>([])
 const commentsLoading = ref(false)
 const commentText = ref('')
 const listRef = ref<HTMLElement | null>(null)
+const replyingTo = ref<any>(null) // 🎯 正在回复的评论
+// 🎯 分页数据
+const pageNo = ref(0)
+const pageSize = 20
+const total = ref(0)
+const hasMore = computed(() => comments.value.length < total.value)
+const isLoadingMore = ref(false)
 
 // 计算属性
 const canSend = computed(() => commentText.value.trim().length > 0)
@@ -145,13 +187,22 @@ const handleClose = () => {
   emit('close')
 }
 
-// 加载评论数据
+// 🎯 加载评论数据（第一页）
 const loadComments = async () => {
   commentsLoading.value = true
+  pageNo.value = 0
   try {
-    const res: any = await videoComments({ videoId: props.videoId })
+    const res: any = await videoComments({
+      videoId: props.videoId,
+      pageNo: pageNo.value,
+      pageSize
+    })
     if (res.success) {
-      const list = Array.isArray(res.data?.list) ? res.data.list : Array.isArray(res.data) ? res.data : []
+      const list = Array.isArray(res.data?.list)
+        ? res.data.list
+        : Array.isArray(res.data)
+          ? res.data
+          : []
       comments.value = list.map((v: any) => ({
         ...v,
         showChildren: false,
@@ -160,9 +211,12 @@ const loadComments = async () => {
         children: v.children || [],
         digg_count: Number(v.digg_count)
       }))
+      total.value = res.data?.total ?? 0
+      pageNo.value = 1 // 下次加载第二页
     } else if (res.message) {
       _notice(res.message)
       comments.value = []
+      total.value = 0
     }
   } catch (error: any) {
     console.error('[Comment] 加载评论失败:', error)
@@ -172,13 +226,52 @@ const loadComments = async () => {
   }
 }
 
+// 🎯 加载更多评论
+const loadMoreComments = async () => {
+  if (isLoadingMore.value || !hasMore.value) return
+
+  isLoadingMore.value = true
+  try {
+    const res: any = await videoComments({
+      videoId: props.videoId,
+      pageNo: pageNo.value,
+      pageSize
+    })
+    if (res.success) {
+      const list = Array.isArray(res.data?.list)
+        ? res.data.list
+        : Array.isArray(res.data)
+          ? res.data
+          : []
+      const newComments = list.map((v: any) => ({
+        ...v,
+        showChildren: false,
+        user_buried: false,
+        user_digged: false,
+        children: v.children || [],
+        digg_count: Number(v.digg_count)
+      }))
+      comments.value.push(...newComments)
+      pageNo.value++
+    }
+  } catch (error: any) {
+    console.error('[Comment] 加载更多评论失败:', error)
+    _notice(error?.message || '加载失败')
+  } finally {
+    isLoadingMore.value = false
+  }
+}
+
 // 发送评论
 const handleSend = async () => {
   const content = commentText.value.trim()
   if (!content) return
 
   try {
-    const result: any = await sendVideoComment(props.videoId, content)
+    // 🎯 如果是回复评论，传入 reply_to
+    const replyToId = replyingTo.value?.comment_id || null
+    const result: any = await sendVideoComment(props.videoId, content, replyToId)
+
     const formatted = {
       ...result,
       showChildren: false,
@@ -186,22 +279,65 @@ const handleSend = async () => {
       user_buried: false,
       children: []
     }
-    comments.value.unshift(formatted)
+
+    // 🎯 如果是回复，添加到对应评论的回复列表
+    if (replyToId && replyingTo.value) {
+      const parentComment = comments.value.find((c) => c.comment_id === replyToId)
+      if (parentComment) {
+        if (!parentComment.children) parentComment.children = []
+        parentComment.children.unshift(formatted)
+        parentComment.sub_comment_count = (parentComment.sub_comment_count || 0) + 1
+        parentComment.showChildren = true
+      }
+    } else {
+      // 否则添加到主评论列表
+      comments.value.unshift(formatted)
+    }
+
     commentText.value = ''
+    replyingTo.value = null // 🎯 清除回复状态
     emit('comment-success')
   } catch (error: any) {
     _notice(error?.message || '评论失败')
   }
 }
 
-// 点赞评论
-const handleLike = (item: any) => {
-  if (item.user_digged) {
-    item.digg_count--
-  } else {
-    item.digg_count++
+// 🎯 回复评论
+const handleReply = (item: any) => {
+  replyingTo.value = item
+  // 自动聚焦输入框
+  nextTick(() => {
+    const input = document.querySelector('.comment-input') as HTMLInputElement
+    if (input) input.focus()
+  })
+}
+
+// 🎯 取消回复
+const cancelReply = () => {
+  replyingTo.value = null
+  commentText.value = ''
+}
+
+// 🎯 点赞/取消点赞评论
+const handleLike = async (item: any) => {
+  const newLikedState = !item.user_digged
+  const oldLikedState = item.user_digged
+  const oldCount = item.digg_count
+
+  // 乐观更新 UI
+  item.user_digged = newLikedState
+  item.digg_count = newLikedState ? oldCount + 1 : Math.max(0, oldCount - 1)
+
+  try {
+    const result: any = await toggleCommentLike(item.comment_id, newLikedState)
+    // 使用服务器返回的真实数据
+    item.digg_count = result.like_count || 0
+  } catch (error: any) {
+    // 失败时回滚
+    item.user_digged = oldLikedState
+    item.digg_count = oldCount
+    _notice(error?.message || '操作失败')
   }
-  item.user_digged = !item.user_digged
 }
 
 // 展开回复
@@ -237,6 +373,43 @@ const handleInputBlur = () => {
   console.log('[Comment] 输入框失去焦点')
 }
 
+// 🎯 防止空评论或少量评论时下拉导致 miniapp 关闭
+let startY = 0
+const handleTouchStart = (e: TouchEvent) => {
+  startY = e.touches[0].clientY
+}
+
+const handleTouchMove = (e: TouchEvent) => {
+  if (!listRef.value) return
+
+  const currentY = e.touches[0].clientY
+  const deltaY = currentY - startY
+  const scrollTop = listRef.value.scrollTop
+
+  // 🎯 当滚动到顶部且继续下拉时，阻止默认行为
+  if (scrollTop <= 0 && deltaY > 0) {
+    e.preventDefault()
+  }
+
+  // 🎯 当滚动到底部且继续上拉时，也阻止（可选）
+  const scrollHeight = listRef.value.scrollHeight
+  const clientHeight = listRef.value.clientHeight
+  if (scrollTop + clientHeight >= scrollHeight && deltaY < 0) {
+    e.preventDefault()
+  }
+}
+
+// 🎯 滚动到底部时加载更多
+const handleScroll = () => {
+  if (!listRef.value || isLoadingMore.value || !hasMore.value) return
+
+  const { scrollTop, scrollHeight, clientHeight } = listRef.value
+  // 距离底部 100px 时触发加载
+  if (scrollTop + clientHeight >= scrollHeight - 100) {
+    loadMoreComments()
+  }
+}
+
 // 保存页面滚动位置
 let savedScrollTop = 0
 
@@ -245,10 +418,17 @@ watch(
   () => props.modelValue,
   (newVal) => {
     if (newVal) {
-      // ✅ 打开时：保存当前滚动位置
+      // ✅ 打开时：立即清空旧评论数据，重置分页状态
+      comments.value = []
+      commentsLoading.value = true
+      pageNo.value = 0
+      total.value = 0
+      isLoadingMore.value = false
+
+      // ✅ 保存当前滚动位置
       savedScrollTop = document.documentElement.scrollTop || window.pageYOffset || 0
       console.log('[Comment] 📌 打开评论区，保存滚动位置:', savedScrollTop)
-      
+
       loadComments()
       // 滚动到顶部
       nextTick(() => {
@@ -259,12 +439,12 @@ watch(
     } else {
       // ✅ 关闭时：恢复滚动位置
       commentText.value = ''
-      
+
       console.log('[Comment] 📌 关闭评论区前，当前滚动位置:', {
         saved: savedScrollTop,
         current: document.documentElement.scrollTop || window.pageYOffset
       })
-      
+
       nextTick(() => {
         // 延迟恢复，等待 Telegram viewport 恢复
         setTimeout(() => {
@@ -273,12 +453,17 @@ watch(
           document.documentElement.scrollTop = savedScrollTop
           document.body.scrollTop = savedScrollTop
           console.log('[Comment] ✅ 恢复滚动位置到:', savedScrollTop)
-          
+
           // 再次验证并强制恢复（双重保险）
           setTimeout(() => {
             const actualScroll = document.documentElement.scrollTop || window.pageYOffset
-            console.log('[Comment] 🔍 验证滚动位置:', actualScroll, '差异:', Math.abs(actualScroll - savedScrollTop))
-            
+            console.log(
+              '[Comment] 🔍 验证滚动位置:',
+              actualScroll,
+              '差异:',
+              Math.abs(actualScroll - savedScrollTop)
+            )
+
             if (Math.abs(actualScroll - savedScrollTop) > 5) {
               console.log('[Comment] ⚠️ 位置不对，强制再次恢复')
               window.scrollTo({ top: savedScrollTop, behavior: 'auto' })
@@ -361,6 +546,10 @@ watch(
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  // 🎯 防止滚动穿透到父页面
+  overscroll-behavior: contain;
+  // 🎯 只允许垂直滚动
+  touch-action: pan-y;
 }
 
 // 加载中 / 空状态
@@ -553,6 +742,13 @@ watch(
 }
 
 // 已加载完毕
+// 加载更多
+.loading-more {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+}
+
 .no-more {
   text-align: center;
   padding: 20px;
@@ -564,13 +760,46 @@ watch(
 .comment-input-bar {
   flex-shrink: 0;
   background: white;
-  border-bottom: 1px solid #f0f0f0; // ✅ 改为 border-bottom（输入框在顶部）
+  border-bottom: 1px solid #f0f0f0;
   padding: 10px 15px;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   position: relative;
   z-index: 10;
+
+  // 🎯 回复提示
+  .reply-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 10px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #666;
+
+    span {
+      flex: 1;
+    }
+
+    svg {
+      font-size: 16px;
+      cursor: pointer;
+      color: #999;
+
+      &:active {
+        opacity: 0.6;
+      }
+    }
+  }
+
+  // 🎯 输入框包装器
+  .input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
 
   .comment-input {
     flex: 1;
@@ -628,4 +857,3 @@ watch(
   opacity: 0;
 }
 </style>
-
