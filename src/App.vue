@@ -60,16 +60,8 @@ function resetVhAndPx() {
   //document.documentElement.style.fontSize = document.documentElement.clientWidth / 375 + 'px'
 }
 
-onMounted(async () => {
-  // 🎯 1️⃣ 先初始化用户（等待）
-  try {
-    await store.autoInitUser()
-    console.log('[App] 用户初始化完成')
-  } catch (error) {
-    console.error('[App] 用户初始化失败:', error)
-  }
-
-  // 🎯 2️⃣ 再初始化其他数据
+onMounted(() => {
+  // 🎯 初始化应用（登录时自动创建用户，无需额外调用）
   store.init()
   resetVhAndPx()
   // 监听resize事件 视图大小发生变化就重新计算1vh的值

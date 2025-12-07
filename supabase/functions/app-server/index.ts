@@ -124,14 +124,57 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
     .eq('tg_user_id', user.id)
     .maybeSingle()
 
-  // ✅ 只查询用户，不创建（必须先通过Bot注册）
-  if (!existingProfile) {
-    console.log('[app-server] 用户未注册，tg_user_id:', user.id)
-    return errorResponse('请先通过 @douyinbot 开始使用', 'USER_NOT_REGISTERED', 403)
-  }
+  let userId: string
 
-  // ✅ 用户存在，更新基本信息
-  const userId = existingProfile.id
+  // ✅ 用户不存在时自动创建（支持深链接等场景）
+  if (!existingProfile) {
+    console.log('[app-server] 用户不存在，自动创建，tg_user_id:', user.id)
+
+    // 创建 auth 用户
+    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: `tg_${user.id}@telegram.placeholder`,
+      password: crypto.randomUUID(),
+      email_confirm: true,
+      user_metadata: {
+        tg_user_id: user.id,
+        username: user.username || '',
+        first_name: user.first_name || '',
+        last_name: user.last_name || ''
+      }
+    })
+
+    if (authError || !authUser.user) {
+      console.error('[app-server] 创建 auth 用户失败:', authError)
+      return errorResponse('创建用户失败', 1, 500)
+    }
+
+    // 创建 profile
+    const nickname =
+      user.first_name + (user.last_name ? ` ${user.last_name}` : '') || 'Telegram 用户'
+    const avatarUrl =
+      user.photo_url || 'https://cdn.jsdelivr.net/gh/imsyy/file/pic/20210313122054.png'
+
+    const { error: profileError } = await supabaseAdmin.from('profiles').insert({
+      id: authUser.user.id,
+      tg_user_id: user.id,
+      username: user.username || `user_${user.id}`,
+      tg_username: user.username || null,
+      nickname: nickname,
+      avatar_url: avatarUrl,
+      lang: user.language_code || 'en'
+    })
+
+    if (profileError) {
+      console.error('[app-server] 创建 profile 失败:', profileError)
+      return errorResponse('创建用户资料失败', 1, 500)
+    }
+
+    console.log('[app-server] ✅ 新用户创建成功:', authUser.user.id)
+    userId = authUser.user.id
+  } else {
+    // ✅ 用户存在，更新基本信息
+    userId = existingProfile.id
+  }
   const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId)
   const userEmail = authUser?.user?.email || undefined
 
