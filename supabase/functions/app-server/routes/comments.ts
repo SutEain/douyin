@@ -22,6 +22,7 @@ export async function handleVideoComments(req: Request): Promise<Response> {
       content,
       like_count,
       created_at,
+      reply_to,
       profiles:user_id (
         id,
         nickname,
@@ -36,6 +37,7 @@ export async function handleVideoComments(req: Request): Promise<Response> {
     .eq('video_id', videoId)
     .eq('review_status', 'approved')
     .is('deleted_at', null)
+    .is('reply_to', null)
     .order('created_at', { ascending: false })
     .range(from, to)
 
@@ -44,9 +46,30 @@ export async function handleVideoComments(req: Request): Promise<Response> {
     return errorResponse('Failed to load comments', 1, 500)
   }
 
+  // 🎯 查询每个主评论的回复数量
+  const commentIds = (data ?? []).map((row) => row.id)
+  const replyCounts = new Map<string, number>()
+
+  if (commentIds.length > 0) {
+    const { data: replyData } = await supabaseAdmin
+      .from('video_comments')
+      .select('reply_to', { count: 'exact' })
+      .in('reply_to', commentIds)
+      .eq('review_status', 'approved')
+      .is('deleted_at', null)
+
+    // 统计每个评论的回复数
+    for (const reply of replyData ?? []) {
+      if (reply.reply_to) {
+        replyCounts.set(reply.reply_to, (replyCounts.get(reply.reply_to) || 0) + 1)
+      }
+    }
+  }
+
   const list = (data ?? []).map((row) => {
     const formatted = formatCommentRow(row)
     formatted.user_id = row.user_id
+    formatted.sub_comment_count = replyCounts.get(row.id) || 0 // 🎯 设置真实的回复数量
     return formatted
   })
   return successResponse({
@@ -86,6 +109,75 @@ export async function handleVideoCreateComment(req: Request): Promise<Response> 
   const comment = formatCommentRow({ ...data, profiles: profile })
   comment.user_id = user.id
   return successResponse(comment)
+}
+
+// 🎯 获取评论的回复列表
+export async function handleCommentReplies(req: Request): Promise<Response> {
+  const url = new URL(req.url)
+  const commentId = url.searchParams.get('comment_id')
+
+  if (!commentId) {
+    throw new HttpError('Missing comment_id', 400)
+  }
+
+  // 1. 查询回复列表
+  const { data, error } = await supabaseAdmin
+    .from('video_comments')
+    .select(
+      `
+      id,
+      video_id,
+      user_id,
+      content,
+      like_count,
+      created_at,
+      reply_to,
+      profiles:user_id (
+        id,
+        nickname,
+        username,
+        avatar_url,
+        country,
+        city
+      )
+    `
+    )
+    .eq('reply_to', commentId)
+    .eq('review_status', 'approved')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('[app-server] Load replies failed:', error)
+    return errorResponse('Failed to load replies', 1, 500)
+  }
+
+  // 2. 查询父评论的作者信息（回复目标）
+  const { data: parentComment } = await supabaseAdmin
+    .from('video_comments')
+    .select(
+      `
+      user_id,
+      profiles:user_id (
+        nickname,
+        username
+      )
+    `
+    )
+    .eq('id', commentId)
+    .single()
+
+  const replyToNickname =
+    parentComment?.profiles?.nickname || parentComment?.profiles?.username || '用户'
+
+  const list = (data ?? []).map((row) => {
+    const formatted = formatCommentRow(row)
+    formatted.user_id = row.user_id
+    formatted.reply_to_user = replyToNickname // 🎯 添加回复目标用户名
+    return formatted
+  })
+
+  return successResponse({ list })
 }
 
 // 🎯 评论点赞/取消点赞

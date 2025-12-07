@@ -17,7 +17,8 @@ import {
 import {
   handleVideoComments,
   handleVideoCreateComment,
-  handleCommentLike
+  handleCommentLike,
+  handleCommentReplies
 } from './routes/comments.ts'
 import { handleFollowUser, handleGetUserProfile, handleAutoInit } from './routes/user.ts'
 
@@ -69,6 +70,9 @@ serve(async (req) => {
     }
     if (route === '/video/comments' && method === 'POST') {
       return handleVideoCreateComment(req)
+    }
+    if (route === '/comment/replies' && method === 'GET') {
+      return handleCommentReplies(req)
     }
     if (route === '/comment/like' && method === 'POST') {
       return handleCommentLike(req)

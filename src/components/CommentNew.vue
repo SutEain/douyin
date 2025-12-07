@@ -106,7 +106,12 @@
                 <img :src="_checkImgUrl(child.avatar)" class="avatar" />
                 <div class="reply-body">
                   <div class="username">{{ child.nickname }}</div>
-                  <div class="reply-text">{{ child.content }}</div>
+                  <div class="reply-text">
+                    <span v-if="child.reply_to_user" class="reply-to"
+                      >回复 @{{ child.reply_to_user }}：</span
+                    >
+                    {{ child.content }}
+                  </div>
                   <div class="reply-footer">
                     <span class="time">{{ _time(child.create_time) }}</span>
                     <span v-if="child.ip_location" class="location">{{ child.ip_location }}</span>
@@ -117,7 +122,10 @@
 
             <!-- 展开更多回复 -->
             <div
-              v-if="Number(item.sub_comment_count)"
+              v-if="
+                Number(item.sub_comment_count) &&
+                (!item.showChildren || item.children.length < item.sub_comment_count)
+              "
               class="expand-replies"
               @click="handleExpandReplies(item)"
             >
@@ -144,7 +152,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import Loading from './Loading.vue'
-import { videoComments, sendVideoComment, toggleCommentLike } from '@/api/videos'
+import { videoComments, sendVideoComment, toggleCommentLike, getCommentReplies } from '@/api/videos'
 import { _formatNumber, _time, _checkImgUrl, _notice, sampleSize } from '@/utils'
 
 interface Props {
@@ -340,15 +348,28 @@ const handleLike = async (item: any) => {
   }
 }
 
-// 展开回复
+// 🎯 展开回复（调用真实API）
 const handleExpandReplies = async (item: any) => {
   if (item.showChildren) {
-    // 加载更多回复（模拟数据）
-    item.children = item.children.concat(sampleSize(comments.value, 10))
-  } else {
-    // 首次展开（模拟数据）
-    item.children = sampleSize(comments.value, 3)
-    item.showChildren = true
+    // 已展开，无需重复加载（因为条件已经过滤了全部展示的情况）
+    return
+  }
+
+  // 首次展开，加载回复列表
+  try {
+    const res: any = await getCommentReplies(item.comment_id)
+    if (res.success) {
+      item.children = res.data.map((v: any) => ({
+        ...v,
+        user_digged: false,
+        user_buried: false
+      }))
+      item.showChildren = true
+    } else {
+      _notice(res.message || '加载回复失败')
+    }
+  } catch (error: any) {
+    _notice(error?.message || '加载回复失败')
   }
 }
 
@@ -704,6 +725,12 @@ watch(
       line-height: 1.5;
       word-wrap: break-word;
       margin-bottom: 5px;
+
+      // 🎯 回复目标用户样式
+      .reply-to {
+        color: #666;
+        font-size: 12px;
+      }
     }
 
     .reply-footer {

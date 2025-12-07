@@ -115,6 +115,21 @@ export async function toggleCommentLike(commentId: string, liked: boolean) {
   })
 }
 
+// 🎯 获取评论的回复列表
+export async function getCommentReplies(commentId: string) {
+  try {
+    const data = await callAppServer(`/comment/replies?comment_id=${commentId}`, {
+      method: 'GET',
+      requireAuth: false,
+      includeAuthIfAvailable: true
+    })
+    return { success: true, data: data?.list ?? [] }
+  } catch (error: any) {
+    console.error('[getCommentReplies] 请求失败:', error)
+    return { success: false, message: error?.message || '获取回复失败' }
+  }
+}
+
 export async function toggleFollowUser(targetId: string, follow: boolean) {
   return callAppServer('/user/follow', {
     method: 'POST',
