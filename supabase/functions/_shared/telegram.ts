@@ -22,6 +22,7 @@ export interface ValidatedInitData {
   user: TelegramUser
   auth_date: number
   query_id?: string
+  start_param?: string // 🎯 深链接参数
 }
 
 const encoder = new TextEncoder()
@@ -48,7 +49,7 @@ function base64UrlDecode(base64Url: string): Uint8Array {
   const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
   const padding = '='.repeat((4 - (base64.length % 4)) % 4)
   const base64Padded = base64 + padding
-  
+
   // Base64 解码
   const binaryString = atob(base64Padded)
   const bytes = new Uint8Array(binaryString.length)
@@ -61,14 +62,11 @@ function base64UrlDecode(base64Url: string): Uint8Array {
 /**
  * 使用 signature (Ed25519) 验证 - Telegram 官方推荐
  */
-async function validateWithSignature(
-  initData: string,
-  botToken: string
-): Promise<boolean> {
+async function validateWithSignature(initData: string, botToken: string): Promise<boolean> {
   try {
     const params = new URLSearchParams(initData)
     const signature = params.get('signature')
-    
+
     if (!signature) {
       return false
     }
@@ -79,15 +77,15 @@ async function validateWithSignature(
     // 2. 构造 data_check_string（官方文档格式）
     // 格式：bot_id:WebAppData\nauth_date=<value>\nkey=value\n...
     const fields: Array<[string, string]> = []
-    
+
     for (const [key, value] of params.entries()) {
       if (key === 'hash' || key === 'signature') continue
       fields.push([key, value])
     }
-    
+
     // 按 key 排序
     fields.sort((a, b) => a[0].localeCompare(b[0]))
-    
+
     // 构造完整的 data_check_string
     const dataPairs = [`${botId}:WebAppData`]
     for (const [key, value] of fields) {
@@ -127,7 +125,7 @@ export async function validateTelegramInitData(
   try {
     console.log('[TG Auth] Received initData length:', initData.length)
     console.log('[TG Auth] InitData preview:', initData.substring(0, 100) + '...')
-    
+
     const params = new URLSearchParams(initData)
     const signature = params.get('signature')
 
@@ -155,7 +153,7 @@ export async function validateTelegramInitData(
     const authDate = parseInt(params.get('auth_date') || '0')
     const currentTime = Math.floor(Date.now() / 1000)
     const age = currentTime - authDate
-    
+
     if (age > 300) {
       console.error('[TG Auth] ❌ InitData expired, age:', age, 'seconds')
       return null
@@ -176,10 +174,15 @@ export async function validateTelegramInitData(
       return null
     }
 
+    // 🎯 解析深链接参数（start_param）
+    const startParam = params.get('start_param')
+    console.log('[TG Auth] start_param:', startParam || '无')
+
     return {
       user,
       auth_date: authDate,
-      query_id: params.get('query_id') || undefined
+      query_id: params.get('query_id') || undefined,
+      start_param: startParam || undefined
     }
   } catch (error) {
     return null

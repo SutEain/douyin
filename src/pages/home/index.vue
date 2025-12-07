@@ -193,41 +193,11 @@ function handleCloseUserPanel() {
   state.showUserPanel = false
 }
 
-// 🎯 检查深链接参数（简化版 - 让后端API处理）
-async function checkDeepLink() {
-  console.log('[DeepLink][Home] ========== 检查深链接参数 ==========')
-  console.log('[DeepLink][Home] baseStore.startVideoId (初始状态):', baseStore.startVideoId)
-
-  // 🎯 如果第一次没有解析到，延迟重试（给 Telegram WebApp 更多初始化时间）
-  if (!baseStore.startVideoId) {
-    console.log('[DeepLink][Home] 未检测到深链接，延迟 100ms 后重试...')
-
-    // 延迟 100ms 再次解析
-    await new Promise((resolve) => setTimeout(resolve, 100))
-
-    console.log('[DeepLink][Home] 重新尝试解析...')
-    baseStore.parseStartParam()
-    console.log('[DeepLink][Home] baseStore.startVideoId (第二次检查):', baseStore.startVideoId)
-
-    // 如果还是没有，再延迟 200ms 最后一次尝试
-    if (!baseStore.startVideoId) {
-      console.log('[DeepLink][Home] 仍未检测到，延迟 200ms 后最后一次尝试...')
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      console.log('[DeepLink][Home] 最后一次尝试解析...')
-      baseStore.parseStartParam()
-      console.log('[DeepLink][Home] baseStore.startVideoId (第三次检查):', baseStore.startVideoId)
-    }
-  }
-
-  if (baseStore.startVideoId) {
-    console.log('[DeepLink][Home] ✅ 检测到深链接参数:', baseStore.startVideoId)
-    console.log('[DeepLink][Home] 等待 Slide4 调用 API 时处理（后端会将深链接视频插入列表首位）')
-  } else {
-    console.log('[DeepLink][Home] ❌ 未检测到深链接参数，正常加载推荐流')
-  }
-
-  console.log('[DeepLink][Home] ========== 检查完成 ==========')
+// 🎯 深链接已完全由后端处理（通过 Telegram initData）
+// 前端不需要任何解析逻辑，只需要在 HTTP 请求中传递 initData
+function checkDeepLink() {
+  console.log('[DeepLink][Home] 深链接已由后端自动处理（通过 Telegram initData）')
+  console.log('[DeepLink][Home] 前端无需手动解析，100% 可靠')
 }
 
 // ========== 生命周期 ==========

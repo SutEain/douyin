@@ -51,9 +51,7 @@ async function loadMore() {
   console.log('[Slide4] loadMore 被调用', {
     listLength: state.list.length,
     totalSize: state.totalSize,
-    loading: store.loading,
-    hasStartVideoId: !!store.startVideoId,
-    hasStartVideoData: !!store.startVideoData
+    loading: store.loading
   })
 
   if (store.loading) {
@@ -73,16 +71,8 @@ async function loadMore() {
     pageSize: state.pageSize
   }
 
-  if (state.list.length === 0 && store.startVideoId) {
-    console.log('[Slide4] 🎯 检测到深链接参数，传递给API')
-    console.log('[Slide4] start_video_id:', store.startVideoId)
-    requestParams.start_video_id = store.startVideoId
-
-    // 清空深链接数据（已使用）
-    store.clearStartVideoId()
-  }
-
-  console.log('[Slide4] 开始请求 API', requestParams)
+  // 🎯 深链接由后端自动处理，前端无需传递参数
+  console.log('[Slide4] 开始请求 API（深链接由后端自动处理）', requestParams)
 
   const res = await recommendedVideo(requestParams)
 

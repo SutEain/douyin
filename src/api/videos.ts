@@ -14,17 +14,15 @@ export function recommendedVideo(params?: any) {
   const start = params?.start ?? 0
   const pageNo = Math.floor(start / pageSize)
 
-  // 🎯 传递深链接视频ID（如果有的话）
-  const requestParams: any = { pageNo, pageSize }
-  if (params?.start_video_id) {
-    requestParams.start_video_id = params.start_video_id
-    console.log('[API] recommendedVideo 带深链接参数:', params.start_video_id)
-  }
-
-  return requestSupabaseVideoList(`${getAppServerBase()}/video/feed`, requestParams, {
-    requireAuth: false,
-    includeAuthIfAvailable: true
-  })
+  // 🎯 深链接由后端自动处理（通过 Telegram initData）
+  return requestSupabaseVideoList(
+    `${getAppServerBase()}/video/feed`,
+    { pageNo, pageSize },
+    {
+      requireAuth: false,
+      includeAuthIfAvailable: true
+    }
+  )
 }
 
 export function recommendedLongVideo(params?: any) {
@@ -231,6 +229,18 @@ async function callAppServer(path: string, options: CallOptions = {}) {
   }
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  // 🎯 添加 Telegram initData 到请求头（用于后端解析深链接）
+  try {
+    // @ts-ignore
+    const tgWebApp = window.Telegram?.WebApp
+    if (tgWebApp && tgWebApp.initData) {
+      headers['X-Telegram-Init-Data'] = tgWebApp.initData
+      console.log('[API] 添加 Telegram initData 到请求头')
+    }
+  } catch (e) {
+    // 忽略错误，不影响正常请求
   }
 
   const response = await fetch(`${getAppServerBase()}${path}`, {

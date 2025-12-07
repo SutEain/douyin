@@ -65,9 +65,35 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
   console.log('[Feed] 解析参数:', { pageNo, pageSize, from, to })
   console.log('[Feed] 用户ID:', user?.id || 'anonymous')
 
-  // 🎯 检查是否有深链接视频ID
-  const startVideoId = url.searchParams.get('start_video_id')
-  console.log('[Feed] 深链接视频ID:', startVideoId || '无')
+  // 🎯 方式1: 从 URL 参数获取（前端传递）
+  let startVideoId = url.searchParams.get('start_video_id')
+  console.log('[Feed] URL 参数 start_video_id:', startVideoId || '无')
+
+  // 🎯 方式2: 从 Telegram initData 解析（100% 可靠）
+  if (!startVideoId && pageNo === 0) {
+    console.log('[Feed] 🎯 尝试从 Telegram initData 解析 start_param')
+    const initData = req.headers.get('X-Telegram-Init-Data')
+
+    if (initData) {
+      console.log('[Feed] ✅ 检测到 Telegram initData')
+      try {
+        const params = new URLSearchParams(initData)
+        const startParam = params.get('start_param')
+        console.log('[Feed] start_param:', startParam || '无')
+
+        if (startParam && startParam.startsWith('video_')) {
+          startVideoId = startParam.replace('video_', '')
+          console.log('[Feed] ✅ 从 initData 解析到 video_id:', startVideoId)
+        }
+      } catch (e) {
+        console.error('[Feed] ❌ 解析 initData 失败:', e)
+      }
+    } else {
+      console.log('[Feed] 未检测到 Telegram initData 请求头')
+    }
+  }
+
+  console.log('[Feed] 最终 start_video_id:', startVideoId || '无')
   console.log('[Feed] 是否首次加载:', pageNo === 0)
   console.log('[Feed] 是否触发深链接逻辑:', pageNo === 0 && !!startVideoId)
 
