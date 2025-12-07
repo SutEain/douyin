@@ -34,6 +34,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { loginWithTelegram } from '@/api/auth'
 import { useBaseStore } from '@/store/pinia'
+import { supabase } from '@/utils/supabase'
 
 const router = useRouter()
 const baseStore = useBaseStore()
@@ -84,12 +85,29 @@ const initTelegramLogin = async () => {
 
     console.log('[TelegramLogin] 🔐 准备登录...')
 
-    // 调用登录 API
+    // 调用登录 API（内部会调用 setSession）
     const result = await loginWithTelegram(initData)
 
     if (result?.user) {
       baseStore.applyProfile(result.user)
       console.log('[TelegramLogin] ✅ 登录成功')
+    }
+
+    // 🎯 等待 session 真正写入本地存储
+    console.log('[TelegramLogin] ⏳ 等待 session 写入...')
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    // 验证 session 是否可用
+    const {
+      data: { session }
+    } = await supabase.auth.getSession()
+    if (session) {
+      console.log(
+        '[TelegramLogin] ✅ Session 已就绪:',
+        session.access_token.substring(0, 20) + '...'
+      )
+    } else {
+      console.warn('[TelegramLogin] ⚠️ Session 未找到，可能需要重新登录')
     }
 
     // 登录成功，跳转到首页
