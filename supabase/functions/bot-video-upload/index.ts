@@ -176,30 +176,24 @@ async function handleInlineQuery(inlineQuery: any) {
   // 构建深链接
   const deepLink = `https://t.me/tg_douyin_bot/tgdouyin?startapp=video_${videoId}`
 
+  // 🎯 视频描述前50字作为超链接文字
+  const linkText = video.description?.substring(0, 50) || '点击观看精彩视频'
+  const fullDesc = video.description || '精彩视频'
+
   // 构建分享卡片
   const result = {
     type: 'article',
     id: '1',
     title: '🎬 分享视频',
-    description: video.description?.substring(0, 100) || '点击观看这个精彩视频',
+    description: fullDesc.substring(0, 100),
     thumb_url: video.cover_url || video.cover_dynamic_url || '',
     input_message_content: {
-      message_text: `🎬 <b>快来看这个视频！</b>\n\n${video.description || '精彩视频'}\n\n👉 <a href="${deepLink}">点击观看</a>`,
+      message_text: `<a href="${deepLink}">${linkText}</a>`,
       parse_mode: 'HTML'
-    },
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: '🎬 立即观看',
-            url: deepLink
-          }
-        ]
-      ]
     }
   }
 
-  console.log('[InlineQuery] 返回分享卡片')
+  console.log('[InlineQuery] 返回分享卡片，链接文字:', linkText)
   await answerInlineQuery(queryId, [result])
 }
 
