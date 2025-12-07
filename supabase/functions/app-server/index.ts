@@ -118,6 +118,7 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
 
   const { user } = validated
 
+  // 🎯 步骤1: 查询 profile 是否存在
   const { data: existingProfile } = await supabaseAdmin
     .from('profiles')
     .select('id, username, nickname, tg_user_id, avatar_url, lang')
@@ -125,37 +126,54 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
     .maybeSingle()
 
   let userId: string
+  let isNewUser = false
 
-  // ✅ 用户不存在时自动创建（支持深链接等场景）
   if (!existingProfile) {
-    console.log('[app-server] 用户不存在，自动创建，tg_user_id:', user.id)
+    console.log('[app-server] Profile 不存在，检查 auth 用户，tg_user_id:', user.id)
 
-    // 创建 auth 用户
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: `tg_${user.id}@telegram.placeholder`,
-      password: crypto.randomUUID(),
-      email_confirm: true,
-      user_metadata: {
-        tg_user_id: user.id,
-        username: user.username || '',
-        first_name: user.first_name || '',
-        last_name: user.last_name || ''
+    // 🎯 步骤2: 先尝试通过 email 查询 auth 用户
+    const authEmail = `tg_${user.id}@telegram.placeholder`
+    const { data: existingAuthUsers } = await supabaseAdmin.auth.admin.listUsers()
+    const existingAuthUser = existingAuthUsers.users.find((u) => u.email === authEmail)
+
+    let authUserId: string
+
+    if (existingAuthUser) {
+      // auth 用户已存在，直接使用
+      console.log('[app-server] Auth 用户已存在，复用:', existingAuthUser.id)
+      authUserId = existingAuthUser.id
+    } else {
+      // 🎯 步骤3: auth 用户不存在，创建新的
+      console.log('[app-server] Auth 用户不存在，创建新用户')
+      const { data: newAuthUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: authEmail,
+        password: crypto.randomUUID(),
+        email_confirm: true,
+        user_metadata: {
+          tg_user_id: user.id,
+          username: user.username || '',
+          first_name: user.first_name || '',
+          last_name: user.last_name || ''
+        }
+      })
+
+      if (authError || !newAuthUser.user) {
+        console.error('[app-server] 创建 auth 用户失败:', authError)
+        return errorResponse('创建用户失败', 1, 500)
       }
-    })
 
-    if (authError || !authUser.user) {
-      console.error('[app-server] 创建 auth 用户失败:', authError)
-      return errorResponse('创建用户失败', 1, 500)
+      authUserId = newAuthUser.user.id
+      console.log('[app-server] ✅ Auth 用户创建成功:', authUserId)
     }
 
-    // 创建 profile
+    // 🎯 步骤4: 创建 profile
     const nickname =
       user.first_name + (user.last_name ? ` ${user.last_name}` : '') || 'Telegram 用户'
     const avatarUrl =
       user.photo_url || 'https://cdn.jsdelivr.net/gh/imsyy/file/pic/20210313122054.png'
 
     const { error: profileError } = await supabaseAdmin.from('profiles').insert({
-      id: authUser.user.id,
+      id: authUserId,
       tg_user_id: user.id,
       username: user.username || `user_${user.id}`,
       tg_username: user.username || null,
@@ -169,28 +187,37 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
       return errorResponse('创建用户资料失败', 1, 500)
     }
 
-    console.log('[app-server] ✅ 新用户创建成功:', authUser.user.id)
-    userId = authUser.user.id
+    console.log('[app-server] ✅ Profile 创建成功:', authUserId)
+    userId = authUserId
+    isNewUser = true
   } else {
-    // ✅ 用户存在，更新基本信息
+    // ✅ 用户已存在
+    console.log('[app-server] 用户已存在:', existingProfile.id)
     userId = existingProfile.id
   }
+
+  // 🎯 步骤5: 更新用户信息（仅对已存在的用户）
+  if (!isNewUser) {
+    const avatarUrl = user.photo_url || existingProfile!.avatar_url
+
+    await supabaseAdmin
+      .from('profiles')
+      .update({
+        tg_username: user.username || existingProfile!.username || null,
+        nickname: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
+        username: user.username || existingProfile!.username || `user_${user.id}`,
+        avatar_url: avatarUrl,
+        lang: user.language_code || existingProfile!.lang,
+        last_active_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+
+    console.log('[app-server] ✅ 用户信息已更新:', userId)
+  }
+
+  // 🎯 步骤6: 生成会话
   const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId)
   const userEmail = authUser?.user?.email || undefined
-
-  const avatarUrl = user.photo_url || existingProfile.avatar_url
-
-  await supabaseAdmin
-    .from('profiles')
-    .update({
-      tg_username: user.username || existingProfile.username || null,
-      nickname: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
-      username: user.username || existingProfile.username || `user_${user.id}`,
-      avatar_url: avatarUrl,
-      lang: user.language_code || existingProfile.lang,
-      last_active_at: new Date().toISOString()
-    })
-    .eq('id', userId)
 
   const magicLinkEmail = userEmail || `tg_${user.id}@telegram.user`
   const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
