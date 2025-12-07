@@ -2,12 +2,28 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const BOT_TOKEN = Deno.env.get('TG_BOT_TOKEN')!
+const TG_FILE_PROXY_URL = Deno.env.get('TG_CDN_PROXY_URL') || Deno.env.get('TG_VIDEO_PROXY_URL')
 // 本地开发用 SB_ 前缀，生产环境用 SUPABASE_ 前缀
 const SUPABASE_URL = Deno.env.get('SB_URL') || Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY =
   Deno.env.get('SB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+// 🎯 将 Telegram file_id 转换为 CDN URL
+function buildTelegramFileUrl(fileId: string): string | null {
+  if (!fileId) return null
+
+  if (TG_FILE_PROXY_URL) {
+    const base = TG_FILE_PROXY_URL.endsWith('/')
+      ? TG_FILE_PROXY_URL.slice(0, -1)
+      : TG_FILE_PROXY_URL
+    return `${base}?file_id=${encodeURIComponent(fileId)}`
+  }
+
+  console.warn('[bot] 未配置 TG_FILE_PROXY_URL，无法生成缩略图 URL')
+  return null
+}
 
 // 用户状态存储（使用数据库）
 interface UserState {
@@ -166,11 +182,11 @@ async function handleInlineQuery(inlineQuery: any) {
   const videoId = query.replace('video_', '')
   console.log('[InlineQuery] ✅ 提取视频ID:', videoId)
 
-  // 从数据库获取视频信息
+  // 从数据库获取视频信息（包含 tg_thumbnail_file_id 用于构建 CDN URL）
   console.log('[InlineQuery] 开始查询数据库...')
   const { data: video, error } = await supabase
     .from('videos')
-    .select('id, description, cover_url, status')
+    .select('id, description, cover_url, tg_thumbnail_file_id, status')
     .eq('id', videoId)
     .single()
 
@@ -204,17 +220,41 @@ async function handleInlineQuery(inlineQuery: any) {
   console.log('[InlineQuery] 超链接文字:', linkText)
   console.log('[InlineQuery] 完整描述:', fullDesc.substring(0, 100))
 
+  // 🎯 构建缩略图 URL（使用 CF Worker CDN）
+  let thumbUrl: string | null = null
+
+  // 优先使用 cover_url（如果是 HTTP URL）
+  if (
+    video.cover_url &&
+    (video.cover_url.startsWith('http://') || video.cover_url.startsWith('https://'))
+  ) {
+    thumbUrl = video.cover_url
+    console.log('[InlineQuery] 使用 cover_url:', thumbUrl)
+  }
+  // 否则尝试从 tg_thumbnail_file_id 构建 CDN URL
+  else if (video.tg_thumbnail_file_id) {
+    thumbUrl = buildTelegramFileUrl(video.tg_thumbnail_file_id)
+    console.log('[InlineQuery] 从 tg_thumbnail_file_id 构建 CDN URL:', thumbUrl)
+  } else {
+    console.log('[InlineQuery] 无可用缩略图')
+  }
+
   // 构建分享卡片
-  const result = {
+  const result: any = {
     type: 'article',
     id: '1',
     title: '🎬 分享视频',
     description: fullDesc.substring(0, 100),
-    thumb_url: video.cover_url || '',
     input_message_content: {
       message_text: `<a href="${deepLink}">${linkText}</a>`,
       parse_mode: 'HTML'
     }
+  }
+
+  // 🎯 只在有有效 URL 时才传递 thumb_url
+  if (thumbUrl) {
+    result.thumb_url = thumbUrl
+    console.log('[InlineQuery] 添加缩略图到卡片:', thumbUrl)
   }
 
   console.log('[InlineQuery] 构建的卡片数据:', JSON.stringify(result, null, 2))
