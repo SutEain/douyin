@@ -105,6 +105,104 @@ async function deleteMessage(chatId: number, messageId: number) {
   }
 }
 
+// 🎯 处理 inline query（分享功能）
+async function answerInlineQuery(inlineQueryId: string, results: any[]) {
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/answerInlineQuery`
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        inline_query_id: inlineQueryId,
+        results,
+        cache_time: 0
+      })
+    })
+    const result = await response.json()
+    if (!result.ok) {
+      console.error('[answerInlineQuery] 失败:', result)
+    } else {
+      console.log('[answerInlineQuery] 成功')
+    }
+    return result
+  } catch (error) {
+    console.error('[answerInlineQuery] 异常:', error)
+    throw error
+  }
+}
+
+// 🎯 处理 inline query - 视频分享
+async function handleInlineQuery(inlineQuery: any) {
+  const queryId = inlineQuery.id
+  const query = inlineQuery.query || ''
+  const userId = inlineQuery.from.id
+
+  console.log('[InlineQuery] 收到查询:', { queryId, query, userId })
+
+  // 检查查询格式：video_{videoId}
+  if (!query.startsWith('video_')) {
+    console.log('[InlineQuery] 查询格式不匹配，忽略')
+    await answerInlineQuery(queryId, [])
+    return
+  }
+
+  const videoId = query.replace('video_', '')
+  console.log('[InlineQuery] 提取视频ID:', videoId)
+
+  // 从数据库获取视频信息
+  const { data: video, error } = await supabase
+    .from('videos')
+    .select('id, description, cover_dynamic_url, cover_url, status')
+    .eq('id', videoId)
+    .single()
+
+  if (error || !video) {
+    console.error('[InlineQuery] 视频不存在:', error)
+    await answerInlineQuery(queryId, [])
+    return
+  }
+
+  if (video.status !== 'published') {
+    console.log('[InlineQuery] 视频未发布，不允许分享')
+    await answerInlineQuery(queryId, [])
+    return
+  }
+
+  console.log('[InlineQuery] 视频信息:', {
+    id: video.id,
+    desc: video.description?.substring(0, 30)
+  })
+
+  // 构建深链接
+  const deepLink = `https://t.me/tg_douyin_bot/tgdouyin?startapp=video_${videoId}`
+
+  // 构建分享卡片
+  const result = {
+    type: 'article',
+    id: '1',
+    title: '🎬 分享视频',
+    description: video.description?.substring(0, 100) || '点击观看这个精彩视频',
+    thumb_url: video.cover_url || video.cover_dynamic_url || '',
+    input_message_content: {
+      message_text: `🎬 <b>快来看这个视频！</b>\n\n${video.description || '精彩视频'}\n\n👉 <a href="${deepLink}">点击观看</a>`,
+      parse_mode: 'HTML'
+    },
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: '🎬 立即观看',
+            url: deepLink
+          }
+        ]
+      ]
+    }
+  }
+
+  console.log('[InlineQuery] 返回分享卡片')
+  await answerInlineQuery(queryId, [result])
+}
+
 // 发送自毁消息（3秒后删除）
 async function sendSelfDestructMessage(chatId: number, text: string, seconds: number = 3) {
   const result = await sendMessage(chatId, text)
@@ -2311,6 +2409,11 @@ serve(async (req) => {
         })
 
         await handleCallback(chatId, messageId, data, callback.id)
+      }
+      // 🎯 处理 inline query（分享功能）
+      else if (update.inline_query) {
+        console.log('[DEBUG] 收到 inline query')
+        await handleInlineQuery(update.inline_query)
       }
 
       return new Response('OK', { status: 200 })
