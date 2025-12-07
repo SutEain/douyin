@@ -129,66 +129,85 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
   let isNewUser = false
 
   if (!existingProfile) {
-    console.log('[app-server] Profile 不存在，检查 auth 用户，tg_user_id:', user.id)
+    console.log('[app-server] Profile 不存在，开始创建用户，tg_user_id:', user.id)
 
-    // 🎯 步骤2: 先尝试通过 email 查询 auth 用户
-    const authEmail = `tg_${user.id}@telegram.placeholder`
-    const { data: existingAuthUsers } = await supabaseAdmin.auth.admin.listUsers()
-    const existingAuthUser = existingAuthUsers.users.find((u) => u.email === authEmail)
-
+    // 🎯 步骤2: 创建 auth 用户（与 Bot 逻辑完全一致）
+    const uniqueEmail = `tg_${user.id}@telegram.user` // ✅ 使用与 Bot 相同的邮箱格式
     let authUserId: string
 
-    if (existingAuthUser) {
-      // auth 用户已存在，直接使用
-      console.log('[app-server] Auth 用户已存在，复用:', existingAuthUser.id)
-      authUserId = existingAuthUser.id
-    } else {
-      // 🎯 步骤3: auth 用户不存在，创建新的
-      console.log('[app-server] Auth 用户不存在，创建新用户')
-      const { data: newAuthUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-        email: authEmail,
-        password: crypto.randomUUID(),
+    try {
+      console.log('[app-server] 尝试创建 auth 用户, email:', uniqueEmail)
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: uniqueEmail,
         email_confirm: true,
         user_metadata: {
           tg_user_id: user.id,
-          username: user.username || '',
-          first_name: user.first_name || '',
-          last_name: user.last_name || ''
+          tg_username: user.username,
+          tg_first_name: user.first_name,
+          tg_last_name: user.last_name
         }
       })
 
-      if (authError || !newAuthUser.user) {
-        console.error('[app-server] 创建 auth 用户失败:', authError)
-        return errorResponse('创建用户失败', 1, 500)
-      }
+      if (authError) {
+        console.log('[app-server] createUser 失败:', authError.message)
+        console.log('[app-server] error.status:', authError.status)
 
-      authUserId = newAuthUser.user.id
-      console.log('[app-server] ✅ Auth 用户创建成功:', authUserId)
+        // ✅ 如果邮箱已存在，获取已有用户（与 Bot 逻辑一致）
+        if (authError.status === 422 || authError.message?.includes('email')) {
+          console.log('[app-server] 邮箱冲突，查找已存在的 auth 用户')
+          const { data: users } = await supabaseAdmin.auth.admin.listUsers()
+          const existingUser = users?.users?.find((u) => u.email === uniqueEmail)
+
+          if (existingUser) {
+            authUserId = existingUser.id
+            console.log('[app-server] ✅ 找到已存在的 auth 用户:', authUserId)
+          } else {
+            console.error('[app-server] ❌ 邮箱冲突但查询不到用户')
+            return errorResponse('创建用户失败', 1, 500)
+          }
+        } else {
+          console.error('[app-server] ❌ 创建 auth 用户失败:', authError)
+          return errorResponse('创建用户失败', 1, 500)
+        }
+      } else {
+        authUserId = authData.user.id
+        console.log('[app-server] ✅ 成功创建 auth 用户:', authUserId)
+      }
+    } catch (err) {
+      console.error('[app-server] ❌ 创建 auth 用户异常:', err)
+      return errorResponse('创建用户失败', 1, 500)
     }
 
-    // 🎯 步骤4: 创建 profile
-    const nickname =
-      user.first_name + (user.last_name ? ` ${user.last_name}` : '') || 'Telegram 用户'
-    const avatarUrl =
-      user.photo_url || 'https://cdn.jsdelivr.net/gh/imsyy/file/pic/20210313122054.png'
+    // 🎯 步骤3: 补充 profile 完整信息（与 Bot 逻辑一致）
+    const nickname = user.first_name + (user.last_name ? ` ${user.last_name}` : '')
+    const avatarUrl = `https://t.me/i/userpic/320/${user.id}.jpg` // ✅ 使用与 Bot 相同的头像 URL
 
-    const { error: profileError } = await supabaseAdmin.from('profiles').insert({
-      id: authUserId,
-      tg_user_id: user.id,
-      username: user.username || `user_${user.id}`,
-      tg_username: user.username || null,
-      nickname: nickname,
-      avatar_url: avatarUrl,
-      lang: user.language_code || 'en'
-    })
+    console.log('[app-server] 触发器已创建基础 profile，使用 upsert 补充完整信息')
+    const { data: profile, error: upsertError } = await supabaseAdmin
+      .from('profiles')
+      .upsert(
+        {
+          id: authUserId!,
+          tg_user_id: user.id,
+          tg_username: user.username || null,
+          nickname: nickname,
+          username: user.username || `user_${user.id}`,
+          avatar_url: avatarUrl,
+          auth_provider: 'tg',
+          lang: user.language_code || 'zh-CN'
+        },
+        { onConflict: 'id' }
+      )
+      .select('id')
+      .single()
 
-    if (profileError) {
-      console.error('[app-server] 创建 profile 失败:', profileError)
+    if (upsertError) {
+      console.error('[app-server] ❌ upsert profile 失败:', upsertError)
       return errorResponse('创建用户资料失败', 1, 500)
     }
 
-    console.log('[app-server] ✅ Profile 创建成功:', authUserId)
-    userId = authUserId
+    console.log('[app-server] ✅ 成功创建 profile:', profile.id)
+    userId = profile.id
     isNewUser = true
   } else {
     // ✅ 用户已存在
