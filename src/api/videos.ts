@@ -163,10 +163,28 @@ async function requestSupabaseVideoList(
     })
     const query = search.toString()
 
-    const response = await fetch(`${endpoint}${query ? `?${query}` : ''}`, {
-      headers: {
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+    // 🎯 构建请求头
+    const headers: Record<string, string> = {}
+
+    // 添加认证令牌
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`
+    }
+
+    // 🎯 添加 Telegram initData（用于后端解析深链接）
+    try {
+      // @ts-ignore
+      const tgWebApp = window.Telegram?.WebApp
+      if (tgWebApp && tgWebApp.initData) {
+        headers['X-Telegram-Init-Data'] = tgWebApp.initData
+        console.log('[API][requestSupabaseVideoList] 添加 Telegram initData 到请求头')
       }
+    } catch (e) {
+      // 忽略错误，不影响正常请求
+    }
+
+    const response = await fetch(`${endpoint}${query ? `?${query}` : ''}`, {
+      headers
     })
 
     const payload = await response.json()
