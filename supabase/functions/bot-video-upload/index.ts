@@ -108,48 +108,66 @@ async function deleteMessage(chatId: number, messageId: number) {
 // 🎯 处理 inline query（分享功能）
 async function answerInlineQuery(inlineQueryId: string, results: any[]) {
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/answerInlineQuery`
+  const payload = {
+    inline_query_id: inlineQueryId,
+    results,
+    cache_time: 0
+  }
+
+  console.log('[answerInlineQuery] 准备发送请求')
+  console.log('[answerInlineQuery] payload:', JSON.stringify(payload, null, 2))
+
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        inline_query_id: inlineQueryId,
-        results,
-        cache_time: 0
-      })
+      body: JSON.stringify(payload)
     })
     const result = await response.json()
+
+    console.log('[answerInlineQuery] 响应状态:', response.status)
+    console.log('[answerInlineQuery] 响应结果:', JSON.stringify(result, null, 2))
+
     if (!result.ok) {
-      console.error('[answerInlineQuery] 失败:', result)
+      console.error('[answerInlineQuery] ❌ 失败! 错误码:', result.error_code)
+      console.error('[answerInlineQuery] 错误描述:', result.description)
     } else {
-      console.log('[answerInlineQuery] 成功')
+      console.log('[answerInlineQuery] ✅ 成功返回卡片')
     }
     return result
   } catch (error) {
-    console.error('[answerInlineQuery] 异常:', error)
+    console.error('[answerInlineQuery] ❌ 异常:', error)
+    console.error(
+      '[answerInlineQuery] 错误堆栈:',
+      error instanceof Error ? error.stack : String(error)
+    )
     throw error
   }
 }
 
 // 🎯 处理 inline query - 视频分享
 async function handleInlineQuery(inlineQuery: any) {
+  console.log('[InlineQuery] ========== 开始处理 ==========')
+  console.log('[InlineQuery] 完整 inlineQuery:', JSON.stringify(inlineQuery, null, 2))
+
   const queryId = inlineQuery.id
   const query = inlineQuery.query || ''
   const userId = inlineQuery.from.id
 
-  console.log('[InlineQuery] 收到查询:', { queryId, query, userId })
+  console.log('[InlineQuery] 解析参数:', { queryId, query, userId })
 
   // 检查查询格式：video_{videoId}
   if (!query.startsWith('video_')) {
-    console.log('[InlineQuery] 查询格式不匹配，忽略')
+    console.log('[InlineQuery] ❌ 查询格式不匹配，期望 video_xxx，实际:', query)
     await answerInlineQuery(queryId, [])
     return
   }
 
   const videoId = query.replace('video_', '')
-  console.log('[InlineQuery] 提取视频ID:', videoId)
+  console.log('[InlineQuery] ✅ 提取视频ID:', videoId)
 
   // 从数据库获取视频信息
+  console.log('[InlineQuery] 开始查询数据库...')
   const { data: video, error } = await supabase
     .from('videos')
     .select('id, description, cover_dynamic_url, cover_url, status')
@@ -157,28 +175,34 @@ async function handleInlineQuery(inlineQuery: any) {
     .single()
 
   if (error || !video) {
-    console.error('[InlineQuery] 视频不存在:', error)
+    console.error('[InlineQuery] ❌ 视频查询失败:', error)
     await answerInlineQuery(queryId, [])
     return
   }
+
+  console.log('[InlineQuery] ✅ 视频查询成功:', {
+    id: video.id,
+    status: video.status,
+    has_desc: !!video.description,
+    desc_preview: video.description?.substring(0, 30)
+  })
 
   if (video.status !== 'published') {
-    console.log('[InlineQuery] 视频未发布，不允许分享')
+    console.log('[InlineQuery] ❌ 视频未发布，状态:', video.status)
     await answerInlineQuery(queryId, [])
     return
   }
-
-  console.log('[InlineQuery] 视频信息:', {
-    id: video.id,
-    desc: video.description?.substring(0, 30)
-  })
 
   // 构建深链接
   const deepLink = `https://t.me/tg_douyin_bot/tgdouyin?startapp=video_${videoId}`
+  console.log('[InlineQuery] 深链接:', deepLink)
 
   // 🎯 视频描述前50字作为超链接文字
   const linkText = video.description?.substring(0, 50) || '点击观看精彩视频'
   const fullDesc = video.description || '精彩视频'
+
+  console.log('[InlineQuery] 超链接文字:', linkText)
+  console.log('[InlineQuery] 完整描述:', fullDesc.substring(0, 100))
 
   // 构建分享卡片
   const result = {
@@ -193,8 +217,12 @@ async function handleInlineQuery(inlineQuery: any) {
     }
   }
 
-  console.log('[InlineQuery] 返回分享卡片，链接文字:', linkText)
+  console.log('[InlineQuery] 构建的卡片数据:', JSON.stringify(result, null, 2))
+  console.log('[InlineQuery] 准备调用 answerInlineQuery...')
+
   await answerInlineQuery(queryId, [result])
+
+  console.log('[InlineQuery] ========== 处理完成 ==========')
 }
 
 // 发送自毁消息（3秒后删除）
@@ -2406,8 +2434,10 @@ serve(async (req) => {
       }
       // 🎯 处理 inline query（分享功能）
       else if (update.inline_query) {
-        console.log('[DEBUG] 收到 inline query')
+        console.log('[MAIN] ========== 收到 INLINE QUERY ==========')
+        console.log('[MAIN] inline_query:', JSON.stringify(update.inline_query, null, 2))
         await handleInlineQuery(update.inline_query)
+        console.log('[MAIN] ========== INLINE QUERY 处理完成 ==========')
       }
 
       return new Response('OK', { status: 200 })
