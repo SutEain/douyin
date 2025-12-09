@@ -43,6 +43,7 @@ import { buildCdnUrl } from '@/utils/media'
 
 interface ImageItem {
   file_id: string
+  url?: string // 🎯 后端返回的完整 CDN URL
   width?: number
   height?: number
   order?: number
@@ -78,6 +79,8 @@ const swiperStyle = computed(() => {
 })
 
 function getImageUrl(image: ImageItem) {
+  // 🎯 优先使用后端返回的完整 URL，否则尝试构建
+  if (image.url) return image.url
   return buildCdnUrl(image.file_id)
 }
 

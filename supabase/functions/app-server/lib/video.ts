@@ -43,12 +43,20 @@ export async function mapVideoRow(row: any, profile: any) {
       ]
   const authorCardEntries = Array.isArray(profile?.card_entries) ? profile.card_entries : []
 
-  // 🎯 解析 images 字段
+  // 🎯 解析 images 字段，并转换 file_id 为完整 CDN URL
   let images: any[] = []
   if (row.images) {
     try {
-      images = typeof row.images === 'string' ? JSON.parse(row.images) : row.images
-      if (!Array.isArray(images)) images = []
+      const rawImages = typeof row.images === 'string' ? JSON.parse(row.images) : row.images
+      if (Array.isArray(rawImages)) {
+        // 转换每个图片的 file_id 为完整 URL
+        images = await Promise.all(
+          rawImages.map(async (img: any) => ({
+            ...img,
+            url: img.file_id ? await buildTelegramFileUrl(img.file_id) : null
+          }))
+        )
+      }
     } catch {
       images = []
     }

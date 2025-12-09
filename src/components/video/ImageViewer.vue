@@ -26,7 +26,7 @@ import { ref, computed } from 'vue'
 import { buildCdnUrl } from '@/utils/media'
 
 interface Props {
-  images: Array<{ file_id: string; width?: number; height?: number }>
+  images: Array<{ file_id: string; url?: string; width?: number; height?: number }>
 }
 
 const props = defineProps<Props>()
@@ -39,6 +39,8 @@ const loading = ref(true)
 // 获取第一张图片的 URL
 const imageUrl = computed(() => {
   if (props.images && props.images.length > 0) {
+    // 🎯 优先使用后端返回的完整 URL
+    if (props.images[0].url) return props.images[0].url
     return buildCdnUrl(props.images[0].file_id)
   }
   return ''

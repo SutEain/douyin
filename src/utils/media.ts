@@ -40,7 +40,7 @@ export function buildCdnUrl(fileIdOrUrl: string): string {
  */
 export function parseImages(
   images: any
-): Array<{ file_id: string; width?: number; height?: number; order?: number }> {
+): Array<{ file_id: string; url?: string; width?: number; height?: number; order?: number }> {
   if (!images) return []
   if (typeof images === 'string') {
     try {
