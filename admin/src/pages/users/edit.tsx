@@ -148,11 +148,7 @@ export const UserEdit = () => {
           </Col>
           <Col span={8}>
             <Form.Item label="语言" name="lang">
-              <Select placeholder="选择语言">
-                <Select.Option value="zh-CN">简体中文</Select.Option>
-                <Select.Option value="zh-TW">繁体中文</Select.Option>
-                <Select.Option value="en">English</Select.Option>
-              </Select>
+              <Input disabled style={{ backgroundColor: '#f5f5f5' }} />
             </Form.Item>
           </Col>
         </Row>
