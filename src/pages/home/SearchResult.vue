@@ -4,7 +4,7 @@
     <div class="header">
       <dy-back mode="light" @click="router.back" class="mr1r"></dy-back>
       <div class="search-bar-readonly" @click="handleSearchBarClick">
-        <img src="../../assets/img/icon/home/search.png" class="search-icon" />
+        <img src="../../assets/img/icon/search-light.png" class="search-icon" />
         <div class="content">
           <span class="keyword">{{ keyword }}</span>
           <span class="count" v-if="searchType === 'video' && videoTotal > 0"
@@ -21,7 +21,7 @@
         <Loading :is-full-screen="false" />
       </div>
       <div v-else-if="videoList.length === 0" class="empty">
-        <img src="../../assets/img/icon/home/empty.png" alt="" class="empty-icon" />
+        <img src="../../assets/img/icon/no-result.png" alt="" class="empty-icon" />
         <div class="empty-text">暂无相关视频</div>
       </div>
       <div v-else class="video-list">
@@ -51,7 +51,7 @@
         <Loading :is-full-screen="false" />
       </div>
       <div v-else-if="userList.length === 0" class="empty">
-        <img src="../../assets/img/icon/home/empty.png" alt="" class="empty-icon" />
+        <img src="../../assets/img/icon/no-result.png" alt="" class="empty-icon" />
         <div class="empty-text">暂无相关用户</div>
       </div>
       <div v-else class="user-list">
