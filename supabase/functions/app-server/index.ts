@@ -14,7 +14,8 @@ import {
   handleVideoMy,
   handleVideoDetail,
   handleBatchReview,
-  handleApproveVideo
+  handleApproveVideo,
+  handleRecordView
 } from './routes/video.ts'
 import {
   handleVideoComments,
@@ -79,6 +80,10 @@ serve(async (req) => {
     }
     if (route === '/video/approve' && method === 'POST') {
       return handleApproveVideo(req)
+    }
+    // 🎯 记录观看历史（播放时调用）
+    if (route === '/video/view' && method === 'POST') {
+      return handleRecordView(req)
     }
     if (route === '/video/comments' && method === 'GET') {
       return handleVideoComments(req)

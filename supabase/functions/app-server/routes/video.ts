@@ -857,3 +857,59 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
     return errorResponse('Internal server error', 1, 500)
   }
 }
+
+/**
+ * 记录观看历史
+ * POST /video/view
+ * body: { video_id: string, progress?: number, completed?: boolean }
+ * progress: 0-100 的百分比
+ */
+export async function handleRecordView(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+  const body = await parseJsonBody(req)
+  const { video_id, progress, completed } = body
+
+  if (!video_id) {
+    return errorResponse('video_id is required', 1, 400)
+  }
+
+  try {
+    // 先查询是否已存在记录
+    const { data: existing } = await supabaseAdmin
+      .from('watch_history')
+      .select('id, progress, completed')
+      .eq('user_id', user.id)
+      .eq('video_id', video_id)
+      .maybeSingle()
+
+    if (existing) {
+      // 已存在，更新记录（只更新更大的进度，完播状态只能从 false -> true）
+      const updateData: Record<string, any> = {
+        updated_at: new Date().toISOString()
+      }
+      // 只更新更大的进度值
+      if (progress !== undefined && (existing.progress === null || progress > existing.progress)) {
+        updateData.progress = Math.min(100, Math.max(0, progress))
+      }
+      // 完播状态只能设为 true，不能撤销
+      if (completed === true && !existing.completed) {
+        updateData.completed = true
+      }
+
+      await supabaseAdmin.from('watch_history').update(updateData).eq('id', existing.id)
+    } else {
+      // 不存在，插入新记录
+      await supabaseAdmin.from('watch_history').insert({
+        user_id: user.id,
+        video_id: video_id,
+        progress: progress !== undefined ? Math.min(100, Math.max(0, progress)) : 0,
+        completed: completed === true
+      })
+    }
+
+    return successResponse({ success: true })
+  } catch (error) {
+    console.error('[view] Unexpected error:', error)
+    return successResponse({ success: true }) // 即使失败也返回成功，不影响用户体验
+  }
+}

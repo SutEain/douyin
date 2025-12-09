@@ -167,6 +167,28 @@ export async function getVideoById(videoId: string) {
   }
 }
 
+// 🎯 记录观看历史（播放时调用）
+// progress: 0-100 的百分比，completed: 是否完播
+export async function recordVideoView(
+  videoId: string,
+  options?: { progress?: number; completed?: boolean }
+) {
+  try {
+    await callAppServer('/video/view', {
+      method: 'POST',
+      body: {
+        video_id: videoId,
+        progress: options?.progress,
+        completed: options?.completed
+      },
+      requireAuth: true
+    })
+  } catch (error) {
+    // 静默失败，不影响用户体验
+    console.warn('[recordVideoView] 记录观看历史失败:', error)
+  }
+}
+
 async function requestSupabaseVideoList(
   endpoint: string,
   params?: Record<string, any>,

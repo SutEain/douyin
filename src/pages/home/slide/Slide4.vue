@@ -14,6 +14,7 @@
         page="home"
         :initial-index="0"
         :autoplay="props.active"
+        :has-more="state.totalSize === 0 || state.list.length < state.totalSize"
         @load-more="loadMore"
       />
 

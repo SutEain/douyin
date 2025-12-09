@@ -1,8 +1,7 @@
 <template>
   <div class="footer" :class="{ isWhite }">
-    <div class="l-button" @click="refresh(1)">
-      <span v-if="!isRefresh1" :class="{ active: currentTab === 1 }">{{ $t('home.home') }}</span>
-      <img v-if="isRefresh1" src="../assets/img/icon/refresh1.png" alt="" class="refresh" />
+    <div class="l-button" @click="tab(1)">
+      <span :class="{ active: currentTab === 1 }">{{ $t('home.home') }}</span>
     </div>
 
     <!-- ✅ 中间分割线 -->
@@ -20,7 +19,6 @@ export default {
   props: ['initTab', 'isWhite'],
   data() {
     return {
-      isRefresh1: false,
       currentTab: this.initTab
     }
   },
@@ -50,16 +48,6 @@ export default {
         case 5:
           this.$nav('/me')
           break
-      }
-    },
-    refresh(index) {
-      if (this.currentTab === index) {
-        this['isRefresh' + index] = !this['isRefresh' + index]
-        setTimeout(() => {
-          this['isRefresh' + index] = !this['isRefresh' + index]
-        }, 2000)
-      } else {
-        this.tab(index)
       }
     }
   }
@@ -97,21 +85,6 @@ export default {
     align-items: center;
     position: relative;
     font-size: 16rem;
-
-    .refresh {
-      width: 25%;
-      animation: rotate 0.5s linear infinite;
-    }
-
-    @keyframes rotate {
-      from {
-        transform: rotate(0deg);
-      }
-
-      to {
-        transform: rotate(-360deg);
-      }
-    }
 
     span {
       cursor: pointer;

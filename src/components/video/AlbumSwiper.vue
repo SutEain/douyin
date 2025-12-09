@@ -69,6 +69,9 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const emit = defineEmits<{
+  reachedLast: [] // 🎯 滑到最后一张时触发
+}>()
 
 const currentIndex = ref(0)
 const showPreview = ref(false)
@@ -119,6 +122,10 @@ function goToSlide(index: number) {
   setTimeout(() => {
     isTransitioning.value = false
   }, 300)
+  // 🎯 滑到最后一张时触发完播事件
+  if (index === props.images.length - 1) {
+    emit('reachedLast')
+  }
 }
 
 // 触摸事件

@@ -27,8 +27,17 @@
         data-progress="true"
         data-progress-bar="true"
       >
+        <!-- 🎯 没有更多内容时显示空状态 -->
+        <template v-if="slot.videoIndex === null && !hasMore">
+          <div class="no-more-page">
+            <div class="no-more-icon">📭</div>
+            <p class="no-more-text">暂时没有更多了</p>
+            <p class="no-more-subtext">休息一下，稍后再来</p>
+          </div>
+        </template>
+
         <!-- 🎯 根据内容类型渲染不同组件 -->
-        <template v-if="getSlotContentType(slot) === 'video'">
+        <template v-else-if="getSlotContentType(slot) === 'video'">
           <!-- 视频元素 -->
           <video
             :ref="setSlotRef(slot.key)"
@@ -66,7 +75,11 @@
 
         <!-- 📷 相册 -->
         <template v-else-if="getSlotContentType(slot) === 'album'">
-          <AlbumSwiper :images="getSlotImages(slot)" @click="handleImageClick(slot)" />
+          <AlbumSwiper
+            :images="getSlotImages(slot)"
+            @click="handleImageClick(slot)"
+            @reached-last="handleAlbumComplete(slot)"
+          />
         </template>
       </div>
 
@@ -114,8 +127,13 @@ import AlbumSwiper from './AlbumSwiper.vue'
 import type { VideoItem } from '../../types'
 import { useVideoStore } from '@/stores/video'
 import { parseImages, getContentType } from '@/utils/media'
+import { recordVideoView } from '@/api/videos'
 
 const DEBUG_PREFIX = '[AutoPlayDebug]'
+// 🎯 观看历史记录追踪（避免重复记录）
+const recordedViews = new Set<string>() // 已记录开始观看
+const completedViews = new Set<string>() // 已记录完播
+const imageTimers = new Map<string, NodeJS.Timeout>() // 图片显示计时器
 const SLOT_KEYS = ['slotA', 'slotB', 'slotC'] as const
 
 interface SlotState {
@@ -132,11 +150,13 @@ interface Props {
   page: 'home' | 'detail' | 'me'
   initialIndex?: number
   autoplay?: boolean
+  hasMore?: boolean // 🎯 是否还有更多数据
 }
 
 const props = withDefaults(defineProps<Props>(), {
   initialIndex: 0,
-  autoplay: true
+  autoplay: true,
+  hasMore: true
 })
 
 const emit = defineEmits<{
@@ -250,6 +270,15 @@ function handleImageClick(slot: SlotState) {
   // 图片/相册点击时可以执行特定操作
   // 目前保持空实现，后续可以添加放大预览等功能
   console.log('[VideoList] Image clicked:', slot.key)
+}
+
+// 🎯 相册滑到最后一张，记录完播
+function handleAlbumComplete(slot: SlotState) {
+  const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
+  if (item?.aweme_id && !completedViews.has(item.aweme_id)) {
+    completedViews.add(item.aweme_id)
+    recordVideoView(item.aweme_id, { progress: 100, completed: true })
+  }
 }
 
 // 进度百分比
@@ -406,6 +435,31 @@ function playCurrent() {
   if (contentType === 'image' || contentType === 'album') {
     console.log(`${DEBUG_PREFIX} playCurrent:skip-non-video`, { contentType })
     isPlaying.value = true // 图片/相册默认显示为"播放中"状态
+    // 🎯 记录观看历史
+    const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
+    if (item?.aweme_id) {
+      // 首次记录
+      if (!recordedViews.has(item.aweme_id)) {
+        recordedViews.add(item.aweme_id)
+        recordVideoView(item.aweme_id, { progress: 0 })
+      }
+      // 图片：2秒后算完播
+      if (contentType === 'image' && !completedViews.has(item.aweme_id)) {
+        // 清除之前的计时器
+        const existingTimer = imageTimers.get(item.aweme_id)
+        if (existingTimer) clearTimeout(existingTimer)
+        // 设置新计时器
+        const timer = setTimeout(() => {
+          if (!completedViews.has(item.aweme_id)) {
+            completedViews.add(item.aweme_id)
+            recordVideoView(item.aweme_id, { progress: 100, completed: true })
+          }
+          imageTimers.delete(item.aweme_id)
+        }, 2000)
+        imageTimers.set(item.aweme_id, timer)
+      }
+      // 相册的完播在 AlbumSwiper 组件中处理（滑到最后一张时）
+    }
     return
   }
 
@@ -452,6 +506,12 @@ function playCurrent() {
       }
       isPlaying.value = true
       tryUnmute(video)
+      // 🎯 记录观看历史（首次播放）
+      const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
+      if (item?.aweme_id && !recordedViews.has(item.aweme_id)) {
+        recordedViews.add(item.aweme_id)
+        recordVideoView(item.aweme_id, { progress: 0 })
+      }
     })
     .catch((err) => {
       console.warn(`${DEBUG_PREFIX} play:error`, {
@@ -498,9 +558,21 @@ function prepareSlots(initial = false) {
 }
 
 function rotateToNext() {
-  if (currentIndex.value >= props.items.length - 1) {
-    emit('loadMore')
+  // 🎯 如果已经在"没有更多"页面（超出最后一个视频），不再继续
+  if (currentIndex.value >= props.items.length) {
     return
+  }
+
+  // 🎯 如果在最后一个视频
+  if (currentIndex.value >= props.items.length - 1) {
+    // 如果没有更多数据，允许滑动到"没有更多"页面
+    if (!props.hasMore) {
+      // 继续执行，滑动到 next slot（显示"没有更多"）
+    } else {
+      // 还有更多数据，触发加载
+      emit('loadMore')
+      return
+    }
   }
 
   console.log('[视频切换] 切换到下一个 START', {
@@ -537,10 +609,18 @@ function rotateToNext() {
 
   currentIndex.value += 1
   emit('update:index', currentIndex.value)
-  videoStore.setCurrentVideo(props.items[currentIndex.value], currentIndex.value)
-  videoStore.setCurrentPlaying(props.items[currentIndex.value].aweme_id, props.page)
-  // ✅ 深拷贝确保每个视频的统计数据独立
-  currentItemLocal.value = JSON.parse(JSON.stringify(props.items[currentIndex.value]))
+
+  // 🎯 如果滑到了"没有更多"页面，不更新视频相关状态
+  const nextItem = props.items[currentIndex.value]
+  if (nextItem) {
+    videoStore.setCurrentVideo(nextItem, currentIndex.value)
+    videoStore.setCurrentPlaying(nextItem.aweme_id, props.page)
+    // ✅ 深拷贝确保每个视频的统计数据独立
+    currentItemLocal.value = JSON.parse(JSON.stringify(nextItem))
+  } else {
+    // 滑到了"没有更多"页面
+    currentItemLocal.value = null
+  }
 
   prev.videoIndex = currentIndex.value + 1 < props.items.length ? currentIndex.value + 1 : null
   updateSlotSource(prev, true)
@@ -548,10 +628,11 @@ function rotateToNext() {
 
   console.log('[视频切换] 切换到下一个 END', {
     newIndex: currentIndex.value,
+    isNoMorePage: !nextItem,
     timestamp: Date.now()
   })
 
-  if (currentIndex.value >= props.items.length - 3) {
+  if (currentIndex.value >= props.items.length - 3 && currentIndex.value < props.items.length) {
     emit('loadMore')
   }
 }
@@ -1097,6 +1178,17 @@ function bindCurrentVideoEvents(video: HTMLVideoElement) {
       computeStep()
     }
     updateProgressFromVideo(video)
+
+    // 🎯 完播检测：播放进度 >= 90%
+    if (video.duration > 0) {
+      const progress = (video.currentTime / video.duration) * 100
+      const currentSlot = getSlotByRole('current')
+      const item = currentSlot?.videoIndex != null ? props.items[currentSlot.videoIndex] : null
+      if (item?.aweme_id && progress >= 90 && !completedViews.has(item.aweme_id)) {
+        completedViews.add(item.aweme_id)
+        recordVideoView(item.aweme_id, { progress: Math.round(progress), completed: true })
+      }
+    }
   }
 
   nextTick(computeStep)
@@ -1364,6 +1456,48 @@ defineExpose({
 
   > * {
     pointer-events: auto;
+  }
+}
+
+// 🎯 没有更多页面样式
+.no-more-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+
+  .no-more-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .no-more-text {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.9);
+    margin: 0 0 8px 0;
+  }
+
+  .no-more-subtext {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0;
+  }
+
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
   }
 }
 </style>
