@@ -7,6 +7,14 @@
           <Icon icon="icon-park-outline:like" />
           <span>{{ _formatNumber(i.statistics.digg_count) }}</span>
         </div>
+        <!-- 🎯 内容类型标识：图片/相册 -->
+        <div class="content-type-badge" v-if="i.content_type === 'image'">
+          <Icon icon="solar:gallery-bold" />
+        </div>
+        <div class="content-type-badge album" v-if="i.content_type === 'album'">
+          <Icon icon="solar:album-bold" />
+          <span v-if="i.images?.length">{{ i.images.length }}</span>
+        </div>
         <!-- 🎯 只在 showLabels=true 时显示标签 -->
         <template v-if="showLabels">
           <div class="top" v-if="i.is_top">置顶</div>
@@ -32,6 +40,7 @@ import { _checkImgUrl, _formatNumber } from '@/utils'
 import { useBaseStore } from '@/store/pinia'
 import { useRouter } from 'vue-router'
 import { cloneDeep } from '@/utils'
+import { Icon } from '@iconify/vue'
 
 const store = useBaseStore()
 const nav = useRouter()
@@ -166,6 +175,27 @@ function getMonth(time) {
       width: 14rem;
       height: 14rem;
       margin-right: 5rem;
+    }
+  }
+
+  // 🎯 图片/相册类型标识
+  .content-type-badge {
+    position: absolute;
+    top: 7rem;
+    right: 7rem;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 3rem 6rem;
+    border-radius: 4rem;
+    font-size: 12rem;
+    display: flex;
+    align-items: center;
+    gap: 3rem;
+
+    &.album {
+      span {
+        font-size: 10rem;
+      }
     }
   }
 

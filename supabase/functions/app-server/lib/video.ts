@@ -26,9 +26,13 @@ function calculateAge(birthday: string): number {
 export async function mapVideoRow(row: any, profile: any) {
   const coverUrl = await buildCoverUrl(row, profile)
   const avatar = profile?.avatar_url || DEFAULT_AVATAR
-  const videoUrl = await buildVideoUrl(row)
 
-  if (!videoUrl) return null
+  // 🎯 根据内容类型决定是否需要视频URL
+  const contentType = row.content_type || 'video'
+  const videoUrl = contentType === 'video' ? await buildVideoUrl(row) : null
+
+  // 🎯 只有视频类型才需要检查视频URL
+  if (contentType === 'video' && !videoUrl) return null
 
   const authorCoverList = Array.isArray(profile?.cover_url)
     ? profile.cover_url
@@ -39,11 +43,24 @@ export async function mapVideoRow(row: any, profile: any) {
       ]
   const authorCardEntries = Array.isArray(profile?.card_entries) ? profile.card_entries : []
 
+  // 🎯 解析 images 字段
+  let images: any[] = []
+  if (row.images) {
+    try {
+      images = typeof row.images === 'string' ? JSON.parse(row.images) : row.images
+      if (!Array.isArray(images)) images = []
+    } catch {
+      images = []
+    }
+  }
+
   return {
     aweme_id: typeof row.id === 'string' ? row.id : String(row.id),
     is_top: !!row.is_top,
     status: row.status || 'published', // ✅ 添加视频状态 (draft/ready/published)
     is_private: !!row.is_private, // ✅ 添加私密标记
+    content_type: contentType, // 🎯 内容类型：video/image/album
+    images: images, // 🎯 图片数组（用于 image/album 类型）
     desc: row.description || '',
     tags: row.tags || [],
     create_time: Math.floor(new Date(row.created_at).getTime() / 1000),
@@ -126,6 +143,24 @@ export async function buildVideoUrl(row: any): Promise<string | null> {
 }
 
 export async function buildCoverUrl(row: any, profile: any): Promise<string> {
+  // 🎯 对于图片/相册类型，优先使用 images 数组中的第一张图片
+  const contentType = row.content_type || 'video'
+  if (contentType === 'image' || contentType === 'album') {
+    let images: any[] = []
+    if (row.images) {
+      try {
+        images = typeof row.images === 'string' ? JSON.parse(row.images) : row.images
+        if (!Array.isArray(images)) images = []
+      } catch {
+        images = []
+      }
+    }
+    if (images.length > 0 && images[0].file_id) {
+      const imgUrl = await buildTelegramFileUrl(images[0].file_id)
+      if (imgUrl) return imgUrl
+    }
+  }
+
   const primary = await convertMediaReferenceToUrl(row.cover_url)
   if (primary) return primary
 

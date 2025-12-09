@@ -25,6 +25,15 @@
     <!-- 视频封面 -->
     <div class="video-cover">
       <img :src="coverUrl" class="cover-image" @error="handleCoverError" />
+      <!-- 🎯 内容类型标识 -->
+      <div class="content-type-badge" v-if="video.content_type === 'image'">
+        <Icon icon="solar:gallery-bold" />
+        <span>图片</span>
+      </div>
+      <div class="content-type-badge album" v-if="video.content_type === 'album'">
+        <Icon icon="solar:album-bold" />
+        <span>{{ video.images?.length || 0 }}张</span>
+      </div>
       <div class="video-info">
         <div class="stats">
           <span class="stat-item">
@@ -36,7 +45,14 @@
             {{ formatNumber(video.statistics?.digg_count || video.like_count || 0) }}
           </span>
         </div>
-        <div class="duration" v-if="video.video?.duration || video.duration">
+        <div
+          class="duration"
+          v-if="
+            (video.video?.duration || video.duration) &&
+            video.content_type !== 'image' &&
+            video.content_type !== 'album'
+          "
+        >
           {{ formatDuration(video.video?.duration || video.duration) }}
         </div>
       </div>
@@ -60,6 +76,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { _checkImgUrl } from '@/utils'
+import { Icon } from '@iconify/vue'
 
 const props = defineProps<{
   video: any
@@ -289,6 +306,22 @@ const handleGoUserPanel = () => {
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+
+    // 🎯 内容类型标识
+    .content-type-badge {
+      position: absolute;
+      top: 10rem;
+      left: 10rem;
+      background: rgba(0, 0, 0, 0.6);
+      color: white;
+      padding: 4rem 8rem;
+      border-radius: 4rem;
+      font-size: 12rem;
+      display: flex;
+      align-items: center;
+      gap: 4rem;
+      z-index: 1;
     }
 
     .video-info {
