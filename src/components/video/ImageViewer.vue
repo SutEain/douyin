@@ -14,9 +14,9 @@
       <div class="loading-spinner"></div>
     </div>
 
-    <!-- 左上角类型标识 -->
+    <!-- 左上角类型标识（毛玻璃效果） -->
     <div class="content-type-badge">
-      <span class="badge-icon">🖼️</span>
+      <span class="badge-text">图片</span>
     </div>
   </div>
 </template>
@@ -114,16 +114,22 @@ function onImageError() {
   position: absolute;
   top: 60px;
   left: 12px;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 4px 8px;
-  border-radius: 12px;
+  // 🎯 毛玻璃效果
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
-  gap: 4px;
   z-index: 10;
+  color: white;
+  font-size: 13px;
 
-  .badge-icon {
-    font-size: 14px;
+  .badge-text {
+    font-weight: 500;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 }
 </style>

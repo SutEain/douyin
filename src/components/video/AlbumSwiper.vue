@@ -4,6 +4,10 @@
     @touchstart="onTouchStart"
     @touchmove="onTouchMove"
     @touchend="onTouchEnd"
+    @mousedown="onMouseDown"
+    @mousemove="onMouseMove"
+    @mouseup="onMouseUp"
+    @mouseleave="onMouseUp"
     @click="$emit('click')"
   >
     <!-- 图片容器 -->
@@ -14,14 +18,14 @@
           class="slide-image"
           @load="onImageLoad(index)"
           @error="onImageError(index)"
+          draggable="false"
         />
       </div>
     </div>
 
-    <!-- 左上角类型标识 + 页码 -->
+    <!-- 左上角类型标识 + 页码（毛玻璃效果） -->
     <div class="content-type-badge">
-      <span class="badge-icon">📷</span>
-      <span class="badge-text">{{ currentIndex + 1 }}/{{ images.length }}</span>
+      <span class="badge-text">相册 {{ currentIndex + 1 }}/{{ images.length }}</span>
     </div>
 
     <!-- 底部指示器 -->
@@ -126,7 +130,40 @@ function onTouchMove(e: TouchEvent) {
 function onTouchEnd() {
   if (!touch.active) return
   touch.active = false
+  finishSwipe()
+}
 
+// 🖱️ 鼠标事件
+function onMouseDown(e: MouseEvent) {
+  e.preventDefault() // 阻止拖拽图片
+  touch.startX = e.clientX
+  touch.deltaX = 0
+  touch.active = true
+  isTransitioning.value = false
+}
+
+function onMouseMove(e: MouseEvent) {
+  if (!touch.active) return
+  const currentX = e.clientX
+  touch.deltaX = currentX - touch.startX
+
+  // 边界处理
+  if (currentIndex.value === 0 && touch.deltaX > 0) {
+    touch.deltaX = touch.deltaX * 0.3
+  }
+  if (currentIndex.value === props.images.length - 1 && touch.deltaX < 0) {
+    touch.deltaX = touch.deltaX * 0.3
+  }
+}
+
+function onMouseUp() {
+  if (!touch.active) return
+  touch.active = false
+  finishSwipe()
+}
+
+// 🎯 完成滑动（触摸和鼠标共用）
+function finishSwipe() {
   const threshold = window.innerWidth * 0.2 // 20% 阈值
 
   if (touch.deltaX < -threshold && currentIndex.value < props.images.length - 1) {
@@ -189,22 +226,22 @@ function onTouchEnd() {
   position: absolute;
   top: 60px;
   left: 12px;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 4px 10px;
-  border-radius: 12px;
+  // 🎯 毛玻璃效果
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
-  gap: 4px;
   z-index: 10;
   color: white;
-  font-size: 12px;
-
-  .badge-icon {
-    font-size: 14px;
-  }
+  font-size: 13px;
 
   .badge-text {
     font-weight: 500;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 }
 
