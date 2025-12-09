@@ -1,13 +1,25 @@
 import { List, useTable } from '@refinedev/antd'
 import { Table, Space, Tag, Button, Modal, Input, Select, Form, message } from 'antd'
 import { useState, useRef } from 'react'
-import { useUpdate } from '@refinedev/core'
+import { useUpdate, useDelete } from '@refinedev/core'
 import { useNavigate } from 'react-router-dom'
-import { EyeOutlined, EditOutlined } from '@ant-design/icons'
+import {
+  EyeOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  LeftOutlined,
+  RightOutlined
+} from '@ant-design/icons'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
-import { getCoverUrl, getVideoPlayUrl } from '../../utils/media'
+import {
+  getCoverUrl,
+  getVideoPlayUrl,
+  parseImages,
+  getContentTypeInfo,
+  buildCdnUrl
+} from '../../utils/media'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -41,7 +53,13 @@ export const VideoList = () => {
   const [batchLoading, setBatchLoading] = useState(false)
   const [rejectForm] = Form.useForm()
   const { mutate: updateVideo } = useUpdate()
+  const { mutate: deleteVideo } = useDelete()
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  // 📸 图片/相册预览相关状态
+  const [previewContentType, setPreviewContentType] = useState<'video' | 'image' | 'album'>('video')
+  const [previewImages, setPreviewImages] = useState<string[]>([])
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   const { tableProps, searchFormProps, filters } = useTable({
     resource: 'videos',
@@ -93,6 +111,15 @@ export const VideoList = () => {
         })
       }
 
+      // 筛选内容类型
+      if (params.content_type) {
+        filters.push({
+          field: 'content_type',
+          operator: 'eq',
+          value: params.content_type
+        })
+      }
+
       return filters
     }
   })
@@ -131,25 +158,43 @@ export const VideoList = () => {
     return parts.length > 0 ? parts.join(' · ') : '-'
   }
 
-  // 预览视频
+  // 预览内容（视频/图片/相册）
   const handlePreview = (record: any) => {
-    const videoUrl = getVideoPlayUrl(record)
+    const contentType = record.content_type || 'video'
+    setPreviewContentType(contentType)
 
-    if (!videoUrl) {
-      message.error('视频URL不可用')
-      return
-    }
-    setCurrentVideoUrl(videoUrl)
-    setPreviewModalVisible(true)
-
-    // 延迟设置视频音频（等待 DOM 渲染）
-    setTimeout(() => {
-      if (videoRef.current) {
-        const video = videoRef.current
-        video.muted = false
-        video.volume = 1.0
+    if (contentType === 'video') {
+      // 视频预览
+      const videoUrl = getVideoPlayUrl(record)
+      if (!videoUrl) {
+        message.error('视频URL不可用')
+        return
       }
-    }, 100)
+      setCurrentVideoUrl(videoUrl)
+      setPreviewImages([])
+      setPreviewModalVisible(true)
+
+      // 延迟设置视频音频（等待 DOM 渲染）
+      setTimeout(() => {
+        if (videoRef.current) {
+          const video = videoRef.current
+          video.muted = false
+          video.volume = 1.0
+        }
+      }, 100)
+    } else {
+      // 图片/相册预览
+      const images = parseImages(record.images)
+      if (images.length === 0) {
+        message.error('图片不可用')
+        return
+      }
+      const imageUrls = images.map((img: any) => buildCdnUrl(img.file_id))
+      setPreviewImages(imageUrls)
+      setCurrentImageIndex(0)
+      setCurrentVideoUrl('')
+      setPreviewModalVisible(true)
+    }
   }
 
   // 关闭预览
@@ -161,6 +206,43 @@ export const VideoList = () => {
     }
     setPreviewModalVisible(false)
     setCurrentVideoUrl('')
+    setPreviewImages([])
+    setCurrentImageIndex(0)
+  }
+
+  // 相册上一张
+  const handlePrevImage = () => {
+    setCurrentImageIndex((prev) => (prev > 0 ? prev - 1 : previewImages.length - 1))
+  }
+
+  // 相册下一张
+  const handleNextImage = () => {
+    setCurrentImageIndex((prev) => (prev < previewImages.length - 1 ? prev + 1 : 0))
+  }
+
+  // 删除视频
+  const handleDelete = (record: any) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除这个${record.content_type === 'video' ? '视频' : record.content_type === 'album' ? '相册' : '图片'}吗？此操作不可恢复！`,
+      okType: 'danger',
+      onOk: () => {
+        deleteVideo(
+          {
+            resource: 'videos',
+            id: record.id
+          },
+          {
+            onSuccess: () => {
+              message.success('删除成功')
+            },
+            onError: () => {
+              message.error('删除失败')
+            }
+          }
+        )
+      }
+    })
   }
 
   // 通过审核
@@ -328,6 +410,13 @@ export const VideoList = () => {
               <Select.Option value="appealing">申诉中</Select.Option>
             </Select>
           </Form.Item>
+          <Form.Item name="content_type" label="内容类型">
+            <Select placeholder="选择类型" allowClear style={{ width: 100 }}>
+              <Select.Option value="video">🎬 视频</Select.Option>
+              <Select.Option value="image">🖼️ 图片</Select.Option>
+              <Select.Option value="album">📷 相册</Select.Option>
+            </Select>
+          </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit">
               搜索
@@ -349,22 +438,57 @@ export const VideoList = () => {
 
         <Table {...tableProps} rowKey="id" scroll={{ x: 1800 }} rowSelection={rowSelection}>
           <Table.Column
+            dataIndex="content_type"
+            title="类型"
+            width={80}
+            render={(value) => {
+              const info = getContentTypeInfo(value || 'video')
+              return (
+                <Tag color={info.color}>
+                  {info.icon} {info.text}
+                </Tag>
+              )
+            }}
+          />
+
+          <Table.Column
             dataIndex="cover_url"
             title="封面"
             width={100}
             render={(_, record: any) => {
               const coverUrl = getCoverUrl(record)
+              const contentType = record.content_type || 'video'
+              const images = parseImages(record.images)
+
               return coverUrl ? (
-                <img
-                  src={coverUrl}
-                  alt="封面"
-                  style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 4 }}
-                  onError={(e) => {
-                    // 封面加载失败时的处理
-                    ;(e.target as HTMLImageElement).src =
-                      'https://via.placeholder.com/80x80?text=No+Image'
-                  }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <img
+                    src={coverUrl}
+                    alt="封面"
+                    style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 4 }}
+                    onError={(e) => {
+                      ;(e.target as HTMLImageElement).src =
+                        'https://via.placeholder.com/80x80?text=No+Image'
+                    }}
+                  />
+                  {/* 相册显示图片数量角标 */}
+                  {contentType === 'album' && images.length > 1 && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        background: 'rgba(0,0,0,0.6)',
+                        color: 'white',
+                        fontSize: 10,
+                        padding: '2px 6px',
+                        borderRadius: 8
+                      }}
+                    >
+                      {images.length}张
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div
                   style={{
@@ -541,7 +665,7 @@ export const VideoList = () => {
 
           <Table.Column
             title="操作"
-            width={300}
+            width={320}
             fixed="right"
             render={(_, record: any) => (
               <Space size="small">
@@ -573,22 +697,38 @@ export const VideoList = () => {
                   icon={<EditOutlined />}
                   onClick={() => navigate(`/videos/edit/${record.id}`)}
                 />
+
+                {/* 删除按钮 */}
+                <Button
+                  danger
+                  type="text"
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  onClick={() => handleDelete(record)}
+                />
               </Space>
             )}
           />
         </Table>
       </List>
 
-      {/* 视频预览弹窗 */}
+      {/* 预览弹窗（视频/图片/相册） */}
       <Modal
-        title="视频预览"
+        title={
+          previewContentType === 'video'
+            ? '视频预览'
+            : previewContentType === 'album'
+              ? `相册预览 (${currentImageIndex + 1}/${previewImages.length})`
+              : '图片预览'
+        }
         open={previewModalVisible}
         onCancel={handleClosePreview}
         footer={null}
         width={800}
         centered
       >
-        {currentVideoUrl && (
+        {/* 视频预览 */}
+        {previewContentType === 'video' && currentVideoUrl && (
           <video
             ref={videoRef}
             src={currentVideoUrl}
@@ -599,6 +739,81 @@ export const VideoList = () => {
             playsInline
           />
         )}
+
+        {/* 图片/相册预览 */}
+        {(previewContentType === 'image' || previewContentType === 'album') &&
+          previewImages.length > 0 && (
+            <div style={{ position: 'relative', textAlign: 'center' }}>
+              <img
+                src={previewImages[currentImageIndex]}
+                alt={`图片 ${currentImageIndex + 1}`}
+                style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
+                onError={(e) => {
+                  ;(e.target as HTMLImageElement).src =
+                    'https://via.placeholder.com/400x400?text=加载失败'
+                }}
+              />
+
+              {/* 相册左右切换按钮 */}
+              {previewImages.length > 1 && (
+                <>
+                  <Button
+                    type="text"
+                    icon={<LeftOutlined />}
+                    onClick={handlePrevImage}
+                    style={{
+                      position: 'absolute',
+                      left: 10,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'rgba(0,0,0,0.3)',
+                      color: 'white',
+                      border: 'none',
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%'
+                    }}
+                  />
+                  <Button
+                    type="text"
+                    icon={<RightOutlined />}
+                    onClick={handleNextImage}
+                    style={{
+                      position: 'absolute',
+                      right: 10,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'rgba(0,0,0,0.3)',
+                      color: 'white',
+                      border: 'none',
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%'
+                    }}
+                  />
+                </>
+              )}
+
+              {/* 图片指示器 */}
+              {previewImages.length > 1 && (
+                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 8 }}>
+                  {previewImages.map((_, index) => (
+                    <div
+                      key={index}
+                      onClick={() => setCurrentImageIndex(index)}
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: index === currentImageIndex ? '#1890ff' : '#d9d9d9',
+                        cursor: 'pointer'
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
       </Modal>
 
       {/* 拒绝审核弹窗 */}

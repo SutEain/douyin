@@ -64,5 +64,50 @@ export function getCoverUrl(record: any): string {
     return buildCdnUrl(record.tg_thumbnail_file_id)
   }
 
+  // 📸 图片/相册：使用第一张图片作为封面
+  const contentType = record.content_type || 'video'
+  if (contentType === 'image' || contentType === 'album') {
+    const images = parseImages(record.images)
+    if (images.length > 0) {
+      return buildCdnUrl(images[0].file_id)
+    }
+  }
+
   return ''
+}
+
+/**
+ * 解析 images 字段
+ */
+export function parseImages(
+  images: any
+): Array<{ file_id: string; width?: number; height?: number; order?: number }> {
+  if (!images) return []
+  if (typeof images === 'string') {
+    try {
+      return JSON.parse(images)
+    } catch {
+      return []
+    }
+  }
+  return Array.isArray(images) ? images : []
+}
+
+/**
+ * 获取内容类型信息
+ */
+export function getContentTypeInfo(contentType: string): {
+  text: string
+  icon: string
+  color: string
+} {
+  switch (contentType) {
+    case 'image':
+      return { text: '图片', icon: '🖼️', color: 'green' }
+    case 'album':
+      return { text: '相册', icon: '📷', color: 'blue' }
+    case 'video':
+    default:
+      return { text: '视频', icon: '🎬', color: 'purple' }
+  }
 }
