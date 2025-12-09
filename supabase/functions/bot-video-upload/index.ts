@@ -92,7 +92,7 @@ async function editMessage(chatId: number, messageId: number, text: string, opti
   }
 }
 
-async function deleteMessage(chatId: number, messageId: number) {
+async function deleteTelegramMessage(chatId: number, messageId: number) {
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`
   try {
     await fetch(url, {
@@ -213,7 +213,7 @@ async function handleSettingsCallback(chatId: number, messageId: number, data: s
   const action = parts[1] // menu, set, main, close
 
   if (action === 'close') {
-    await deleteMessage(chatId, messageId)
+    await deleteTelegramMessage(chatId, messageId)
     return
   }
 
@@ -256,23 +256,6 @@ async function handleSettingsCallback(chatId: number, messageId: number, data: s
         reply_markup: getSettingsKeyboard(settings)
       }
     )
-  }
-}
-
-// 删除消息
-async function deleteMessage(chatId: number, messageId: number) {
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`
-  try {
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        message_id: messageId
-      })
-    })
-  } catch (error) {
-    console.error('删除消息失败:', error)
   }
 }
 
@@ -402,7 +385,7 @@ async function sendSelfDestructMessage(chatId: number, text: string, seconds: nu
   if (result.ok) {
     const messageId = result.result.message_id
     setTimeout(() => {
-      deleteMessage(chatId, messageId)
+      deleteTelegramMessage(chatId, messageId)
     }, seconds * 1000)
   }
   return result
@@ -754,11 +737,18 @@ async function getOrCreateProfile(
 }
 
 // 处理视频上传
-async function handleVideo(chatId: number, video: any, caption?: string, from?: any) {
+async function handleVideo(
+  chatId: number,
+  video: any,
+  caption?: string,
+  from?: any,
+  mediaGroupId?: string
+) {
   console.log('[handleVideo] 开始处理视频')
   console.log('[handleVideo] chatId:', chatId)
   console.log('[handleVideo] video:', JSON.stringify(video).substring(0, 200))
   console.log('[handleVideo] caption:', caption)
+  console.log('[handleVideo] mediaGroupId:', mediaGroupId)
 
   try {
     // 处理 caption（转发视频可能带有文案）
@@ -808,7 +798,8 @@ async function handleVideo(chatId: number, video: any, caption?: string, from?: 
         height: video.height,
         file_size: videoSize, // ✅ 记录文件大小
         is_private: false,
-        status: isLargeFile ? 'processing' : 'draft' // ✅ 大文件标记为 processing
+        status: isLargeFile ? 'processing' : 'draft', // ✅ 大文件标记为 processing
+        media_group_id: mediaGroupId || null
       })
       .select()
       .single()
@@ -821,7 +812,35 @@ async function handleVideo(chatId: number, video: any, caption?: string, from?: 
 
     console.log(`[handleVideo] 视频记录已保存: ${draftVideo.id}, 状态: ${draftVideo.status}`)
 
-    // ✅ 根据文件大小显示不同消息
+    // 🎯 Media Group 处理逻辑
+    if (mediaGroupId) {
+      console.log(`[handleVideo] 检测到 Media Group: ${mediaGroupId}`)
+
+      // 检查是否应该发送提示消息（策略：如果这是该组的第一条视频）
+      // 查询该 mediaGroupId 下最早创建的一条记录
+      const { data: earliestVideo } = await supabase
+        .from('videos')
+        .select('id')
+        .eq('media_group_id', mediaGroupId)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single()
+
+      // 如果当前视频就是最早的那条，发送提示
+      if (earliestVideo && earliestVideo.id === draftVideo.id) {
+        await sendMessage(
+          chatId,
+          `📦 <b>收到多条视频</b>\n\n` +
+            `已全部自动保存为草稿。\n` +
+            `请在 <a href="t.me/tg_douyin_bot/tgdouyin">📹 我的视频</a> 中统一进行编辑和发布。`
+        )
+      } else {
+        console.log(`[handleVideo] Media Group ${mediaGroupId} - 静默处理 (非首条)`)
+      }
+      return
+    }
+
+    // ✅ 根据文件大小显示不同消息 (非 Media Group)
     if (isLargeFile) {
       // 大文件：显示处理中消息
       await sendMessage(
@@ -1397,7 +1416,7 @@ async function handleText(chatId: number, text: string, userMessageId: number) {
   switch (userState.state) {
     case 'waiting_description': {
       // 删除用户消息
-      await deleteMessage(chatId, userMessageId)
+      await deleteTelegramMessage(chatId, userMessageId)
 
       if (text.length > 300) {
         await sendSelfDestructMessage(chatId, '❌ 描述最多 300 字，请重新输入')
@@ -1425,7 +1444,7 @@ async function handleText(chatId: number, text: string, userMessageId: number) {
 
     case 'waiting_tags': {
       // 删除用户消息
-      await deleteMessage(chatId, userMessageId)
+      await deleteTelegramMessage(chatId, userMessageId)
 
       const tags = text
         .trim()
@@ -1457,7 +1476,7 @@ async function handleText(chatId: number, text: string, userMessageId: number) {
 
     // 🎯 从视频详情页编辑描述
     case 'editing_description': {
-      await deleteMessage(chatId, userMessageId)
+      await deleteTelegramMessage(chatId, userMessageId)
 
       if (text.length > 300) {
         await sendSelfDestructMessage(chatId, '❌ 描述最多 300 字，请重新输入')
@@ -1481,7 +1500,7 @@ async function handleText(chatId: number, text: string, userMessageId: number) {
 
     // 🎯 从视频详情页编辑标签
     case 'editing_tags': {
-      await deleteMessage(chatId, userMessageId)
+      await deleteTelegramMessage(chatId, userMessageId)
 
       const tags = text
         .trim()
@@ -1510,7 +1529,7 @@ async function handleText(chatId: number, text: string, userMessageId: number) {
     // 🎯 从视频详情页编辑位置
     // 🎯 editing_location_detail 现在使用位置消息，不再处理文本
     case 'editing_location_detail': {
-      await deleteMessage(chatId, userMessageId)
+      await deleteTelegramMessage(chatId, userMessageId)
       await sendSelfDestructMessage(
         chatId,
         '❌ 请发送位置信息（不是文本）\n\n点击下方的 📎 附件按钮选择"位置"',
@@ -1521,7 +1540,7 @@ async function handleText(chatId: number, text: string, userMessageId: number) {
 
     // 🎯 waiting_location 状态已在 handleLocation 中处理
     case 'waiting_location': {
-      await deleteMessage(chatId, userMessageId)
+      await deleteTelegramMessage(chatId, userMessageId)
       await sendSelfDestructMessage(
         chatId,
         '❌ 请发送位置信息（不是文本）\n\n点击下方的 📎 附件按钮选择"位置"',
@@ -1531,7 +1550,7 @@ async function handleText(chatId: number, text: string, userMessageId: number) {
     }
 
     case 'editing_location': {
-      await deleteMessage(chatId, userMessageId)
+      await deleteTelegramMessage(chatId, userMessageId)
 
       // 解析位置：格式1: "城市 国家", 格式2: "国家"
       const parts = text.trim().split(/\s+/)
@@ -1590,7 +1609,7 @@ async function handleLocation(chatId: number, location: any, userMessageId: numb
 
   try {
     // 删除用户位置消息
-    await deleteMessage(chatId, userMessageId)
+    await deleteTelegramMessage(chatId, userMessageId)
 
     // 在主消息上显示"识别中"
     await editMessage(chatId, userState.current_message_id, '🔄 正在识别位置...')
@@ -2588,7 +2607,13 @@ serve(async (req) => {
         }
         // 视频消息（直接处理，caption 作为描述）
         else if (message.video) {
-          await handleVideo(chatId, message.video, message.caption, message.from)
+          await handleVideo(
+            chatId,
+            message.video,
+            message.caption,
+            message.from,
+            message.media_group_id
+          )
         }
         // 位置消息
         else if (message.location) {
