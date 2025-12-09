@@ -8,7 +8,6 @@
     @mousemove="onMouseMove"
     @mouseup="onMouseUp"
     @mouseleave="onMouseUp"
-    @click="$emit('click')"
   >
     <!-- 图片容器 -->
     <div class="swiper-container" :style="swiperStyle" :class="{ transitioning: isTransitioning }">
@@ -18,6 +17,7 @@
           class="slide-image"
           @load="onImageLoad(index)"
           @error="onImageError(index)"
+          @click.stop="openPreview(index)"
           draggable="false"
         />
       </div>
@@ -26,6 +26,12 @@
     <!-- 左上角类型标识 + 页码（毛玻璃效果） -->
     <div class="content-type-badge">
       <span class="badge-text">相册 {{ currentIndex + 1 }}/{{ images.length }}</span>
+    </div>
+
+    <!-- 点击查看高清提示 -->
+    <div class="hd-tip" @click.stop="openPreview(currentIndex)">
+      <Icon icon="mdi:magnify-plus" />
+      <span>查看高清</span>
     </div>
 
     <!-- 底部指示器 -->
@@ -38,12 +44,17 @@
         @click.stop="goToSlide(index)"
       ></div>
     </div>
+
+    <!-- 高清预览弹窗 -->
+    <ImagePreview v-model:visible="showPreview" :images="images" :initial-index="previewIndex" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
+import { Icon } from '@iconify/vue'
 import { buildCdnUrl } from '@/utils/media'
+import ImagePreview from './ImagePreview.vue'
 
 interface ImageItem {
   file_id: string
@@ -58,11 +69,16 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const emit = defineEmits<{
-  click: []
-}>()
 
 const currentIndex = ref(0)
+const showPreview = ref(false)
+const previewIndex = ref(0)
+
+// 🎯 打开高清预览
+function openPreview(index: number) {
+  previewIndex.value = index
+  showPreview.value = true
+}
 const isTransitioning = ref(false)
 const loadedImages = reactive<Set<number>>(new Set())
 
@@ -267,6 +283,36 @@ function finishSwipe() {
     background: white;
     width: 18px;
     border-radius: 3px;
+  }
+}
+
+// 🎯 查看高清按钮
+.hd-tip {
+  position: absolute;
+  bottom: 160px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  &:active {
+    transform: translateX(-50%) scale(0.95);
   }
 }
 </style>

@@ -196,7 +196,12 @@ function getSettingsKeyboard(settings: any) {
         { text: `⭐ 收藏: ${getStatus('collect')}`, callback_data: 'settings:menu:collect' },
         { text: `➕ 关注: ${getStatus('follow')}`, callback_data: 'settings:menu:follow' }
       ],
-      [{ text: `🎬 新作品: ${getStatus('new_post')}`, callback_data: 'settings:menu:new_post' }],
+      [
+        {
+          text: `🎬 关注博主的新作品: ${getStatus('new_post')}`,
+          callback_data: 'settings:menu:new_post'
+        }
+      ],
       [{ text: '❌ 关闭', callback_data: 'settings:close' }]
     ]
   }

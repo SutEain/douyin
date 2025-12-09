@@ -1,5 +1,5 @@
 <template>
-  <div class="image-viewer" @click="$emit('click')">
+  <div class="image-viewer">
     <!-- 图片内容 -->
     <img
       :src="imageUrl"
@@ -7,6 +7,7 @@
       :style="imageStyle"
       @load="onImageLoad"
       @error="onImageError"
+      @click.stop="openPreview"
     />
 
     <!-- 加载中 -->
@@ -18,23 +19,37 @@
     <div class="content-type-badge">
       <span class="badge-text">图片</span>
     </div>
+
+    <!-- 点击查看高清提示 -->
+    <div class="hd-tip" @click.stop="openPreview">
+      <Icon icon="mdi:magnify-plus" />
+      <span>查看高清</span>
+    </div>
+
+    <!-- 高清预览弹窗 -->
+    <ImagePreview v-model:visible="showPreview" :images="images" :initial-index="0" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { Icon } from '@iconify/vue'
 import { buildCdnUrl } from '@/utils/media'
+import ImagePreview from './ImagePreview.vue'
 
 interface Props {
   images: Array<{ file_id: string; url?: string; width?: number; height?: number }>
 }
 
 const props = defineProps<Props>()
-const emit = defineEmits<{
-  click: []
-}>()
 
 const loading = ref(true)
+const showPreview = ref(false)
+
+// 🎯 打开高清预览
+function openPreview() {
+  showPreview.value = true
+}
 
 // 获取第一张图片的 URL
 const imageUrl = computed(() => {
@@ -130,6 +145,36 @@ function onImageError() {
   .badge-text {
     font-weight: 500;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+}
+
+// 🎯 查看高清按钮
+.hd-tip {
+  position: absolute;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  &:active {
+    transform: translateX(-50%) scale(0.95);
   }
 }
 </style>
