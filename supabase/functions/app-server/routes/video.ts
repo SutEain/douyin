@@ -777,10 +777,10 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
   console.log(`[approve] Processing video: ${video_id}`)
 
   try {
-    // 1. 查询视频信息
+    // 1. 查询视频信息（包含描述，用于通知）
     const { data: video, error: videoError } = await supabaseAdmin
       .from('videos')
-      .select('id, status, author_id, tg_user_id')
+      .select('id, status, author_id, tg_user_id, description')
       .eq('id', video_id)
       .single()
 
@@ -810,10 +810,10 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
     const authorField = video.tg_user_id ? 'tg_user_id' : 'id'
     const authorValue = video.tg_user_id ?? video.author_id
 
-    // 查询用户当前的 auto_approve 状态
+    // 查询用户当前的 auto_approve 状态和昵称
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('id, auto_approve')
+      .select('id, auto_approve, nickname')
       .eq(authorField, authorValue)
       .single()
 
@@ -832,6 +832,19 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
         autoApproveEnabled = true
         console.log(`[approve] Enabled auto_approve for user: ${profile.id}`)
       }
+    }
+
+    // 🎯 4. 审核通过并发布后，通知粉丝
+    if (shouldPublish && profile?.id) {
+      const { notifyFollowersNewPost } = await import('../lib/notification.ts')
+      notifyFollowersNewPost(
+        profile.id,
+        profile.nickname || '用户',
+        video_id,
+        video.description
+      ).catch((e: any) => {
+        console.error('[approve] 通知粉丝失败:', e)
+      })
     }
 
     console.log(`[approve] Successfully approved video: ${video_id}`)

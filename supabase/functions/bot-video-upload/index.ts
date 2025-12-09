@@ -134,7 +134,8 @@ const DEFAULT_NOTIFICATION_SETTINGS = {
   like: { mute_until: 0 },
   comment: { mute_until: 0 },
   collect: { mute_until: 0 },
-  follow: { mute_until: 0 }
+  follow: { mute_until: 0 },
+  new_post: { mute_until: 0 } // 🎯 关注的人发布新作品
 }
 
 async function getUserSettings(chatId: number) {
@@ -159,6 +160,10 @@ async function getUserSettings(chatId: number) {
     follow: {
       ...DEFAULT_NOTIFICATION_SETTINGS.follow,
       ...(data.notification_settings?.follow || {})
+    },
+    new_post: {
+      ...DEFAULT_NOTIFICATION_SETTINGS.new_post,
+      ...(data.notification_settings?.new_post || {})
     }
   }
 }
@@ -191,13 +196,20 @@ function getSettingsKeyboard(settings: any) {
         { text: `⭐ 收藏: ${getStatus('collect')}`, callback_data: 'settings:menu:collect' },
         { text: `➕ 关注: ${getStatus('follow')}`, callback_data: 'settings:menu:follow' }
       ],
+      [{ text: `🎬 新作品: ${getStatus('new_post')}`, callback_data: 'settings:menu:new_post' }],
       [{ text: '❌ 关闭', callback_data: 'settings:close' }]
     ]
   }
 }
 
 function getSubMenuKeyboard(type: string) {
-  const map: any = { like: '❤️ 点赞', comment: '💬 评论', collect: '⭐ 收藏', follow: '➕ 关注' }
+  const map: any = {
+    like: '❤️ 点赞',
+    comment: '💬 评论',
+    collect: '⭐ 收藏',
+    follow: '➕ 关注',
+    new_post: '🎬 新作品'
+  }
   const title = map[type] || type
 
   return {
@@ -401,6 +413,116 @@ async function sendSelfDestructMessage(chatId: number, text: string, seconds: nu
     }, seconds * 1000)
   }
   return result
+}
+
+// 🎯 通知粉丝：有新作品发布
+async function notifyFollowersNewPost(
+  authorId: string,
+  authorNickname: string,
+  videoId: string,
+  videoDesc?: string
+) {
+  console.log(`[NOTIFY-NEW-POST] 开始通知粉丝: author=${authorId}, video=${videoId}`)
+
+  try {
+    // 1. 查询该用户的所有粉丝（包含通知设置）
+    const { data: followers, error } = await supabase
+      .from('follows')
+      .select(
+        `
+        follower_id,
+        follower:profiles!follows_follower_id_fkey(
+          id,
+          tg_user_id,
+          notification_settings
+        )
+      `
+      )
+      .eq('followee_id', authorId)
+
+    if (error) {
+      console.error('[NOTIFY-NEW-POST] ❌ 查询粉丝失败:', error)
+      return
+    }
+
+    if (!followers || followers.length === 0) {
+      console.log('[NOTIFY-NEW-POST] 没有粉丝需要通知')
+      return
+    }
+
+    console.log(`[NOTIFY-NEW-POST] 找到 ${followers.length} 个粉丝`)
+
+    // 2. 构造消息
+    const descPreview = videoDesc
+      ? `\n📝 ${videoDesc.substring(0, 50)}${videoDesc.length > 50 ? '...' : ''}`
+      : ''
+    const message = `🎬 <b>${authorNickname}</b> 发布了新作品${descPreview}`
+
+    // 3. 构造深链
+    const botUsername = 'tg_douyin_bot'
+    const appName = 'tgdouyin'
+    const deepLink = `https://t.me/${botUsername}/${appName}?startapp=video_${videoId}`
+
+    let sentCount = 0
+    let skippedCount = 0
+
+    // 4. 批量发送通知
+    for (const follow of followers) {
+      const followerProfile = (follow as any).follower
+      if (!followerProfile || !followerProfile.tg_user_id) {
+        skippedCount++
+        continue
+      }
+
+      // 检查通知设置
+      const settings = followerProfile.notification_settings || {}
+      const typeSetting = settings['new_post'] || { mute_until: 0 }
+      const muteUntil = typeSetting.mute_until || 0
+
+      if (muteUntil === -1) {
+        // 永久关闭
+        skippedCount++
+        continue
+      }
+      if (muteUntil > Date.now()) {
+        // 临时静音中
+        skippedCount++
+        continue
+      }
+
+      // 发送通知
+      try {
+        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: followerProfile.tg_user_id,
+            text: message,
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [[{ text: '👉 立即查看', url: deepLink }]]
+            }
+          })
+        })
+        const data = await res.json()
+        if (data.ok) {
+          sentCount++
+        } else {
+          console.warn(
+            `[NOTIFY-NEW-POST] 发送失败 to ${followerProfile.tg_user_id}:`,
+            data.description
+          )
+        }
+      } catch (e) {
+        console.error(`[NOTIFY-NEW-POST] 发送异常 to ${followerProfile.tg_user_id}:`, e)
+      }
+    }
+
+    console.log(`[NOTIFY-NEW-POST] ✅ 完成: 发送 ${sentCount} 条, 跳过 ${skippedCount} 条`)
+  } catch (error) {
+    console.error('[NOTIFY-NEW-POST] Error:', error)
+  }
 }
 
 // 获取持久化键盘
@@ -2509,14 +2631,16 @@ async function handleViewVideo(chatId: number, messageId: number, videoId: strin
 // 发布视频（提交审核）
 async function publishVideo(chatId: number, messageId: number, videoId: string) {
   try {
-    // 1. 检查用户是否有自动审核权限
+    // 1. 检查用户是否有自动审核权限，同时获取 id 和 nickname 用于通知
     const { data: profile } = await supabase
       .from('profiles')
-      .select('auto_approve')
+      .select('id, nickname, auto_approve')
       .eq('tg_user_id', chatId)
       .single()
 
     const autoApprove = profile?.auto_approve === true
+    const authorId = profile?.id
+    const authorNickname = profile?.nickname || '用户'
 
     // 2. 根据是否自动审核决定状态
     let newStatus: string
@@ -2578,6 +2702,14 @@ async function publishVideo(chatId: number, messageId: number, videoId: string) 
     }
 
     await editMessage(chatId, messageId, successMessage.join('\n'))
+
+    // 🎯 自动发布成功后，通知粉丝
+    if (autoApprove && authorId) {
+      // 异步通知，不阻塞主流程
+      notifyFollowersNewPost(authorId, authorNickname, videoId, video.description).catch((e) => {
+        console.error('[publishVideo] 通知粉丝失败:', e)
+      })
+    }
   } catch (error) {
     console.error('发布错误:', error)
     await editMessage(chatId, messageId, '❌ 发布时发生错误，请重试')
