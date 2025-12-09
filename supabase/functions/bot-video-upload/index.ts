@@ -816,28 +816,55 @@ async function handleVideo(
     if (mediaGroupId) {
       console.log(`[handleVideo] 检测到 Media Group: ${mediaGroupId}`)
 
-      // 检查是否应该发送提示消息（策略：如果这是该组的第一条视频）
-      // 查询该 mediaGroupId 下最早创建的一条记录
-      const { data: earliestVideo } = await supabase
+      // 查询该组所有视频（按时间排序）
+      const { data: groupVideos } = await supabase
         .from('videos')
-        .select('id')
+        .select('id, storage_type, created_at')
         .eq('media_group_id', mediaGroupId)
         .order('created_at', { ascending: true })
-        .limit(1)
-        .single()
+        .limit(10)
 
-      // 如果当前视频就是最早的那条，发送提示
-      if (earliestVideo && earliestVideo.id === draftVideo.id) {
+      const count = groupVideos?.length || 0
+
+      if (count === 1) {
+        console.log(`[handleVideo] Media Group - 仅检测到 1 条视频，按单视频处理`)
+        // 继续向下执行（发送编辑菜单）
+      } else if (count === 2) {
+        console.log(`[handleVideo] Media Group - 检测到第 2 条视频，切换为组模式`)
+
+        // 1. 尝试撤回第 1 条视频的编辑菜单
+        // 只有当第 1 条视频是小文件（非 pending）时，才可能发了菜单
+        const firstVideo = groupVideos![0]
+        if (firstVideo.storage_type !== 'pending') {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('current_message_id')
+            .eq('tg_user_id', chatId)
+            .single()
+
+          if (profile?.current_message_id) {
+            try {
+              await deleteTelegramMessage(chatId, profile.current_message_id)
+              console.log(`[handleVideo] 已撤回第 1 条视频的菜单: ${profile.current_message_id}`)
+            } catch (e) {
+              console.warn('[handleVideo] 撤回菜单失败:', e)
+            }
+          }
+        }
+
+        // 2. 发送汇总提示
         await sendMessage(
           chatId,
           `📦 <b>收到多条视频</b>\n\n` +
             `已全部自动保存为草稿。\n` +
-            `请在 <a href="t.me/tg_douyin_bot/tgdouyin">📹 我的视频</a> 中统一进行编辑和发布。`
+            `请在 📹 我的视频 - 草稿 中统一进行编辑和发布。`
         )
+        return
       } else {
-        console.log(`[handleVideo] Media Group ${mediaGroupId} - 静默处理 (非首条)`)
+        // count > 2
+        console.log(`[handleVideo] Media Group - 静默处理 (第 ${count} 条)`)
+        return
       }
-      return
     }
 
     // ✅ 根据文件大小显示不同消息 (非 Media Group)
