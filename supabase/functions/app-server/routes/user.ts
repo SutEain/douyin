@@ -1,9 +1,10 @@
 import { successResponse, errorResponse } from '../../_shared/response.ts'
 import { supabaseAdmin, DEFAULT_AVATAR } from '../lib/env.ts'
+import { checkAndSendNotification } from '../lib/notification.ts'
 import { HttpError, parseJsonBody, requireAuth, tryGetAuth } from '../lib/auth.ts'
 
 export async function handleFollowUser(req: Request): Promise<Response> {
-  const { user } = await requireAuth(req)
+  const { user, profile } = await requireAuth(req, { withProfile: true })
   const body = await parseJsonBody<{ target_id?: string; follow?: boolean }>(req)
   if (!body.target_id || typeof body.follow !== 'boolean') {
     throw new HttpError('Missing target_id or follow flag', 400)
@@ -24,6 +25,15 @@ export async function handleFollowUser(req: Request): Promise<Response> {
       console.error('[app-server] Follow user failed:', error)
       return errorResponse('Failed to follow user', 1, 500)
     }
+
+    // 发送通知
+    const nickname = profile.nickname || profile.username || '用户'
+    checkAndSendNotification(
+      body.target_id,
+      'follow',
+      `➕ 用户 <b>${nickname}</b> 关注了你`,
+      undefined // 不带 startParam 或者 user_${user.id} 如果前端支持
+    )
   } else {
     // 取消关注
     const { error } = await supabaseAdmin

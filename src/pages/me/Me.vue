@@ -135,12 +135,16 @@
           <!-- Tab 0: 作品 -->
           <SlideItem>
             <Posters
-              v-if="state.videos.my.total !== -1"
+              v-if="state.videos.my.list.length > 0"
               :list="state.videos.my.list"
               :showLabels="true"
             />
             <Loading v-if="state.loadings.loading0" :is-full-screen="false" />
-            <no-more v-else />
+            <div v-else-if="state.videos.my.total === 0" class="empty-list">
+              <div class="title">暂时没有作品</div>
+              <div class="desc">去发布你的第一个作品吧</div>
+            </div>
+            <no-more v-else-if="state.videos.my.total !== -1" />
           </SlideItem>
 
           <!-- Tab 1: 喜欢 -->
@@ -150,9 +154,12 @@
               <img src="../../assets/img/icon/me/lock-gray.png" alt="" />
               <span>只有你能看到自己的喜欢列表</span>
             </div>
-            <Posters v-if="state.videos.like.total !== -1" :list="state.videos.like.list" />
+            <Posters v-if="state.videos.like.list.length > 0" :list="state.videos.like.list" />
             <Loading v-if="state.loadings.loading1" :is-full-screen="false" />
-            <no-more v-else />
+            <div v-else-if="state.videos.like.total === 0" class="empty-list">
+              <div class="title">暂时没有喜欢的视频</div>
+            </div>
+            <no-more v-else-if="state.videos.like.total !== -1" />
           </SlideItem>
 
           <!-- Tab 2: 收藏 -->
@@ -162,7 +169,7 @@
               <img src="../../assets/img/icon/me/lock-gray.png" alt="" />
               <span>只有你能看到自己的收藏列表</span>
             </div>
-            <div class="collect">
+            <div class="collect" v-if="state.videos.collect.video.list.length > 0">
               <!-- 视频收藏 -->
               <div class="video" v-if="state.videos.collect.video.total !== -1">
                 <div class="top" @click="$nav('/me/collect/video-collect')">
@@ -711,6 +718,23 @@ onMounted(() => {
             color: rgba(255, 255, 255, 0.5);
           }
         }
+      }
+    }
+
+    .empty-list {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding-top: 50px;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 14px;
+
+      .title {
+        margin-bottom: 5px;
+        font-size: 16px;
+        font-weight: bold;
+        color: rgba(255, 255, 255, 0.9);
       }
     }
   }

@@ -271,6 +271,15 @@
                   :list="props.currentItem.aweme_list"
                 ></Posters>
                 <Loading :isFullScreen="false" v-else-if="state.loadings.profile" />
+                <div
+                  class="empty-list"
+                  v-else-if="
+                    (!props.currentItem.aweme_list || props.currentItem.aweme_list.length === 0) &&
+                    !state.loadings.profile
+                  "
+                >
+                  <div class="title">暂时没有作品</div>
+                </div>
                 <NoMore
                   v-else-if="
                     props.currentItem.aweme_list && props.currentItem.aweme_list.length > 0
@@ -291,6 +300,12 @@
                 <template v-else>
                   <Posters v-if="state.videos.like.list.length" :list="state.videos.like.list" />
                   <Loading :isFullScreen="false" v-else-if="state.loadings.like" />
+                  <div
+                    class="empty-list"
+                    v-else-if="state.videos.like.list.length === 0 && !state.loadings.like"
+                  >
+                    <div class="title">暂时没有喜欢的视频</div>
+                  </div>
                   <NoMore v-else />
                 </template>
               </div>
@@ -311,6 +326,12 @@
                     :list="state.videos.collect.list"
                   />
                   <Loading :isFullScreen="false" v-else-if="state.loadings.collect" />
+                  <div
+                    class="empty-list"
+                    v-else-if="state.videos.collect.list.length === 0 && !state.loadings.collect"
+                  >
+                    <div class="title">暂时没有收藏的视频</div>
+                  </div>
                   <NoMore v-else />
                 </template>
               </div>
@@ -971,6 +992,23 @@ onUnmounted(() => {
   .main {
     // ✅ 添加 touch-action，允许垂直滚动但拦截其他触摸行为
     touch-action: pan-y;
+
+    .empty-list {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding-top: 50px;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 14px;
+
+      .title {
+        margin-bottom: 5px;
+        font-size: 16px;
+        font-weight: bold;
+        color: rgba(255, 255, 255, 0.9);
+      }
+    }
 
     .notice {
       font-size: 12rem;

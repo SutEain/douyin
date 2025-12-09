@@ -6,23 +6,33 @@ export async function checkAndSendNotification(
   message: string,
   startParam?: string
 ) {
+  console.log(`[DEBUG-NOTIF] checkAndSendNotification: type=${type}, target=${targetUserId}`)
   try {
     if (!TG_BOT_TOKEN) {
-      console.warn('[Notification] TG_BOT_TOKEN not configured')
+      console.warn('[DEBUG-NOTIF] ❌ TG_BOT_TOKEN not configured')
       return
     }
 
     // 1. 获取目标用户信息
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error } = await supabaseAdmin
       .from('profiles')
       .select('tg_user_id, notification_settings')
       .eq('id', targetUserId)
       .single()
 
-    if (!profile || !profile.tg_user_id) {
-      // console.log(`[Notification] Skipped: Target user ${targetUserId} has no tg_user_id`)
+    if (error) {
+      console.error('[DEBUG-NOTIF] ❌ Query profile error:', error)
       return
     }
+
+    if (!profile || !profile.tg_user_id) {
+      console.log(
+        `[DEBUG-NOTIF] Skipped: Target user ${targetUserId} has no tg_user_id. Profile exists: ${!!profile}`
+      )
+      return
+    }
+
+    console.log(`[DEBUG-NOTIF] Found target tg_user_id: ${profile.tg_user_id}`)
 
     // 2. 检查设置
     const settings = profile.notification_settings || {}
@@ -30,19 +40,20 @@ export async function checkAndSendNotification(
 
     const muteUntil = typeSetting.mute_until || 0
     if (muteUntil === -1) {
-      console.log(`[Notification] Skipped: User disabled ${type} notifications`)
+      console.log(`[DEBUG-NOTIF] Skipped: User disabled ${type} notifications`)
       return
     }
 
     if (muteUntil > Date.now()) {
       console.log(
-        `[Notification] Skipped: User muted ${type} notifications until ${new Date(muteUntil).toISOString()}`
+        `[DEBUG-NOTIF] Skipped: User muted ${type} notifications until ${new Date(muteUntil).toISOString()}`
       )
       return
     }
 
     // 3. 发送通知
     const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`
+    console.log(`[DEBUG-NOTIF] Sending message to ${url}`)
 
     // 构造按钮
     // TODO: 从环境变量获取 Bot Username 和 App Name
@@ -72,12 +83,14 @@ export async function checkAndSendNotification(
       .then((res) => res.json())
       .then((res) => {
         if (!res.ok) {
-          console.error('[Notification] Send failed:', res)
+          console.error('[DEBUG-NOTIF] Send failed:', res)
         } else {
-          console.log(`[Notification] Sent ${type} to ${profile.tg_user_id}`)
+          console.log(
+            `[DEBUG-NOTIF] ✅ Sent ${type} to ${profile.tg_user_id}, msg_id: ${res.result?.message_id}`
+          )
         }
       })
-      .catch((e) => console.error('[Notification] Error:', e))
+      .catch((e) => console.error('[DEBUG-NOTIF] Error:', e))
 
     // 这里的 Promise p 没有被 await，在某些 runtime 可能被中断
     // 但为了响应速度，且这只是通知，可以接受一定程度的丢失

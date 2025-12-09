@@ -92,6 +92,19 @@ async function editMessage(chatId: number, messageId: number, text: string, opti
   }
 }
 
+async function deleteMessage(chatId: number, messageId: number) {
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId })
+    })
+  } catch (e) {
+    console.error('[deleteMessage] Error:', e)
+  }
+}
+
 async function answerCallbackQuery(callbackQueryId: string, text?: string) {
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`
   await fetch(url, {
@@ -166,7 +179,7 @@ function getSettingsKeyboard(settings: any) {
         { text: `⭐ 收藏: ${getStatus('collect')}`, callback_data: 'settings:menu:collect' },
         { text: `➕ 关注: ${getStatus('follow')}`, callback_data: 'settings:menu:follow' }
       ],
-      [{ text: '❌ 关闭菜单', callback_data: 'settings:close' }]
+      [{ text: '❌ 关闭', callback_data: 'settings:close' }]
     ]
   }
 }
@@ -200,7 +213,7 @@ async function handleSettingsCallback(chatId: number, messageId: number, data: s
   const action = parts[1] // menu, set, main, close
 
   if (action === 'close') {
-    await editMessage(chatId, messageId, '设置已关闭')
+    await deleteMessage(chatId, messageId)
     return
   }
 
@@ -398,7 +411,7 @@ async function sendSelfDestructMessage(chatId: number, text: string, seconds: nu
 // 获取持久化键盘
 function getPersistentKeyboard() {
   return {
-    keyboard: [[{ text: '📹 我的视频' }, { text: '⚙️ 隐私设置' }]],
+    keyboard: [[{ text: '📹 我的视频' }, { text: '⚙️ 隐私设置' }], [{ text: '🔔 通知设置' }]],
     resize_keyboard: true,
     persistent: true
   }

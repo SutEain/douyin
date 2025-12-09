@@ -1,5 +1,6 @@
 import { successResponse, errorResponse } from '../../_shared/response.ts'
 import { supabaseAdmin } from '../lib/env.ts'
+import { checkAndSendNotification } from '../lib/notification.ts'
 import {
   applyRowFlags,
   attachUserFlags,
@@ -473,7 +474,7 @@ async function queryUserLikes(
 }
 
 export async function handleVideoLike(req: Request): Promise<Response> {
-  const { user } = await requireAuth(req)
+  const { user, profile } = await requireAuth(req, { withProfile: true })
   const body = await parseJsonBody<{ video_id?: string; liked?: boolean }>(req)
   if (!body.video_id || typeof body.liked !== 'boolean') {
     throw new HttpError('Missing video_id or liked flag', 400)
@@ -501,9 +502,30 @@ export async function handleVideoLike(req: Request): Promise<Response> {
 
   const { data: video } = await supabaseAdmin
     .from('videos')
-    .select('like_count')
+    .select('like_count, author_id, description')
     .eq('id', body.video_id)
     .maybeSingle()
+
+  // 🔍 调试日志：点赞通知前置检查
+  console.log('[DEBUG-LIKE] 检查通知条件:', {
+    liked: body.liked,
+    hasVideo: !!video,
+    authorId: video?.author_id,
+    currentUserId: user.id,
+    isSelf: video?.author_id === user.id
+  })
+
+  // 发送通知
+  if (body.liked && video && video.author_id && video.author_id !== user.id) {
+    const nickname = profile.nickname || profile.username || '用户'
+    // 异步发送
+    checkAndSendNotification(
+      video.author_id,
+      'like',
+      `❤️ 用户 <b>${nickname}</b> 赞了你的作品`,
+      `video_${body.video_id}`
+    )
+  }
 
   return successResponse({
     liked: body.liked,
@@ -603,7 +625,7 @@ async function queryUserCollections(
 }
 
 export async function handleVideoCollect(req: Request): Promise<Response> {
-  const { user } = await requireAuth(req)
+  const { user, profile } = await requireAuth(req, { withProfile: true })
   const body = await parseJsonBody<{ video_id?: string; collected?: boolean }>(req)
   if (!body.video_id || typeof body.collected !== 'boolean') {
     throw new HttpError('Missing video_id or collected flag', 400)
@@ -631,9 +653,20 @@ export async function handleVideoCollect(req: Request): Promise<Response> {
 
   const { data: video } = await supabaseAdmin
     .from('videos')
-    .select('collect_count')
+    .select('collect_count, author_id, description')
     .eq('id', body.video_id)
     .maybeSingle()
+
+  // 发送通知
+  if (body.collected && video && video.author_id && video.author_id !== user.id) {
+    const nickname = profile.nickname || profile.username || '用户'
+    checkAndSendNotification(
+      video.author_id,
+      'collect',
+      `⭐ 用户 <b>${nickname}</b> 收藏了你的作品`,
+      `video_${body.video_id}`
+    )
+  }
 
   return successResponse({
     collected: body.collected,

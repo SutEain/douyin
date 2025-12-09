@@ -1,5 +1,6 @@
 import { successResponse, errorResponse } from '../../_shared/response.ts'
 import { supabaseAdmin } from '../lib/env.ts'
+import { checkAndSendNotification } from '../lib/notification.ts'
 import { formatCommentRow } from '../lib/video.ts'
 import { parseJsonBody, parsePagination, requireAuth } from '../lib/auth.ts'
 import { HttpError } from '../lib/auth.ts'
@@ -104,6 +105,52 @@ export async function handleVideoCreateComment(req: Request): Promise<Response> 
   if (error) {
     console.error('[app-server] Create comment failed:', error)
     return errorResponse('Failed to send comment', 1, 500)
+  }
+
+  // 发送通知
+  if (data) {
+    ;(async () => {
+      try {
+        const nickname = profile.nickname || profile.username || '用户'
+        const shortContent = content.length > 20 ? content.substring(0, 20) + '...' : content
+
+        if (body.reply_to) {
+          // 回复评论：通知原评论作者
+          const { data: parent } = await supabaseAdmin
+            .from('video_comments')
+            .select('user_id')
+            .eq('id', body.reply_to)
+            .single()
+
+          if (parent && parent.user_id !== user.id) {
+            await checkAndSendNotification(
+              parent.user_id,
+              'comment',
+              `💬 用户 <b>${nickname}</b> 回复了你的评论：${shortContent}`,
+              `video_${body.video_id}`
+            )
+          }
+        } else {
+          // 直接评论：通知视频作者
+          const { data: video } = await supabaseAdmin
+            .from('videos')
+            .select('author_id')
+            .eq('id', body.video_id)
+            .single()
+
+          if (video && video.author_id !== user.id) {
+            await checkAndSendNotification(
+              video.author_id,
+              'comment',
+              `💬 用户 <b>${nickname}</b> 评论了你的作品：${shortContent}`,
+              `video_${body.video_id}`
+            )
+          }
+        }
+      } catch (e) {
+        console.error('[Comment Notification] Error:', e)
+      }
+    })()
   }
 
   const comment = formatCommentRow({ ...data, profiles: profile })
