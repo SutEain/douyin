@@ -1517,7 +1517,7 @@ async function handleCallback(
     const userState = await getUserState(chatId)
 
     if (!userState.draft_video_id) {
-      await answerCallbackQuery(callbackQueryId, '会话已过期，请重新上传视频')
+      await answerCallbackQuery(callbackQueryId, '会话已过期，请从 我的视频 里继续编辑')
       return
     }
 
