@@ -89,6 +89,11 @@ function onImageError() {
   align-items: center;
   justify-content: center;
   background: black;
+  // 🎯 强制 GPU 渲染，解决 Windows 上滑动无动画问题
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .image-content {
