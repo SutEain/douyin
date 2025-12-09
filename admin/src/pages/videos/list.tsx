@@ -47,7 +47,7 @@ export const VideoList = () => {
     resource: 'videos',
     syncWithLocation: true,
     meta: {
-      select: '*, profiles:author_id(nickname, avatar_url, avatar_thumb, avatar_larger)'
+      select: '*, profiles:author_id(nickname, avatar_url)'
     },
     sorters: {
       initial: [
@@ -391,10 +391,8 @@ export const VideoList = () => {
               // 兼容可能为数组的情况（虽然 user_id 应该是一对一）
               const user = Array.isArray(profile) ? profile[0] : profile
               const nickname = user?.nickname || '未知用户'
-              // 尝试获取头像，兼容多种字段
+              // 尝试获取头像
               let avatar = user?.avatar_url
-              if (!avatar && user?.avatar_thumb) avatar = user.avatar_thumb
-              if (!avatar && user?.avatar_larger) avatar = user.avatar_larger
 
               // 如果是对象（Telegram 风格，数据库中可能是 jsonb）
               if (typeof avatar === 'object' && avatar !== null) {
