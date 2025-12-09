@@ -665,6 +665,7 @@ async function loadAuthorInfo() {
         // 个人信息
         nickname: profile.nickname || props.currentItem.author.nickname,
         unique_id: profile.username || props.currentItem.author.unique_id,
+        numeric_id: profile.numeric_id || props.currentItem.author.numeric_id, // ✅ 添加 numeric_id
         signature: profile.bio || profile.signature || props.currentItem.author.signature,
         gender: profile.gender,
         birthday: profile.birthday,

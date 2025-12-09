@@ -72,7 +72,7 @@
           />
           <div class="info">
             <div class="nickname">{{ user.nickname || user.username }}</div>
-            <div class="username">@{{ user.username }}</div>
+            <div class="username" v-if="user.numeric_id">ID: {{ user.numeric_id }}</div>
             <div class="stats">
               <span>{{ _formatNumber(user.follower_count) }} 粉丝</span>
               <span class="divider">·</span>

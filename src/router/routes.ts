@@ -12,11 +12,6 @@ const routes: RouteRecordRaw[] = [
   { path: '/publish', component: () => import('@/pages/home/Publish.vue') },
 
   { path: '/home', component: Home },
-  {
-    path: '/user/:id',
-    name: 'user-page',
-    component: () => import('@/pages/user/UserPage.vue')
-  },
   { path: '/home/music', component: () => import('@/pages/home/Music.vue') },
   {
     path: '/home/music-rank-list',
@@ -256,6 +251,11 @@ const routes: RouteRecordRaw[] = [
     path: '/video-detail',
     name: 'video-detail',
     component: () => import('@/pages/other/VideoDetail.vue')
+  },
+  {
+    path: '/user/:id',
+    name: 'user-page',
+    component: () => import('@/pages/user/UserPage.vue')
   }
 ]
 
