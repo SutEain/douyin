@@ -12,6 +12,11 @@ const routes: RouteRecordRaw[] = [
   { path: '/publish', component: () => import('@/pages/home/Publish.vue') },
 
   { path: '/home', component: Home },
+  {
+    path: '/user/:id',
+    name: 'user-page',
+    component: () => import('@/pages/user/UserPage.vue')
+  },
   { path: '/home/music', component: () => import('@/pages/home/Music.vue') },
   {
     path: '/home/music-rank-list',
@@ -237,16 +242,20 @@ const routes: RouteRecordRaw[] = [
     path: '/message/share-to-friend',
     component: () => import('@/pages/message/Share2Friend.vue')
   },
-  {
-    path: '/video-detail',
-    name: 'video-detail',
-    component: () => import('@/pages/other/VideoDetail.vue')
-  },
   // {path: '/album-detail', component: () => import('@/pages/other/AlbumDetail.vue')},
 
   {
     path: '/home/search',
     component: () => import('@/pages/home/SearchPage.vue')
+  },
+  {
+    path: '/home/search/result',
+    component: () => import('@/pages/home/SearchResult.vue')
+  },
+  {
+    path: '/video-detail',
+    name: 'video-detail',
+    component: () => import('@/pages/other/VideoDetail.vue')
   }
 ]
 

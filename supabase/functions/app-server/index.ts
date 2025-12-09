@@ -12,7 +12,8 @@ import {
   handleVideoLike,
   handleVideoLikes,
   handleVideoMy,
-  handleVideoDetail
+  handleVideoDetail,
+  handleBatchReview
 } from './routes/video.ts'
 import {
   handleVideoComments,
@@ -21,6 +22,13 @@ import {
   handleCommentReplies
 } from './routes/comments.ts'
 import { handleFollowUser, handleGetUserProfile, handleAutoInit } from './routes/user.ts'
+import {
+  handleSearchVideos,
+  handleSearchUsers,
+  handleHotSearch,
+  handleGetSearchHistory,
+  handleDeleteSearchHistory
+} from './routes/search.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -65,6 +73,9 @@ serve(async (req) => {
     if (route === '/video/collect' && method === 'POST') {
       return handleVideoCollect(req)
     }
+    if (route === '/video/batch-review' && method === 'POST') {
+      return handleBatchReview(req)
+    }
     if (route === '/video/comments' && method === 'GET') {
       return handleVideoComments(req)
     }
@@ -86,6 +97,23 @@ serve(async (req) => {
     // 🎯 自动初始化用户
     if (route === '/user/auto-init' && method === 'POST') {
       return handleAutoInit(req)
+    }
+
+    // 🔍 搜索相关路由
+    if (route === '/search/videos' && method === 'GET') {
+      return handleSearchVideos(req)
+    }
+    if (route === '/search/users' && method === 'GET') {
+      return handleSearchUsers(req)
+    }
+    if (route === '/search/hot' && method === 'GET') {
+      return handleHotSearch(req)
+    }
+    if (route === '/search/history' && method === 'GET') {
+      return handleGetSearchHistory(req)
+    }
+    if (route === '/search/history' && method === 'DELETE') {
+      return handleDeleteSearchHistory(req)
     }
 
     return errorResponse('Not found', 1, 404)

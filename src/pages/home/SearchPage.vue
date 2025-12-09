@@ -2,19 +2,31 @@
   <div class="Search">
     <div class="header">
       <dy-back mode="light" @click="router.back" class="mr1r"></dy-back>
-      <Search placeholder="搜索用户名字/抖音号" :isShowRightText="true" @notice="_no"></Search>
+      <div class="search-container">
+        <select v-model="searchType" class="search-type-select">
+          <option value="video">视频</option>
+          <option value="user">用户</option>
+        </select>
+        <Search
+          :placeholder="searchType === 'video' ? '搜索视频内容' : '搜索用户名'"
+          :isShowRightText="true"
+          @notice="handleSearch"
+          v-model="searchKeyword"
+        ></Search>
+      </div>
     </div>
     <div class="content">
-      <div class="history">
+      <div class="history" v-if="data.history.length > 0">
         <div class="row" :key="index" v-for="(item, index) in lHistory">
-          <div class="left">
+          <div class="left" @click="handleSearchHistory(item)">
             <img src="../../assets/img/icon/home/time-white.png" alt="" />
-            <span> {{ item }}</span>
+            <span class="history-type">{{ item.type === 'video' ? '📹' : '👤' }}</span>
+            <span> {{ item.keyword }}</span>
           </div>
           <dy-back
             img="close"
             mode="gray"
-            @click="data.history.splice(index, 1)"
+            @click.stop="deleteHistoryItem(item.keyword, index)"
             scale=".7"
           ></dy-back>
         </div>
@@ -25,14 +37,25 @@
       <div class="guess">
         <div class="title">
           <div class="left">猜你想搜</div>
-          <div class="right" @click.stop="refresh">
+          <div class="right" @click.stop="refreshHotKeywords">
             <img class="scan" src="../../assets/img/icon/home/refresh-gray.png" />
             <span>换一换</span>
           </div>
         </div>
         <div class="keys">
-          <div class="key" :key="index" v-for="(item, index) in data.randomGuess">
+          <div
+            class="key"
+            :key="index"
+            v-for="(item, index) in data.randomGuess"
+            @click="handleSearch(item.name)"
+          >
             <span class="desc">{{ item.name }}</span>
+            <img
+              v-if="item.type === 0"
+              src="../../assets/img/icon/home/hot.webp"
+              alt=""
+              class="type"
+            />
             <img
               v-if="item.type === 1"
               src="../../assets/img/icon/home/new.webp"
@@ -246,10 +269,11 @@
 <script setup lang="ts">
 import Search from '../../components/Search.vue'
 import Dom from '../../utils/dom'
-import { computed, nextTick, onMounted, reactive, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, watch, ref } from 'vue'
 import { _checkImgUrl, _formatNumber, _no, _showSimpleConfirmDialog, sampleSize } from '@/utils'
 import { useRouter } from 'vue-router'
 import { useNav } from '@/utils/hooks/useNav'
+import { getHotKeywords, getSearchHistory, deleteSearchHistory } from '@/api/search'
 
 defineOptions({
   name: 'SearchPage'
@@ -257,38 +281,19 @@ defineOptions({
 
 const router = useRouter()
 const nav = useNav()
+
+// 🔍 搜索状态
+const searchKeyword = ref('')
+const searchType = ref<'video' | 'user'>('video') // 默认搜索视频
+const isLoadingHistory = ref(false)
+const isLoadingHot = ref(false)
+
 const data = reactive({
   isExpand: false,
   adIndex: 0,
-  history: [
-    '历史记录1',
-    '历史记录2',
-    '历史记录3',
-    '历史记录4',
-    '历史记录5',
-    '历史记录6',
-    '历史记录7',
-    '历史记录8',
-    '历史记录9',
-    '历史记录10'
-  ],
-  guess: [
-    { name: '少年透明人', type: -1 },
-    { name: '花呗分批次接入征信', type: -1 },
-    { name: '新娘婚礼上跪求悔婚', type: -1 },
-    { name: '当你想换iPhone13时', type: -1 },
-    { name: 'Ling OS灵犀系统', type: -1 },
-    { name: '桑塔纳2022款', type: -1 },
-    { name: '透明人', type: -1 },
-    { name: '恒大集团凌晨发公告', type: 0 },
-    { name: '2022款日产GT-R', type: 1 },
-    { name: '四川双一流大学名单', type: -1 },
-    { name: '一公司放假通知走红', type: -1 },
-    { name: '成都新全优教育倒闭', type: -1 },
-    { name: '当代女生社交现状', type: -1 },
-    { name: '恒大集团凌晨发公告', type: -1 }
-  ],
-  randomGuess: [],
+  history: [] as Array<{ keyword: string; type: 'video' | 'user' }>, // 从数据库加载，包含搜索类型
+  allHotKeywords: [] as Array<{ text: string; count: number }>, // 所有热门搜索词（30条，只有视频）
+  randomGuess: [] as Array<{ name: string; type: number }>, // 当前显示的6条
   hotRankList: [
     { name: '国内手机厂商最大的软肋就是 android 系统！', type: 0 },
     { name: '大家的官网订单现在什么状态', type: -1 },
@@ -701,9 +706,10 @@ watch(
   { immediate: true }
 )
 
-onMounted(() => {
-  data.history = data.history.reverse()
-  refresh()
+onMounted(async () => {
+  await loadSearchHistory()
+  await loadHotKeywords()
+  refreshHotKeywords()
 })
 
 function toggleKey(key: string, i: number) {
@@ -712,16 +718,136 @@ function toggleKey(key: string, i: number) {
   clearInterval(data.timer)
 }
 
-function refresh() {
-  data.randomGuess = sampleSize(data.guess, 6)
+// 🔍 加载搜索历史（需要登录）
+async function loadSearchHistory() {
+  try {
+    isLoadingHistory.value = true
+    const result = await getSearchHistory(10)
+    data.history = result.history || []
+  } catch (error) {
+    // 如果未登录或其他错误，静默失败
+    console.log('[SearchPage] 加载搜索历史失败（可能未登录）:', error.message)
+    data.history = []
+  } finally {
+    isLoadingHistory.value = false
+  }
+}
+
+// 🔥 加载热门搜索词（30条）
+async function loadHotKeywords() {
+  try {
+    isLoadingHot.value = true
+    const result = await getHotKeywords(30)
+    data.allHotKeywords = result.keywords || []
+
+    // 如果返回的数据为空，使用默认热词
+    if (data.allHotKeywords.length === 0) {
+      console.log('[SearchPage] 暂无热门搜索数据，使用默认热词')
+      data.allHotKeywords = [
+        { text: '搞笑视频', count: 0 },
+        { text: '美食教程', count: 0 },
+        { text: '旅行vlog', count: 0 },
+        { text: '音乐翻唱', count: 0 },
+        { text: '舞蹈教学', count: 0 },
+        { text: '日常分享', count: 0 },
+        { text: '运动健身', count: 0 },
+        { text: '游戏解说', count: 0 },
+        { text: '时尚穿搭', count: 0 },
+        { text: '宠物日常', count: 0 }
+      ]
+    }
+  } catch (error) {
+    console.error('[SearchPage] 加载热门搜索词失败:', error)
+    // API 调用失败，使用默认热词
+    data.allHotKeywords = [
+      { text: '搞笑视频', count: 0 },
+      { text: '美食教程', count: 0 },
+      { text: '旅行vlog', count: 0 },
+      { text: '音乐翻唱', count: 0 },
+      { text: '舞蹈教学', count: 0 },
+      { text: '日常分享', count: 0 },
+      { text: '运动健身', count: 0 },
+      { text: '游戏解说', count: 0 },
+      { text: '时尚穿搭', count: 0 },
+      { text: '宠物日常', count: 0 }
+    ]
+  } finally {
+    isLoadingHot.value = false
+  }
+}
+
+// 🔄 刷新热门搜索词（随机展示6条）
+function refreshHotKeywords() {
+  if (data.allHotKeywords.length <= 6) {
+    // 如果总数小于等于6，全部显示
+    data.randomGuess = data.allHotKeywords.map((item) => ({
+      name: item.text,
+      type: item.count > 50 ? 0 : -1 // 热度高的标记为热门
+    }))
+  } else {
+    // 随机取6条
+    const sampled = sampleSize(data.allHotKeywords, 6)
+    data.randomGuess = sampled.map((item: any) => ({
+      name: item.text,
+      type: item.count > 50 ? 0 : -1
+    }))
+  }
+}
+
+// 🔍 处理搜索（输入框搜索）
+function handleSearch(keyword?: string) {
+  // 如果没有传入关键词，使用输入框的值
+  const searchText = (keyword || searchKeyword.value)?.trim()
+  if (!searchText) return
+
+  // 跳转到搜索结果页，带上搜索类型
+  router.push({
+    path: '/home/search/result',
+    query: {
+      keyword: searchText,
+      type: searchType.value // 传递搜索类型
+    }
+  })
+}
+
+// 🔍 处理搜索历史点击（带类型）
+function handleSearchHistory(item: { keyword: string; type: 'video' | 'user' }) {
+  // 使用历史记录中的搜索类型
+  router.push({
+    path: '/home/search/result',
+    query: {
+      keyword: item.keyword,
+      type: item.type
+    }
+  })
+}
+
+// 🗑️ 删除单条历史记录
+async function deleteHistoryItem(keyword: string, index: number) {
+  try {
+    await deleteSearchHistory(keyword)
+    data.history.splice(index, 1)
+  } catch (error) {
+    console.error('[SearchPage] 删除搜索历史失败:', error)
+  }
+}
+
+// 🗑️ 清空所有历史记录
+async function clearAllHistory() {
+  try {
+    await deleteSearchHistory()
+    data.history = []
+  } catch (error) {
+    console.error('[SearchPage] 清空搜索历史失败:', error)
+  }
 }
 
 function toggle() {
   if (data.isExpand) {
     _showSimpleConfirmDialog(
       '是否清空历史记录？',
-      () => {
-        data.history = []
+      async () => {
+        await clearAllHistory()
       },
       null,
       '确定',
@@ -774,6 +900,30 @@ function toggle() {
     display: flex;
     justify-content: space-between;
     align-items: center;
+
+    .search-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8rem;
+
+      .search-type-select {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4rem;
+        padding: 6rem 10rem;
+        font-size: 13rem;
+        cursor: pointer;
+        outline: none;
+        flex-shrink: 0;
+
+        option {
+          background: var(--main-bg);
+          color: white;
+        }
+      }
+    }
     border-bottom: 1px solid var(--line-color);
     position: fixed;
     width: 100%;
@@ -797,6 +947,16 @@ function toggle() {
     .history {
       .row {
         min-height: 40rem;
+
+        .left {
+          display: flex;
+          align-items: center;
+
+          .history-type {
+            margin: 0 4rem;
+            font-size: 14rem;
+          }
+        }
       }
 
       .history-expand {

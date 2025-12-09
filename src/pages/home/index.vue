@@ -11,7 +11,7 @@
 
       <!-- ✅ 视频内容区域（只有推荐） -->
       <div class="video-content">
-        <Slide4 :active="true" />
+        <Slide4 :active="state.active" />
       </div>
 
       <!-- 底部导航栏 -->
@@ -51,14 +51,6 @@
 
     <!-- ✅ 使用 Teleport 将弹窗传送到 body，避免定位问题 -->
     <Teleport to="body">
-      <!-- 用户资料页 -->
-      <UserPanel
-        v-if="state.showUserPanel && state.currentItem"
-        :currentItem="state.currentItem"
-        :active="state.showUserPanel"
-        @back="handleCloseUserPanel"
-        @update:currentItem="(item) => (state.currentItem = item)"
-      />
       <!-- 评论弹窗 -->
       <Comment
         page-id="home-index"
@@ -104,7 +96,6 @@ import BlockDialog from '../message/components/BlockDialog.vue'
 import ConfirmDialog from '@/components/dialog/ConfirmDialog.vue'
 import Search from '@/components/Search.vue'
 import ShareToFriend from './components/ShareToFriend.vue'
-import UserPanel from '@/components/UserPanel.vue'
 
 defineOptions({
   name: 'Home'
@@ -129,8 +120,7 @@ const state = reactive({
   showChangeNote: false,
   shareToFriend: false,
   active: true,
-  currentItem: null as any,
-  showUserPanel: false // ✅ 控制显示用户资料页
+  currentItem: null as any
 })
 
 // 监听 navIndex 变化，暂停其他 tab 的视频
@@ -178,19 +168,17 @@ function handleGoUserInfo() {
   if (currentVideo?.author) {
     const author = currentVideo.author
     console.log('[Home] 打开用户资料页', { author })
-    // 更新 currentItem 并显示 UserPanel
-    state.currentItem = currentVideo
-    state.showUserPanel = true
-    console.log('[Home] ✅ showUserPanel 已设置为:', state.showUserPanel)
-    console.log('[Home] ✅ currentItem:', state.currentItem)
+
+    const targetId = author.user_id || author.uid
+    if (targetId) {
+      router.push({
+        name: 'user-page',
+        params: { id: targetId }
+      })
+    }
   } else {
     console.log('[Home] ❌ 没有 currentVideo 或 author', { currentVideo })
   }
-}
-
-// 关闭用户资料页
-function handleCloseUserPanel() {
-  state.showUserPanel = false
 }
 
 // 🎯 深链接已完全由后端处理（通过 Telegram initData）

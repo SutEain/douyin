@@ -160,7 +160,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
   console.log('[推荐视频] 查询条件:', {
     状态: 'published',
     排除ID: startVideo ? startVideoId : '无',
-    排序: 'is_top desc, created_at desc',
+    排序: 'created_at desc', // 只按时间倒序
     范围: `${adjustedFrom}-${adjustedTo}`
   })
 
@@ -169,8 +169,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     error: videoError,
     count
   } = await query
-    .order('is_top', { ascending: false })
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false }) // 只按时间倒序，不考虑置顶
     .range(adjustedFrom, adjustedTo)
 
   if (videoError) {
@@ -442,6 +441,7 @@ async function queryUserLikes(
       .from('videos')
       .select('*')
       .in('id', videoIds)
+      .eq('status', 'published')
     if (videoError) {
       console.error('[app-server] Fetch liked videos failed:', videoError)
       return errorResponse('Failed to load videos', 1, 500)
@@ -571,6 +571,7 @@ async function queryUserCollections(
       .from('videos')
       .select('*')
       .in('id', videoIds)
+      .eq('status', 'published')
     if (videoError) {
       console.error('[app-server] Fetch collected videos failed:', videoError)
       return errorResponse('Failed to load videos', 1, 500)
@@ -638,4 +639,92 @@ export async function handleVideoCollect(req: Request): Promise<Response> {
     collected: body.collected,
     collect_count: video?.collect_count ?? 0
   })
+}
+
+/**
+ * 批量审核视频
+ * POST /video/batch-review
+ */
+export async function handleBatchReview(req: Request): Promise<Response> {
+  const body = await parseJsonBody(req)
+  const { video_ids, action, reject_reason } = body
+
+  if (!video_ids || !Array.isArray(video_ids) || video_ids.length === 0) {
+    return errorResponse('video_ids is required and must be a non-empty array', 1, 400)
+  }
+
+  if (!action || !['approve', 'reject'].includes(action)) {
+    return errorResponse('action must be either "approve" or "reject"', 1, 400)
+  }
+
+  if (action === 'reject' && !reject_reason) {
+    return errorResponse('reject_reason is required when rejecting', 1, 400)
+  }
+
+  console.log(`[batch-review] ${action} ${video_ids.length} videos`)
+
+  try {
+    if (action === 'approve') {
+      // 批量通过：先查询所有视频的状态
+      const { data: videos, error: queryError } = await supabaseAdmin
+        .from('videos')
+        .select('id, status')
+        .in('id', video_ids)
+
+      if (queryError) {
+        console.error('[batch-review] Query videos error:', queryError)
+        return errorResponse('Failed to query videos', 1, 500)
+      }
+
+      // 批量更新：ready → published, 其他状态保持
+      const updatePromises = (videos ?? []).map((video) => {
+        const shouldPublish = video.status === 'ready'
+        return supabaseAdmin
+          .from('videos')
+          .update({
+            review_status: 'approved',
+            status: shouldPublish ? 'published' : video.status
+          })
+          .eq('id', video.id)
+      })
+
+      const results = await Promise.all(updatePromises)
+
+      // 检查是否有错误
+      const errors = results.filter((r) => r.error)
+      if (errors.length > 0) {
+        console.error('[batch-review] Some updates failed:', errors)
+        return errorResponse(`${errors.length} videos failed to update`, 1, 500)
+      }
+
+      console.log(`[batch-review] Successfully approved ${video_ids.length} videos`)
+      return successResponse({
+        success: true,
+        updated: video_ids.length
+      })
+    } else {
+      // 批量拒绝
+      const { error } = await supabaseAdmin
+        .from('videos')
+        .update({
+          review_status: 'rejected',
+          reject_reason: reject_reason
+        })
+        .in('id', video_ids)
+
+      if (error) {
+        console.error('[batch-review] Batch reject error:', error)
+        return errorResponse('Failed to reject videos', 1, 500)
+      }
+
+      console.log(`[batch-review] Successfully rejected ${video_ids.length} videos`)
+      return successResponse({
+        success: true,
+        updated: video_ids.length
+      })
+    }
+  } catch (error) {
+    console.error('[batch-review] Unexpected error:', error)
+    return errorResponse('Internal server error', 1, 500)
+  }
 }

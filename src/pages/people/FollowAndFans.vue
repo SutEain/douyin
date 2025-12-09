@@ -78,25 +78,15 @@
       <!-- ✅ 关闭 main -->
     </div>
     <!-- ✅ 关闭 scroll-container -->
-
-    <!-- 用户资料页 -->
-    <UserPanel
-      v-if="showUserPanel && selectedUser"
-      :currentItem="selectedUser"
-      :active="showUserPanel"
-      @back="showUserPanel = false"
-      @update:currentItem="(item) => (selectedUser = item)"
-    />
   </div>
 </template>
 <script setup lang="ts">
 import People from './components/People.vue'
 import Search from '../../components/Search.vue'
 import Indicator from '../../components/slide/Indicator.vue'
-import UserPanel from '@/components/UserPanel.vue'
 import { useBaseStore } from '@/store/pinia'
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useNav } from '@/utils/hooks/useNav'
 import { getFollowingList, getFollowersList } from '@/api/user'
 import { toggleFollowUser } from '@/api/videos'
@@ -107,6 +97,7 @@ defineOptions({
 })
 
 const route = useRoute()
+const router = useRouter()
 const nav = useNav()
 const store = useBaseStore()
 const data = reactive({
@@ -118,9 +109,9 @@ const data = reactive({
   searchFollowing: [] as any[]
 })
 
-// ✅ UserPanel 相关状态
-const showUserPanel = ref(false)
-const selectedUser = ref<any>(null)
+// UserPanel 相关状态 (已移除，改用路由跳转)
+// const showUserPanel = ref(false)
+// const selectedUser = ref<any>(null)
 
 // ✅ 双层滚动结构的 refs
 const scrollContainer = ref<HTMLElement | null>(null)
@@ -208,37 +199,13 @@ async function handleUnfollow(userId: string) {
   }
 }
 
-// ✅ 处理头像点击，打开用户资料页
+// ✅ 处理头像点击，打开用户资料页（路由跳转）
 function handleClickAvatar(user: any) {
   console.log('[FollowAndFans] 点击头像:', user)
-
-  // 转换数据格式为 UserPanel 需要的格式
-  selectedUser.value = {
-    aweme_id: user.user_id || user.uid,
-    author: {
-      user_id: user.user_id || user.uid,
-      uid: user.uid || user.user_id,
-      nickname: user.name || user.nickname,
-      unique_id: user.unique_id,
-      avatar_168x168: {
-        url_list: [user.avatar || user.avatar_url]
-      },
-      avatar_300x300: {
-        url_list: [user.avatar || user.avatar_url]
-      },
-      signature: user.signature,
-      follow_status: user.follow_status || 0,
-      is_follow: user.follow_status > 0, // ✅ 根据 follow_status 设置 is_follow
-      follower_count: user.follower_count || 0,
-      following_count: user.following_count || 0,
-      aweme_count: user.aweme_count || 0,
-      cover_url: user.cover_url || []
-    },
-    aweme_list: [] // 会自动加载
+  const userId = user.user_id || user.uid
+  if (userId) {
+    router.push(`/user/${userId}`)
   }
-
-  showUserPanel.value = true
-  console.log('[FollowAndFans] ✅ 打开 UserPanel')
 }
 
 watch(
