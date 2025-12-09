@@ -271,7 +271,7 @@
 <script setup lang="ts">
 import Search from '../../components/Search.vue'
 import Dom from '../../utils/dom'
-import { computed, nextTick, onMounted, reactive, watch, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, watch, ref } from 'vue'
 import { _checkImgUrl, _formatNumber, _no, _showSimpleConfirmDialog, sampleSize } from '@/utils'
 import { useRouter } from 'vue-router'
 import { useNav } from '@/utils/hooks/useNav'
@@ -761,7 +761,7 @@ watch(
 onMounted(async () => {
   // 🔒 锁定高度
   pageHeight.value = window.innerHeight + 'px'
-  console.log('[SearchPage] Mounted with height:', pageHeight.value)
+  console.log('[SearchPage] Mounted 🟢 Timestamp:', Date.now(), 'Height:', pageHeight.value)
 
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
@@ -780,6 +780,11 @@ onMounted(async () => {
   await loadSearchHistory()
   await loadHotKeywords()
   refreshHotKeywords()
+})
+
+onUnmounted(() => {
+  console.log('[SearchPage] Unmounted 🔴 Timestamp:', Date.now())
+  if (monitorTimer) clearInterval(monitorTimer)
 })
 
 function toggleKey(key: string, i: number) {

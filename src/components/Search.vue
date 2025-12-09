@@ -9,11 +9,13 @@
         alt=""
       />
       <input
-        type="text"
+        type="search"
         :placeholder="placeholder"
         v-model="value"
+        autocomplete="off"
         @focus="$emit('focus', $event)"
         @blur="$emit('blur', $event)"
+        @keydown.enter.prevent="$emit('notice')"
       />
       <div class="suffix">
         <slot v-if="$slots.default"></slot>
