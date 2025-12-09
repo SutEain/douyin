@@ -13,7 +13,8 @@ import {
   handleVideoLikes,
   handleVideoMy,
   handleVideoDetail,
-  handleBatchReview
+  handleBatchReview,
+  handleApproveVideo
 } from './routes/video.ts'
 import {
   handleVideoComments,
@@ -75,6 +76,9 @@ serve(async (req) => {
     }
     if (route === '/video/batch-review' && method === 'POST') {
       return handleBatchReview(req)
+    }
+    if (route === '/video/approve' && method === 'POST') {
+      return handleApproveVideo(req)
     }
     if (route === '/video/comments' && method === 'GET') {
       return handleVideoComments(req)

@@ -2506,15 +2506,49 @@ async function handleViewVideo(chatId: number, messageId: number, videoId: strin
   }
 }
 
-// 发布视频
+// 发布视频（提交审核）
 async function publishVideo(chatId: number, messageId: number, videoId: string) {
   try {
-    // 更新状态为已发布
+    // 1. 检查用户是否有自动审核权限
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('auto_approve')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    const autoApprove = profile?.auto_approve === true
+
+    // 2. 根据是否自动审核决定状态
+    let newStatus: string
+    let newReviewStatus: string
+    let successMessage: string[]
+
+    if (autoApprove) {
+      // ✅ 老用户：自动通过审核，直接发布
+      newStatus = 'published'
+      newReviewStatus = 'auto_approved'
+      successMessage = ['🎉 <b>发布成功！</b>', '', '视频已发布到首页']
+    } else {
+      // 🕐 新用户：需要人工审核
+      newStatus = 'ready'
+      newReviewStatus = 'pending'
+      successMessage = [
+        '✅ <b>提交成功！</b>',
+        '',
+        '您的内容已提交审核',
+        '审核通过后将自动发布到首页',
+        '',
+        '💡 首次发布需要审核，后续发布将自动通过'
+      ]
+    }
+
+    // 3. 更新视频状态
     const { data: video, error } = await supabase
       .from('videos')
       .update({
-        status: 'published',
-        published_at: new Date().toISOString()
+        status: newStatus,
+        review_status: newReviewStatus,
+        published_at: autoApprove ? new Date().toISOString() : null
       })
       .eq('id', videoId)
       .select()
@@ -2530,22 +2564,20 @@ async function publishVideo(chatId: number, messageId: number, videoId: string) 
     await updateUserState(chatId, { state: 'idle', draft_video_id: null, current_message_id: null })
 
     // 构建成功消息
-    const lines = ['🎉 <b>发布成功！</b>', '', '视频已发布到首页']
-
     if (video.description) {
       const desc = safeTruncate(video.description, 50)
-      lines.push(`📝 ${desc}`)
+      successMessage.push(`📝 ${desc}`)
     }
     if (video.tags && video.tags.length > 0) {
-      lines.push(`🏷️ ${video.tags.map((t: string) => '#' + t).join(' ')}`)
+      successMessage.push(`🏷️ ${video.tags.map((t: string) => '#' + t).join(' ')}`)
     }
     if (video.location_country) {
       let loc = getFlag(video.location_country_code!) + ' ' + video.location_country
       if (video.location_city) loc += ' · ' + video.location_city
-      lines.push(`📍 ${loc}`)
+      successMessage.push(`📍 ${loc}`)
     }
 
-    await editMessage(chatId, messageId, lines.join('\n'))
+    await editMessage(chatId, messageId, successMessage.join('\n'))
   } catch (error) {
     console.error('发布错误:', error)
     await editMessage(chatId, messageId, '❌ 发布时发生错误，请重试')

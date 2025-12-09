@@ -249,31 +249,34 @@ export const VideoList = () => {
   const handleApprove = (record: any) => {
     Modal.confirm({
       title: '确认通过审核',
-      content: `确定通过视频「${record.title}」的审核吗？`,
-      onOk: () => {
-        // 🎯 审核通过逻辑：
-        // - ready（就绪）→ published（已发布）
-        // - 其他状态保持不变
-        const shouldPublish = record.status === 'ready'
+      content: `确定通过「${record.title}」的审核吗？`,
+      onOk: async () => {
+        try {
+          // 🎯 调用后端 API 处理审核通过（包含自动审核逻辑）
+          const response = await fetch(`${import.meta.env.VITE_APP_SERVER_URL}/video/approve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ video_id: record.id })
+          })
 
-        updateVideo(
-          {
-            resource: 'videos',
-            id: record.id,
-            values: {
-              review_status: 'approved',
-              status: shouldPublish ? 'published' : record.status
+          const result = await response.json()
+
+          if (result.code === 0) {
+            const { auto_approve_enabled } = result.data || {}
+            if (auto_approve_enabled) {
+              message.success('审核通过！该用户后续发布将自动通过审核')
+            } else {
+              message.success('审核通过，内容已发布')
             }
-          },
-          {
-            onSuccess: () => {
-              message.success(shouldPublish ? '审核通过，视频已发布' : '审核通过')
-            },
-            onError: () => {
-              message.error('操作失败')
-            }
+            // 刷新列表
+            window.location.reload()
+          } else {
+            message.error(result.msg || '操作失败')
           }
-        )
+        } catch (error) {
+          console.error('Approve error:', error)
+          message.error('操作失败，请重试')
+        }
       }
     })
   }

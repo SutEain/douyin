@@ -761,3 +761,86 @@ export async function handleBatchReview(req: Request): Promise<Response> {
     return errorResponse('Internal server error', 1, 500)
   }
 }
+
+/**
+ * 单个视频审核通过（含自动审核逻辑）
+ * POST /video/approve
+ */
+export async function handleApproveVideo(req: Request): Promise<Response> {
+  const body = await parseJsonBody(req)
+  const { video_id } = body
+
+  if (!video_id) {
+    return errorResponse('video_id is required', 1, 400)
+  }
+
+  console.log(`[approve] Processing video: ${video_id}`)
+
+  try {
+    // 1. 查询视频信息
+    const { data: video, error: videoError } = await supabaseAdmin
+      .from('videos')
+      .select('id, status, author_id, tg_user_id')
+      .eq('id', video_id)
+      .single()
+
+    if (videoError || !video) {
+      console.error('[approve] Video not found:', videoError)
+      return errorResponse('Video not found', 1, 404)
+    }
+
+    // 2. 更新视频状态
+    const shouldPublish = video.status === 'ready'
+    const { error: updateError } = await supabaseAdmin
+      .from('videos')
+      .update({
+        review_status: 'approved',
+        status: shouldPublish ? 'published' : video.status,
+        published_at: shouldPublish ? new Date().toISOString() : null
+      })
+      .eq('id', video_id)
+
+    if (updateError) {
+      console.error('[approve] Update video failed:', updateError)
+      return errorResponse('Failed to approve video', 1, 500)
+    }
+
+    // 3. 检查并更新用户的自动审核权限
+    let autoApproveEnabled = false
+    const authorField = video.tg_user_id ? 'tg_user_id' : 'id'
+    const authorValue = video.tg_user_id ?? video.author_id
+
+    // 查询用户当前的 auto_approve 状态
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, auto_approve')
+      .eq(authorField, authorValue)
+      .single()
+
+    if (profile && !profile.auto_approve) {
+      // 用户还没有自动审核权限，这是他的第一个通过的视频
+      // 设置 auto_approve = true
+      const { error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .update({ auto_approve: true })
+        .eq('id', profile.id)
+
+      if (profileError) {
+        console.error('[approve] Failed to update auto_approve:', profileError)
+        // 不影响主流程，只记录日志
+      } else {
+        autoApproveEnabled = true
+        console.log(`[approve] Enabled auto_approve for user: ${profile.id}`)
+      }
+    }
+
+    console.log(`[approve] Successfully approved video: ${video_id}`)
+    return successResponse({
+      success: true,
+      auto_approve_enabled: autoApproveEnabled
+    })
+  } catch (error) {
+    console.error('[approve] Unexpected error:', error)
+    return errorResponse('Internal server error', 1, 500)
+  }
+}
