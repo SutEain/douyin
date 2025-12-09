@@ -435,8 +435,14 @@ async function handleFollowUser(user: any) {
     z-index: 4;
     background: var(--main-bg);
     height: 60rem;
-    font-size: 14rem;
+    // ✅ 适配安全区域
+    height: calc(60rem + constant(safe-area-inset-top));
+    height: calc(60rem + env(safe-area-inset-top));
     padding: 0 var(--page-padding);
+    padding-top: constant(safe-area-inset-top);
+    padding-top: env(safe-area-inset-top);
+
+    font-size: 14rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -496,7 +502,12 @@ async function handleFollowUser(user: any) {
   .video-results,
   .user-results {
     padding-top: 60rem; // 调整顶部间距
+    padding-top: calc(60rem + constant(safe-area-inset-top));
+    padding-top: calc(60rem + env(safe-area-inset-top));
+
     min-height: calc(100vh - 60rem);
+    min-height: calc(100vh - (60rem + constant(safe-area-inset-top)));
+    min-height: calc(100vh - (60rem + env(safe-area-inset-top)));
   }
 
   .loading-container {

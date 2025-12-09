@@ -8,7 +8,13 @@
         src="../assets/img/icon/search-gray.png"
         alt=""
       />
-      <input type="text" :placeholder="placeholder" v-model="value" />
+      <input
+        type="text"
+        :placeholder="placeholder"
+        v-model="value"
+        @focus="$emit('focus', $event)"
+        @blur="$emit('blur', $event)"
+      />
       <div class="suffix">
         <slot v-if="$slots.default"></slot>
         <img

@@ -12,6 +12,8 @@
           :isShowRightText="true"
           @notice="handleSearch"
           v-model="searchKeyword"
+          @focus="handleInputFocus"
+          @blur="handleInputBlur"
         ></Search>
       </div>
     </div>
@@ -289,6 +291,54 @@ const isLoadingHistory = ref(false)
 const isLoadingHot = ref(false)
 // 🔒 锁定页面高度，防止键盘弹出时挤压页面导致黑屏
 const pageHeight = ref('100vh')
+
+// 🔍 日志监控
+let monitorTimer: any = null
+
+function handleInputFocus(e: any) {
+  console.log('[SearchPage] Input Focus 🟢', {
+    windowHeight: window.innerHeight,
+    pageHeight: pageHeight.value,
+    scrollTop: document.documentElement.scrollTop || document.body.scrollTop,
+    visualViewport: {
+      height: window.visualViewport?.height,
+      offsetTop: window.visualViewport?.offsetTop,
+      pageTop: window.visualViewport?.pageTop
+    }
+  })
+
+  // 持续监控5秒，观察黑屏发生时的状态
+  monitorViewport(5000)
+}
+
+function handleInputBlur() {
+  console.log('[SearchPage] Input Blur 🔴')
+}
+
+function monitorViewport(duration: number) {
+  if (monitorTimer) clearInterval(monitorTimer)
+
+  const startTime = Date.now()
+  monitorTimer = setInterval(() => {
+    if (Date.now() - startTime > duration) {
+      clearInterval(monitorTimer)
+      return
+    }
+
+    const searchEl = document.querySelector('.Search')
+    const rect = searchEl?.getBoundingClientRect()
+
+    console.log('[SearchPage] ⏱️ Monitor State:', {
+      time: Date.now() - startTime,
+      visualHeight: window.visualViewport?.height, // 可视高度（键盘弹出后变小）
+      visualOffset: window.visualViewport?.offsetTop, // 视口偏移
+      rectTop: rect?.top, // 元素顶部位置
+      rectHeight: rect?.height,
+      bodyScroll: document.body.scrollTop,
+      docScroll: document.documentElement.scrollTop
+    })
+  }, 500)
+}
 
 const data = reactive({
   isExpand: false,
@@ -711,6 +761,22 @@ watch(
 onMounted(async () => {
   // 🔒 锁定高度
   pageHeight.value = window.innerHeight + 'px'
+  console.log('[SearchPage] Mounted with height:', pageHeight.value)
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      console.log(
+        '[SearchPage] ⚠️ visualViewport Resize:',
+        window.visualViewport?.height,
+        'Offset:',
+        window.visualViewport?.offsetTop
+      )
+    })
+    window.visualViewport.addEventListener('scroll', () => {
+      console.log('[SearchPage] ⚠️ visualViewport Scroll:', window.visualViewport?.offsetTop)
+    })
+  }
+
   await loadSearchHistory()
   await loadHotKeywords()
   refreshHotKeywords()
@@ -900,8 +966,14 @@ function toggle() {
     z-index: 4;
     background: var(--main-bg);
     height: 60rem;
-    font-size: 14rem;
+    // ✅ 适配安全区域
+    height: calc(60rem + constant(safe-area-inset-top));
+    height: calc(60rem + env(safe-area-inset-top));
     padding: 0 var(--page-padding);
+    padding-top: constant(safe-area-inset-top);
+    padding-top: env(safe-area-inset-top);
+
+    font-size: 14rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -948,6 +1020,8 @@ function toggle() {
 
   .content {
     padding-top: 60rem;
+    padding-top: calc(60rem + constant(safe-area-inset-top));
+    padding-top: calc(60rem + env(safe-area-inset-top));
 
     .history {
       .row {
