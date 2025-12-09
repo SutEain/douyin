@@ -1,5 +1,5 @@
 <template>
-  <div class="Search">
+  <div class="Search" :style="{ height: pageHeight }">
     <div class="header">
       <dy-back mode="light" @click="router.back" class="mr1r"></dy-back>
       <div class="search-container">
@@ -287,6 +287,8 @@ const searchKeyword = ref('')
 const searchType = ref<'video' | 'user'>('video') // 默认搜索视频
 const isLoadingHistory = ref(false)
 const isLoadingHot = ref(false)
+// 🔒 锁定页面高度，防止键盘弹出时挤压页面导致黑屏
+const pageHeight = ref('100vh')
 
 const data = reactive({
   isExpand: false,
@@ -707,6 +709,8 @@ watch(
 )
 
 onMounted(async () => {
+  // 🔒 锁定高度
+  pageHeight.value = window.innerHeight + 'px'
   await loadSearchHistory()
   await loadHotKeywords()
   refreshHotKeywords()
@@ -865,8 +869,7 @@ function toggle() {
 .Search {
   position: fixed;
   left: 0;
-  right: 0;
-  bottom: 0;
+  width: 100%;
   top: 0;
   overflow: auto;
   color: white;
