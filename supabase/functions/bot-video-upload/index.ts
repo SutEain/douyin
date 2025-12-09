@@ -13,20 +13,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 // 🚫 媒体组拒绝缓存（避免同一组发送多条提示）
 const mediaGroupRejectCache = new Map<string, boolean>()
 
-// 📸 相册缓存（收集同一个 media_group_id 的所有图片）
+// 📸 图片信息接口
 interface AlbumPhoto {
   file_id: string
   width: number
   height: number
   file_size?: number
+  order?: number
 }
-interface AlbumCache {
-  photos: AlbumPhoto[]
-  caption?: string
-  from?: any
-  timer?: ReturnType<typeof setTimeout>
-}
-const albumCache = new Map<string, AlbumCache>()
 
 // 🎯 将 Telegram file_id 转换为 CDN URL
 function buildTelegramFileUrl(fileId: string): string | null {
@@ -765,6 +759,7 @@ async function getOrCreateProfile(
 }
 
 // 📸 处理图片上传（单图或相册）
+// 使用数据库存储相册状态，解决 Edge Function 无状态问题
 async function handlePhoto(
   chatId: number,
   photoSizes: any[], // Telegram 会发送多个尺寸的图片
@@ -781,56 +776,160 @@ async function handlePhoto(
     const photo = photoSizes[photoSizes.length - 1]
     console.log('[handlePhoto] 最大尺寸图片:', photo)
 
-    // 🎯 相册模式：收集同一组的所有图片
-    if (mediaGroupId) {
-      const cacheKey = `album_${chatId}_${mediaGroupId}`
-      let albumData = albumCache.get(cacheKey)
+    // 获取用户 profile
+    const profile = await getOrCreateProfile(chatId, from)
+    if (!profile) {
+      await sendMessage(chatId, '❌ 账号初始化失败\n\n请先发送 /start 命令初始化账号')
+      return
+    }
 
-      if (!albumData) {
-        // 第一张图片，初始化缓存
-        albumData = {
-          photos: [],
-          caption: caption,
-          from: from
+    // 🎯 相册模式：使用数据库存储
+    if (mediaGroupId) {
+      // 查询是否已有该 media_group_id 的记录
+      const { data: existingPost } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('tg_user_id', chatId)
+        .eq('media_group_id', mediaGroupId)
+        .single()
+
+      if (existingPost) {
+        // 已有记录，追加图片
+        const currentImages: AlbumPhoto[] =
+          typeof existingPost.images === 'string'
+            ? JSON.parse(existingPost.images)
+            : existingPost.images || []
+
+        // 检查是否已存在该图片（避免重复）
+        const exists = currentImages.some((img) => img.file_id === photo.file_id)
+        if (exists) {
+          console.log('[handlePhoto] 图片已存在，跳过')
+          return
         }
-        albumCache.set(cacheKey, albumData)
+
+        // 追加新图片
+        currentImages.push({
+          file_id: photo.file_id,
+          width: photo.width,
+          height: photo.height,
+          order: currentImages.length
+        })
+
+        // 更新数据库
+        const { error: updateError } = await supabase
+          .from('videos')
+          .update({
+            images: JSON.stringify(currentImages),
+            title: `相册 (${currentImages.length}张)`,
+            content_type: 'album' // 确保是相册类型
+          })
+          .eq('id', existingPost.id)
+
+        if (updateError) {
+          console.error('[handlePhoto] 更新相册失败:', updateError)
+          return
+        }
+
+        console.log(`[handlePhoto] 相册已更新，当前 ${currentImages.length} 张图片`)
+
+        // 🎯 更新编辑菜单（获取最新数据）
+        const { data: updatedPost } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('id', existingPost.id)
+          .single()
+
+        if (updatedPost) {
+          // 获取当前消息ID并更新菜单
+          const { data: userState } = await supabase
+            .from('user_bot_states')
+            .select('current_message_id')
+            .eq('user_id', chatId)
+            .single()
+
+          if (userState?.current_message_id) {
+            try {
+              await editMessage(
+                chatId,
+                userState.current_message_id,
+                getEditMenuText(updatedPost),
+                {
+                  reply_markup: getEditKeyboard(updatedPost)
+                }
+              )
+            } catch (e) {
+              console.warn('[handlePhoto] 更新菜单失败:', e)
+            }
+          }
+        }
+
+        return
       }
 
-      // 添加图片到缓存
-      albumData.photos.push({
-        file_id: photo.file_id,
-        width: photo.width,
-        height: photo.height,
-        file_size: photo.file_size
+      // 没有记录，创建新相册
+      console.log('[handlePhoto] 创建新相册')
+
+      // 处理 caption
+      let description = null
+      let tags: string[] = []
+      if (caption && caption.length > 0) {
+        description = safeTruncate(caption, 300)
+        tags = extractTags(caption)
+      }
+
+      const { data: newPost, error } = await supabase
+        .from('videos')
+        .insert({
+          tg_user_id: chatId,
+          author_id: profile.id,
+          title: '相册 (1张)',
+          description: description,
+          tags: tags.length > 0 ? tags : null,
+          content_type: 'album',
+          media_group_id: mediaGroupId, // 🎯 保存 media_group_id 用于后续匹配
+          images: JSON.stringify([
+            {
+              file_id: photo.file_id,
+              width: photo.width,
+              height: photo.height,
+              order: 0
+            }
+          ]),
+          width: photo.width,
+          height: photo.height,
+          storage_type: 'telegram',
+          is_private: false,
+          status: 'draft'
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('[handlePhoto] 创建相册失败:', error)
+        await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + error.message)
+        return
+      }
+
+      console.log(`[handlePhoto] 相册记录已创建: ${newPost.id}`)
+
+      // 发送编辑菜单
+      const menuResult = await sendMessage(chatId, getEditMenuText(newPost), {
+        reply_markup: getEditKeyboard(newPost)
       })
 
-      // 保存 caption（只有第一张图片有 caption）
-      if (caption && !albumData.caption) {
-        albumData.caption = caption
-      }
+      const messageId = menuResult.ok ? menuResult.result.message_id : null
 
-      console.log(`[handlePhoto] 相册已收集 ${albumData.photos.length} 张图片`)
-
-      // 清除之前的定时器，重新设置
-      if (albumData.timer) {
-        clearTimeout(albumData.timer)
-      }
-
-      // 1秒后处理整个相册（等待所有图片到达）
-      albumData.timer = setTimeout(async () => {
-        const finalAlbum = albumCache.get(cacheKey)
-        albumCache.delete(cacheKey)
-
-        if (finalAlbum && finalAlbum.photos.length > 0) {
-          await saveAlbum(chatId, finalAlbum)
-        }
-      }, 1000)
+      await updateUserState(chatId, {
+        state: 'idle',
+        draft_video_id: newPost.id,
+        current_message_id: messageId
+      })
 
       return
     }
 
     // 🎯 单图模式：直接保存
-    await saveSinglePhoto(chatId, photo, caption, from)
+    await saveSinglePhoto(chatId, photo, caption, from, profile)
   } catch (error) {
     console.error('[handlePhoto] 处理图片失败:', error)
     await sendMessage(chatId, '❌ 图片上传失败，请重试')
@@ -838,7 +937,13 @@ async function handlePhoto(
 }
 
 // 保存单张图片
-async function saveSinglePhoto(chatId: number, photo: any, caption?: string, from?: any) {
+async function saveSinglePhoto(
+  chatId: number,
+  photo: any,
+  caption?: string,
+  from?: any,
+  profile?: any
+) {
   console.log('[saveSinglePhoto] 保存单张图片')
 
   // 处理 caption
@@ -849,11 +954,13 @@ async function saveSinglePhoto(chatId: number, photo: any, caption?: string, fro
     tags = extractTags(caption)
   }
 
-  // 获取用户 profile
-  const profile = await getOrCreateProfile(chatId, from)
+  // 获取用户 profile（如果没有传入）
   if (!profile) {
-    await sendMessage(chatId, '❌ 账号初始化失败\n\n请先发送 /start 命令初始化账号')
-    return
+    profile = await getOrCreateProfile(chatId, from)
+    if (!profile) {
+      await sendMessage(chatId, '❌ 账号初始化失败\n\n请先发送 /start 命令初始化账号')
+      return
+    }
   }
 
   // 保存到数据库
@@ -891,78 +998,6 @@ async function saveSinglePhoto(chatId: number, photo: any, caption?: string, fro
   }
 
   console.log(`[saveSinglePhoto] 图片记录已保存: ${draftPost.id}`)
-
-  // 发送编辑菜单
-  const menuResult = await sendMessage(chatId, getEditMenuText(draftPost), {
-    reply_markup: getEditKeyboard(draftPost)
-  })
-
-  const messageId = menuResult.ok ? menuResult.result.message_id : null
-
-  await updateUserState(chatId, {
-    state: 'idle',
-    draft_video_id: draftPost.id,
-    current_message_id: messageId
-  })
-}
-
-// 保存相册
-async function saveAlbum(chatId: number, albumData: AlbumCache) {
-  console.log(`[saveAlbum] 保存相册，共 ${albumData.photos.length} 张图片`)
-
-  // 处理 caption
-  let description = null
-  let tags: string[] = []
-  if (albumData.caption && albumData.caption.length > 0) {
-    description = safeTruncate(albumData.caption, 300)
-    tags = extractTags(albumData.caption)
-  }
-
-  // 获取用户 profile
-  const profile = await getOrCreateProfile(chatId, albumData.from)
-  if (!profile) {
-    await sendMessage(chatId, '❌ 账号初始化失败\n\n请先发送 /start 命令初始化账号')
-    return
-  }
-
-  // 按顺序整理图片数组
-  const images = albumData.photos.map((p, index) => ({
-    file_id: p.file_id,
-    width: p.width,
-    height: p.height,
-    order: index
-  }))
-
-  // 使用第一张图片的尺寸作为封面尺寸
-  const firstPhoto = albumData.photos[0]
-
-  // 保存到数据库
-  const { data: draftPost, error } = await supabase
-    .from('videos')
-    .insert({
-      tg_user_id: chatId,
-      author_id: profile.id,
-      title: `相册 (${images.length}张)`,
-      description: description,
-      tags: tags.length > 0 ? tags : null,
-      content_type: 'album',
-      images: JSON.stringify(images),
-      width: firstPhoto.width,
-      height: firstPhoto.height,
-      storage_type: 'telegram',
-      is_private: false,
-      status: 'draft'
-    })
-    .select()
-    .single()
-
-  if (error) {
-    console.error('保存相册记录失败:', error)
-    await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + error.message)
-    return
-  }
-
-  console.log(`[saveAlbum] 相册记录已保存: ${draftPost.id}`)
 
   // 发送编辑菜单
   const menuResult = await sendMessage(chatId, getEditMenuText(draftPost), {
@@ -2880,13 +2915,19 @@ serve(async (req) => {
             setTimeout(() => mediaGroupRejectCache.delete(mixedCacheKey + '_video'), 5000)
 
             if (hasPhoto) {
-              // 已经有图片了，这是混合相册，拒绝并清理图片缓存
-              const albumCacheKey = `album_${chatId}_${message.media_group_id}`
-              const albumData = albumCache.get(albumCacheKey)
-              if (albumData?.timer) {
-                clearTimeout(albumData.timer)
+              // 已经有图片了，这是混合相册，拒绝并清理数据库中的相册记录
+              const { data: albumPost } = await supabase
+                .from('videos')
+                .select('id')
+                .eq('tg_user_id', chatId)
+                .eq('media_group_id', message.media_group_id)
+                .single()
+
+              if (albumPost) {
+                // 删除已创建的相册记录
+                await supabase.from('videos').delete().eq('id', albumPost.id)
+                console.log(`[MAIN] 已删除混合相册记录: ${albumPost.id}`)
               }
-              albumCache.delete(albumCacheKey)
 
               // 发送拒绝提示（只发一次）
               const rejectKey = `media_group_reject_${chatId}_${message.media_group_id}`
