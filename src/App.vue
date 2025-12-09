@@ -64,8 +64,8 @@ onMounted(() => {
   store.init()
   resetVhAndPx()
   // 监听resize事件 视图大小发生变化就重新计算1vh的值
+  // ⚠️ 注意：移动端键盘弹出也会触发 resize，不能在这里刷新页面
   window.addEventListener('resize', () => {
-    location.href = BASE_URL + '/'
     resetVhAndPx()
   })
 })

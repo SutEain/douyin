@@ -759,9 +759,10 @@ watch(
 )
 
 onMounted(async () => {
-  // 🔒 锁定高度
+  // 🔒 锁定高度：使用固定像素值，防止键盘弹出时页面重排导致崩溃
+  // 注意：不要监听 resize 更新它，这正是崩溃的根源
   pageHeight.value = window.innerHeight + 'px'
-  console.log('[SearchPage] Mounted 🟢 Timestamp:', Date.now(), 'Height:', pageHeight.value)
+  console.log('[SearchPage] Mounted 🟢 Timestamp:', Date.now(), 'Locked Height:', pageHeight.value)
 
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
