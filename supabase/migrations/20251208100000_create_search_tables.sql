@@ -20,21 +20,25 @@ CREATE INDEX IF NOT EXISTS idx_search_history_type ON public.search_history(sear
 ALTER TABLE public.search_history ENABLE ROW LEVEL SECURITY;
 
 -- 用户只能查看自己的搜索历史
+DROP POLICY IF EXISTS "Users can view own search history" ON public.search_history;
 CREATE POLICY "Users can view own search history"
 ON public.search_history FOR SELECT
 USING (auth.uid() = user_id);
 
 -- 用户只能插入自己的搜索历史
+DROP POLICY IF EXISTS "Users can insert own search history" ON public.search_history;
 CREATE POLICY "Users can insert own search history"
 ON public.search_history FOR INSERT
 WITH CHECK (auth.uid() = user_id);
 
 -- 用户只能更新自己的搜索历史
+DROP POLICY IF EXISTS "Users can update own search history" ON public.search_history;
 CREATE POLICY "Users can update own search history"
 ON public.search_history FOR UPDATE
 USING (auth.uid() = user_id);
 
 -- 用户只能删除自己的搜索历史
+DROP POLICY IF EXISTS "Users can delete own search history" ON public.search_history;
 CREATE POLICY "Users can delete own search history"
 ON public.search_history FOR DELETE
 USING (auth.uid() = user_id);
