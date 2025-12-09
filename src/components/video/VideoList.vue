@@ -1214,6 +1214,10 @@ defineExpose({
   width: 100%;
   height: 100%;
   will-change: transform;
+  // 🎯 强制 GPU 渲染，解决 Windows 上图片切换无动画问题
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform-style: preserve-3d;
 
   // 🎯 吸附动画由 computed 控制，不在这里设置
   &.transitioning {
@@ -1226,7 +1230,11 @@ defineExpose({
   left: 0;
   width: 100%;
   height: 100%;
-  // 🎯 移除 transition，由 slide-container 统一控制
+  // 🎯 强制 GPU 渲染，解决 Windows 上图片切换无动画问题
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform-style: preserve-3d;
+  overflow: hidden;
 
   video {
     width: 100%;
