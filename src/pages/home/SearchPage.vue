@@ -867,13 +867,15 @@ function toggle() {
 @import '../../assets/less/index';
 
 .Search {
-  position: fixed;
+  position: absolute;
   left: 0;
   width: 100%;
   top: 0;
   overflow: auto;
   color: white;
   font-size: 14rem;
+  background: var(--main-bg);
+  z-index: 10;
 
   .type {
     display: flex;
