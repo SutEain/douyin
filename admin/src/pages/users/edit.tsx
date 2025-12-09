@@ -1,14 +1,66 @@
 import { Edit, useForm } from '@refinedev/antd'
-import { Form, Input, Select, Switch, DatePicker, Row, Col, Divider, Avatar, Space } from 'antd'
+import { useOne } from '@refinedev/core'
+import { Form, Input, Select, Switch, DatePicker, Row, Col, Divider, Avatar, Spin } from 'antd'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import dayjs from 'dayjs'
 
 export const UserEdit = () => {
-  const { formProps, saveButtonProps, queryResult } = useForm({
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+
+  // 手动获取数据
+  const { data, isLoading } = useOne({
     resource: 'profiles',
-    action: 'edit'
+    id: id!
   })
 
-  const record = queryResult?.data?.data
+  const record = data?.data
+
+  const { formProps, saveButtonProps, form } = useForm({
+    resource: 'profiles',
+    action: 'edit',
+    id: id,
+    redirect: false,
+    onMutationSuccess: () => {
+      navigate('/users')
+    }
+  })
+
+  // 当数据加载完成后，设置表单值
+  useEffect(() => {
+    if (record && form) {
+      form.setFieldsValue({
+        nickname: record.nickname,
+        username: record.username,
+        bio: record.bio,
+        avatar_url: record.avatar_url,
+        cover_url: record.cover_url,
+        gender: record.gender,
+        birthday: record.birthday ? dayjs(record.birthday) : null,
+        country: record.country,
+        tg_user_id: record.tg_user_id,
+        tg_username: record.tg_username,
+        lang: record.lang,
+        video_count: record.video_count,
+        follower_count: record.follower_count,
+        following_count: record.following_count,
+        total_likes: record.total_likes,
+        auto_approve: record.auto_approve,
+        show_collect: record.show_collect !== false,
+        show_like: record.show_like !== false,
+        show_tg_username: record.show_tg_username !== false
+      })
+    }
+  }, [record, form])
+
+  if (isLoading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '50px' }}>
+        <Spin size="large" />
+      </div>
+    )
+  }
 
   return (
     <Edit saveButtonProps={saveButtonProps}>
