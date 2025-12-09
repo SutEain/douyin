@@ -10,6 +10,9 @@ const SUPABASE_SERVICE_KEY =
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+// 🚫 媒体组拒绝缓存（避免同一组发送多条提示）
+const mediaGroupRejectCache = new Map<string, boolean>()
+
 // 🎯 将 Telegram file_id 转换为 CDN URL
 function buildTelegramFileUrl(fileId: string): string | null {
   if (!fileId) return null
@@ -771,6 +774,28 @@ async function handleVideo(
       return
     }
 
+    // 🚫 拒绝媒体组（多视频/视频+图片混合）
+    if (mediaGroupId) {
+      console.log(`[handleVideo] 检测到 Media Group: ${mediaGroupId}，拒绝处理`)
+      // 使用 mediaGroupId 作为 key，避免重复发送提示
+      const cacheKey = `media_group_reject_${chatId}_${mediaGroupId}`
+      const alreadyNotified = mediaGroupRejectCache.get(cacheKey)
+
+      if (!alreadyNotified) {
+        mediaGroupRejectCache.set(cacheKey, true)
+        // 5秒后清除缓存，避免内存泄漏
+        setTimeout(() => mediaGroupRejectCache.delete(cacheKey), 5000)
+
+        await sendMessage(
+          chatId,
+          `⚠️ <b>暂不支持批量上传</b>\n\n` +
+            `请一次只上传一条视频。\n\n` +
+            `💡 如需上传多条视频，请分开发送。`
+        )
+      }
+      return
+    }
+
     // ✅ 根据文件大小决定处理方式
     const videoSize = video.file_size || 0
     const sizeMB = (videoSize / 1024 / 1024).toFixed(1)
@@ -798,8 +823,7 @@ async function handleVideo(
         height: video.height,
         file_size: videoSize, // ✅ 记录文件大小
         is_private: false,
-        status: isLargeFile ? 'processing' : 'draft', // ✅ 大文件标记为 processing
-        media_group_id: mediaGroupId || null
+        status: isLargeFile ? 'processing' : 'draft' // ✅ 大文件标记为 processing
       })
       .select()
       .single()
@@ -812,62 +836,7 @@ async function handleVideo(
 
     console.log(`[handleVideo] 视频记录已保存: ${draftVideo.id}, 状态: ${draftVideo.status}`)
 
-    // 🎯 Media Group 处理逻辑
-    if (mediaGroupId) {
-      console.log(`[handleVideo] 检测到 Media Group: ${mediaGroupId}`)
-
-      // 查询该组所有视频（按时间排序）
-      const { data: groupVideos } = await supabase
-        .from('videos')
-        .select('id, storage_type, created_at')
-        .eq('media_group_id', mediaGroupId)
-        .order('created_at', { ascending: true })
-        .limit(10)
-
-      const count = groupVideos?.length || 0
-
-      if (count === 1) {
-        console.log(`[handleVideo] Media Group - 仅检测到 1 条视频，按单视频处理`)
-        // 继续向下执行（发送编辑菜单）
-      } else if (count === 2) {
-        console.log(`[handleVideo] Media Group - 检测到第 2 条视频，切换为组模式`)
-
-        // 1. 尝试撤回第 1 条视频的编辑菜单
-        // 只有当第 1 条视频是小文件（非 pending）时，才可能发了菜单
-        const firstVideo = groupVideos![0]
-        if (firstVideo.storage_type !== 'pending') {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('current_message_id')
-            .eq('tg_user_id', chatId)
-            .single()
-
-          if (profile?.current_message_id) {
-            try {
-              await deleteTelegramMessage(chatId, profile.current_message_id)
-              console.log(`[handleVideo] 已撤回第 1 条视频的菜单: ${profile.current_message_id}`)
-            } catch (e) {
-              console.warn('[handleVideo] 撤回菜单失败:', e)
-            }
-          }
-        }
-
-        // 2. 发送汇总提示
-        await sendMessage(
-          chatId,
-          `📦 <b>收到多条视频</b>\n\n` +
-            `已全部自动保存为草稿。\n` +
-            `请在 📹 我的视频 - 草稿 中统一进行编辑和发布。`
-        )
-        return
-      } else {
-        // count > 2
-        console.log(`[handleVideo] Media Group - 静默处理 (第 ${count} 条)`)
-        return
-      }
-    }
-
-    // ✅ 根据文件大小显示不同消息 (非 Media Group)
+    // ✅ 根据文件大小显示不同消息
     if (isLargeFile) {
       // 大文件：显示处理中消息
       await sendMessage(
