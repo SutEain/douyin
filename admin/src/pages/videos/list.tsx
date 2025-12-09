@@ -47,7 +47,7 @@ export const VideoList = () => {
     resource: 'videos',
     syncWithLocation: true,
     meta: {
-      select: '*, profiles:user_id(nickname, avatar_url, avatar_thumb, avatar_larger)'
+      select: '*, profiles:author_id(nickname, avatar_url, avatar_thumb, avatar_larger)'
     },
     sorters: {
       initial: [
