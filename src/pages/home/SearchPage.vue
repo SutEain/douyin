@@ -1,5 +1,5 @@
 <template>
-  <div class="Search" :style="{ height: pageHeight }">
+  <div class="Search">
     <div class="header">
       <dy-back mode="light" @click="router.back" class="mr1r"></dy-back>
       <div class="search-container">
@@ -938,15 +938,16 @@ function toggle() {
 @import '../../assets/less/index';
 
 .Search {
-  position: absolute;
+  position: fixed;
   left: 0;
-  width: 100%;
+  right: 0;
   top: 0;
-  overflow: auto;
+  bottom: 0;
+  overflow: hidden;
   color: white;
   font-size: 14rem;
   background: var(--main-bg);
-  z-index: 10;
+  z-index: 999; // Ensure it covers Home but maybe 10 was enough? 999 is safer.
 
   .type {
     display: flex;
@@ -1024,6 +1025,11 @@ function toggle() {
   }
 
   .content {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box;
+
     padding-top: 60rem;
     padding-top: calc(60rem + constant(safe-area-inset-top));
     padding-top: calc(60rem + env(safe-area-inset-top));
