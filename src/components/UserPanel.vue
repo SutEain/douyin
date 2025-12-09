@@ -270,12 +270,16 @@
                   v-if="props.currentItem.aweme_list && props.currentItem.aweme_list.length"
                   :list="props.currentItem.aweme_list"
                 ></Posters>
-                <Loading :isFullScreen="false" v-else-if="state.loadings.profile" />
+                <Loading
+                  :isFullScreen="false"
+                  v-else-if="state.loadings.profile || state.loadings.works"
+                />
                 <div
                   class="empty-list"
                   v-else-if="
                     (!props.currentItem.aweme_list || props.currentItem.aweme_list.length === 0) &&
-                    !state.loadings.profile
+                    !state.loadings.profile &&
+                    !state.loadings.works
                   "
                 >
                   <div class="title">暂时没有作品</div>
@@ -420,6 +424,7 @@ const state = reactive({
     showRecommend: false,
     follow: false, // ✅ 关注/取消关注 loading
     profile: false, // ✅ 加载用户信息 loading
+    works: false, // ✅ 加载作品列表 loading
     like: false, // 🎯 加载喜欢列表 loading
     collect: false // 🎯 加载收藏列表 loading
   },
@@ -719,6 +724,8 @@ async function loadAuthorVideos() {
       return
     }
 
+    state.loadings.works = true // ✅ 开始加载
+
     console.log('[UserPanel] 📡 调用 authorVideos API, authorId:', authorId)
     // ✅ 统一使用 authorVideos，不再区分自己还是别人
     const res = await authorVideos(authorId, { pageNo: 0, pageSize: 20 })
@@ -733,12 +740,19 @@ async function loadAuthorVideos() {
         author: props.currentItem.author
       }))
       console.log('[UserPanel] ✅ 设置 aweme_list, 视频数量:', list.length)
-      emit('update:currentItem', Object.assign(props.currentItem, { aweme_list: list }))
+      // ✅ 返回新对象，触发响应式更新
+      emit('update:currentItem', { ...props.currentItem, aweme_list: list })
     } else {
       console.log('[UserPanel] ❌ API 调用失败或返回空')
+      // ✅ 即使失败，也更新为空列表（如果是第一次加载），触发状态更新
+      if (!props.currentItem.aweme_list) {
+        emit('update:currentItem', { ...props.currentItem, aweme_list: [] })
+      }
     }
   } catch (error) {
     console.error('[UserPanel] loadAuthorVideos 错误:', error)
+  } finally {
+    state.loadings.works = false // ✅ 结束加载
   }
 }
 
