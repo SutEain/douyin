@@ -30,35 +30,35 @@ export default defineConfig((): Promise<UserConfig> => {
             // reactivityTransform: {
             //   exclude: [/node_modules/, /jQuery\.js/]
             // }
-          }),
+          })
           // Vue(),
           // VueJsx(),
-          lifecycle === 'report' ? (visualizer({ open: false }) as any as PluginOption) : null,
-          importToCDN({
-            modules: [
-              {
-                name: 'vue',
-                var: 'Vue',
-                path: `https://lib.baomitu.com/vue/3.4.21/vue.runtime.global.prod.min.js`
-              },
-              {
-                name: 'vue-router',
-                var: 'VueRouter',
-                path: 'https://lib.baomitu.com/vue-router/4.3.0/vue-router.global.prod.min.js'
-              },
-              {
-                name: 'vue-demi',
-                var: 'VueDemi',
-                path: 'https://lib.baomitu.com/vue-demi/0.14.7/index.iife.min.js'
-              }
-              // ❌ 移除 mockjs CDN 引用，生产环境不应该加载 Mock.js
-              // {
-              //   name: 'mockjs',
-              //   var: 'Mock',
-              //   path: 'https://lib.baomitu.com/Mock.js/1.0.1-beta3/mock-min.js'
-              // }
-            ]
-          })
+          // lifecycle === 'report' ? (visualizer({ open: false }) as any as PluginOption) : null,
+          // importToCDN({
+          //   modules: [
+          //     {
+          //       name: 'vue',
+          //       var: 'Vue',
+          //       path: `https://lib.baomitu.com/vue/3.4.21/vue.runtime.global.prod.min.js`
+          //     },
+          //     {
+          //       name: 'vue-router',
+          //       var: 'VueRouter',
+          //       path: 'https://lib.baomitu.com/vue-router/4.3.0/vue-router.global.prod.min.js'
+          //     },
+          //     {
+          //       name: 'vue-demi',
+          //       var: 'VueDemi',
+          //       path: 'https://lib.baomitu.com/vue-demi/0.14.7/index.iife.min.js'
+          //     }
+          //     // ❌ 移除 mockjs CDN 引用，生产环境不应该加载 Mock.js
+          //     // {
+          //     //   name: 'mockjs',
+          //     //   var: 'Mock',
+          //     //   path: 'https://lib.baomitu.com/Mock.js/1.0.1-beta3/mock-min.js'
+          //     // }
+          //   ]
+          // })
           // viteCompression({
           //   verbose: false,
           //   disable: false,
