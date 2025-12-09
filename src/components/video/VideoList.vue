@@ -27,34 +27,47 @@
         data-progress="true"
         data-progress-bar="true"
       >
-        <!-- 🎯 视频元素 -->
-        <video
-          :ref="setSlotRef(slot.key)"
-          preload="auto"
-          loop
-          playsinline
-          webkit-playsinline
-          x5-playsinline
-          x5-video-player-type="h5-page"
-          :muted="slot.muted"
-          @play="onPlay(slot)"
-          @playing="onPlaying(slot)"
-          @pause="onPause(slot)"
-          @error="onError(slot)"
-          @click="togglePlay(slot)"
-        />
+        <!-- 🎯 根据内容类型渲染不同组件 -->
+        <template v-if="getSlotContentType(slot) === 'video'">
+          <!-- 视频元素 -->
+          <video
+            :ref="setSlotRef(slot.key)"
+            preload="auto"
+            loop
+            playsinline
+            webkit-playsinline
+            x5-playsinline
+            x5-video-player-type="h5-page"
+            :muted="slot.muted"
+            @play="onPlay(slot)"
+            @playing="onPlaying(slot)"
+            @pause="onPause(slot)"
+            @error="onError(slot)"
+            @click="togglePlay(slot)"
+          />
 
-        <!-- 🎯 自定义 poster 层：视频加载时显示缩略图 -->
-        <div
-          v-if="slot.posterUrl && !slot.isPlaying"
-          class="video-poster"
-          :style="{ backgroundImage: `url(${slot.posterUrl})` }"
-        ></div>
+          <!-- 自定义 poster 层：视频加载时显示缩略图 -->
+          <div
+            v-if="slot.posterUrl && !slot.isPlaying"
+            class="video-poster"
+            :style="{ backgroundImage: `url(${slot.posterUrl})` }"
+          ></div>
 
-        <!-- 暂停图标 -->
-        <div v-if="slot.role === 'current' && isPausedOverlay" class="pause-layer">
-          <Icon icon="fluent:play-28-filled" class="pause-icon" />
-        </div>
+          <!-- 暂停图标 -->
+          <div v-if="slot.role === 'current' && isPausedOverlay" class="pause-layer">
+            <Icon icon="fluent:play-28-filled" class="pause-icon" />
+          </div>
+        </template>
+
+        <!-- 🖼️ 单图 -->
+        <template v-else-if="getSlotContentType(slot) === 'image'">
+          <ImageViewer :images="getSlotImages(slot)" @click="handleImageClick(slot)" />
+        </template>
+
+        <!-- 📷 相册 -->
+        <template v-else-if="getSlotContentType(slot) === 'album'">
+          <AlbumSwiper :images="getSlotImages(slot)" @click="handleImageClick(slot)" />
+        </template>
       </div>
 
       <!-- 🎯 UI 元素（描述、点赞、进度条等）：放在 slide-container 里，跟随整体移动 -->
@@ -62,8 +75,9 @@
         <ItemToolbar v-model:item="currentItemLocal" @update:item="handleItemUpdate" />
         <ItemDesc v-model:item="currentItemLocal" @update:item="handleItemUpdate" />
 
-        <!-- 进度条：直接放在 overlay 内的最上层 -->
+        <!-- 进度条：只在视频类型时显示 -->
         <div
+          v-if="currentContentType === 'video'"
           class="video-progress"
           @pointerdown.stop.prevent="handleProgressStart"
           data-progress="video-progress"
@@ -95,8 +109,11 @@ import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, wat
 import { Icon } from '@iconify/vue'
 import ItemToolbar from '../slide/ItemToolbar.vue'
 import ItemDesc from '../slide/ItemDesc.vue'
+import ImageViewer from './ImageViewer.vue'
+import AlbumSwiper from './AlbumSwiper.vue'
 import type { VideoItem } from '../../types'
 import { useVideoStore } from '@/stores/video'
+import { parseImages, getContentType } from '@/utils/media'
 
 const DEBUG_PREFIX = '[AutoPlayDebug]'
 const SLOT_KEYS = ['slotA', 'slotB', 'slotC'] as const
@@ -209,6 +226,32 @@ const currentItemLocal = ref<VideoItem | null>(
 const isPlaying = ref(false)
 const isPausedOverlay = computed(() => !isPlaying.value)
 
+// 🎯 当前内容类型
+const currentContentType = computed(() => getContentType(currentItem.value))
+
+// 🎯 获取 slot 对应的内容类型
+function getSlotContentType(slot: SlotState): 'video' | 'image' | 'album' {
+  if (slot.videoIndex == null) return 'video'
+  const item = props.items[slot.videoIndex]
+  return getContentType(item)
+}
+
+// 🎯 获取 slot 对应的图片数组
+function getSlotImages(
+  slot: SlotState
+): Array<{ file_id: string; width?: number; height?: number }> {
+  if (slot.videoIndex == null) return []
+  const item = props.items[slot.videoIndex]
+  return parseImages(item?.images)
+}
+
+// 🎯 图片/相册点击处理（可以用于暂停/恢复等交互）
+function handleImageClick(slot: SlotState) {
+  // 图片/相册点击时可以执行特定操作
+  // 目前保持空实现，后续可以添加放大预览等功能
+  console.log('[VideoList] Image clicked:', slot.key)
+}
+
 // 进度百分比
 const progressPercent = computed(() => {
   if (!playState.duration || playState.duration <= 0) return 0
@@ -278,6 +321,20 @@ function setProgressRef(el: HTMLElement | null) {
 }
 
 function updateSlotSource(slot: SlotState, preloadOnly = false) {
+  const idx = slot.videoIndex
+
+  // 🎯 检查内容类型
+  const contentType = getSlotContentType(slot)
+
+  // 📸 图片/相册类型：不需要处理视频
+  if (contentType === 'image' || contentType === 'album') {
+    slot.posterUrl = ''
+    slot.isPlaying = false
+    // 图片/相册不需要视频元素，直接返回
+    return
+  }
+
+  // 🎬 视频类型：正常处理
   const video = slotRefs.get(slot.key)
   if (!video) return
 
@@ -291,7 +348,6 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     video.pause()
   }
 
-  const idx = slot.videoIndex
   if (idx == null || !props.items[idx]) {
     video.removeAttribute('src')
     video.load()
@@ -344,6 +400,15 @@ function playCurrent() {
     console.warn(`${DEBUG_PREFIX} playCurrent:no-slot`)
     return
   }
+
+  // 🎯 图片/相册类型不需要播放
+  const contentType = getSlotContentType(slot)
+  if (contentType === 'image' || contentType === 'album') {
+    console.log(`${DEBUG_PREFIX} playCurrent:skip-non-video`, { contentType })
+    isPlaying.value = true // 图片/相册默认显示为"播放中"状态
+    return
+  }
+
   const video = slotRefs.get(slot.key)
   if (!video) {
     console.warn(`${DEBUG_PREFIX} playCurrent:no-video`, { slot: slot.role, key: slot.key })

@@ -15,6 +15,15 @@ export interface VideoItem {
   isLoved?: boolean
   isCollect?: boolean
   isAttention?: boolean
+  // 🎯 内容类型：video=视频, image=单图, album=相册
+  content_type?: 'video' | 'image' | 'album'
+  // 🎯 图片数组（用于 image 和 album 类型）
+  images?: Array<{
+    file_id: string
+    width?: number
+    height?: number
+    order?: number
+  }>
   statistics: {
     digg_count: number
     comment_count: number
@@ -65,4 +74,3 @@ export interface VideoListResponse {
     list: VideoItem[]
   }
 }
-
