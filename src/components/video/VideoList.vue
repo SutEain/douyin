@@ -95,7 +95,11 @@
           @pointerdown.stop.prevent="handleProgressStart"
           data-progress="video-progress"
         >
-          <div class="progress-time" v-if="playState.isMoving" data-progress="time">
+          <div
+            class="progress-time"
+            v-if="playState.isMoving || playState.showTimeHint"
+            data-progress="time"
+          >
             {{ formatTime(playState.currentTime) }} / {{ formatTime(playState.duration) }}
           </div>
           <div class="progress-track" :ref="setProgressRef" data-progress="track">
@@ -263,7 +267,8 @@ const playState = reactive({
   isMoving: false,
   startX: 0,
   lastX: 0,
-  lastTime: 0
+  lastTime: 0,
+  showTimeHint: false // 🎯 松手后短暂保留时间提示，避免一闪而过
 })
 
 const touch = reactive({
@@ -1272,6 +1277,7 @@ function getCurrentVideoIndex() {
 
 // 进度条拖动
 let isDragging = false
+let timeHintTimer: number | null = null
 
 function handleProgressStart(e: PointerEvent) {
   const video = getCurrentVideo()
@@ -1280,6 +1286,12 @@ function handleProgressStart(e: PointerEvent) {
 
   isDragging = true
   playState.isMoving = true
+  playState.showTimeHint = true
+
+  if (timeHintTimer) {
+    clearTimeout(timeHintTimer)
+    timeHintTimer = null
+  }
   video.pause()
 
   updateProgressFromPointer(e, track, video)
@@ -1295,6 +1307,12 @@ function handleProgressStart(e: PointerEvent) {
     playState.isMoving = false
     video.currentTime = playState.currentTime
     video.play().catch(() => {})
+
+    // 🎯 松手后延迟隐藏时间提示，避免一闪而逝
+    timeHintTimer = window.setTimeout(() => {
+      playState.showTimeHint = false
+      timeHintTimer = null
+    }, 300)
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onEnd)
     window.removeEventListener('pointercancel', onEnd)
@@ -1523,7 +1541,7 @@ defineExpose({
   right: 0;
   bottom: 0;
   top: 0; // 覆盖整个区域
-  z-index: 10;
+  z-index: 50; // 提高层级，确保进度条和时间提示在最上层
   pointer-events: none;
 
   > * {
