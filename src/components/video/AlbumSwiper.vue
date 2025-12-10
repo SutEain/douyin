@@ -88,8 +88,11 @@ const loadedImages = reactive<Set<number>>(new Set())
 // 触摸状态
 const touch = reactive({
   startX: 0,
+  startY: 0,
   deltaX: 0,
-  active: false
+  deltaY: 0,
+  active: false,
+  isHorizontal: false // 🎯 是否判定为水平滑动（用于屏蔽父级的上下滑动）
 })
 
 // 滑动容器样式
@@ -130,16 +133,35 @@ function goToSlide(index: number) {
 
 // 触摸事件
 function onTouchStart(e: TouchEvent) {
-  touch.startX = e.touches[0].clientX
+  const t = e.touches[0]
+  touch.startX = t.clientX
+  touch.startY = t.clientY
   touch.deltaX = 0
+  touch.deltaY = 0
   touch.active = true
+  touch.isHorizontal = false
   isTransitioning.value = false
 }
 
 function onTouchMove(e: TouchEvent) {
   if (!touch.active) return
-  const currentX = e.touches[0].clientX
-  touch.deltaX = currentX - touch.startX
+  const t = e.touches[0]
+  touch.deltaX = t.clientX - touch.startX
+  touch.deltaY = t.clientY - touch.startY
+
+  // 🎯 一旦判定为水平滑动，则阻止事件冒泡给父级（避免触发 feed 的上下滑动）
+  if (!touch.isHorizontal) {
+    const absX = Math.abs(touch.deltaX)
+    const absY = Math.abs(touch.deltaY)
+    // 水平位移足够大且明显大于垂直位移时，认定为水平滑动
+    if (absX > 8 && absX > absY * 1.2) {
+      touch.isHorizontal = true
+    }
+  }
+
+  if (touch.isHorizontal) {
+    e.stopPropagation()
+  }
 
   // 边界处理：第一张向右滑、最后一张向左滑时增加阻尼
   if (currentIndex.value === 0 && touch.deltaX > 0) {
@@ -150,8 +172,11 @@ function onTouchMove(e: TouchEvent) {
   }
 }
 
-function onTouchEnd() {
+function onTouchEnd(e: TouchEvent) {
   if (!touch.active) return
+  if (touch.isHorizontal) {
+    e.stopPropagation()
+  }
   touch.active = false
   finishSwipe()
 }
