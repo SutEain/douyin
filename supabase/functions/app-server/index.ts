@@ -9,6 +9,7 @@ import {
   handleVideoCollect,
   handleVideoCollections,
   handleVideoFeed,
+  handleVideoFollowing,
   handleVideoLike,
   handleVideoLikes,
   handleVideoMy,
@@ -26,6 +27,7 @@ import {
 import { handleFollowUser, handleGetUserProfile, handleAutoInit } from './routes/user.ts'
 import {
   handleSearchVideos,
+  handleSearchAdultVideos,
   handleSearchUsers,
   handleHotSearch,
   handleGetSearchHistory,
@@ -55,6 +57,9 @@ serve(async (req) => {
     }
     if (route === '/video/feed' && method === 'GET') {
       return handleVideoFeed(req)
+    }
+    if (route === '/video/following' && method === 'GET') {
+      return handleVideoFollowing(req)
     }
     if (route === '/video/author' && method === 'GET') {
       return handleVideoAuthor(req)
@@ -111,6 +116,9 @@ serve(async (req) => {
     // 🔍 搜索相关路由
     if (route === '/search/videos' && method === 'GET') {
       return handleSearchVideos(req)
+    }
+    if (route === '/search/adult' && method === 'GET') {
+      return handleSearchAdultVideos(req)
     }
     if (route === '/search/users' && method === 'GET') {
       return handleSearchUsers(req)

@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS public.search_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   keyword TEXT NOT NULL,
-  search_type TEXT NOT NULL DEFAULT 'video' CHECK (search_type IN ('video', 'user')),
+  search_type TEXT NOT NULL DEFAULT 'video' CHECK (search_type IN ('video', 'user', 'adult')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   
@@ -70,7 +70,7 @@ WHERE status = 'published' AND review_status = 'approved';
 -- 注释
 COMMENT ON TABLE public.search_history IS '用户搜索历史记录表';
 COMMENT ON COLUMN public.search_history.keyword IS '搜索关键词';
-COMMENT ON COLUMN public.search_history.search_type IS '搜索类型：video=视频，user=用户';
+COMMENT ON COLUMN public.search_history.search_type IS '搜索类型：video=视频，user=用户，adult=成人视频';
 COMMENT ON COLUMN public.search_history.updated_at IS '更新时间（重复搜索时更新）';
 
 

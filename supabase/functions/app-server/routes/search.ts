@@ -18,7 +18,7 @@ export async function handleSearchVideos(req: Request): Promise<Response> {
 
   console.log('[search] 搜索视频:', { keyword, pageNo, pageSize })
 
-  // 保存搜索历史（如果用户已登录）
+  // 保存搜索历史（如果用户已登录），普通视频搜索
   const { user } = await tryGetAuth(req)
   if (user) {
     await saveSearchHistory(user.id, keyword, 'video').catch((err) => {
@@ -35,6 +35,7 @@ export async function handleSearchVideos(req: Request): Promise<Response> {
     .from('videos')
     .select('*', { count: 'exact' })
     .eq('status', 'published')
+    .eq('is_adult', false)
     .or(
       `description.ilike.%${keyword}%,` + `tags.cs.{${keyword}}` // 标签包含（精确匹配）
     )
@@ -76,6 +77,86 @@ export async function handleSearchVideos(req: Request): Promise<Response> {
         // 添加关注状态
         mapped.is_following = followingSet.has(row.author_id)
 
+        list.push(mapped)
+      }
+    }
+  }
+
+  return successResponse({
+    list,
+    total: count ?? 0,
+    pageNo,
+    pageSize
+  })
+}
+
+/**
+ * 搜索成人视频（18+）
+ * GET /search/adult?keyword=xxx&pageNo=0&pageSize=20
+ */
+export async function handleSearchAdultVideos(req: Request): Promise<Response> {
+  const url = new URL(req.url)
+  const keyword = url.searchParams.get('keyword')?.trim()
+  const { pageNo, pageSize, from, to } = parsePagination(url)
+
+  if (!keyword) {
+    return errorResponse('Keyword is required', 1, 400)
+  }
+
+  console.log('[search] 搜索成人视频:', { keyword, pageNo, pageSize })
+
+  // 保存搜索历史（如果用户已登录），类型 adult
+  const { user } = await tryGetAuth(req)
+  if (user) {
+    await saveSearchHistory(user.id, keyword, 'adult').catch((err) => {
+      console.error('[search] 保存成人搜索历史失败:', err)
+    })
+  }
+
+  const {
+    data: rows,
+    error,
+    count
+  } = await supabaseAdmin
+    .from('videos')
+    .select('*', { count: 'exact' })
+    .eq('status', 'published')
+    .eq('is_adult', true)
+    .or(`description.ilike.%${keyword}%,` + `tags.cs.{${keyword}}`)
+    .order('like_count', { ascending: false })
+    .order('comment_count', { ascending: false })
+    .order('created_at', { ascending: false })
+    .range(from, to)
+
+  if (error) {
+    console.error('[search] 搜索成人视频失败:', error)
+    return errorResponse('Search failed', 1, 500)
+  }
+
+  console.log('[search] 成人搜索结果:', { total: count, returned: rows?.length })
+
+  // 批量获取热门评论
+  const videoIds = (rows ?? []).map((r) => r.id)
+  const topCommentsMap = await batchGetTopComments(videoIds)
+
+  // 批量获取关注状态
+  let followingSet = new Set<string>()
+  if (user && rows?.length) {
+    const authorIds = rows.map((r) => r.author_id)
+    followingSet = await batchCheckFollowStatus(user.id, authorIds)
+  }
+
+  const list = []
+  for (const row of rows ?? []) {
+    const profile = await getProfileById(row.author_id)
+    if (profile) {
+      const mapped = await mapVideoRow(row, profile)
+      if (mapped) {
+        const topComment = topCommentsMap.get(row.id)
+        if (topComment) {
+          mapped.top_comment = topComment
+        }
+        mapped.is_following = followingSet.has(row.author_id)
         list.push(mapped)
       }
     }
@@ -373,7 +454,7 @@ export async function handleDeleteSearchHistory(req: Request): Promise<Response>
 async function saveSearchHistory(
   userId: string,
   keyword: string,
-  searchType: 'video' | 'user'
+  searchType: 'video' | 'user' | 'adult'
 ): Promise<void> {
   // 使用 upsert：如果已存在则更新 updated_at
   const { error } = await supabaseAdmin.from('search_history').upsert(

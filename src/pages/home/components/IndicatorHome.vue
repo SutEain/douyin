@@ -1,22 +1,24 @@
 <template>
   <div class="indicator-home" :class="{ isLight }">
-    <div class="notice" :style="noticeStyle"><span>{{ $t('home.refreshContent') }}</span></div>
+    <div class="notice" :style="noticeStyle">
+      <span>{{ $t('home.refreshContent') }}</span>
+    </div>
     <div class="toolbar" ref="toolbar" :style="toolbarStyle">
       <div class="tab-ctn">
         <div class="tabs" ref="tabs">
-          <!-- 长视频 - 禁用 -->
+          <!-- 长视频 - 仍然禁用，仅展示 -->
           <div class="tab disabled">
-            <span style="opacity: 0.3;">{{ $t('home.longVideo') }}</span>
+            <span style="opacity: 0.3">{{ $t('home.longVideo') }}</span>
           </div>
-          
-          <!-- 关注 - 禁用 -->
-          <div class="tab disabled">
-            <span style="opacity: 0.3;">{{ $t('home.following') }}</span>
-            <img src="../../../assets/img/icon/live.webp" class="tab2-img" style="opacity: 0.3;" />
+
+          <!-- 关注 - 可点击 -->
+          <div class="tab" :class="{ active: index === 1 }" @click.stop="change(1)">
+            <span>{{ $t('home.following') }}</span>
+            <img src="../../../assets/img/icon/live.webp" class="tab2-img" />
           </div>
-          
-          <!-- 推荐 - 唯一可用的 tab -->
-          <div class="tab active" @click.stop="change(2)">
+
+          <!-- 推荐 -->
+          <div class="tab" :class="{ active: index === 2 }" @click.stop="change(2)">
             <span>{{ $t('home.recommended') }}</span>
           </div>
         </div>

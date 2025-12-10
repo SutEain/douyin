@@ -15,7 +15,7 @@ async function getAccessToken(required: boolean = true) {
 }
 
 /**
- * 搜索视频
+ * 搜索视频（普通）
  */
 export async function searchVideos(keyword: string, pageNo = 0, pageSize = 20) {
   const accessToken = await getAccessToken(false) // 可选认证
@@ -33,7 +33,9 @@ export async function searchVideos(keyword: string, pageNo = 0, pageSize = 20) {
   }
 
   const response = await fetch(
-    `${APP_SERVER_URL}/search/videos?keyword=${encodeURIComponent(keyword)}&pageNo=${pageNo}&pageSize=${pageSize}`,
+    `${APP_SERVER_URL}/search/videos?keyword=${encodeURIComponent(
+      keyword
+    )}&pageNo=${pageNo}&pageSize=${pageSize}`,
     { headers }
   )
 
@@ -45,6 +47,44 @@ export async function searchVideos(keyword: string, pageNo = 0, pageSize = 20) {
 
   if (result.code !== 0) {
     throw new Error(result.msg || 'Search videos failed')
+  }
+
+  return result.data
+}
+
+/**
+ * 搜索成人视频（18+）
+ */
+export async function searchAdultVideos(keyword: string, pageNo = 0, pageSize = 20) {
+  const accessToken = await getAccessToken(false) // 可选认证
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  }
+
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  if (window.Telegram?.WebApp?.initData) {
+    headers['X-Telegram-Init-Data'] = window.Telegram.WebApp.initData
+  }
+
+  const response = await fetch(
+    `${APP_SERVER_URL}/search/adult?keyword=${encodeURIComponent(
+      keyword
+    )}&pageNo=${pageNo}&pageSize=${pageSize}`,
+    { headers }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Search adult videos failed: ${response.status}`)
+  }
+
+  const result = await response.json()
+
+  if (result.code !== 0) {
+    throw new Error(result.msg || 'Search adult videos failed')
   }
 
   return result.data

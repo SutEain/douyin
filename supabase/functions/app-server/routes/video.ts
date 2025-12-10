@@ -124,11 +124,13 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
         .from('videos')
         .select('*')
         .eq('status', 'published')
+        .eq('is_adult', false)
         .order('created_at', { ascending: false })
         .limit(pageSize)
       rows = fallbackData || []
     } else {
-      rows = data || []
+      // 🎯 即使 RPC 返回了成人内容，这里也强制过滤掉
+      rows = (data || []).filter((r: any) => !r.is_adult)
     }
   } else {
     // 未登录用户：按时间倒序
@@ -136,6 +138,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
       .from('videos')
       .select('*')
       .eq('status', 'published')
+      .eq('is_adult', false)
       .order('created_at', { ascending: false })
       .limit(pageSize)
     rows = data || []
@@ -176,6 +179,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     .from('videos')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'published')
+    .eq('is_adult', false)
 
   return successResponse({
     list,
@@ -183,6 +187,77 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     pageNo,
     pageSize,
     hasMore: list.length >= pageSize
+  })
+}
+
+/**
+ * 关注流：按时间倒序，包含成人内容
+ * GET /video/following?pageNo=&pageSize=
+ */
+export async function handleVideoFollowing(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+  const url = new URL(req.url)
+  const { pageNo, pageSize, from, to } = parsePagination(url)
+
+  // 查询当前用户关注的作者
+  const { data: follows, error: followError } = await supabaseAdmin
+    .from('follows')
+    .select('followee_id')
+    .eq('follower_id', user.id)
+
+  if (followError) {
+    console.error('[FollowFeed] 查询关注列表失败:', followError)
+    return errorResponse('Failed to load following feed', 1, 500)
+  }
+
+  const followeeIds = (follows ?? []).map((f) => f.followee_id).filter(Boolean)
+  if (!followeeIds.length) {
+    return successResponse({
+      list: [],
+      total: 0,
+      pageNo,
+      pageSize
+    })
+  }
+
+  // 按发布时间倒序拉取关注作者的公开作品（包含成人内容）
+  const {
+    data: rows,
+    error: videoError,
+    count
+  } = await supabaseAdmin
+    .from('videos')
+    .select('*', { count: 'exact' })
+    .in('author_id', followeeIds)
+    .eq('status', 'published')
+    .eq('is_private', false)
+    .order('published_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .range(from, to)
+
+  if (videoError) {
+    console.error('[FollowFeed] 查询视频失败:', videoError)
+    return errorResponse('Failed to load following feed', 1, 500)
+  }
+
+  await attachUserFlags(rows ?? [], user.id)
+
+  const profileCache = new Map<string, any>()
+  const list = []
+  for (const row of rows ?? []) {
+    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+    const mapped = await mapVideoRow(row, authorProfile)
+    if (mapped) {
+      applyRowFlags(mapped, row)
+      list.push(mapped)
+    }
+  }
+
+  return successResponse({
+    list,
+    total: count ?? 0,
+    pageNo,
+    pageSize
   })
 }
 

@@ -35,6 +35,19 @@ export function recommendedLongVideo(params?: any) {
   )
 }
 
+// 关注流视频列表（需要登录）
+export function followingVideo(params?: any) {
+  const pageSize = params?.pageSize ?? 10
+  const start = params?.start ?? 0
+  const pageNo = Math.floor(start / pageSize)
+
+  return requestSupabaseVideoList(
+    `${getAppServerBase()}/video/following`,
+    { pageNo, pageSize },
+    { requireAuth: true }
+  )
+}
+
 export function myVideo(params?: any) {
   return requestSupabaseVideoList(`${getAppServerBase()}/video/my`, params, { requireAuth: true })
 }

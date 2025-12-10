@@ -103,7 +103,7 @@ import VideoListItem from '../../components/VideoListItem.vue'
 import Loading from '../../components/Loading.vue'
 import { ref, onMounted, onActivated, onDeactivated, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { searchVideos, searchUsers } from '@/api/search'
+import { searchVideos, searchAdultVideos, searchUsers } from '@/api/search'
 import { toggleFollowUser } from '@/api/videos'
 import { _checkImgUrl, _formatNumber, _no } from '@/utils'
 import { useBaseStore } from '@/store/pinia'
@@ -123,12 +123,15 @@ const savedScrollTop = ref(0)
 
 // 搜索关键词和类型
 const keyword = ref('')
-const searchType = ref<'video' | 'user'>('video')
+const searchType = ref<'video' | 'user' | 'adult'>('video')
 
 // 记录上次搜索的参数
-const lastSearchParams = ref({
+const lastSearchParams = ref<{
+  keyword: string
+  type: 'video' | 'user' | 'adult'
+}>({
   keyword: '',
-  type: 'video' as 'video' | 'user'
+  type: 'video'
 })
 
 // 标记是否是首次挂载
@@ -153,7 +156,7 @@ const userHasMore = ref(true)
 // 检查是否需要重新搜索
 function shouldReload() {
   const newKeyword = (route.query.keyword as string) || ''
-  const newType = (route.query.type as 'video' | 'user') || 'video'
+  const newType = (route.query.type as 'video' | 'user' | 'adult') || 'video'
 
   return newKeyword !== lastSearchParams.value.keyword || newType !== lastSearchParams.value.type
 }
@@ -161,7 +164,7 @@ function shouldReload() {
 // 初始化搜索
 function initSearch() {
   const newKeyword = (route.query.keyword as string) || ''
-  const newType = (route.query.type as 'video' | 'user') || 'video'
+  const newType = (route.query.type as 'video' | 'user' | 'adult') || 'video'
 
   keyword.value = newKeyword
   searchType.value = newType
@@ -174,7 +177,7 @@ function initSearch() {
     }
 
     // 根据类型搜索
-    if (searchType.value === 'video') {
+    if (searchType.value === 'video' || searchType.value === 'adult') {
       loadVideos()
     } else {
       loadUsers()
@@ -206,8 +209,8 @@ onActivated(() => {
   if (shouldReload()) {
     console.log('[SearchResult] 参数变化，重新搜索')
     // 重置数据
-    const newType = (route.query.type as 'video' | 'user') || 'video'
-    if (newType === 'video') {
+    const newType = (route.query.type as 'video' | 'user' | 'adult') || 'video'
+    if (newType === 'video' || newType === 'adult') {
       videoList.value = []
       videoPage.value = 0
       videoTotal.value = 0
@@ -243,7 +246,7 @@ watch(
 
     if (hasKeywordChanged || hasTypeChanged) {
       keyword.value = newKeyword as string
-      searchType.value = (newType as 'video' | 'user') || 'video'
+      searchType.value = (newType as 'video' | 'user' | 'adult') || 'video'
 
       // 更新上次搜索参数
       lastSearchParams.value = {
@@ -259,7 +262,7 @@ watch(
 // 重新搜索
 function resetAndSearch() {
   // 根据类型重置对应的状态
-  if (searchType.value === 'video') {
+  if (searchType.value === 'video' || searchType.value === 'adult') {
     videoList.value = []
     videoPage.value = 0
     videoTotal.value = 0
@@ -274,13 +277,16 @@ function resetAndSearch() {
   }
 }
 
-// 加载视频
+// 加载视频（普通 / 成人）
 async function loadVideos() {
   if (videoLoading.value || !videoHasMore.value) return
 
   try {
     videoLoading.value = true
-    const result = await searchVideos(keyword.value, videoPage.value, videoPageSize.value)
+    const result =
+      searchType.value === 'adult'
+        ? await searchAdultVideos(keyword.value, videoPage.value, videoPageSize.value)
+        : await searchVideos(keyword.value, videoPage.value, videoPageSize.value)
 
     if (result.list) {
       videoList.value.push(...result.list)
