@@ -158,8 +158,13 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
   // 根据内容类型计算完播时长
   let completionTime: number
   if (contentType === 'image' || contentType === 'album') {
-    // 🎯 图片/相册：视为立即完播（50ms），确保只要看到就算看过
-    completionTime = 50
+    // 🎯 图片/相册：立即记录完播，不使用计时器
+    if (!completedViews.has(item.aweme_id)) {
+      completedViews.add(item.aweme_id)
+      recordVideoView(item.aweme_id, { progress: 100, completed: true })
+      console.log(`[ViewHistory] 图片/相册立即完播: ${item.aweme_id.substring(0, 8)}`)
+    }
+    return // 退出，不设置计时器
   } else {
     // 视频：时长的 70%，最少 2 秒，最多 30 秒
     const duration = item.video?.duration || 10
@@ -487,6 +492,12 @@ function playCurrent() {
   const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
 
   // 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
+  console.log(`${DEBUG_PREFIX} 准备记录观看历史`, {
+    id: item?.aweme_id,
+    type: contentType,
+    hasRecorded: item?.aweme_id ? recordedViews.has(item.aweme_id) : false
+  })
+
   recordEnterCurrent(item, contentType)
 
   // 🎯 图片/相册类型不需要播放视频元素
