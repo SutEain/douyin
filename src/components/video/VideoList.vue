@@ -1433,17 +1433,18 @@ defineExpose({
 
   .progress-time {
     position: absolute;
-    bottom: 30px; // 向上移一点，避免和进度条重叠
+    bottom: 40px; // 向上移，更大空间
     left: 50%;
     transform: translateX(-50%);
-    font-size: 16px; // 从 13px 改为 16px，更大
-    font-weight: 500;
+    font-size: 20px; // 更大的字号
+    font-weight: 600; // 更粗
     color: white;
     background: rgba(0, 0, 0, 0.75);
-    padding: 6px 16px; // 加大内边距
-    border-radius: 14px;
+    padding: 8px 18px; // 更大内边距
+    border-radius: 20px;
     white-space: nowrap;
     z-index: 201; // 确保在最上层
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); // 增加阴影提升对比度
   }
 
   .progress-track {

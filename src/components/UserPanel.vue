@@ -417,8 +417,12 @@ const state = reactive({
   floatHeight: 52,
   tabIndex: 0, // 🎯 当前tab索引
   videos: {
-    like: { list: [], total: -1 },
-    collect: { list: [], total: -1 }
+    // 作者作品分页信息（列表直接复用 props.currentItem.aweme_list）
+    works: { total: -1, pageNo: 0, pageSize: 20 },
+    // 喜欢列表
+    like: { list: [], total: -1, pageNo: 0, pageSize: 20 },
+    // 收藏列表
+    collect: { list: [], total: -1, pageNo: 0, pageSize: 20 }
   },
   loadings: {
     showRecommend: false,
@@ -725,24 +729,46 @@ async function loadAuthorVideos() {
       return
     }
 
+    // 已经全部加载完
+    if (
+      state.videos.works.total !== -1 &&
+      (props.currentItem.aweme_list?.length || 0) >= state.videos.works.total
+    ) {
+      console.log('[UserPanel] 已加载全部作品，跳过')
+      return
+    }
+
     state.loadings.works = true // ✅ 开始加载
 
     console.log('[UserPanel] 📡 调用 authorVideos API, authorId:', authorId)
-    // ✅ 统一使用 authorVideos，不再区分自己还是别人
-    const res = await authorVideos(authorId, { pageNo: 0, pageSize: 20 })
+    // ✅ 分页加载作者作品
+    const res = await authorVideos(authorId, {
+      pageNo: state.videos.works.pageNo,
+      pageSize: state.videos.works.pageSize
+    })
     console.log('[UserPanel] API 响应:', {
       success: res?.success,
       listLength: res?.data?.list?.length || 0
     })
 
     if (res?.success) {
-      const list = (res.data?.list || []).map((a: any) => ({
+      state.videos.works.total = res.data?.total ?? state.videos.works.total
+
+      const pageList = (res.data?.list || []).map((a: any) => ({
         ...a,
         author: props.currentItem.author
       }))
-      console.log('[UserPanel] ✅ 设置 aweme_list, 视频数量:', list.length)
+      console.log('[UserPanel] ✅ 本次加载作品数量:', pageList.length)
+
+      const existing = props.currentItem.aweme_list || []
+      const merged = state.videos.works.pageNo === 0 ? pageList : [...existing, ...pageList]
+
+      console.log('[UserPanel] ✅ 合并后作品总数:', merged.length)
+
       // ✅ 返回新对象，触发响应式更新
-      emit('update:currentItem', { ...props.currentItem, aweme_list: list })
+      emit('update:currentItem', { ...props.currentItem, aweme_list: merged })
+
+      state.videos.works.pageNo++
     } else {
       console.log('[UserPanel] ❌ API 调用失败或返回空')
       // ✅ 即使失败，也更新为空列表（如果是第一次加载），触发状态更新
@@ -759,8 +785,13 @@ async function loadAuthorVideos() {
 
 // 🎯 加载用户喜欢的视频列表
 async function loadLikeVideos() {
-  if (state.loadings.like || state.videos.like.total !== -1) {
+  if (state.loadings.like) {
     return // 避免重复加载
+  }
+
+  // 已经全部加载完
+  if (state.videos.like.total !== -1 && state.videos.like.list.length >= state.videos.like.total) {
+    return
   }
 
   try {
@@ -772,16 +803,21 @@ async function loadLikeVideos() {
 
     console.log('[UserPanel] 📡 加载喜欢列表, authorId:', authorId)
     state.loadings.like = true
-    const res = await likeVideo({ user_id: authorId, pageNo: 0, pageSize: 20 })
+    const res = await likeVideo({
+      user_id: authorId,
+      pageNo: state.videos.like.pageNo,
+      pageSize: state.videos.like.pageSize
+    })
 
     if (res?.success) {
-      const list = (res.data?.list || []).map((a: any) => ({
+      const pageList = (res.data?.list || []).map((a: any) => ({
         ...a,
         author: a.author || props.currentItem.author
       }))
-      state.videos.like.list = list
       state.videos.like.total = res.data?.total || 0
-      console.log('[UserPanel] ✅ 喜欢列表加载成功, 视频数量:', list.length)
+      state.videos.like.list.push(...pageList)
+      state.videos.like.pageNo++
+      console.log('[UserPanel] ✅ 喜欢列表加载成功, 累计视频数量:', state.videos.like.list.length)
     } else {
       console.log('[UserPanel] ❌ 喜欢列表加载失败')
       state.videos.like.total = 0
@@ -796,8 +832,15 @@ async function loadLikeVideos() {
 
 // 🎯 加载用户收藏的视频列表
 async function loadCollectVideos() {
-  if (state.loadings.collect || state.videos.collect.total !== -1) {
+  if (state.loadings.collect) {
     return // 避免重复加载
+  }
+
+  if (
+    state.videos.collect.total !== -1 &&
+    state.videos.collect.list.length >= state.videos.collect.total
+  ) {
+    return
   }
 
   try {
@@ -809,16 +852,24 @@ async function loadCollectVideos() {
 
     console.log('[UserPanel] 📡 加载收藏列表, authorId:', authorId)
     state.loadings.collect = true
-    const res = await collectedVideo({ user_id: authorId, pageNo: 0, pageSize: 20 })
+    const res = await collectedVideo({
+      user_id: authorId,
+      pageNo: state.videos.collect.pageNo,
+      pageSize: state.videos.collect.pageSize
+    })
 
     if (res?.success) {
-      const list = (res.data?.list || []).map((a: any) => ({
+      const pageList = (res.data?.list || []).map((a: any) => ({
         ...a,
         author: a.author || props.currentItem.author
       }))
-      state.videos.collect.list = list
       state.videos.collect.total = res.data?.total || 0
-      console.log('[UserPanel] ✅ 收藏列表加载成功, 视频数量:', list.length)
+      state.videos.collect.list.push(...pageList)
+      state.videos.collect.pageNo++
+      console.log(
+        '[UserPanel] ✅ 收藏列表加载成功, 累计视频数量:',
+        state.videos.collect.list.length
+      )
     } else {
       console.log('[UserPanel] ❌ 收藏列表加载失败')
       state.videos.collect.total = 0
@@ -869,6 +920,23 @@ function scroll(e: Event) {
       cover.value.style.height = `calc(${state.coverHeight}rem)`
       state.isAutoScaleCover = false
     }, 200)
+  }
+
+  // 🎯 接近底部时，根据当前 Tab 加载更多
+  const target = e.target as HTMLElement | null
+  if (!target) return
+  const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+  if (scrollBottom > 200) return
+
+  if (state.tabIndex === 0) {
+    // 作品
+    loadAuthorVideos()
+  } else if (state.tabIndex === 1 && isLikePublic.value) {
+    // 喜欢
+    loadLikeVideos()
+  } else if (state.tabIndex === 2 && isCollectPublic.value) {
+    // 收藏
+    loadCollectVideos()
   }
 }
 

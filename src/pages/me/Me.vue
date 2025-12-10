@@ -1,7 +1,7 @@
 <template>
   <div class="Me">
     <!-- 整体可滚动区域 -->
-    <div class="scroll-container">
+    <div class="scroll-container" @scroll.passive="handleScroll">
       <!-- 用户信息区域 -->
       <div class="user-info">
         <header :style="headerBackgroundStyle" @click="handleHeaderClick">
@@ -330,6 +330,24 @@ async function loadMyVideos() {
     state.videos.my.total = res.data.total
     state.videos.my.list.push(...res.data.list)
     state.videos.my.pageNo++
+  }
+}
+
+// 监听滚动，接近底部时加载更多
+function handleScroll(e: Event) {
+  const target = e.target as HTMLElement | null
+  if (!target) return
+
+  const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+  // 距离底部小于 200px 时尝试加载更多
+  if (scrollBottom > 200) return
+
+  if (state.contentIndex === 0) {
+    loadMyVideos()
+  } else if (state.contentIndex === 1) {
+    loadLikedVideos()
+  } else if (state.contentIndex === 2) {
+    loadCollectedVideos()
   }
 }
 

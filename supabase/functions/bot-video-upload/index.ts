@@ -2,6 +2,8 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const BOT_TOKEN = Deno.env.get('TG_BOT_TOKEN')!
+const TG_API_BASE = Deno.env.get('TELEGRAM_API_BASE') || 'https://api.telegram.org'
+const BOT_WORKER_URL = Deno.env.get('BOT_WORKER_URL')
 const TG_FILE_PROXY_URL = Deno.env.get('TG_CDN_PROXY_URL') || Deno.env.get('TG_VIDEO_PROXY_URL')
 // 本地开发用 SB_ 前缀，生产环境用 SUPABASE_ 前缀
 const SUPABASE_URL = Deno.env.get('SB_URL') || Deno.env.get('SUPABASE_URL')!
@@ -47,7 +49,7 @@ interface UserState {
 // Telegram API 调用
 async function sendMessage(chatId: number, text: string, options: any = {}) {
   console.log('[sendMessage] chatId:', chatId, 'textLength:', text.length)
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`
+  const url = `${TG_API_BASE}/bot${BOT_TOKEN}/sendMessage`
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -74,7 +76,7 @@ async function sendMessage(chatId: number, text: string, options: any = {}) {
 
 async function editMessage(chatId: number, messageId: number, text: string, options: any = {}) {
   console.log('[editMessage] chatId:', chatId, 'messageId:', messageId, 'textLength:', text.length)
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`
+  const url = `${TG_API_BASE}/bot${BOT_TOKEN}/editMessageText`
   try {
     const payload = {
       chat_id: chatId,
@@ -105,7 +107,7 @@ async function editMessage(chatId: number, messageId: number, text: string, opti
 }
 
 async function deleteTelegramMessage(chatId: number, messageId: number) {
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`
+  const url = `${TG_API_BASE}/bot${BOT_TOKEN}/deleteMessage`
   try {
     await fetch(url, {
       method: 'POST',
@@ -118,7 +120,7 @@ async function deleteTelegramMessage(chatId: number, messageId: number) {
 }
 
 async function answerCallbackQuery(callbackQueryId: string, text?: string) {
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`
+  const url = `${TG_API_BASE}/bot${BOT_TOKEN}/answerCallbackQuery`
   await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -290,7 +292,7 @@ async function handleSettingsCallback(chatId: number, messageId: number, data: s
 
 // 🎯 处理 inline query（分享功能）
 async function answerInlineQuery(inlineQueryId: string, results: any[]) {
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/answerInlineQuery`
+  const url = `${TG_API_BASE}/bot${BOT_TOKEN}/answerInlineQuery`
   const payload = {
     inline_query_id: inlineQueryId,
     results,
@@ -497,7 +499,7 @@ async function notifyFollowersNewPost(
 
       // 发送通知
       try {
-        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`
+        const url = `${TG_API_BASE}/bot${BOT_TOKEN}/sendMessage`
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -744,7 +746,7 @@ function extractTags(text: string): string[] {
 // 获取 Telegram 用户信息
 async function getTelegramUserInfo(userId: number) {
   try {
-    const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChat`
+    const url = `${TG_API_BASE}/bot${BOT_TOKEN}/getChat`
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -882,6 +884,31 @@ async function getOrCreateProfile(
   } catch (error) {
     console.error('getOrCreateProfile 异常:', error)
     return null
+  }
+}
+
+// 🎯 触发 Worker 处理视频 (转存 R2)
+async function triggerWorker(videoId: string, fileId: string, chatId: number, messageId: number) {
+  if (!BOT_WORKER_URL) {
+    console.error('❌ BOT_WORKER_URL 未配置')
+    return
+  }
+  console.log(`[triggerWorker] 触发 Worker: video=${videoId}`)
+  try {
+    // Fire and forget (Worker 会异步处理)
+    fetch(`${BOT_WORKER_URL}/process`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        video_id: videoId,
+        file_id: fileId,
+        bot_token: BOT_TOKEN,
+        chat_id: chatId,
+        message_id: messageId
+      })
+    }).catch((e) => console.error('[triggerWorker] fetch error:', e))
+  } catch (e) {
+    console.error('[triggerWorker] 异常:', e)
   }
 }
 
@@ -1197,12 +1224,11 @@ async function handleVideo(
       return
     }
 
-    // ✅ 根据文件大小决定处理方式
+    // ✅ 统一使用 R2 转存流程 (Local Bot API 模式下，所有文件都在 VPS 本地，必须转存)
     const videoSize = video.file_size || 0
     const sizeMB = (videoSize / 1024 / 1024).toFixed(1)
-    const isLargeFile = videoSize > 19.8 * 1024 * 1024 // 19.8MB 阈值（TG Bot API 限制 20MB，留 0.2MB 缓冲）
 
-    console.log(`[handleVideo] 视频大小: ${sizeMB} MB, 是否大文件: ${isLargeFile}`)
+    console.log(`[handleVideo] 视频大小: ${sizeMB} MB, 准备转存 R2`)
 
     // 保存到数据库
     const { data: draftVideo, error } = await supabase
@@ -1213,18 +1239,18 @@ async function handleVideo(
         title: video.file_name || '未命名视频',
         description: description,
         tags: tags.length > 0 ? tags : null,
-        play_url: isLargeFile ? null : video.file_id, // 大文件暂时不设置 play_url
+        play_url: null, // 待 Worker 填充
         cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '',
         tg_file_id: video.file_id,
         tg_thumbnail_file_id: video.thumbnail?.file_id || video.thumb?.file_id,
         tg_unique_id: video.file_unique_id,
-        storage_type: isLargeFile ? 'pending' : 'telegram', // ✅ 大文件标记为 pending
+        storage_type: 'r2_pending', // ✅ 标记为等待 R2 转存
         duration: video.duration,
         width: video.width,
         height: video.height,
-        file_size: videoSize, // ✅ 记录文件大小
+        file_size: videoSize,
         is_private: false,
-        status: isLargeFile ? 'processing' : 'draft' // ✅ 大文件标记为 processing
+        status: 'processing' // ✅ 标记为处理中
       })
       .select()
       .single()
@@ -1237,34 +1263,22 @@ async function handleVideo(
 
     console.log(`[handleVideo] 视频记录已保存: ${draftVideo.id}, 状态: ${draftVideo.status}`)
 
-    // ✅ 根据文件大小显示不同消息
-    if (isLargeFile) {
-      // 大文件：显示处理中消息
-      await sendMessage(
-        chatId,
-        `✅ 视频已接收！\n\n` +
-          `📦 文件大小：${sizeMB} MB\n` +
-          `🔄 正在后台处理中...\n` +
-          `⏱️ 预计 2-5 分钟完成\n\n` +
-          `💡 处理完成后会自动通知您\n` +
-          `您可以继续发送其他视频`
-      )
+    // 发送处理中消息
+    const processingMsg = await sendMessage(
+      chatId,
+      `🔄 <b>正在处理视频...</b>\n\n` +
+        `📦 文件大小：${sizeMB} MB\n` +
+        `⏳ 正在转码并同步数据...\n` +
+        `💡 处理完成后会自动显示编辑菜单`
+    )
 
-      // 不更新用户状态，允许继续上传
+    const processingMessageId = processingMsg.ok ? processingMsg.result.message_id : 0
+
+    // 触发 Worker
+    if (processingMessageId) {
+      await triggerWorker(draftVideo.id, video.file_id, chatId, processingMessageId)
     } else {
-      // 小文件：显示编辑菜单
-      const menuResult = await sendMessage(chatId, getEditMenuText(draftVideo), {
-        reply_markup: getEditKeyboard(draftVideo)
-      })
-
-      const messageId = menuResult.ok ? menuResult.result.message_id : null
-
-      // 更新用户状态（保存消息ID）
-      await updateUserState(chatId, {
-        state: 'idle',
-        draft_video_id: draftVideo.id,
-        current_message_id: messageId
-      })
+      console.error('[handleVideo] 发送处理消息失败，无法触发 Worker')
     }
   } catch (error) {
     console.error('[handleVideo] 处理视频失败:', error)
@@ -2991,6 +3005,54 @@ serve(async (req) => {
     // 处理 Webhook
     if (req.method === 'POST') {
       const update = await req.json()
+
+      // ✅ 处理 Worker 完成回调
+      if (update.type === 'worker_complete') {
+        console.log('[WorkerCallback] 收到完成通知:', update)
+        const { chatId, messageId, videoId, success, error: workerError } = update
+
+        try {
+          // 1. 删除"处理中"消息
+          if (messageId) {
+            await deleteTelegramMessage(chatId, messageId)
+          }
+
+          if (!success) {
+            await sendMessage(chatId, `❌ 处理失败\n\n${workerError || '未知错误'}`)
+            return new Response('OK', { status: 200 })
+          }
+
+          // 2. 获取视频信息
+          const { data: video } = await supabase
+            .from('videos')
+            .select('*')
+            .eq('id', videoId)
+            .single()
+
+          if (!video) {
+            await sendMessage(chatId, '❌ 视频信息同步失败')
+            return new Response('OK', { status: 200 })
+          }
+
+          // 3. 发送编辑菜单
+          const menuResult = await sendMessage(chatId, getEditMenuText(video), {
+            reply_markup: getEditKeyboard(video)
+          })
+
+          const newMessageId = menuResult.ok ? menuResult.result.message_id : null
+
+          // 4. 更新用户状态
+          await updateUserState(chatId, {
+            state: 'idle',
+            draft_video_id: video.id,
+            current_message_id: newMessageId
+          })
+        } catch (e) {
+          console.error('[WorkerCallback] 处理异常:', e)
+        }
+        return new Response('OK', { status: 200 })
+      }
+
       console.log('收到更新:', JSON.stringify(update).substring(0, 200))
 
       // 处理消息
