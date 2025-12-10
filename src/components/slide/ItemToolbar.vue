@@ -34,10 +34,10 @@ onMounted(() => {
     setTimeout(() => {
       showSoundTip.value = true
       sessionStorage.setItem('sound-tip-shown', '1')
-      // 2秒后自动消失
+      // 5秒后自动消失（原来是 2 秒）
       setTimeout(() => {
         showSoundTip.value = false
-      }, 2000)
+      }, 5000)
     }, 500)
   }
 })
