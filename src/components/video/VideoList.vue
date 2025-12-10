@@ -795,7 +795,10 @@ function onTouchEnd() {
 
   if (shouldSwitch && direction) {
     // 🎯 执行切换
-    if (direction === 'next' && currentIndex.value < props.items.length - 1) {
+    // 如果没有更多数据，允许滑动到 items.length 位置（即 no-more 页面）
+    const maxIndex = props.hasMore ? props.items.length - 1 : props.items.length
+
+    if (direction === 'next' && currentIndex.value < maxIndex) {
       snapToNext()
     } else if (direction === 'prev' && currentIndex.value > 0) {
       snapToPrev()
@@ -873,7 +876,10 @@ function onMouseUp() {
 
   if (shouldSwitch && direction) {
     // 🎯 执行切换
-    if (direction === 'next' && currentIndex.value < props.items.length - 1) {
+    // 如果没有更多数据，允许滑动到 items.length 位置（即 no-more 页面）
+    const maxIndex = props.hasMore ? props.items.length - 1 : props.items.length
+
+    if (direction === 'next' && currentIndex.value < maxIndex) {
       snapToNext()
     } else if (direction === 'prev' && currentIndex.value > 0) {
       snapToPrev()
@@ -932,7 +938,8 @@ function onWheel(e: WheelEvent) {
 
   // 判断是否达到阈值
   if (Math.abs(wheelDeltaY) > threshold) {
-    if (wheelDeltaY > 0 && currentIndex.value < props.items.length - 1) {
+    const maxIndex = props.hasMore ? props.items.length - 1 : props.items.length
+    if (wheelDeltaY > 0 && currentIndex.value < maxIndex) {
       // 向下滚动（切换到下一个）
       wheelLock = true
       wheelDeltaY = 0 // 重置累积值
