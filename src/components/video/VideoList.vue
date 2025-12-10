@@ -157,10 +157,9 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
 
   // 根据内容类型计算完播时长
   let completionTime: number
-  if (contentType === 'image') {
-    completionTime = 2000 // 图片：2秒
-  } else if (contentType === 'album') {
-    completionTime = 3000 // 相册：3秒（滑到最后一张也会触发完播）
+  if (contentType === 'image' || contentType === 'album') {
+    // 🎯 图片/相册：视为立即完播（50ms），确保只要看到就算看过
+    completionTime = 50
   } else {
     // 视频：时长的 70%，最少 2 秒，最多 30 秒
     const duration = item.video?.duration || 10
