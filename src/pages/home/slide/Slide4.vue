@@ -14,7 +14,7 @@
         page="home"
         :initial-index="0"
         :autoplay="props.active"
-        :has-more="state.totalSize === 0 || state.list.length < state.totalSize"
+        :has-more="state.hasMore"
         @load-more="loadMore"
       />
 
@@ -45,22 +45,24 @@ const props = defineProps({
 const state = reactive({
   list: [] as VideoItem[],
   totalSize: 0,
-  pageSize: 10
+  pageSize: 10,
+  hasMore: true // 🎯 新增
 })
 
 async function loadMore() {
   console.log('[Slide4] loadMore 被调用', {
     listLength: state.list.length,
     totalSize: state.totalSize,
-    loading: store.loading
+    loading: store.loading,
+    hasMore: state.hasMore
   })
 
   if (store.loading) {
     console.log('[Slide4] 正在加载中，跳过')
     return
   }
-  if (state.totalSize > 0 && state.list.length >= state.totalSize) {
-    console.log('[Slide4] 已加载全部数据，跳过')
+  if (!state.hasMore) {
+    console.log('[Slide4] 没有更多数据，跳过')
     return
   }
 
@@ -80,18 +82,37 @@ async function loadMore() {
   console.log('[Slide4] API 响应', {
     success: res.success,
     total: res.data?.total,
-    listLength: res.data?.list?.length
+    listLength: res.data?.list?.length,
+    hasMore: res.data?.hasMore
   })
 
   store.loading = false
 
   if (res.success) {
     state.totalSize = res.data.total
-    state.list.push(...res.data.list)
-    console.log('[Slide4] ✅ 数据加载成功', {
-      totalSize: state.totalSize,
-      currentLength: state.list.length
-    })
+
+    // 🎯 更新 hasMore 状态
+    // 如果后端返回了 hasMore 则使用它，否则降级为判断返回数量是否足够
+    state.hasMore = res.data.hasMore ?? res.data.list.length >= state.pageSize
+
+    // 🎯 前端去重（过滤掉列表中已存在的视频）
+    const existingIds = new Set(state.list.map((v) => v.aweme_id || v.id))
+    const uniqueNewList = res.data.list.filter((v: any) => !existingIds.has(v.aweme_id || v.id))
+
+    if (uniqueNewList.length > 0) {
+      state.list.push(...uniqueNewList)
+      console.log('[Slide4] ✅ 数据加载成功 (已去重)', {
+        原始数量: res.data.list.length,
+        有效新增: uniqueNewList.length,
+        totalSize: state.totalSize,
+        currentLength: state.list.length,
+        hasMore: state.hasMore
+      })
+    } else {
+      console.log('[Slide4] ⚠️ 获取的数据全部重复，未添加到列表')
+      // 如果数据重复且后端说还有更多，可能需要再试一次？
+      // 暂时不重试，避免死循环，等待用户再次下拉
+    }
   } else {
     console.error('[Slide4] ❌ API 调用失败', res)
   }

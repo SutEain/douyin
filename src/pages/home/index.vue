@@ -75,7 +75,6 @@
 <script setup lang="ts">
 import { onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { _notice } from '@/utils'
 import { useBaseStore } from '@/store/pinia'
 import { useVideoStore } from '@/stores/video'
 import { videoManager } from '@/utils/videoManager'
@@ -198,14 +197,6 @@ onMounted(() => {
 
   // 🎯 检查深链接参数
   checkDeepLink()
-
-  // 首次打开时提示打开声音
-  if (!sessionStorage.getItem('sound-tip-shown')) {
-    setTimeout(() => {
-      _notice('点击右下角打开声音 🔊')
-      sessionStorage.setItem('sound-tip-shown', '1')
-    }, 500)
-  }
 })
 
 onUnmounted(() => {

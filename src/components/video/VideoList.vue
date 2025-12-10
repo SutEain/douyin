@@ -133,7 +133,60 @@ const DEBUG_PREFIX = '[AutoPlayDebug]'
 // 🎯 观看历史记录追踪（避免重复记录）
 const recordedViews = new Set<string>() // 已记录开始观看
 const completedViews = new Set<string>() // 已记录完播
-const imageTimers = new Map<string, NodeJS.Timeout>() // 图片显示计时器
+let currentCompletionTimer: NodeJS.Timeout | null = null // 当前视频的完播计时器
+
+// 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
+function recordEnterCurrent(item: VideoItem | null, contentType: string) {
+  if (!item?.aweme_id) return
+
+  // 1. 立即记录播放
+  if (!recordedViews.has(item.aweme_id)) {
+    recordedViews.add(item.aweme_id)
+    recordVideoView(item.aweme_id, { progress: 0 })
+    console.log(`[ViewHistory] 记录播放: ${item.aweme_id.substring(0, 8)}`)
+  }
+
+  // 2. 设置完播计时器
+  if (completedViews.has(item.aweme_id)) return // 已完播过
+
+  // 清除之前的计时器
+  if (currentCompletionTimer) {
+    clearTimeout(currentCompletionTimer)
+    currentCompletionTimer = null
+  }
+
+  // 根据内容类型计算完播时长
+  let completionTime: number
+  if (contentType === 'image') {
+    completionTime = 2000 // 图片：2秒
+  } else if (contentType === 'album') {
+    completionTime = 3000 // 相册：3秒（滑到最后一张也会触发完播）
+  } else {
+    // 视频：时长的 70%，最少 2 秒，最多 30 秒
+    const duration = item.video?.duration || 10
+    completionTime = Math.max(2000, Math.min(30000, duration * 0.7 * 1000))
+  }
+
+  console.log(`[ViewHistory] 设置完播计时器: ${item.aweme_id.substring(0, 8)}, ${completionTime}ms`)
+
+  currentCompletionTimer = setTimeout(() => {
+    if (!completedViews.has(item.aweme_id)) {
+      completedViews.add(item.aweme_id)
+      recordVideoView(item.aweme_id, { progress: 100, completed: true })
+      console.log(`[ViewHistory] 记录完播: ${item.aweme_id.substring(0, 8)}`)
+    }
+    currentCompletionTimer = null
+  }, completionTime)
+}
+
+// 🎯 离开 current（清除计时器）
+function recordLeaveCurrent() {
+  if (currentCompletionTimer) {
+    clearTimeout(currentCompletionTimer)
+    currentCompletionTimer = null
+    console.log(`[ViewHistory] 清除完播计时器（离开当前视频）`)
+  }
+}
 const SLOT_KEYS = ['slotA', 'slotB', 'slotC'] as const
 
 interface SlotState {
@@ -430,36 +483,17 @@ function playCurrent() {
     return
   }
 
-  // 🎯 图片/相册类型不需要播放
+  // 🎯 获取当前内容
   const contentType = getSlotContentType(slot)
+  const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
+
+  // 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
+  recordEnterCurrent(item, contentType)
+
+  // 🎯 图片/相册类型不需要播放视频元素
   if (contentType === 'image' || contentType === 'album') {
     console.log(`${DEBUG_PREFIX} playCurrent:skip-non-video`, { contentType })
     isPlaying.value = true // 图片/相册默认显示为"播放中"状态
-    // 🎯 记录观看历史
-    const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
-    if (item?.aweme_id) {
-      // 首次记录
-      if (!recordedViews.has(item.aweme_id)) {
-        recordedViews.add(item.aweme_id)
-        recordVideoView(item.aweme_id, { progress: 0 })
-      }
-      // 图片：2秒后算完播
-      if (contentType === 'image' && !completedViews.has(item.aweme_id)) {
-        // 清除之前的计时器
-        const existingTimer = imageTimers.get(item.aweme_id)
-        if (existingTimer) clearTimeout(existingTimer)
-        // 设置新计时器
-        const timer = setTimeout(() => {
-          if (!completedViews.has(item.aweme_id)) {
-            completedViews.add(item.aweme_id)
-            recordVideoView(item.aweme_id, { progress: 100, completed: true })
-          }
-          imageTimers.delete(item.aweme_id)
-        }, 2000)
-        imageTimers.set(item.aweme_id, timer)
-      }
-      // 相册的完播在 AlbumSwiper 组件中处理（滑到最后一张时）
-    }
     return
   }
 
@@ -506,12 +540,6 @@ function playCurrent() {
       }
       isPlaying.value = true
       tryUnmute(video)
-      // 🎯 记录观看历史（首次播放）
-      const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
-      if (item?.aweme_id && !recordedViews.has(item.aweme_id)) {
-        recordedViews.add(item.aweme_id)
-        recordVideoView(item.aweme_id, { progress: 0 })
-      }
     })
     .catch((err) => {
       console.warn(`${DEBUG_PREFIX} play:error`, {
@@ -574,6 +602,9 @@ function rotateToNext() {
       return
     }
   }
+
+  // 🎯 离开当前视频，清除完播计时器
+  recordLeaveCurrent()
 
   console.log('[视频切换] 切换到下一个 START', {
     from: currentIndex.value,
@@ -639,6 +670,9 @@ function rotateToNext() {
 
 function rotateToPrev() {
   if (currentIndex.value <= 0) return
+
+  // 🎯 离开当前视频，清除完播计时器
+  recordLeaveCurrent()
 
   console.log('[视频切换] 切换到上一个 START', {
     from: currentIndex.value,
@@ -1178,17 +1212,6 @@ function bindCurrentVideoEvents(video: HTMLVideoElement) {
       computeStep()
     }
     updateProgressFromVideo(video)
-
-    // 🎯 完播检测：播放进度 >= 90%
-    if (video.duration > 0) {
-      const progress = (video.currentTime / video.duration) * 100
-      const currentSlot = getSlotByRole('current')
-      const item = currentSlot?.videoIndex != null ? props.items[currentSlot.videoIndex] : null
-      if (item?.aweme_id && progress >= 90 && !completedViews.has(item.aweme_id)) {
-        completedViews.add(item.aweme_id)
-        recordVideoView(item.aweme_id, { progress: Math.round(progress), completed: true })
-      }
-    }
   }
 
   nextTick(computeStep)

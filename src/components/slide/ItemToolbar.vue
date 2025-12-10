@@ -25,6 +25,23 @@ const props = defineProps({
 const position = inject<any>('position')
 const videoStore = useVideoStore()
 
+// 🎯 声音提示气泡
+const showSoundTip = ref(false)
+
+onMounted(() => {
+  // 首次打开 App 时显示气泡提示
+  if (!sessionStorage.getItem('sound-tip-shown')) {
+    setTimeout(() => {
+      showSoundTip.value = true
+      sessionStorage.setItem('sound-tip-shown', '1')
+      // 2秒后自动消失
+      setTimeout(() => {
+        showSoundTip.value = false
+      }, 2000)
+    }, 500)
+  }
+})
+
 const emit = defineEmits(['update:item', 'goUserInfo', 'showComments', 'showShare', 'goMusic'])
 
 function syncItemState() {
@@ -259,6 +276,14 @@ const vClick = useClick()
     <div class="mute-toggle mb2r" v-click="toggleMute" @click.stop>
       <Icon v-if="isMuted" icon="ph:speaker-simple-slash-fill" class="icon" style="color: white" />
       <Icon v-else icon="ph:speaker-simple-high-fill" class="icon" style="color: white" />
+
+      <!-- 🎯 声音提示气泡 -->
+      <transition name="bubble">
+        <div v-if="showSoundTip" class="sound-tip-bubble" @click.stop="showSoundTip = false">
+          <span>点这打开声音 🔊</span>
+          <div class="bubble-arrow"></div>
+        </div>
+      </transition>
     </div>
   </div>
 </template>
@@ -357,6 +382,75 @@ const vClick = useClick()
 
   .loved {
     background: red;
+  }
+
+  // 🎯 静音开关容器
+  .mute-toggle {
+    position: relative;
+  }
+
+  // 🎯 声音提示气泡
+  .sound-tip-bubble {
+    position: absolute;
+    right: 50px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+    padding: 8px 14px;
+    border-radius: 20px;
+    white-space: nowrap;
+    pointer-events: none; // 不影响点击
+    z-index: 100;
+
+    span {
+      color: white;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    // 右侧箭头
+    .bubble-arrow {
+      position: absolute;
+      right: -6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 6px solid rgba(0, 0, 0, 0.8);
+    }
+  }
+}
+
+// 🎯 气泡动画
+.bubble-enter-active {
+  animation: bubble-in 0.3s ease-out;
+}
+.bubble-leave-active {
+  animation: bubble-out 0.3s ease-in;
+}
+
+@keyframes bubble-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-50%) translateX(10px) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0) scale(1);
+  }
+}
+
+@keyframes bubble-out {
+  0% {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-50%) translateX(10px) scale(0.8);
   }
 }
 </style>

@@ -58,166 +58,108 @@ export async function handleVideoMy(req: Request): Promise<Response> {
 
 export async function handleVideoFeed(req: Request): Promise<Response> {
   const url = new URL(req.url)
-  const { pageNo, pageSize, from, to } = parsePagination(url)
+  const { pageNo, pageSize } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  console.log('\n========== [深链接调试] handleVideoFeed START ==========')
-  console.log('[Feed] 完整请求URL:', req.url)
-  console.log('[Feed] 解析参数:', { pageNo, pageSize, from, to })
-  console.log('[Feed] 用户ID:', user?.id || 'anonymous')
-
-  // 🎯 方式1: 从 URL 参数获取（前端传递）
-  let startVideoId = url.searchParams.get('start_video_id')
-  console.log('[Feed] URL 参数 start_video_id:', startVideoId || '无')
-
-  // 🎯 方式2: 从 Telegram initData 解析（100% 可靠）
-  if (!startVideoId && pageNo === 0) {
-    console.log('[Feed] 🎯 尝试从 Telegram initData 解析 start_param')
-    const initData = req.headers.get('X-Telegram-Init-Data')
-
-    if (initData) {
-      console.log('[Feed] ✅ 检测到 Telegram initData')
-      try {
-        const params = new URLSearchParams(initData)
-        const startParam = params.get('start_param')
-        console.log('[Feed] start_param:', startParam || '无')
-
-        if (startParam && startParam.startsWith('video_')) {
-          startVideoId = startParam.replace('video_', '')
-          console.log('[Feed] ✅ 从 initData 解析到 video_id:', startVideoId)
-        }
-      } catch (e) {
-        console.error('[Feed] ❌ 解析 initData 失败:', e)
-      }
-    } else {
-      console.log('[Feed] 未检测到 Telegram initData 请求头')
-    }
-  }
-
-  console.log('[Feed] 最终 start_video_id:', startVideoId || '无')
-  console.log('[Feed] 是否首次加载:', pageNo === 0)
-  console.log('[Feed] 是否触发深链接逻辑:', pageNo === 0 && !!startVideoId)
+  // 🔍 诊断日志
+  console.log('[Feed] ========== 请求开始 ==========')
+  console.log('[Feed] 用户认证:', user ? `✅ ${user.id}` : '❌ 未登录')
+  console.log('[Feed] 分页参数:', { pageNo, pageSize })
 
   let startVideo: any = null
-  const adjustedFrom = from
-  let adjustedTo = to
+  let startVideoId: string | null = null
 
-  // 🎯 如果是首次加载（pageNo=0）且有 start_video_id
-  if (pageNo === 0 && startVideoId) {
-    console.log('\n[深链接] ========== 步骤1: 获取深链接视频 ==========')
-    console.log('[深链接] 目标视频ID:', startVideoId)
+  // 🎯 深链接处理（仅首页第一次加载）
+  if (pageNo === 0) {
+    startVideoId = url.searchParams.get('start_video_id')
+    if (!startVideoId) {
+      const initData = req.headers.get('X-Telegram-Init-Data')
+      if (initData) {
+        try {
+          const params = new URLSearchParams(initData)
+          const startParam = params.get('start_param')
+          if (startParam?.startsWith('video_')) {
+            startVideoId = startParam.replace('video_', '')
+          }
+        } catch (e) {
+          console.error('[Feed] 解析 initData 失败:', e)
+        }
+      }
+    }
 
-    // 获取深链接视频
-    const { data: startRow, error: startError } = await supabaseAdmin
+    if (startVideoId) {
+      const { data: startRow } = await supabaseAdmin
+        .from('videos')
+        .select('*')
+        .eq('id', startVideoId)
+        .eq('status', 'published')
+        .maybeSingle()
+
+      if (startRow) {
+        startVideo = startRow
+        console.log('[Feed] 深链接视频:', startVideoId)
+      }
+    }
+  }
+
+  // 🎯 计算需要获取的数量
+  const targetCount = startVideo ? pageSize - 1 : pageSize
+  const recommendCount = Math.ceil(targetCount * 0.7)
+  const normalCount = targetCount - recommendCount
+
+  let rows: any[] = []
+
+  if (user?.id) {
+    // 已登录用户：使用 get_feed_mix（严格排除观看历史）
+    const { data, error } = await supabaseAdmin.rpc('get_feed_mix', {
+      p_user_id: user.id,
+      p_recommend_count: recommendCount,
+      p_normal_count: normalCount,
+      p_history_limit: 500 // 增加历史限制
+    })
+
+    if (error) {
+      console.error('[Feed] get_feed_mix 失败:', error)
+      const { data: fallbackData } = await supabaseAdmin
+        .from('videos')
+        .select('*')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+        .limit(pageSize)
+      rows = fallbackData || []
+    } else {
+      rows = data || []
+    }
+  } else {
+    // 未登录用户：按时间倒序
+    const { data } = await supabaseAdmin
       .from('videos')
       .select('*')
-      .eq('id', startVideoId)
       .eq('status', 'published')
-      .maybeSingle()
-
-    if (startError) {
-      console.error('[深链接] ❌ 查询失败:', {
-        错误代码: startError.code,
-        错误消息: startError.message,
-        详情: startError.details
-      })
-    } else if (startRow) {
-      console.log('[深链接] ✅ 查询成功:', {
-        视频ID: startRow.id,
-        标题: startRow.description?.substring(0, 30) + '...',
-        状态: startRow.status,
-        作者ID: startRow.user_id,
-        创建时间: startRow.created_at
-      })
-      startVideo = startRow
-
-      // 🎯 调整推荐视频的数量：总共返回 pageSize 个，深链接占1个，推荐占 pageSize-1 个
-      adjustedTo = from + pageSize - 2 // -1 是因为 range 包含结束位置，再 -1 是因为深链接占1个
-      console.log('[深链接] 调整推荐视频范围:', {
-        原始范围: `${from}-${to}`,
-        调整后范围: `${adjustedFrom}-${adjustedTo}`,
-        原因: '深链接占1个位置'
-      })
-    } else {
-      console.log('[深链接] ⚠️ 视频不存在或未发布:', {
-        视频ID: startVideoId,
-        可能原因: ['ID不存在', '状态不是published', '已被删除']
-      })
-    }
+      .order('created_at', { ascending: false })
+      .limit(pageSize)
+    rows = data || []
   }
 
-  console.log('\n[推荐视频] ========== 步骤2: 查询推荐视频 ==========')
-
-  // 🎯 构建查询，如果有深链接视频则排除它（避免重复）
-  let query = supabaseAdmin.from('videos').select('*', { count: 'exact' }).eq('status', 'published')
-
+  // 🎯 排除深链接视频（避免重复）
   if (startVideo) {
-    console.log('[推荐视频] 🎯 排除深链接视频，避免重复:', startVideoId)
-    query = query.neq('id', startVideoId)
-  } else {
-    console.log('[推荐视频] 无需排除，正常查询')
+    rows = rows.filter((r) => r.id !== startVideoId)
   }
 
-  console.log('[推荐视频] 查询条件:', {
-    状态: 'published',
-    排除ID: startVideo ? startVideoId : '无',
-    排序: 'created_at desc', // 只按时间倒序
-    范围: `${adjustedFrom}-${adjustedTo}`
+  // 🎯 合并：深链接视频在最前面
+  const allRows = startVideo ? [startVideo, ...rows] : rows
+
+  console.log('[Feed] 结果:', {
+    深链接: !!startVideo,
+    推荐数: rows.filter((r) => r.is_recommended).length,
+    普通数: rows.filter((r) => !r.is_recommended).length,
+    总数: allRows.length
   })
 
-  const {
-    data: rows,
-    error: videoError,
-    count
-  } = await query
-    .order('created_at', { ascending: false }) // 只按时间倒序，不考虑置顶
-    .range(adjustedFrom, adjustedTo)
-
-  if (videoError) {
-    console.error('[推荐视频] ❌ 查询失败:', {
-      错误代码: videoError.code,
-      错误消息: videoError.message,
-      详情: videoError.details
-    })
-    return errorResponse('Failed to load feed', 1, 500)
-  }
-
-  console.log('[推荐视频] ✅ 查询成功:', {
-    返回数量: rows?.length || 0,
-    总数: count,
-    第一个ID: rows?.[0]?.id || '无',
-    最后一个ID: rows?.[rows.length - 1]?.id || '无'
-  })
-
-  console.log('\n[数据合并] ========== 步骤3: 合并数据 ==========')
-
-  // 🎯 合并深链接视频和推荐视频
-  const allRows = startVideo ? [startVideo, ...(rows ?? [])] : (rows ?? [])
-
-  console.log('[数据合并] 合并结果:', {
-    有深链接: !!startVideo,
-    深链接ID: startVideo?.id || '无',
-    推荐视频数: rows?.length || 0,
-    合并后总数: allRows.length
-  })
-
-  if (startVideo) {
-    const allIds = allRows.map((r) => r.id)
-    const hasDuplicate = new Set(allIds).size !== allIds.length
-    console.log('[数据合并] 去重检查:', {
-      总ID数: allIds.length,
-      唯一ID数: new Set(allIds).size,
-      是否有重复: hasDuplicate ? '❌ 有重复!' : '✅ 无重复'
-    })
-    if (hasDuplicate) {
-      console.warn('[数据合并] ⚠️ 检测到重复ID，列表:', allIds)
-    }
-  }
-
-  console.log('\n[用户标记] 开始附加用户标记...')
+  // 附加用户标记
   await attachUserFlags(allRows, user?.id ?? null)
 
-  console.log('[数据映射] 开始映射视频数据...')
+  // 映射视频数据
   const profileCache = new Map<string, any>()
   const list = []
   for (const row of allRows) {
@@ -229,29 +171,18 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     }
   }
 
-  console.log('[数据映射] 映射完成:', {
-    原始数据: allRows.length,
-    映射成功: list.length,
-    映射失败: allRows.length - list.length
-  })
-
-  console.log('\n[最终返回] ========== 返回数据给前端 ==========')
-  console.log('[最终返回] 返回结构:', {
-    list长度: list.length,
-    total: count ?? 0,
-    pageNo,
-    pageSize,
-    第一个视频ID: list[0]?.aweme_id || '无',
-    第一个视频标题: list[0]?.desc?.substring(0, 30) || '无',
-    前3个视频ID: list.slice(0, 3).map((v) => v.aweme_id)
-  })
-  console.log('========== [深链接调试] handleVideoFeed END ==========\n')
+  // 获取总数（用于分页）
+  const { count } = await supabaseAdmin
+    .from('videos')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'published')
 
   return successResponse({
     list,
     total: count ?? 0,
     pageNo,
-    pageSize
+    pageSize,
+    hasMore: list.length >= pageSize
   })
 }
 
@@ -899,12 +830,17 @@ export async function handleRecordView(req: Request): Promise<Response> {
       await supabaseAdmin.from('watch_history').update(updateData).eq('id', existing.id)
     } else {
       // 不存在，插入新记录
-      await supabaseAdmin.from('watch_history').insert({
+      const { error: insertError } = await supabaseAdmin.from('watch_history').insert({
         user_id: user.id,
         video_id: video_id,
         progress: progress !== undefined ? Math.min(100, Math.max(0, progress)) : 0,
         completed: completed === true
       })
+
+      // 🎯 首次观看，view_count + 1
+      if (!insertError) {
+        await supabaseAdmin.rpc('increment_view_count', { p_video_id: video_id })
+      }
     }
 
     return successResponse({ success: true })

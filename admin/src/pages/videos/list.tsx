@@ -120,6 +120,15 @@ export const VideoList = () => {
         })
       }
 
+      // 筛选推荐状态
+      if (params.is_recommended) {
+        filters.push({
+          field: 'is_recommended',
+          operator: 'eq',
+          value: params.is_recommended === 'true'
+        })
+      }
+
       return filters
     }
   })
@@ -383,6 +392,37 @@ export const VideoList = () => {
     return record.review_status === 'pending' || record.review_status === 'manual_review'
   }
 
+  // 🎯 切换推荐状态
+  const handleToggleRecommend = (record: any) => {
+    const newRecommended = !record.is_recommended
+    Modal.confirm({
+      title: newRecommended ? '确认推荐' : '取消推荐',
+      content: newRecommended
+        ? `确定将「${record.description?.substring(0, 20) || '该视频'}」加入推荐池吗？`
+        : `确定将「${record.description?.substring(0, 20) || '该视频'}」从推荐池移除吗？`,
+      onOk: () => {
+        updateVideo(
+          {
+            resource: 'videos',
+            id: record.id,
+            values: {
+              is_recommended: newRecommended,
+              recommended_at: newRecommended ? new Date().toISOString() : null
+            }
+          },
+          {
+            onSuccess: () => {
+              message.success(newRecommended ? '已加入推荐池' : '已从推荐池移除')
+            },
+            onError: (error) => {
+              message.error('操作失败：' + (error as Error).message)
+            }
+          }
+        )
+      }
+    })
+  }
+
   return (
     <>
       <List>
@@ -418,6 +458,12 @@ export const VideoList = () => {
               <Select.Option value="video">🎬 视频</Select.Option>
               <Select.Option value="image">🖼️ 图片</Select.Option>
               <Select.Option value="album">📷 相册</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="is_recommended" label="推荐状态">
+            <Select placeholder="推荐状态" allowClear style={{ width: 100 }}>
+              <Select.Option value="true">⭐ 已推荐</Select.Option>
+              <Select.Option value="false">未推荐</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item>
@@ -626,6 +672,15 @@ export const VideoList = () => {
           />
 
           <Table.Column
+            dataIndex="is_recommended"
+            title="推荐"
+            width={80}
+            render={(value) =>
+              value ? <Tag color="gold">⭐ 推荐</Tag> : <Tag color="default">-</Tag>
+            }
+          />
+
+          <Table.Column
             dataIndex="view_count"
             title="播放量"
             width={80}
@@ -692,6 +747,20 @@ export const VideoList = () => {
                       拒绝
                     </Button>
                   </>
+                )}
+
+                {/* 推荐按钮（只有已发布的视频才显示） */}
+                {record.status === 'published' && (
+                  <Button
+                    type={record.is_recommended ? 'primary' : 'default'}
+                    size="small"
+                    onClick={() => handleToggleRecommend(record)}
+                    style={
+                      record.is_recommended ? { background: '#faad14', borderColor: '#faad14' } : {}
+                    }
+                  >
+                    {record.is_recommended ? '取消推荐' : '推荐'}
+                  </Button>
                 )}
 
                 <Button
