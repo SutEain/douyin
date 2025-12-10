@@ -491,6 +491,16 @@ function playCurrent() {
   const contentType = getSlotContentType(slot)
   const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
 
+  // 🔍 手机调试日志
+  console.log('[DebugMobile] playCurrent called', {
+    slotKey: slot.key,
+    videoIndex: slot.videoIndex,
+    itemExists: !!item,
+    itemId: item?.aweme_id,
+    contentType,
+    recorded: item?.aweme_id ? recordedViews.has(item.aweme_id) : 'N/A'
+  })
+
   // 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
   console.log(`${DEBUG_PREFIX} 准备记录观看历史`, {
     id: item?.aweme_id,
@@ -676,6 +686,15 @@ function rotateToNext() {
   if (currentIndex.value >= props.items.length - 3 && currentIndex.value < props.items.length) {
     emit('loadMore')
   }
+
+  // 🎯 强制记录观看历史（针对图片/相册），防止 playCurrent 未及时执行
+  if (nextItem) {
+    const type = getContentType(nextItem)
+    if (type === 'image' || type === 'album') {
+      console.log(`${DEBUG_PREFIX} rotateToNext: 强制记录图片/相册历史`, { id: nextItem.aweme_id })
+      recordEnterCurrent(nextItem, type)
+    }
+  }
 }
 
 function rotateToPrev() {
@@ -732,6 +751,18 @@ function rotateToPrev() {
   next.videoIndex = currentIndex.value - 1 >= 0 ? currentIndex.value - 1 : null
   updateSlotSource(next, true)
   updateSlotSource(prev)
+
+  // 🎯 强制记录观看历史（针对图片/相册）
+  const currentItem = props.items[currentIndex.value]
+  if (currentItem) {
+    const type = getContentType(currentItem)
+    if (type === 'image' || type === 'album') {
+      console.log(`${DEBUG_PREFIX} rotateToPrev: 强制记录图片/相册历史`, {
+        id: currentItem.aweme_id
+      })
+      recordEnterCurrent(currentItem, type)
+    }
+  }
 
   console.log('[视频切换] 切换到上一个 END', {
     newIndex: currentIndex.value,
