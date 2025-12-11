@@ -32,7 +32,9 @@
           <div class="no-more-page">
             <div class="no-more-icon">📭</div>
             <p class="no-more-text">暂时没有更多了</p>
-            <p class="no-more-subtext">休息一下，稍后再来</p>
+            <p v-if="noMoreSubtext" class="no-more-subtext">
+              {{ noMoreSubtext }}
+            </p>
           </div>
         </template>
 
@@ -212,12 +214,14 @@ interface Props {
   initialIndex?: number
   autoplay?: boolean
   hasMore?: boolean // 🎯 是否还有更多数据
+  noMoreSubtext?: string | null // 🎯 没有更多时的副标题文案
 }
 
 const props = withDefaults(defineProps<Props>(), {
   initialIndex: 0,
   autoplay: true,
-  hasMore: true
+  hasMore: true,
+  noMoreSubtext: '休息一下，稍后再来'
 })
 
 const emit = defineEmits<{
@@ -1578,6 +1582,7 @@ defineExpose({
     font-size: 14px;
     color: rgba(255, 255, 255, 0.5);
     margin: 0;
+    white-space: pre-line; // 支持多行规则展示
   }
 
   @keyframes float {

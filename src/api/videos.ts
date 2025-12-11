@@ -215,6 +215,20 @@ export async function recordVideoView(
   }
 }
 
+// 🎯 获取成人内容观看配额
+export async function getAdultQuota() {
+  try {
+    const data = await callAppServer('/video/adult-quota', {
+      method: 'GET',
+      requireAuth: true
+    })
+    return { success: true, data }
+  } catch (error: any) {
+    console.error('[getAdultQuota] 请求失败:', error)
+    return { success: false, message: error?.message || '获取配额失败' }
+  }
+}
+
 async function requestSupabaseVideoList(
   endpoint: string,
   params?: Record<string, any>,

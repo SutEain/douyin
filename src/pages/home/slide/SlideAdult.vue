@@ -15,6 +15,7 @@
         :initial-index="0"
         :autoplay="props.active"
         :has-more="state.hasMore"
+        :no-more-subtext="adultRuleText"
         @load-more="loadMore"
       />
 
@@ -48,6 +49,13 @@ const state = reactive({
   pageSize: 10,
   hasMore: true
 })
+
+const adultRuleText =
+  '默认每日可观看 10 条成人内容。\n' +
+  '使用专属邀请链接邀请新用户注册，\n可解锁无限成人内容：\n\n' +
+  '• 成功邀请 1 人 → 解锁 24 小时无限刷\n' +
+  '• 成功邀请 2 人 → 解锁 3 天无限刷\n' +
+  '• 累计邀请 3 人 → 永久解锁无限刷'
 
 async function loadMore() {
   console.log('[SlideAdult] loadMore 被调用', {

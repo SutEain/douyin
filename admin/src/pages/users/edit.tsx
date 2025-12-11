@@ -49,7 +49,11 @@ export const UserEdit = () => {
         auto_approve: record.auto_approve,
         show_collect: record.show_collect !== false,
         show_like: record.show_like !== false,
-        show_tg_username: record.show_tg_username !== false
+        show_tg_username: record.show_tg_username !== false,
+        invite_success_count: record.invite_success_count,
+        adult_daily_limit: record.adult_daily_limit,
+        adult_unlock_until: record.adult_unlock_until ? dayjs(record.adult_unlock_until) : null,
+        adult_permanent_unlock: record.adult_permanent_unlock
       })
     }
   }, [record, form])
@@ -197,6 +201,41 @@ export const UserEdit = () => {
           <Col span={6}>
             <Form.Item label="显示TG用户名" name="show_tg_username" valuePropName="checked">
               <Switch checkedChildren="显示" unCheckedChildren="隐藏" />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Divider orientation="left">成人内容与邀请</Divider>
+        <Row gutter={16}>
+          <Col span={6}>
+            <Form.Item label="成功邀请人数" name="invite_success_count">
+              <Input type="number" />
+            </Form.Item>
+          </Col>
+          <Col span={6}>
+            <Form.Item label="每日成人上限" name="adult_daily_limit">
+              <Input type="number" />
+            </Form.Item>
+          </Col>
+          <Col span={6}>
+            <Form.Item
+              label="成人解锁截止时间"
+              name="adult_unlock_until"
+              getValueProps={(value) => ({
+                value: value ? dayjs(value) : null
+              })}
+              getValueFromEvent={(date) => (date ? date.toISOString() : null)}
+            >
+              <DatePicker showTime style={{ width: '100%' }} placeholder="临时解锁到期时间" />
+            </Form.Item>
+          </Col>
+          <Col span={6}>
+            <Form.Item
+              label="永久解锁成人内容"
+              name="adult_permanent_unlock"
+              valuePropName="checked"
+            >
+              <Switch checkedChildren="已永久解锁" unCheckedChildren="未解锁" />
             </Form.Item>
           </Col>
         </Row>

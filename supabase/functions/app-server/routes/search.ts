@@ -1,6 +1,7 @@
 import { successResponse, errorResponse } from '../../_shared/response.ts'
 import { supabaseAdmin } from '../lib/env.ts'
 import { mapVideoRow, getProfileById } from '../lib/video.ts'
+import { getAdultQuota } from './video.ts'
 import { HttpError, parsePagination, requireAuth, tryGetAuth } from '../lib/auth.ts'
 
 /**
@@ -105,11 +106,25 @@ export async function handleSearchAdultVideos(req: Request): Promise<Response> {
 
   console.log('[search] 搜索成人视频:', { keyword, pageNo, pageSize })
 
-  // 保存搜索历史（如果用户已登录），类型 adult
-  const { user } = await tryGetAuth(req)
-  if (user) {
-    await saveSearchHistory(user.id, keyword, 'adult').catch((err) => {
-      console.error('[search] 保存成人搜索历史失败:', err)
+  // 必须登录才能搜索成人内容（实际上小程序都是登录的）
+  const { user } = await requireAuth(req)
+
+  // 保存搜索历史（类型 adult）
+  await saveSearchHistory(user.id, keyword, 'adult').catch((err) => {
+    console.error('[search] 保存成人搜索历史失败:', err)
+  })
+
+  // 🔒 检查是否解锁了无限成人内容
+  const quota = await getAdultQuota(user.id)
+  if (!quota.unlimited) {
+    // 未解锁：直接返回 locked 状态，不执行搜索
+    console.log('[search] 用户未解锁成人搜索:', { userId: user.id })
+    return successResponse({
+      list: [],
+      total: 0,
+      pageNo,
+      pageSize,
+      locked: true
     })
   }
 

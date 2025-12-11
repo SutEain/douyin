@@ -1,5 +1,5 @@
 <template>
-  <div 
+  <div
     id="video-detail"
     @touchstart="handleTouchStart"
     @touchmove="handleTouchMove"
@@ -11,13 +11,29 @@
     </div>
 
     <!-- 单个视频（改为三槽位循环结构） -->
-    <div 
-      class="video-container" 
+    <div
+      class="video-container"
       v-if="state.videoItem"
       :class="{ 'no-transition': state.isDragging }"
       :style="{ transform: `translateY(${state.translateY}px)` }"
     >
+      <!-- 成人内容次数已用完：显示规则说明页 -->
+      <div v-if="state.showAdultRules" class="adult-rules-page">
+        <div class="rules-card">
+          <h2>今日成人内容已达上限</h2>
+          <p>默认每日可观看 5 条成人内容。</p>
+          <p>使用你的专属邀请链接邀请新用户注册，可解锁无限成人内容：</p>
+          <ul>
+            <li>邀请 1 人成功 → 解锁 24 小时无限成人内容</li>
+            <li>邀请 2 人成功 → 解锁 3 天无限成人内容</li>
+            <li>累计邀请 3 人成功 → 永久解锁无限成人内容</li>
+          </ul>
+          <p>请前往 Bot，点击「邀请好友解锁🔞」获取你的专属邀请链接。</p>
+        </div>
+      </div>
+      <!-- 正常详情播放 -->
       <VideoList
+        v-else
         :items="videoItems"
         page="detail"
         :initial-index="initialIndex"
@@ -28,23 +44,19 @@
     <!-- 底部导航 -->
     <BaseFooter :init-tab="5" />
 
-  <!-- ✅ 使用 Teleport 将弹窗传送到 body，避免 transform 影响 fixed 定位 -->
-  <Teleport to="body">
-    <!-- 评论弹窗 -->
-    <Comment
-      page-id="video-detail"
-      :video-id="state.commentVideoId"
-      v-model="state.showComments"
-      @close="state.showComments = false"
-    />
+    <!-- ✅ 使用 Teleport 将弹窗传送到 body，避免 transform 影响 fixed 定位 -->
+    <Teleport to="body">
+      <!-- 评论弹窗 -->
+      <Comment
+        page-id="video-detail"
+        :video-id="state.commentVideoId"
+        v-model="state.showComments"
+        @close="state.showComments = false"
+      />
 
-    <!-- 分享弹窗 -->
-    <Share
-      v-model="state.isSharing"
-      page-id="video-detail"
-      :item="state.videoItem"
-    />
-  </Teleport>
+      <!-- 分享弹窗 -->
+      <Share v-model="state.isSharing" page-id="video-detail" :item="state.videoItem" />
+    </Teleport>
   </div>
 </template>
 
@@ -59,6 +71,7 @@ import Share from '@/components/Share.vue'
 import { useBaseStore } from '@/store/pinia'
 import { videoPlaybackManager } from '@/utils/videoPlaybackManager'
 import bus, { EVENT_KEY } from '@/utils/bus'
+import { getAdultQuota } from '@/api/videos'
 
 defineOptions({
   name: 'VideoDetail'
@@ -72,6 +85,7 @@ const state = reactive({
   showComments: false,
   commentVideoId: '',
   isSharing: false,
+  showAdultRules: false,
   // 滑动返回相关
   startY: 0,
   startX: 0,
@@ -80,8 +94,14 @@ const state = reactive({
 })
 
 // ✅ 提供 item 和 position 给子组件（BaseVideo, ItemDesc, ItemToolbar）
-provide('item', computed(() => state.videoItem))
-provide('position', computed(() => ({ uniqueId: 'video_detail', index: 0 })))
+provide(
+  'item',
+  computed(() => state.videoItem)
+)
+provide(
+  'position',
+  computed(() => ({ uniqueId: 'video_detail', index: 0 }))
+)
 
 const videoItems = computed(() => {
   if (baseStore.routeData?.items?.length) {
@@ -128,10 +148,19 @@ onMounted(() => {
     router.back()
     return
   }
-  
+
   // 暂停其他页面的视频
   videoPlaybackManager.pauseAll()
-  
+
+  // 如果是成人视频，检查今日配额
+  if (state.videoItem?.is_adult) {
+    getAdultQuota().then((res) => {
+      if (res.success && !res.data.unlimited && res.data.remaining <= 0) {
+        state.showAdultRules = true
+      }
+    })
+  }
+
   // 监听事件
   bus.on(EVENT_KEY.UPDATE_ITEM, updateItem)
   bus.on(EVENT_KEY.SHOW_SHARE, handleShowShare)
@@ -143,7 +172,7 @@ onUnmounted(() => {
   bus.off(EVENT_KEY.UPDATE_ITEM, updateItem)
   bus.off(EVENT_KEY.SHOW_SHARE, handleShowShare)
   bus.off(EVENT_KEY.SHOW_COMMENTS, handleShowComments)
-  
+
   // 停止播放
   videoPlaybackManager.pauseAll()
 })
@@ -170,7 +199,7 @@ onDeactivated(() => {
     left: 15rem;
     top: 10rem;
     z-index: 999;
-    
+
     .back-icon {
       font-size: 28rem;
       color: #fff;
@@ -185,11 +214,10 @@ onDeactivated(() => {
     position: relative;
     transition: transform 0.2s ease-out;
     will-change: transform;
-    
+
     &.no-transition {
       transition: none;
     }
   }
 }
 </style>
-

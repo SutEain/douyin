@@ -17,7 +17,8 @@ import {
   handleBatchReview,
   handleApproveVideo,
   handleRecordView,
-  handleVideoAdultFeed
+  handleVideoAdultFeed,
+  handleGetAdultQuota
 } from './routes/video.ts'
 import {
   handleVideoComments,
@@ -93,6 +94,9 @@ serve(async (req) => {
     // 🎯 记录观看历史（播放时调用）
     if (route === '/video/view' && method === 'POST') {
       return handleRecordView(req)
+    }
+    if (route === '/video/adult-quota' && method === 'GET') {
+      return handleGetAdultQuota(req)
     }
     if (route === '/video/comments' && method === 'GET') {
       return handleVideoComments(req)
@@ -176,7 +180,7 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
     return errorResponse('Invalid Telegram data', 1, 401)
   }
 
-  const { user } = validated
+  const { user, start_param } = validated
 
   // 🎯 步骤1: 查询 profile 是否存在
   const { data: existingProfile } = await supabaseAdmin
@@ -275,6 +279,66 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
     // ✅ 用户已存在
     console.log('[app-server] 用户已存在:', existingProfile.id)
     userId = existingProfile.id
+  }
+
+  // 🎯 处理邀请逻辑（仅新用户 + 有 invite_xxx 参数）
+  try {
+    if (isNewUser && start_param?.startsWith('invite_')) {
+      const inviterId = start_param.replace('invite_', '')
+      if (inviterId && inviterId !== userId) {
+        console.log('[Invite] 新用户通过邀请链接进入, inviterId =', inviterId, 'userId =', userId)
+
+        // 标记新用户的 invited_by
+        await supabaseAdmin.from('profiles').update({ invited_by: inviterId }).eq('id', userId)
+
+        // 读取邀请人当前状态
+        const { data: inviterProfile } = await supabaseAdmin
+          .from('profiles')
+          .select('id, invite_success_count, adult_permanent_unlock, adult_unlock_until')
+          .eq('id', inviterId)
+          .maybeSingle()
+
+        if (inviterProfile) {
+          const now = new Date()
+          const currentCount = inviterProfile.invite_success_count ?? 0
+          const newCount = currentCount + 1
+
+          let adultPermanentUnlock = inviterProfile.adult_permanent_unlock === true
+          let adultUnlockUntil = inviterProfile.adult_unlock_until
+
+          if (!adultPermanentUnlock) {
+            if (newCount >= 3) {
+              adultPermanentUnlock = true
+              adultUnlockUntil = null
+            } else if (newCount === 2) {
+              adultUnlockUntil = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString()
+            } else if (newCount === 1) {
+              adultUnlockUntil = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
+            }
+          }
+
+          await supabaseAdmin
+            .from('profiles')
+            .update({
+              invite_success_count: newCount,
+              adult_permanent_unlock: adultPermanentUnlock,
+              adult_unlock_until: adultUnlockUntil
+            })
+            .eq('id', inviterId)
+
+          console.log('[Invite] 邀请人状态已更新', {
+            inviterId,
+            invite_success_count: newCount,
+            adult_permanent_unlock: adultPermanentUnlock,
+            adult_unlock_until: adultUnlockUntil
+          })
+        } else {
+          console.warn('[Invite] 未找到邀请人 profile, inviterId =', inviterId)
+        }
+      }
+    }
+  } catch (inviteError) {
+    console.error('[Invite] 处理邀请逻辑失败:', inviteError)
   }
 
   // 🎯 步骤5: 更新用户信息（仅对已存在的用户）

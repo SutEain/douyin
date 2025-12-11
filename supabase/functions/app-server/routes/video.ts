@@ -199,26 +199,8 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  let rows: any[] = []
-  let total: number | null = null
-
-  if (user?.id) {
-    // 已登录用户：使用 get_adult_feed，排除 watch_history 里的视频
-    const { data, error } = await supabaseAdmin.rpc('get_adult_feed', {
-      p_user_id: user.id,
-      p_page_no: pageNo,
-      p_page_size: pageSize
-    })
-
-    if (error) {
-      console.error('[AdultFeed] get_adult_feed 失败，降级为简单查询:', error)
-    } else {
-      rows = data || []
-    }
-  }
-
-  // 未登录用户，或者 RPC 失败时，使用简单查询（不排除已观看）
-  if (!rows.length) {
+  // 未登录用户：不做次数限制，只按发布时间返回成人内容
+  if (!user?.id) {
     const { data, error, count } = await supabaseAdmin
       .from('videos')
       .select('*', { count: 'exact' })
@@ -228,15 +210,78 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
       .range(from, to)
 
     if (error) {
-      console.error('[AdultFeed] 简单查询也失败:', error)
+      console.error('[AdultFeed] 查询视频失败:', error)
       return errorResponse('Failed to load adult feed', 1, 500)
     }
 
-    rows = data || []
-    total = count ?? null
+    await attachUserFlags(data ?? [], null)
+
+    const profileCache = new Map<string, any>()
+    const list: any[] = []
+    for (const row of data ?? []) {
+      const authorProfile = await getVideoAuthorProfile(row, profileCache)
+      const mapped = await mapVideoRow(row, authorProfile)
+      if (mapped) {
+        applyRowFlags(mapped, row)
+        list.push(mapped)
+      }
+    }
+
+    return successResponse({
+      list,
+      total: count ?? 0,
+      pageNo,
+      pageSize,
+      hasMore: list.length >= pageSize
+    })
   }
 
-  await attachUserFlags(rows ?? [], user?.id ?? null)
+  // 已登录用户：先检查成人观看配额
+  const quota = await getAdultQuota(user.id)
+  if (!quota.unlimited && quota.remaining <= 0) {
+    return successResponse({
+      list: [],
+      total: 0,
+      pageNo,
+      pageSize,
+      hasMore: false,
+      reason: 'quota_exceeded',
+      quota
+    })
+  }
+
+  // 使用 get_adult_feed，排除 watch_history 里的视频
+  let rows: any[] = []
+  let total: number | null = null
+
+  const { data, error } = await supabaseAdmin.rpc('get_adult_feed', {
+    p_user_id: user.id,
+    p_page_no: pageNo,
+    p_page_size: pageSize
+  })
+
+  if (error) {
+    console.error('[AdultFeed] get_adult_feed 失败，降级为简单查询:', error)
+    const fallback = await supabaseAdmin
+      .from('videos')
+      .select('*', { count: 'exact' })
+      .eq('status', 'published')
+      .eq('is_adult', true)
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    if (fallback.error) {
+      console.error('[AdultFeed] 简单查询也失败:', fallback.error)
+      return errorResponse('Failed to load adult feed', 1, 500)
+    }
+
+    rows = fallback.data || []
+    total = fallback.count ?? null
+  } else {
+    rows = data || []
+  }
+
+  await attachUserFlags(rows ?? [], user.id)
 
   const profileCache = new Map<string, any>()
   const list: any[] = []
@@ -253,8 +298,88 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
     list,
     total: total ?? list.length,
     pageNo,
-    pageSize
+    pageSize,
+    hasMore: list.length >= pageSize
   })
+}
+
+/**
+ * 计算用户今日成人内容配额
+ */
+export async function getAdultQuota(userId: string) {
+  // 读取用户配置
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('adult_daily_limit, adult_permanent_unlock, adult_unlock_until, invite_success_count')
+    .eq('id', userId)
+    .maybeSingle()
+
+  // 默认每日上限 10 条
+  const dailyLimit = profile?.adult_daily_limit ?? 10
+  const permanent = profile?.adult_permanent_unlock === true
+  const unlockUntil = profile?.adult_unlock_until ? new Date(profile.adult_unlock_until) : null
+
+  const now = new Date()
+
+  if (permanent || (unlockUntil && unlockUntil > now)) {
+    return {
+      unlimited: true,
+      limit: dailyLimit,
+      used: 0,
+      remaining: Number.POSITIVE_INFINITY,
+      unlock_until: unlockUntil ? unlockUntil.toISOString() : null,
+      permanent,
+      invite_success_count: profile?.invite_success_count ?? 0
+    }
+  }
+
+  // 统计今天已观看的成人视频数量
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startISO = startOfDay.toISOString()
+
+  const { data: historyRows } = await supabaseAdmin
+    .from('watch_history')
+    .select('video_id')
+    .eq('user_id', userId)
+    .gte('updated_at', startISO)
+
+  const videoIds = Array.from(
+    new Set((historyRows ?? []).map((row: any) => row.video_id).filter(Boolean))
+  )
+
+  let used = 0
+  if (videoIds.length > 0) {
+    const { count } = await supabaseAdmin
+      .from('videos')
+      .select('*', { count: 'exact', head: true })
+      .in('id', videoIds)
+      .eq('is_adult', true)
+      .eq('status', 'published')
+
+    used = count ?? 0
+  }
+
+  const remaining = Math.max(0, dailyLimit - used)
+
+  return {
+    unlimited: false,
+    limit: dailyLimit,
+    used,
+    remaining,
+    unlock_until: null,
+    permanent: false,
+    invite_success_count: profile?.invite_success_count ?? 0
+  }
+}
+
+/**
+ * 获取用户成人内容配额信息
+ * GET /video/adult-quota
+ */
+export async function handleGetAdultQuota(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+  const quota = await getAdultQuota(user.id)
+  return successResponse(quota)
 }
 
 /**

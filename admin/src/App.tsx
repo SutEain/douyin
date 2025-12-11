@@ -12,6 +12,7 @@ import { UserList, UserShow, UserEdit } from './pages/users'
 import { RecommendationPoolList } from './pages/recommendation-pool'
 import { Login } from './pages/login'
 import { authProvider } from './authProvider'
+import { Dashboard } from './pages/dashboard'
 
 function App() {
   return (
@@ -24,6 +25,13 @@ function App() {
             authProvider={authProvider}
             notificationProvider={useNotificationProvider}
             resources={[
+              {
+                name: 'dashboard',
+                list: '/dashboard',
+                meta: {
+                  label: '运营看板'
+                }
+              },
               {
                 name: 'videos',
                 list: '/videos',
@@ -68,7 +76,9 @@ function App() {
                   </Authenticated>
                 }
               >
-                <Route index element={<VideoList />} />
+                {/* 默认首页为 Dashboard */}
+                <Route index element={<Dashboard />} />
+                <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/videos">
                   <Route index element={<VideoList />} />
                   <Route path="show/:id" element={<VideoShow />} />

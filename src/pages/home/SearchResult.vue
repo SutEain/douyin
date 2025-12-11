@@ -19,7 +19,19 @@
 
     <!-- 视频结果（普通 / 成人 共用一套 UI） -->
     <div v-if="searchType === 'video' || searchType === 'adult'" class="video-results">
-      <div v-if="videoLoading && videoList.length === 0" class="loading-container">
+      <!-- 🔒 成人搜索锁定提示 -->
+      <div v-if="searchType === 'adult' && adultLocked" class="locked-container">
+        <div class="lock-icon">🔞</div>
+        <div class="lock-title">已开启成人搜索保护</div>
+        <div class="lock-desc">
+          为防止未成年人接触，成人内容搜索功能已被锁定。<br />
+          请在 Telegram Bot 中点击「邀请好友解锁🔞」<br />
+          邀请新用户注册后，即可解锁无限刷成人内容。
+        </div>
+        <div class="lock-btn" @click="router.push('/home')">去观看推荐内容</div>
+      </div>
+
+      <div v-else-if="videoLoading && videoList.length === 0" class="loading-container">
         <Loading :is-full-screen="false" />
       </div>
       <div v-else-if="videoList.length === 0" class="empty">
@@ -67,10 +79,7 @@
             :src="_checkImgUrl(user.avatar_url)"
             alt=""
             class="avatar"
-            @error="
-              (e) =>
-                ((e.target as HTMLImageElement).src = require('../../assets/img/icon/avatar/1.png'))
-            "
+            @error="handleAvatarError"
           />
           <div class="info">
             <div class="nickname">{{ user.nickname || user.username }}</div>
@@ -146,6 +155,8 @@ const videoPage = ref(0)
 const videoPageSize = ref(20)
 const videoLoading = ref(false)
 const videoHasMore = ref(true)
+// 成人搜索是否锁定
+const adultLocked = ref(false)
 
 // 用户数据
 const userList = ref<any[]>([])
@@ -217,6 +228,7 @@ onActivated(() => {
       videoPage.value = 0
       videoTotal.value = 0
       videoHasMore.value = true
+      adultLocked.value = false
     } else {
       userList.value = []
       userPage.value = 0
@@ -269,6 +281,7 @@ function resetAndSearch() {
     videoPage.value = 0
     videoTotal.value = 0
     videoHasMore.value = true
+    adultLocked.value = false
     loadVideos()
   } else {
     userList.value = []
@@ -289,6 +302,16 @@ async function loadVideos() {
       searchType.value === 'adult'
         ? await searchAdultVideos(keyword.value, videoPage.value, videoPageSize.value)
         : await searchVideos(keyword.value, videoPage.value, videoPageSize.value)
+
+    // 🔒 检查是否被锁定（仅成人搜索）
+    if (searchType.value === 'adult' && result.locked) {
+      adultLocked.value = true
+      videoList.value = []
+      videoHasMore.value = false
+      return
+    } else {
+      adultLocked.value = false
+    }
 
     if (result.list) {
       videoList.value.push(...result.list)
@@ -424,6 +447,11 @@ async function handleFollowUser(user: any) {
     console.error('关注失败:', error)
   }
 }
+
+function handleAvatarError(e: Event) {
+  const target = e.target as HTMLImageElement
+  target.src = new URL('../../assets/img/icon/avatar/1.png', import.meta.url).href
+}
 </script>
 
 <style scoped lang="less">
@@ -516,6 +544,47 @@ async function handleFollowUser(user: any) {
     min-height: calc(100vh - 60rem);
     min-height: calc(100vh - (60rem + constant(safe-area-inset-top)));
     min-height: calc(100vh - (60rem + env(safe-area-inset-top)));
+  }
+
+  .locked-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60rem 30rem;
+    text-align: center;
+
+    .lock-icon {
+      font-size: 60rem;
+      margin-bottom: 20rem;
+    }
+
+    .lock-title {
+      font-size: 18rem;
+      font-weight: bold;
+      margin-bottom: 12rem;
+      color: var(--main-text-color);
+    }
+
+    .lock-desc {
+      font-size: 14rem;
+      color: var(--second-text-color);
+      line-height: 1.6;
+      margin-bottom: 30rem;
+    }
+
+    .lock-btn {
+      padding: 10rem 30rem;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 20rem;
+      font-size: 14rem;
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+
+      &:active {
+        background: rgba(255, 255, 255, 0.2);
+      }
+    }
   }
 
   .loading-container {
