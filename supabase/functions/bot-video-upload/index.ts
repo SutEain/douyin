@@ -348,7 +348,12 @@ async function handleInlineQuery(inlineQuery: any) {
     return
   }
 
-  const videoId = query.replace('video_', '')
+  let videoId = query.replace('video_', '')
+  // 如果带有邀请码后缀 (video_xxxx_iyyy)，去除后缀以获取正确的 videoId
+  if (videoId.includes('_i')) {
+    videoId = videoId.split('_i')[0]
+  }
+
   console.log('[InlineQuery] ✅ 提取视频ID:', videoId)
 
   // 从数据库获取视频信息
@@ -365,6 +370,15 @@ async function handleInlineQuery(inlineQuery: any) {
     return
   }
 
+  // 获取分享者的 numeric_id 作为邀请码
+  const { data: sharer } = await supabase
+    .from('profiles')
+    .select('numeric_id')
+    .eq('tg_user_id', userId)
+    .single()
+
+  const inviteSuffix = sharer?.numeric_id ? `_i${sharer.numeric_id}` : ''
+
   console.log('[InlineQuery] ✅ 视频查询成功:', {
     id: video.id,
     status: video.status,
@@ -379,7 +393,7 @@ async function handleInlineQuery(inlineQuery: any) {
   }
 
   // 构建深链接
-  const deepLink = `https://t.me/tg_douyin_bot/tgdouyin?startapp=video_${videoId}`
+  const deepLink = `https://t.me/tg_douyin_bot/tgdouyin?startapp=video_${videoId}${inviteSuffix}`
   console.log('[InlineQuery] 深链接:', deepLink)
 
   // 🎯 视频描述前50字作为超链接文字
@@ -466,9 +480,18 @@ async function notifyFollowersNewPost(
     const message = `🎬 <b>${authorNickname}</b> 发布了新作品${descPreview}`
 
     // 3. 构造深链
+    // 获取作者的 numeric_id
+    const { data: authorProfile } = await supabase
+      .from('profiles')
+      .select('numeric_id')
+      .eq('id', authorId)
+      .single()
+
+    const inviteSuffix = authorProfile?.numeric_id ? `_i${authorProfile.numeric_id}` : ''
+
     const botUsername = 'tg_douyin_bot'
     const appName = 'tgdouyin'
-    const deepLink = `https://t.me/${botUsername}/${appName}?startapp=video_${videoId}`
+    const deepLink = `https://t.me/${botUsername}/${appName}?startapp=video_${videoId}${inviteSuffix}`
 
     let sentCount = 0
     let skippedCount = 0
@@ -535,7 +558,10 @@ async function notifyFollowersNewPost(
 // 获取持久化键盘
 function getPersistentKeyboard() {
   return {
-    keyboard: [[{ text: '📹 我的视频' }, { text: '⚙️ 隐私设置' }], [{ text: '🔔 通知设置' }]],
+    keyboard: [
+      [{ text: '📹 我的视频' }, { text: '🔞 邀请解锁' }],
+      [{ text: '🔔 通知设置' }, { text: '⚙️ 隐私设置' }]
+    ],
     resize_keyboard: true,
     persistent: true
   }
@@ -793,7 +819,7 @@ async function getTelegramUserInfo(userId: number) {
 async function getOrCreateProfile(
   tgUserId: number,
   tgUserInfo?: { first_name: string; last_name?: string; username?: string; language_code?: string }
-): Promise<{ id: string } | null> {
+): Promise<{ id: string; numeric_id?: number } | null> {
   try {
     // 1. 先查找是否已存在
     const { data: existingProfile } = await supabase
@@ -804,7 +830,7 @@ async function getOrCreateProfile(
 
     if (existingProfile) {
       console.log('找到已存在的 profile:', existingProfile.id)
-      return { id: existingProfile.id }
+      return { id: existingProfile.id, numeric_id: existingProfile.numeric_id }
     }
 
     // 2. 不存在则创建
@@ -887,7 +913,7 @@ async function getOrCreateProfile(
         },
         { onConflict: 'id' }
       )
-      .select('id')
+      .select('id, numeric_id')
       .single()
 
     if (upsertError) {
@@ -2128,6 +2154,146 @@ async function handleLocation(chatId: number, location: any, userMessageId: numb
   }
 }
 
+// 处理"邀请解锁"
+async function handleInviteUnlock(chatId: number) {
+  try {
+    // 1. 获取用户邀请链接和统计
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    const inviteLink = `https://t.me/tg_douyin_bot?start=${profile?.numeric_id || ''}`
+    const count = profile?.invite_success_count || 0
+
+    // 2. 计算解锁状态
+    let statusText = '🔒 未解锁'
+    if (profile?.adult_permanent_unlock) {
+      statusText = '♾️ 永久解锁'
+    } else if (profile?.adult_unlock_until && new Date(profile.adult_unlock_until) > new Date()) {
+      const until = new Date(profile.adult_unlock_until)
+      const now = new Date()
+      const diffHours = Math.ceil((until.getTime() - now.getTime()) / (1000 * 3600))
+      statusText = `🔓 已解锁 (剩余 ${diffHours} 小时)`
+    }
+
+    // 3. 构建文案
+    const text =
+      `🔞 <b>邀请解锁无限刷</b>\n\n` +
+      `当前状态：${statusText}\n` +
+      `已邀请人数：${count} 人\n\n` +
+      `<b>专属邀请链接：</b>\n` +
+      `${inviteLink}\n` +
+      `(点击上方链接复制)\n\n` +
+      `<b>🎁 解锁规则：</b>\n` +
+      `• 邀请 1 人 → 解锁 24 小时无限刷\n` +
+      `• 邀请 2 人 → 解锁 3 天无限刷\n` +
+      `• 邀请 3 人 → 永久解锁无限刷\n\n` +
+      `<i>💡 好友通过您的链接启动机器人即算邀请成功</i>\n\n` +
+      `<i>💡 此解锁针对🔞的内容，推荐页内容无需解锁</i>`
+
+    await sendMessage(chatId, text)
+  } catch (error) {
+    console.error('handleInviteUnlock error:', error)
+    await sendMessage(chatId, '❌ 获取邀请信息失败，请稍后重试')
+  }
+}
+
+// 处理邀请逻辑
+async function handleInvitation(inviteeId: string, inviterNumericId: number) {
+  try {
+    console.log(`[handleInvitation] 开始处理邀请: invitee=${inviteeId}, code=${inviterNumericId}`)
+
+    // 1. 查找邀请人
+    const { data: inviter } = await supabase
+      .from('profiles')
+      .select('id, invite_success_count, adult_permanent_unlock, adult_unlock_until')
+      .eq('numeric_id', inviterNumericId)
+      .single()
+
+    if (!inviter) {
+      console.log('[handleInvitation] 邀请人不存在')
+      return
+    }
+
+    if (inviter.id === inviteeId) {
+      console.log('[handleInvitation] 不能邀请自己')
+      return
+    }
+
+    // 2. 检查被邀请人是否已被邀请（避免重复）
+    const { data: invitee } = await supabase
+      .from('profiles')
+      .select('invited_by')
+      .eq('id', inviteeId)
+      .single()
+
+    if (invitee?.invited_by) {
+      console.log('[handleInvitation] 该用户已被邀请过')
+      return
+    }
+
+    // 3. 更新被邀请人信息
+    await supabase.from('profiles').update({ invited_by: inviter.id }).eq('id', inviteeId)
+
+    // 4. 更新邀请人统计和解锁状态
+    const newCount = (inviter.invite_success_count || 0) + 1
+    const updates: any = { invite_success_count: newCount }
+
+    // 解锁逻辑
+    if (newCount >= 3) {
+      updates.adult_permanent_unlock = true
+      updates.adult_unlock_until = null // 永久解锁后清除时间限制
+    } else {
+      let durationHours = 0
+      if (newCount === 1) durationHours = 24
+      if (newCount === 2) durationHours = 72 // 3天
+
+      // 如果已经是永久解锁，跳过
+      if (!inviter.adult_permanent_unlock) {
+        // 如果当前有解锁时间，在当前时间基础上增加
+        const currentUnlock = inviter.adult_unlock_until
+          ? new Date(inviter.adult_unlock_until).getTime()
+          : Date.now()
+
+        // 如果当前时间已经过期，则从现在开始算
+        const baseTime = Math.max(currentUnlock, Date.now())
+        updates.adult_unlock_until = new Date(baseTime + durationHours * 3600 * 1000).toISOString()
+      }
+    }
+
+    await supabase.from('profiles').update(updates).eq('id', inviter.id)
+
+    // 5. 通知邀请人
+    // 需要获取邀请人的 tg_user_id
+    const { data: inviterProfile } = await supabase
+      .from('profiles')
+      .select('tg_user_id')
+      .eq('id', inviter.id)
+      .single()
+
+    if (inviterProfile?.tg_user_id) {
+      let rewardText = ''
+      if (newCount === 1) rewardText = '获得 24小时 无限刷'
+      else if (newCount === 2) rewardText = '获得 3天 无限刷'
+      else if (newCount >= 3) rewardText = '获得 永久 无限刷'
+
+      await sendMessage(
+        inviterProfile.tg_user_id,
+        `🎉 <b>邀请成功！</b>\n\n` +
+          `您已成功邀请 ${newCount} 人\n` +
+          `🎁 ${rewardText}\n\n` +
+          `继续邀请可获得更多奖励！`
+      )
+    }
+
+    console.log('[handleInvitation] 邀请处理完成')
+  } catch (error) {
+    console.error('[handleInvitation] 异常:', error)
+  }
+}
+
 // 处理"我的视频"- 概览页
 async function handleMyVideos(chatId: number) {
   try {
@@ -3108,11 +3274,21 @@ serve(async (req) => {
         })
 
         // /start 命令 - 创建用户并显示欢迎消息
-        if (message.text === '/start') {
+        if (message.text && message.text.startsWith('/start')) {
           // 创建或获取用户 profile（直接使用 message.from 数据，无需额外 API 调用）
           const profile = await getOrCreateProfile(chatId, message.from)
 
           if (profile) {
+            // 🎯 处理邀请逻辑 (检查是否有参数 /start 12345)
+            const parts = message.text.split(' ')
+            if (parts.length > 1) {
+              const inviteCode = parts[1]
+              // 如果 inviteCode 是数字且不是自己
+              if (/^\d+$/.test(inviteCode) && String(inviteCode) !== String(profile.numeric_id)) {
+                await handleInvitation(profile.id, parseInt(inviteCode))
+              }
+            }
+
             await sendMessage(
               chatId,
               '👋 <b>欢迎使用视频上传</b>\n\n' +
@@ -3145,6 +3321,10 @@ serve(async (req) => {
         // "隐私设置"按钮
         else if (message.text === '⚙️ 隐私设置') {
           await handlePrivacySettings(chatId)
+        }
+        // "邀请解锁"按钮
+        else if (message.text === '🔞 邀请解锁') {
+          await handleInviteUnlock(chatId)
         }
         // 📸 图片消息
         else if (message.photo) {

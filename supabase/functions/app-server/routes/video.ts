@@ -79,7 +79,12 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
           const params = new URLSearchParams(initData)
           const startParam = params.get('start_param')
           if (startParam?.startsWith('video_')) {
-            startVideoId = startParam.replace('video_', '')
+            let videoId = startParam.replace('video_', '')
+            // 去除邀请码后缀
+            if (videoId.includes('_i')) {
+              videoId = videoId.split('_i')[0]
+            }
+            startVideoId = videoId
           }
         } catch (e) {
           console.error('[Feed] 解析 initData 失败:', e)

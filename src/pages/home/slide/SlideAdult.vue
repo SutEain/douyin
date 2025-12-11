@@ -93,11 +93,11 @@ async function loadMore() {
 
   const res = await adultVideoFeed(requestParams)
 
-  if (res.reason === 'quota_exceeded') {
+  if (res.data?.reason === 'quota_exceeded' || res.reason === 'quota_exceeded') {
     state.quotaExceeded = true
     state.hasMore = false
     store.loading = false
-    console.log('[SlideAdult] 配额耗尽')
+    console.log('[SlideAdult] 🚫 配额已用完')
     return
   } else {
     state.quotaExceeded = false

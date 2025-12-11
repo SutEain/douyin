@@ -281,60 +281,128 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
     userId = existingProfile.id
   }
 
-  // 🎯 处理邀请逻辑（仅新用户 + 有 invite_xxx 参数）
+  // 🎯 处理邀请逻辑
   try {
-    if (isNewUser && start_param?.startsWith('invite_')) {
-      const inviterId = start_param.replace('invite_', '')
-      if (inviterId && inviterId !== userId) {
-        console.log('[Invite] 新用户通过邀请链接进入, inviterId =', inviterId, 'userId =', userId)
+    let inviterCode: string | null = null
 
-        // 标记新用户的 invited_by
+    // 解析邀请码
+    if (isNewUser && start_param) {
+      if (start_param.startsWith('invite_')) {
+        // 兼容旧逻辑
+        const code = start_param.replace('invite_', '')
+        if (/^\d+$/.test(code)) {
+          inviterCode = code
+        } else if (code.includes('-')) {
+          // UUID 格式，直接当作 inviterId 使用
+          const inviterId = code
+          if (inviterId !== userId) {
+            console.log('[Invite] 新用户通过旧邀请链接进入, inviterId =', inviterId)
+            // 仅记录邀请关系，不做奖励计算（旧逻辑暂时这样处理，或可统一调用奖励逻辑）
+            await supabaseAdmin.from('profiles').update({ invited_by: inviterId }).eq('id', userId)
+          }
+        }
+      } else if (start_param.startsWith('video_') && start_param.includes('_i')) {
+        // 新格式：video_xxx_i12345
+        const parts = start_param.split('_i')
+        if (parts.length > 1) {
+          inviterCode = parts[1]
+        }
+      }
+    }
+
+    // 处理数字邀请码 (numeric_id)
+    if (inviterCode && /^\d+$/.test(inviterCode)) {
+      const numericId = parseInt(inviterCode)
+      console.log('[Invite] 检测到数字邀请码:', numericId)
+
+      // 查找邀请人
+      const { data: inviterProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('id, invite_success_count, adult_permanent_unlock, adult_unlock_until')
+        .eq('numeric_id', numericId)
+        .maybeSingle()
+
+      if (inviterProfile && inviterProfile.id !== userId) {
+        const inviterId = inviterProfile.id
+        console.log('[Invite] 找到邀请人:', inviterId)
+
+        // 1. 标记被邀请人
         await supabaseAdmin.from('profiles').update({ invited_by: inviterId }).eq('id', userId)
 
-        // 读取邀请人当前状态
-        const { data: inviterProfile } = await supabaseAdmin
-          .from('profiles')
-          .select('id, invite_success_count, adult_permanent_unlock, adult_unlock_until')
-          .eq('id', inviterId)
-          .maybeSingle()
+        // 2. 更新邀请人奖励
+        const now = new Date()
+        const currentCount = inviterProfile.invite_success_count ?? 0
+        const newCount = currentCount + 1
 
-        if (inviterProfile) {
-          const now = new Date()
-          const currentCount = inviterProfile.invite_success_count ?? 0
-          const newCount = currentCount + 1
+        let adultPermanentUnlock = inviterProfile.adult_permanent_unlock === true
+        let adultUnlockUntil = inviterProfile.adult_unlock_until
 
-          let adultPermanentUnlock = inviterProfile.adult_permanent_unlock === true
-          let adultUnlockUntil = inviterProfile.adult_unlock_until
+        if (!adultPermanentUnlock) {
+          if (newCount >= 3) {
+            adultPermanentUnlock = true
+            adultUnlockUntil = null
+          } else {
+            // 如果当前有解锁时间，在当前时间基础上增加
+            const currentUnlock = adultUnlockUntil
+              ? new Date(adultUnlockUntil).getTime()
+              : now.getTime()
+            // 确保不早于现在
+            const baseTime = Math.max(currentUnlock, now.getTime())
 
-          if (!adultPermanentUnlock) {
-            if (newCount >= 3) {
-              adultPermanentUnlock = true
-              adultUnlockUntil = null
-            } else if (newCount === 2) {
-              adultUnlockUntil = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString()
-            } else if (newCount === 1) {
-              adultUnlockUntil = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
+            let addHours = 0
+            if (newCount === 1) addHours = 24
+            if (newCount === 2) addHours = 72 // 3天
+
+            if (addHours > 0) {
+              adultUnlockUntil = new Date(baseTime + addHours * 3600 * 1000).toISOString()
             }
           }
+        }
 
-          await supabaseAdmin
-            .from('profiles')
-            .update({
-              invite_success_count: newCount,
-              adult_permanent_unlock: adultPermanentUnlock,
-              adult_unlock_until: adultUnlockUntil
-            })
-            .eq('id', inviterId)
-
-          console.log('[Invite] 邀请人状态已更新', {
-            inviterId,
+        await supabaseAdmin
+          .from('profiles')
+          .update({
             invite_success_count: newCount,
             adult_permanent_unlock: adultPermanentUnlock,
             adult_unlock_until: adultUnlockUntil
           })
-        } else {
-          console.warn('[Invite] 未找到邀请人 profile, inviterId =', inviterId)
+          .eq('id', inviterId)
+
+        console.log('[Invite] 邀请处理成功，邀请人新人数:', newCount)
+
+        // 3. 发送通知给邀请人 (通过 Bot API)
+        if (TG_BOT_TOKEN) {
+          const { data: inviterUser } = await supabaseAdmin
+            .from('profiles')
+            .select('tg_user_id')
+            .eq('id', inviterId)
+            .single()
+
+          if (inviterUser?.tg_user_id) {
+            let rewardText = ''
+            if (newCount === 1) rewardText = '获得 24小时 无限刷'
+            else if (newCount === 2) rewardText = '获得 3天 无限刷'
+            else if (newCount >= 3) rewardText = '获得 永久 无限刷'
+
+            const msg =
+              `🎉 <b>邀请成功！</b>\n\n` +
+              `您已成功邀请 ${newCount} 人\n` +
+              `🎁 ${rewardText}\n\n` +
+              `继续邀请可获得更多奖励！`
+
+            await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: inviterUser.tg_user_id,
+                text: msg,
+                parse_mode: 'HTML'
+              })
+            }).catch((e) => console.error('[Invite] 发送通知失败:', e))
+          }
         }
+      } else {
+        console.warn('[Invite] 未找到邀请人或不能邀请自己, code =', numericId)
       }
     }
   } catch (inviteError) {

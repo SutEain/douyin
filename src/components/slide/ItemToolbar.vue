@@ -6,6 +6,7 @@ import { computed, inject, onMounted, onUnmounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { toggleVideoLike, toggleVideoCollect, toggleFollowUser } from '@/api/videos'
 import { useVideoStore } from '@/stores/video'
+import { useBaseStore } from '@/store/pinia'
 
 const props = defineProps({
   isMy: {
@@ -24,6 +25,7 @@ const props = defineProps({
 
 const position = inject<any>('position')
 const videoStore = useVideoStore()
+const baseStore = useBaseStore()
 
 // 🎯 声音提示气泡
 const showSoundTip = ref(false)
@@ -200,7 +202,9 @@ function shareToTelegram() {
     }
 
     // 🎯 复制分享链接到剪贴板
-    const shareText = `@tg_douyin_bot video_${props.item.aweme_id}`
+    const numericId = baseStore.userinfo?.numeric_id
+    const inviteSuffix = numericId ? `_i${numericId}` : ''
+    const shareText = `@tg_douyin_bot video_${props.item.aweme_id}${inviteSuffix}`
 
     console.log('[分享] 复制分享链接:', shareText)
 

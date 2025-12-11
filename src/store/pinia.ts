@@ -270,9 +270,13 @@ export const useBaseStore = defineStore('base', {
         if (startParam) {
           console.log('[DeepLink] 收到启动参数:', startParam)
 
-          // 解析格式：video_xxxxx
+          // 解析格式：video_xxxxx[_iyyyyy]
           if (startParam.startsWith('video_')) {
-            const videoId = startParam.replace('video_', '')
+            let videoId = startParam.replace('video_', '')
+            // 去除邀请码后缀
+            if (videoId.includes('_i')) {
+              videoId = videoId.split('_i')[0]
+            }
             this.startVideoId = videoId
             console.log('[DeepLink] ✅ 方式1成功 - 从 start_param 解析到 video_id:', videoId)
             return

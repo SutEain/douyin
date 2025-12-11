@@ -18,6 +18,12 @@
         @load-more="loadMore"
       />
 
+      <!-- 次数用完提示 -->
+      <div v-else-if="state.quotaExceeded" class="empty-state">
+        <p>今日次数已用完</p>
+        <p style="font-size: 13px; margin-top: 10px; opacity: 0.7">明日更新或邀请好友</p>
+      </div>
+
       <!-- 空状态提示 -->
       <div v-else class="empty-state">
         <p>暂无更多视频</p>
@@ -33,6 +39,7 @@ import VideoList from '@/components/video/VideoList.vue'
 import { recommendedVideo } from '@/api/videos'
 import { useBaseStore } from '@/store/pinia'
 import type { VideoItem } from '@/types'
+import { _showNoticeDialog } from '@/utils'
 
 const store = useBaseStore()
 const props = defineProps({
@@ -46,7 +53,8 @@ const state = reactive({
   list: [] as VideoItem[],
   totalSize: 0,
   pageSize: 10,
-  hasMore: true // 🎯 新增
+  hasMore: true,
+  quotaExceeded: false
 })
 
 async function loadMore() {
@@ -83,12 +91,29 @@ async function loadMore() {
     success: res.success,
     total: res.data?.total,
     listLength: res.data?.list?.length,
-    hasMore: res.data?.hasMore
+    hasMore: res.data?.hasMore,
+    reason: res.data?.reason
   })
 
   store.loading = false
 
   if (res.success) {
+    // 🎯 检查配额限制
+    if (res.data.reason === 'quota_exceeded') {
+      console.log('[Slide4] 🚫 配额已用完')
+      state.hasMore = false
+      state.quotaExceeded = true
+
+      _showNoticeDialog(
+        '今日次数已用完',
+        '您今天的免费观看次数已用完，请明天再来，或邀请好友获取更多次数。',
+        '',
+        () => {},
+        '知道了'
+      )
+      return
+    }
+
     state.totalSize = res.data.total
 
     // 🎯 更新 hasMore 状态
