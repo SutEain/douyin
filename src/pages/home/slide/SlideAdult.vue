@@ -19,6 +19,13 @@
         @load-more="loadMore"
       />
 
+      <!-- 配额耗尽提示 -->
+      <div v-else-if="state.quotaExceeded" class="empty-state">
+        <p style="white-space: pre-line; text-align: center; line-height: 1.6">
+          {{ adultRuleText }}
+        </p>
+      </div>
+
       <!-- 空状态提示 -->
       <div v-else class="empty-state">
         <p>暂无更多成人内容</p>
@@ -47,7 +54,8 @@ const state = reactive({
   list: [] as VideoItem[],
   totalSize: 0,
   pageSize: 10,
-  hasMore: true
+  hasMore: true,
+  quotaExceeded: false
 })
 
 const adultRuleText =
@@ -84,6 +92,16 @@ async function loadMore() {
   console.log('[SlideAdult] 开始请求 API', requestParams)
 
   const res = await adultVideoFeed(requestParams)
+
+  if (res.reason === 'quota_exceeded') {
+    state.quotaExceeded = true
+    state.hasMore = false
+    store.loading = false
+    console.log('[SlideAdult] 配额耗尽')
+    return
+  } else {
+    state.quotaExceeded = false
+  }
 
   console.log('[SlideAdult] API 响应', {
     success: res.success,
