@@ -745,6 +745,8 @@ const slideListHeight = computed(() => {
 watch(
   () => data.slideIndex,
   (newVal) => {
+    // 隐藏了排行榜，不再计算高度
+    /*
     nextTick(() => {
       // console.log(data.$refs[`slide${newVal}`])
       data.slideItemHeight = new Dom(`.slide${newVal}`).css('height')
@@ -763,6 +765,7 @@ watch(
     } else {
       clearInterval(data.timer)
     }
+    */
   },
   { immediate: true }
 )
