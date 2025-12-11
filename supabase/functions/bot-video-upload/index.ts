@@ -2223,15 +2223,29 @@ async function handleInvitation(inviteeId: string, inviterNumericId: number) {
     }
 
     // 2. 检查被邀请人是否已被邀请（避免重复）
+    // 同时也检查 created_at 防止老用户刷量
     const { data: invitee } = await supabase
       .from('profiles')
-      .select('invited_by')
+      .select('invited_by, created_at')
       .eq('id', inviteeId)
       .single()
 
     if (invitee?.invited_by) {
       console.log('[handleInvitation] 该用户已被邀请过')
       return
+    }
+
+    // 🎯 限制：只有注册时间在最近 1 小时内的用户才算“新用户邀请”
+    // 这样老用户点击链接就不会增加邀请次数了
+    if (invitee?.created_at) {
+      const createdAt = new Date(invitee.created_at).getTime()
+      const now = Date.now()
+      const diffMinutes = (now - createdAt) / 1000 / 60
+      if (diffMinutes > 60) {
+        console.log('[handleInvitation] 老用户点击邀请链接，忽略统计', diffMinutes, '分钟前注册')
+        // 可选：给老用户发个提示？暂时不发，避免打扰
+        return
+      }
     }
 
     // 3. 更新被邀请人信息
@@ -3283,6 +3297,14 @@ serve(async (req) => {
             const parts = message.text.split(' ')
             if (parts.length > 1) {
               const inviteCode = parts[1]
+              // 必须是新用户才算有效邀请（通过检查是否已有 invited_by 来近似判断，或依赖 profile 的 created_at 如果有的话）
+              // 但目前 handleInvitation 内部只检查了 invitee.invited_by 是否为空。
+              // 为了防止老用户刷量，我们应该在这里加一个限制：只有当用户还没有 invited_by 时才调用。
+              // 更好的做法是：如果是老用户点击，提示“您已经是老用户了”；如果是新用户，提示“邀请成功”。
+              // 这里的 profile 是刚刚 getOrCreate 的。
+              // 我们检查一下数据库里的 created_at (如果 profile 对象里没有，需要 fetch)
+              // 由于 getOrCreateProfile 返回的可能不够全，我们在 handleInvitation 里做更严格的检查。
+
               // 如果 inviteCode 是数字且不是自己
               if (/^\d+$/.test(inviteCode) && String(inviteCode) !== String(profile.numeric_id)) {
                 await handleInvitation(profile.id, parseInt(inviteCode))
