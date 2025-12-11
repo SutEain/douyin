@@ -30,7 +30,7 @@
           <div class="left" @click="handleSearchHistory(item)">
             <img src="../../assets/img/icon/home/time-white.png" alt="" />
             <span class="history-type">
-              {{ item.type === 'video' ? '📹' : item.type === 'user' ? '👤' : '18X' }}
+              {{ item.type === 'video' ? '📹' : item.type === 'user' ? '👤' : '🔞' }}
             </span>
             <span> {{ item.keyword }}</span>
           </div>
@@ -76,7 +76,7 @@
           </div>
         </div>
       </div>
-      <div class="rank-list">
+      <div class="rank-list" v-if="false">
         <div class="indicator">
           <div class="tab" :class="{ active: data.slideIndex === 0 }" @click="data.slideIndex = 0">
             抖音热榜

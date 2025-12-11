@@ -1,8 +1,9 @@
 import { Edit, useForm } from '@refinedev/antd'
 import { useOne } from '@refinedev/core'
-import { Form, Input, Select, Tag, Spin } from 'antd'
+import { Form, Input, Select, Tag, Spin, Switch } from 'antd'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
+import { supabaseClient } from '../../supabaseClient'
 
 const statusOptions = [
   { value: 'draft', label: '草稿', color: 'default' },
@@ -42,7 +43,35 @@ export const VideoEdit = () => {
     action: 'edit',
     id: id,
     redirect: false,
-    onMutationSuccess: () => {
+    onMutationSuccess: async () => {
+      // 🎯 避免后台小范围编辑把已发布视频打回待审核
+      if (videoData && form) {
+        const values = form.getFieldsValue()
+        const originalStatus = videoData.status
+        const originalReviewStatus = videoData.review_status
+
+        // 仅当原本是已发布+已通过，并且表单中没有修改状态字段时，才进行修正
+        if (
+          originalStatus === 'published' &&
+          originalReviewStatus === 'approved' &&
+          values.status === originalStatus &&
+          values.review_status === originalReviewStatus
+        ) {
+          try {
+            await supabaseClient
+              .from('videos')
+              .update({
+                status: originalStatus,
+                review_status: originalReviewStatus
+              })
+              .eq('id', videoData.id)
+          } catch (error) {
+            // 不中断主流程，仅做日志
+            console.error('[VideoEdit] 恢复审核状态失败:', error)
+          }
+        }
+      }
+
       navigate('/videos')
     }
   })
@@ -53,9 +82,17 @@ export const VideoEdit = () => {
       console.log('[VideoEdit] 设置表单值:', videoData)
       form.setFieldsValue({
         description: videoData.description,
+        // 标签：用空格拼接
+        tags: Array.isArray(videoData.tags) ? videoData.tags.join(' ') : '',
         status: videoData.status,
         review_status: videoData.review_status,
-        reject_reason: videoData.reject_reason
+        reject_reason: videoData.reject_reason,
+        is_adult: videoData.is_adult,
+        is_private: videoData.is_private,
+        is_recommended: videoData.is_recommended,
+        is_top: videoData.is_top,
+        location_country: videoData.location_country,
+        location_city: videoData.location_city
       })
     }
   }, [videoData, form])
@@ -70,9 +107,39 @@ export const VideoEdit = () => {
 
   return (
     <Edit saveButtonProps={saveButtonProps} isLoading={isLoading}>
-      <Form {...formProps} layout="vertical">
+      <Form
+        {...formProps}
+        layout="vertical"
+        onFinish={(values) => {
+          // 🔧 将标签从自由文本转换为数组（用空格分隔）
+          const tagsString = (values.tags || '') as string
+          const tagsArray =
+            tagsString
+              .trim()
+              .split(/\s+/)
+              .filter((t) => !!t) || []
+
+          const payload = {
+            ...values,
+            tags: tagsArray
+          }
+
+          if (formProps.onFinish) {
+            formProps.onFinish(payload)
+          }
+        }}
+      >
         <Form.Item label="描述" name="description">
           <Input.TextArea rows={4} placeholder="视频描述" maxLength={500} showCount />
+        </Form.Item>
+
+        <Form.Item label="标签" name="tags">
+          <Input.TextArea
+            rows={3}
+            placeholder="自由输入，用空格分隔多个标签（例：搞笑 美食 旅游）"
+            maxLength={300}
+            showCount
+          />
         </Form.Item>
 
         <Form.Item label="状态" name="status">
@@ -97,6 +164,30 @@ export const VideoEdit = () => {
 
         <Form.Item label="拒绝理由" name="reject_reason">
           <Input.TextArea rows={3} placeholder="如果审核状态为已拒绝，请填写拒绝理由" />
+        </Form.Item>
+
+        <Form.Item label="成人内容" name="is_adult" valuePropName="checked">
+          <Switch checkedChildren="成人" unCheckedChildren="普通" />
+        </Form.Item>
+
+        <Form.Item label="公开/私密" name="is_private" valuePropName="checked">
+          <Switch checkedChildren="私密" unCheckedChildren="公开" />
+        </Form.Item>
+
+        <Form.Item label="加入推荐池" name="is_recommended" valuePropName="checked">
+          <Switch checkedChildren="推荐" unCheckedChildren="未推荐" />
+        </Form.Item>
+
+        <Form.Item label="作者主页置顶" name="is_top" valuePropName="checked">
+          <Switch checkedChildren="置顶" unCheckedChildren="普通" />
+        </Form.Item>
+
+        <Form.Item label="国家" name="location_country">
+          <Input placeholder="例如：中国、日本、美国" />
+        </Form.Item>
+
+        <Form.Item label="城市" name="location_city">
+          <Input placeholder="例如：北京、东京、纽约" />
         </Form.Item>
 
         {videoData && (

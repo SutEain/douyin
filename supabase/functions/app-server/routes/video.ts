@@ -191,6 +191,73 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
 }
 
 /**
+ * 成人内容流：只返回 is_adult = true 的已发布视频，按时间倒序
+ * GET /video/adult-feed?pageNo=&pageSize=
+ */
+export async function handleVideoAdultFeed(req: Request): Promise<Response> {
+  const url = new URL(req.url)
+  const { pageNo, pageSize, from, to } = parsePagination(url)
+  const { user } = await tryGetAuth(req)
+
+  let rows: any[] = []
+  let total: number | null = null
+
+  if (user?.id) {
+    // 已登录用户：使用 get_adult_feed，排除 watch_history 里的视频
+    const { data, error } = await supabaseAdmin.rpc('get_adult_feed', {
+      p_user_id: user.id,
+      p_page_no: pageNo,
+      p_page_size: pageSize
+    })
+
+    if (error) {
+      console.error('[AdultFeed] get_adult_feed 失败，降级为简单查询:', error)
+    } else {
+      rows = data || []
+    }
+  }
+
+  // 未登录用户，或者 RPC 失败时，使用简单查询（不排除已观看）
+  if (!rows.length) {
+    const { data, error, count } = await supabaseAdmin
+      .from('videos')
+      .select('*', { count: 'exact' })
+      .eq('status', 'published')
+      .eq('is_adult', true)
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    if (error) {
+      console.error('[AdultFeed] 简单查询也失败:', error)
+      return errorResponse('Failed to load adult feed', 1, 500)
+    }
+
+    rows = data || []
+    total = count ?? null
+  }
+
+  await attachUserFlags(rows ?? [], user?.id ?? null)
+
+  const profileCache = new Map<string, any>()
+  const list: any[] = []
+  for (const row of rows ?? []) {
+    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+    const mapped = await mapVideoRow(row, authorProfile)
+    if (mapped) {
+      applyRowFlags(mapped, row)
+      list.push(mapped)
+    }
+  }
+
+  return successResponse({
+    list,
+    total: total ?? list.length,
+    pageNo,
+    pageSize
+  })
+}
+
+/**
  * 关注流：按时间倒序，包含成人内容
  * GET /video/following?pageNo=&pageSize=
  */

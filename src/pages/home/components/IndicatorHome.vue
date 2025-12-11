@@ -6,15 +6,14 @@
     <div class="toolbar" ref="toolbar" :style="toolbarStyle">
       <div class="tab-ctn">
         <div class="tabs" ref="tabs">
-          <!-- 长视频 - 仍然禁用，仅展示 -->
-          <div class="tab disabled">
-            <span style="opacity: 0.3">{{ $t('home.longVideo') }}</span>
+          <!-- 成人内容 Tab -->
+          <div class="tab" :class="{ active: index === 0 }" @click.stop="change(0)">
+            <span>成人</span>
           </div>
 
           <!-- 关注 - 可点击 -->
           <div class="tab" :class="{ active: index === 1 }" @click.stop="change(1)">
             <span>{{ $t('home.following') }}</span>
-            <img src="../../../assets/img/icon/live.webp" class="tab2-img" />
           </div>
 
           <!-- 推荐 -->

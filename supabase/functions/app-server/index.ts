@@ -16,7 +16,8 @@ import {
   handleVideoDetail,
   handleBatchReview,
   handleApproveVideo,
-  handleRecordView
+  handleRecordView,
+  handleVideoAdultFeed
 } from './routes/video.ts'
 import {
   handleVideoComments,
@@ -57,6 +58,9 @@ serve(async (req) => {
     }
     if (route === '/video/feed' && method === 'GET') {
       return handleVideoFeed(req)
+    }
+    if (route === '/video/adult-feed' && method === 'GET') {
+      return handleVideoAdultFeed(req)
     }
     if (route === '/video/following' && method === 'GET') {
       return handleVideoFollowing(req)

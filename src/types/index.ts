@@ -7,6 +7,8 @@ export interface VideoItem {
   is_top?: boolean
   status?: 'draft' | 'ready' | 'published' | 'processing'
   is_private?: boolean
+  // 成人内容标记
+  is_adult?: boolean
   desc: string
   tags?: string[]
   create_time: number

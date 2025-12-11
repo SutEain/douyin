@@ -35,6 +35,19 @@ export function recommendedLongVideo(params?: any) {
   )
 }
 
+// 成人内容视频列表（仅 is_adult = true）
+export function adultVideoFeed(params?: any) {
+  const pageSize = params?.pageSize ?? 10
+  const start = params?.start ?? 0
+  const pageNo = Math.floor(start / pageSize)
+
+  return requestSupabaseVideoList(
+    `${getAppServerBase()}/video/adult-feed`,
+    { pageNo, pageSize },
+    { requireAuth: false, includeAuthIfAvailable: true }
+  )
+}
+
 // 关注流视频列表（需要登录）
 export function followingVideo(params?: any) {
   const pageSize = params?.pageSize ?? 10

@@ -616,6 +616,14 @@ function getEditKeyboard(video: any) {
     }
   ])
 
+  // 第三行：成人内容标记
+  keyboard.push([
+    {
+      text: video.is_adult ? '🔞 成人内容：是' : '🔞 成人内容：否',
+      callback_data: 'toggle_adult'
+    }
+  ])
+
   // 第三行：置顶设置（仅已发布视频可置顶）
   if (video.status === 'published') {
     keyboard.push([
@@ -694,13 +702,21 @@ function getEditMenuText(video: any): string {
   // 隐私
   const privacyText = video.is_private ? '🔒 私密' : '🌍 公开'
 
+  // 成人标记
+  const adultText = video.is_adult ? '是' : '否'
+
   const lines = [
     titleText,
-    ``,
+    '',
+    '⚠️ <b>如果你上传的是成人向内容，请务必在下方勾选「成人内容：是」。</b>',
+    '⛔ 严禁任何涉及儿童 / 未成年人的色情或暗示内容，一经发现将立刻封禁账号。',
+    '📌 未正确标记成人内容的账号，后续将不再享受免审核，严重将限制上传。',
+    '',
     `📝 描述：${descText}`,
     `🏷️ 标签：${tagsText}`,
     `📍 位置：${locationText}`,
     `🔐 隐私：${privacyText}`,
+    `🔞 成人内容：${adultText}`,
     `📌 置顶：${video.is_top ? '已置顶' : '未置顶'}`
   ]
 
@@ -1746,6 +1762,28 @@ async function handleCallback(
         break
       }
 
+      case 'toggle_adult': {
+        // 切换成人内容标记
+        await supabase.from('videos').update({ is_adult: !video.is_adult }).eq('id', video.id)
+
+        await answerCallbackQuery(
+          callbackQueryId,
+          !video.is_adult ? '已标记为成人内容，请确保未涉及任何未成年人。' : '已取消成人内容标记'
+        )
+
+        // 重新获取更新后的视频
+        const { data: updatedVideo } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('id', video.id)
+          .single()
+
+        await editMessage(chatId, messageId, getEditMenuText(updatedVideo), {
+          reply_markup: getEditKeyboard(updatedVideo)
+        })
+        break
+      }
+
       case 'toggle_pin': {
         await answerCallbackQuery(callbackQueryId)
         const videoAfterToggle = await toggleVideoPin(video)
@@ -2670,7 +2708,7 @@ async function publishVideo(chatId: number, messageId: number, videoId: string) 
       // ✅ 老用户：自动通过审核，直接发布
       newStatus = 'published'
       newReviewStatus = 'auto_approved'
-      successMessage = ['🎉 <b>发布成功！</b>', '', '视频已发布到首页']
+      successMessage = ['🎉 <b>发布成功！</b>', '', '视频已发布。']
     } else {
       // 🕐 新用户：需要人工审核
       newStatus = 'ready'

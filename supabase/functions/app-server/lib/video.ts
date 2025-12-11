@@ -67,6 +67,7 @@ export async function mapVideoRow(row: any, profile: any) {
     is_top: !!row.is_top,
     status: row.status || 'published', // ✅ 添加视频状态 (draft/ready/published)
     is_private: !!row.is_private, // ✅ 添加私密标记
+    is_adult: !!row.is_adult, // ✅ 成人内容标记
     content_type: contentType, // 🎯 内容类型：video/image/album
     images: images, // 🎯 图片数组（用于 image/album 类型）
     desc: row.description || '',

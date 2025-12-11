@@ -49,6 +49,9 @@ export const VideoList = () => {
   const [currentVideoId, setCurrentVideoId] = useState<string>('')
   const [currentVideoUrl, setCurrentVideoUrl] = useState<string>('')
   const [currentDescription, setCurrentDescription] = useState<string>('')
+  const [currentVideoStatus, setCurrentVideoStatus] = useState<string>('')
+  const [currentReviewStatus, setCurrentReviewStatus] = useState<string>('')
+  const [savingDescription, setSavingDescription] = useState(false)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [batchLoading, setBatchLoading] = useState(false)
   const [rejectForm] = Form.useForm()
@@ -126,6 +129,15 @@ export const VideoList = () => {
           field: 'is_recommended',
           operator: 'eq',
           value: params.is_recommended === 'true'
+        })
+      }
+
+      // 筛选成人内容
+      if (params.is_adult) {
+        filters.push({
+          field: 'is_adult',
+          operator: 'eq',
+          value: params.is_adult === 'true'
         })
       }
 
@@ -423,6 +435,96 @@ export const VideoList = () => {
     })
   }
 
+  // 🎯 切换成人内容标记
+  const handleToggleAdult = (record: any) => {
+    const newIsAdult = !record.is_adult
+    Modal.confirm({
+      title: newIsAdult ? '标记为成人内容' : '取消成人标记',
+      content: newIsAdult
+        ? '确定将该内容标记为成人内容（🔞）吗？\n标记后将只会出现在成人相关的列表/频道中。'
+        : '确定要取消该内容的成人标记吗？',
+      onOk: () => {
+        updateVideo(
+          {
+            resource: 'videos',
+            id: record.id,
+            values: {
+              is_adult: newIsAdult
+            }
+          },
+          {
+            onSuccess: () => {
+              message.success(newIsAdult ? '已标记为成人内容' : '已取消成人标记')
+            },
+            onError: (error) => {
+              message.error('操作失败：' + (error as Error).message)
+            }
+          }
+        )
+      }
+    })
+  }
+
+  // 🎯 保存描述编辑（不回退审核状态）
+  const handleSaveDescription = () => {
+    if (!currentVideoId) {
+      setDescriptionModalVisible(false)
+      return
+    }
+
+    setSavingDescription(true)
+
+    // 先更新描述
+    updateVideo(
+      {
+        resource: 'videos',
+        id: currentVideoId,
+        values: {
+          description: currentDescription
+        }
+      },
+      {
+        onSuccess: () => {
+          // 如果原本是已发布 + 已通过审核，则再补一次状态，避免被触发器回退
+          if (currentVideoStatus === 'published' && currentReviewStatus === 'approved') {
+            updateVideo(
+              {
+                resource: 'videos',
+                id: currentVideoId,
+                values: {
+                  status: currentVideoStatus,
+                  review_status: currentReviewStatus
+                }
+              },
+              {
+                onSuccess: () => {
+                  message.success('描述已更新')
+                  setDescriptionModalVisible(false)
+                  setSavingDescription(false)
+                },
+                onError: (error) => {
+                  console.error('恢复审核状态失败:', error)
+                  message.warning('描述已更新，但审核状态可能已被重置，请检查')
+                  setDescriptionModalVisible(false)
+                  setSavingDescription(false)
+                }
+              }
+            )
+          } else {
+            message.success('描述已更新')
+            setDescriptionModalVisible(false)
+            setSavingDescription(false)
+          }
+        },
+        onError: (error) => {
+          console.error('更新描述失败:', error)
+          message.error('更新描述失败')
+          setSavingDescription(false)
+        }
+      }
+    )
+  }
+
   return (
     <>
       <List>
@@ -464,6 +566,12 @@ export const VideoList = () => {
             <Select placeholder="推荐状态" allowClear style={{ width: 100 }}>
               <Select.Option value="true">⭐ 已推荐</Select.Option>
               <Select.Option value="false">未推荐</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="is_adult" label="成人内容">
+            <Select placeholder="是否成人" allowClear style={{ width: 110 }}>
+              <Select.Option value="true">🔞 成人</Select.Option>
+              <Select.Option value="false">普通</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item>
@@ -592,10 +700,10 @@ export const VideoList = () => {
             dataIndex="description"
             title="描述"
             width={300}
-            render={(text) => (
+            render={(text, record: any) => (
               <div
                 style={{
-                  cursor: text ? 'pointer' : 'default',
+                  cursor: 'pointer',
                   color: text ? '#1890ff' : 'inherit',
                   display: '-webkit-box',
                   WebkitLineClamp: 4,
@@ -606,10 +714,11 @@ export const VideoList = () => {
                   maxHeight: '6em'
                 }}
                 onClick={() => {
-                  if (text) {
-                    setCurrentDescription(text)
-                    setDescriptionModalVisible(true)
-                  }
+                  setCurrentVideoId(record.id)
+                  setCurrentDescription(text || '')
+                  setCurrentVideoStatus(record.status)
+                  setCurrentReviewStatus(record.review_status)
+                  setDescriptionModalVisible(true)
                 }}
               >
                 {text || '无描述'}
@@ -677,6 +786,15 @@ export const VideoList = () => {
             width={80}
             render={(value) =>
               value ? <Tag color="gold">⭐ 推荐</Tag> : <Tag color="default">-</Tag>
+            }
+          />
+
+          <Table.Column
+            dataIndex="is_adult"
+            title="成人"
+            width={80}
+            render={(value) =>
+              value ? <Tag color="magenta">🔞 成人</Tag> : <Tag color="default">-</Tag>
             }
           />
 
@@ -762,6 +880,16 @@ export const VideoList = () => {
                     {record.is_recommended ? '取消推荐' : '推荐'}
                   </Button>
                 )}
+
+                {/* 成人标记按钮 */}
+                <Button
+                  type={record.is_adult ? 'primary' : 'default'}
+                  danger={record.is_adult}
+                  size="small"
+                  onClick={() => handleToggleAdult(record)}
+                >
+                  {record.is_adult ? '取消成人' : '标记成人'}
+                </Button>
 
                 <Button
                   type="default"
@@ -919,15 +1047,26 @@ export const VideoList = () => {
         open={descriptionModalVisible}
         onCancel={() => setDescriptionModalVisible(false)}
         footer={[
-          <Button key="close" onClick={() => setDescriptionModalVisible(false)}>
-            关闭
+          <Button key="cancel" onClick={() => setDescriptionModalVisible(false)}>
+            取消
+          </Button>,
+          <Button
+            key="save"
+            type="primary"
+            loading={savingDescription}
+            onClick={handleSaveDescription}
+          >
+            保存
           </Button>
         ]}
         width={600}
       >
-        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.6' }}>
-          {currentDescription}
-        </div>
+        <Input.TextArea
+          rows={6}
+          value={currentDescription}
+          onChange={(e) => setCurrentDescription(e.target.value)}
+          placeholder="请输入视频描述"
+        />
       </Modal>
     </>
   )

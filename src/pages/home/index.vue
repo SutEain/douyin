@@ -9,9 +9,14 @@
         v-model:index="state.navIndex"
       />
 
-      <!-- ✅ 视频内容区域（只有推荐） -->
+      <!-- ✅ 视频内容区域：成人 / 关注 / 推荐 -->
       <div class="video-content">
-        <Slide4 :active="state.active" />
+        <SlideAdult v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
+        <SlideFollow
+          v-else-if="state.navIndex === 1"
+          :active="state.active && state.navIndex === 1"
+        />
+        <Slide4 v-else :active="state.active && state.navIndex === 2" />
       </div>
 
       <!-- 底部导航栏 -->
@@ -83,6 +88,8 @@ import bus, { EVENT_KEY } from '@/utils/bus'
 // 组件导入
 import IndicatorHome from './components/IndicatorHome.vue'
 import Slide4 from './slide/Slide4.vue'
+import SlideAdult from './slide/SlideAdult.vue'
+import SlideFollow from './slide/SlideFollow.vue'
 import BaseFooter from '@/components/BaseFooter.vue'
 import Comment from '@/components/CommentNew.vue'
 import Share from '@/components/Share.vue'

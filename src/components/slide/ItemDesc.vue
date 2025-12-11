@@ -71,16 +71,13 @@ const showToggle = computed(() => fullDescription.value.length > 100)
       <div class="name mb1r f18 fb" @click.stop="$emit('goUserInfo')">
         @{{ item?.author?.nickname }}
       </div>
-      <div 
-        class="description-wrapper" 
-        v-if="fullDescription"
-      >
+      <div class="description-wrapper" v-if="fullDescription">
         <div class="description" :class="{ collapsed: !state.expanded && showToggle }">
           {{ fullDescription }}
         </div>
-        <span 
-          class="toggle-desc" 
-          v-if="showToggle" 
+        <span
+          class="toggle-desc"
+          v-if="showToggle"
           @click.stop.prevent="state.expanded = !state.expanded"
           @touchend.stop.prevent="state.expanded = !state.expanded"
         >
@@ -185,9 +182,9 @@ const showToggle = computed(() => fullDescription.value.length > 100)
 
     .toggle-desc {
       position: absolute;
-      right: 0;
-      bottom: 0; // ✅ 固定在底部（折叠后的4行文字底部）
-      font-size: 13rem;
+      right: -40px;
+      bottom: 40px; // ✅ 固定在底部（折叠后的4行文字底部）
+      font-size: 14rem;
       color: rgba(255, 255, 255, 0.9);
       cursor: pointer;
       padding: 8rem 12rem;
@@ -198,7 +195,7 @@ const showToggle = computed(() => fullDescription.value.length > 100)
       min-width: 64rem;
       text-align: center;
       z-index: 60; // ✅ 高于进度条热区(50)，与静音icon同级
-      
+
       &:active {
         opacity: 0.8;
         background: rgba(0, 0, 0, 0.3);

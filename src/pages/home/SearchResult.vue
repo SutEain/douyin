@@ -7,7 +7,9 @@
         <img src="../../assets/img/icon/search-light.png" class="search-icon" />
         <div class="content">
           <span class="keyword">{{ keyword }}</span>
-          <span class="count" v-if="searchType === 'video' && videoTotal > 0"
+          <span
+            class="count"
+            v-if="(searchType === 'video' || searchType === 'adult') && videoTotal > 0"
             >({{ videoTotal }})</span
           >
           <span class="count" v-if="searchType === 'user' && userTotal > 0">({{ userTotal }})</span>
@@ -15,8 +17,8 @@
       </div>
     </div>
 
-    <!-- 视频结果 -->
-    <div v-if="searchType === 'video'" class="video-results">
+    <!-- 视频结果（普通 / 成人 共用一套 UI） -->
+    <div v-if="searchType === 'video' || searchType === 'adult'" class="video-results">
       <div v-if="videoLoading && videoList.length === 0" class="loading-container">
         <Loading :is-full-screen="false" />
       </div>
