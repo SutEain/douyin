@@ -116,6 +116,14 @@ export async function handleSearchAdultVideos(req: Request): Promise<Response> {
 
   // 🔒 检查是否解锁了无限成人内容
   const quota = await getAdultQuota(user.id)
+
+  // 临时增加调试日志
+  console.log('[search] 成人搜索权限检查:', {
+    userId: user.id,
+    unlimited: quota.unlimited,
+    quota
+  })
+
   if (!quota.unlimited) {
     // 未解锁：直接返回 locked 状态，不执行搜索
     console.log('[search] 用户未解锁成人搜索:', { userId: user.id })
