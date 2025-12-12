@@ -236,6 +236,7 @@ const emit = defineEmits<{
 
 const videoStore = useVideoStore()
 const baseStore = useBaseStore()
+const brokenIds = new Set<string>() // 记录不可播放的视频，避免反复重试
 
 const containerRef = ref<HTMLDivElement>()
 const currentIndex = ref(props.initialIndex)
@@ -425,11 +426,31 @@ function setSlotRef(key: string) {
             el.addEventListener(evt, () => log(evt))
           }
         )
+        el.addEventListener('error', () => handleVideoError(key))
         boundVideos.add(el)
       }
     } else {
       slotRefs.delete(key)
     }
+  }
+}
+
+function handleVideoError(key: string) {
+  const slot = slots.find((s) => s.key === key)
+  if (!slot) return
+  const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
+  const vid = item?.aweme_id || item?.id
+  if (vid) {
+    brokenIds.add(vid)
+    console.warn(`${DEBUG_PREFIX} marked-broken`, { key, role: slot.role, id: vid })
+  }
+  const video = slotRefs.get(key)
+  if (video) {
+    video.removeAttribute('src')
+    video.load()
+  }
+  if (slot.role === 'current') {
+    rotateToNext()
   }
 }
 
@@ -476,8 +497,18 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     slot.isPlaying = false
     return
   }
-  const url = props.items[idx].video?.play_addr?.url_list?.[0]
-  const poster = props.items[idx].video?.cover?.url_list?.[0] || ''
+  const item = props.items[idx]
+  const vid = item?.aweme_id || item?.id
+  if (vid && brokenIds.has(vid)) {
+    console.warn(`${DEBUG_PREFIX} skip-broken`, { key: slot.key, role: slot.role, id: vid })
+    if (slot.role === 'current') {
+      rotateToNext()
+    }
+    return
+  }
+
+  const url = item.video?.play_addr?.url_list?.[0]
+  const poster = item.video?.cover?.url_list?.[0] || ''
 
   // 🎯 设置 poster URL 到 slot 状态
   slot.posterUrl = poster
@@ -629,6 +660,14 @@ function playCurrent() {
       tryUnmute(video)
     })
     .catch((err) => {
+      if (err?.name === 'NotSupportedError') {
+        const badItem = slot.videoIndex != null ? props.items[slot.videoIndex] : null
+        const badId = badItem?.aweme_id || badItem?.id
+        if (badId) brokenIds.add(badId)
+        console.warn(`${DEBUG_PREFIX} play:not-supported`, { id: badId })
+        rotateToNext()
+        return
+      }
       console.warn(`${DEBUG_PREFIX} play:error`, {
         id:
           slot.videoIndex != null
@@ -663,6 +702,14 @@ function playCurrent() {
           tryUnmute(video)
         })
         .catch((err2) => {
+          if (err2?.name === 'NotSupportedError') {
+            const badItem = slot.videoIndex != null ? props.items[slot.videoIndex] : null
+            const badId = badItem?.aweme_id || badItem?.id
+            if (badId) brokenIds.add(badId)
+            console.warn(`${DEBUG_PREFIX} play:retry-fail-not-supported`, { id: badId })
+            rotateToNext()
+            return
+          }
           console.error(`${DEBUG_PREFIX} play:retry-fail`, err2)
         })
     })
