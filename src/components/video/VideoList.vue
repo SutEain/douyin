@@ -236,9 +236,6 @@ const emit = defineEmits<{
 
 const videoStore = useVideoStore()
 const baseStore = useBaseStore()
-const retryCounts = new Map<string, number>() // 每个视频的播放失败重试计数（仅 current，有限次）
-const RETRY_DELAY_MS = 1000
-const MAX_RETRY = 2
 
 function stopVideo(slot: SlotState) {
   const video = slotRefs.get(slot.key)
@@ -1290,58 +1287,13 @@ function handlePlayError(slot: SlotState, err: any) {
     error: err?.name
   })
 
-  // 只有 current 参与重试
-  if (slot.role !== 'current') {
-    if (video) {
-      video.pause()
-      video.removeAttribute('src')
-      video.load()
-    }
-    return
-  }
-
+  // 去掉自动重试：出错后停止当前的播放尝试，保持当前索引，等待用户滑动或手动操作
   if (video) {
     video.pause()
+    // 清空 src 避免浏览器继续重试
+    video.removeAttribute('src')
+    video.load()
   }
-
-  const vid = slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id : undefined
-  if (!vid) return
-
-  const count = retryCounts.get(vid) ?? 0
-
-  if (count >= MAX_RETRY) {
-    console.warn(`${DEBUG_PREFIX} play:max-retry-hit`, { id: vid, count })
-    return
-  }
-
-  retryCounts.set(vid, count + 1)
-
-  // 冷却后再尝试，确保资源有时间 ready，且仍是 current 同一条
-  const delay = RETRY_DELAY_MS + count * 300
-  setTimeout(() => {
-    const currentSlot = getSlotByRole('current')
-    if (
-      !currentSlot ||
-      currentSlot.key !== slot.key ||
-      currentSlot.videoIndex !== slot.videoIndex
-    ) {
-      return
-    }
-    const v = slotRefs.get(slot.key)
-    if (!v || !v.src) return
-    // readyState 低时先 load 再播
-    if (v.readyState < 2) {
-      v.load()
-    }
-    v.play()
-      .then(() => {
-        isPlaying.value = true
-        tryUnmute(v)
-      })
-      .catch((err2) => {
-        console.warn(`${DEBUG_PREFIX} play:retry-fail`, { id: vid, err: err2?.name })
-      })
-  }, delay)
 }
 
 // 保存当前绑定的视频元素，防止多个视频同时更新进度条
