@@ -63,17 +63,24 @@ async function loadMore() {
     })
 
     if (res.success) {
-      state.totalSize = res.data.total
+      const totalNum = Number(res.data.total)
+      state.totalSize = Number.isFinite(totalNum) ? totalNum : res.data.total
+
       state.list.push(...res.data.list)
-      state.hasMore = res.data.list.length >= state.pageSize
+
+      if (Number.isFinite(totalNum)) {
+        const nextLen = state.list.length
+        state.hasMore = nextLen < totalNum
+      } else {
+        state.hasMore = res.data.list.length >= state.pageSize
+      }
+
       console.log('[MainFeed] 加载成功', {
         新增: res.data.list.length,
         总数: state.list.length,
+        total: state.totalSize,
         hasMore: state.hasMore
       })
-      if (!state.hasMore) {
-        console.log('[MainFeed] 后端返回不足一页，视为无更多')
-      }
     }
   } catch (error) {
     console.error('[MainFeed] 加载失败', error)
