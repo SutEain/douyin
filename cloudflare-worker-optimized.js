@@ -12,6 +12,16 @@ addEventListener('fetch', (event) => {
 
 async function handleRequest(request) {
   const url = new URL(request.url)
+
+  // 兼容 /videos/<file_id>.mp4 形式的访问，自动映射到 ?file_id=
+  if (url.pathname.startsWith('/videos/')) {
+    const name = url.pathname.split('/').pop() || ''
+    const maybeId = name.replace(/\.mp4$/i, '')
+    if (maybeId) {
+      url.searchParams.set('file_id', maybeId)
+    }
+  }
+
   const fileId = url.searchParams.get('file_id')
 
   if (!fileId) {
