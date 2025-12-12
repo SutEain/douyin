@@ -528,8 +528,6 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     }
 
     if (slot.role === 'current') {
-      const vid = slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id : undefined
-      if (vid) retryCounts.set(vid, 0) // 新 current 重置重试计数
       resetProgressState()
       bindCurrentVideoEvents(video)
     }
