@@ -63,6 +63,11 @@ export const authProvider: AuthProvider = {
     try {
       const { data } = await supabaseClient.auth.getSession()
       const { session } = data
+      console.log('[AuthCheck] session', {
+        hasSession: !!session,
+        userId: session?.user?.id,
+        role: session?.user?.app_metadata?.role
+      })
 
       if (!session) {
         return {
@@ -74,6 +79,7 @@ export const authProvider: AuthProvider = {
 
       // 🎯 检查管理员权限
       const role = session.user?.app_metadata?.role
+      console.log('[AuthCheck] role', role)
       if (role !== 'admin') {
         return {
           authenticated: false,
