@@ -1,6 +1,7 @@
 import { Refine, Authenticated } from '@refinedev/core'
 import { ErrorComponent, useNotificationProvider, ThemedLayout } from '@refinedev/antd'
 import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom'
+import routerProvider from '@refinedev/react-router'
 import { dataProvider, liveProvider } from '@refinedev/supabase'
 import { App as AntdApp, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
@@ -23,6 +24,7 @@ function App() {
             dataProvider={dataProvider(supabaseClient)}
             liveProvider={liveProvider(supabaseClient)}
             authProvider={authProvider}
+            routerProvider={routerProvider}
             notificationProvider={useNotificationProvider}
             resources={[
               {
