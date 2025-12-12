@@ -98,8 +98,10 @@ export async function handleMyVideos(chatId: number) {
     }
 
     if (!videos || videos.length === 0) {
-      const text = '📹 <b>我的视频</b>\n\n暂无视频\n\n<i>发送或转发视频即可上传</i>'
-      const replyMarkup = { inline_keyboard: [] as any[] }
+      const text = '📹 <b>我的视频</b>\n\n暂无视频\n\n<i>直接发送或转发视频给我即可上传</i>'
+      const replyMarkup = {
+        inline_keyboard: [[{ text: '⬅️ 返回首页', callback_data: 'back_home' }]]
+      }
       const dashId = (userState as any)?.dashboard_message_id
       if (dashId) {
         const edited = await editMessage(chatId, dashId, text, { reply_markup: replyMarkup })
@@ -120,7 +122,13 @@ export async function handleMyVideos(chatId: number) {
     const totalLikes = published.reduce((sum, v) => sum + (v.like_count || 0), 0)
     const totalComments = published.reduce((sum, v) => sum + (v.comment_count || 0), 0)
 
-    const lines = [`📹 <b>我的视频</b>`, ``, `共 ${videos.length} 个视频`]
+    const lines = [
+      `📹 <b>我的视频</b>`,
+      ``,
+      `共 ${videos.length} 个视频`,
+      ``,
+      `💡 <b>上传方式：</b> 直接发送/转发视频给我`
+    ]
     if (processing.length > 0) {
       lines.push(
         `📤 上传中 ${processing.length} · 草稿 ${drafts.length} · 已发布 ${published.length}`
@@ -147,6 +155,8 @@ export async function handleMyVideos(chatId: number) {
         { text: `📺 我发布的视频 (${published.length})`, callback_data: 'my_published' }
       ])
     }
+
+    keyboard.push([{ text: '⬅️ 返回首页', callback_data: 'back_home' }])
 
     const text = lines.join('\n')
     const replyMarkup = { inline_keyboard: keyboard }

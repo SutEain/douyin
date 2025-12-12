@@ -3,7 +3,7 @@ import { editMessage, sendMessage } from '../telegram.ts'
 import { getPersistentKeyboard } from '../keyboards.ts'
 
 // 处理"使用说明"
-export async function handleHelp(chatId: number) {
+export async function handleHelp(chatId: number, messageId?: number) {
   const text =
     `📖 <b>使用说明</b>\n\n` +
     `<b>1. 上传视频</b>\n` +
@@ -17,11 +17,19 @@ export async function handleHelp(chatId: number) {
     `• 点击「个人中心」-「获取邀请链接」\n` +
     `• 邀请好友使用机器人可获得成人内容解锁时长`
 
-  await sendMessage(chatId, text)
+  const keyboard = {
+    inline_keyboard: [[{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]]
+  }
+
+  if (messageId) {
+    await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+  } else {
+    await sendMessage(chatId, text, { reply_markup: keyboard })
+  }
 }
 
 // 处理"个人中心"
-export async function handleUserProfile(chatId: number) {
+export async function handleUserProfile(chatId: number, messageId?: number) {
   try {
     const { data: profile } = await supabase
       .from('profiles')
@@ -58,11 +66,29 @@ export async function handleUserProfile(chatId: number) {
         [
           { text: '🔔 通知设置', callback_data: 'profile_settings_notify' },
           { text: '⚙️ 隐私设置', callback_data: 'profile_settings_privacy' }
-        ]
+        ],
+        [{ text: '⬅️ 返回首页', callback_data: 'back_home' }]
       ]
     }
 
-    await sendMessage(chatId, text, { reply_markup: keyboard })
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      // 如果没有传入 messageId，尝试获取 userState 里的 dashboard_message_id
+      const { getUserState, updateUserState } = await import('../state.ts')
+      const userState = await getUserState(chatId)
+      const dashId = (userState as any)?.dashboard_message_id
+
+      if (dashId) {
+        const edited = await editMessage(chatId, dashId, text, { reply_markup: keyboard })
+        if (edited?.ok) return
+      }
+
+      const sent = await sendMessage(chatId, text, { reply_markup: keyboard })
+      if (sent?.ok) {
+        await updateUserState(chatId, { dashboard_message_id: sent.result.message_id })
+      }
+    }
   } catch (error) {
     console.error('handleUserProfile error:', error)
     await sendMessage(chatId, '❌ 系统错误，请稍后重试')
@@ -70,7 +96,7 @@ export async function handleUserProfile(chatId: number) {
 }
 
 // 处理"邀请解锁"
-export async function handleInviteUnlock(chatId: number) {
+export async function handleInviteUnlock(chatId: number, messageId?: number) {
   try {
     const { data: profile } = await supabase
       .from('profiles')
@@ -105,7 +131,15 @@ export async function handleInviteUnlock(chatId: number) {
       `<i>💡 好友通过您的链接启动机器人即算邀请成功</i>\n\n` +
       `<i>💡 此解锁针对🔞的内容，推荐页内容无需解锁</i>`
 
-    await sendMessage(chatId, text)
+    const keyboard = {
+      inline_keyboard: [[{ text: '⬅️ 返回首页', callback_data: 'back_home' }]]
+    }
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: keyboard })
+    }
   } catch (error) {
     console.error('handleInviteUnlock error:', error)
     await sendMessage(chatId, '❌ 获取邀请信息失败，请稍后重试')
@@ -113,7 +147,7 @@ export async function handleInviteUnlock(chatId: number) {
 }
 
 // 🎯 处理隐私设置
-export async function handlePrivacySettings(chatId: number) {
+export async function handlePrivacySettings(chatId: number, messageId?: number) {
   try {
     const { data: profile } = await supabase
       .from('profiles')
@@ -122,9 +156,13 @@ export async function handlePrivacySettings(chatId: number) {
       .single()
 
     if (!profile) {
-      await sendMessage(chatId, '❌ 获取隐私设置失败', {
-        reply_markup: getPersistentKeyboard()
-      })
+      if (messageId) {
+        await editMessage(chatId, messageId, '❌ 获取隐私设置失败')
+      } else {
+        await sendMessage(chatId, '❌ 获取隐私设置失败', {
+          reply_markup: getPersistentKeyboard()
+        })
+      }
       return
     }
 
@@ -152,17 +190,28 @@ export async function handlePrivacySettings(chatId: number) {
           text: showTgUsername ? '✅ 显示Tg用户名' : '❌ 隐藏Tg用户名',
           callback_data: 'toggle_show_tg_username'
         }
-      ]
+      ],
+      [{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]
     ]
 
-    await sendMessage(chatId, lines.join('\n'), {
-      reply_markup: { inline_keyboard: keyboard }
-    })
+    if (messageId) {
+      await editMessage(chatId, messageId, lines.join('\n'), {
+        reply_markup: { inline_keyboard: keyboard }
+      })
+    } else {
+      await sendMessage(chatId, lines.join('\n'), {
+        reply_markup: { inline_keyboard: keyboard }
+      })
+    }
   } catch (error) {
     console.error('获取隐私设置错误:', error)
-    await sendMessage(chatId, '❌ 获取隐私设置失败', {
-      reply_markup: getPersistentKeyboard()
-    })
+    if (messageId) {
+      await editMessage(chatId, messageId, '❌ 获取隐私设置失败')
+    } else {
+      await sendMessage(chatId, '❌ 获取隐私设置失败', {
+        reply_markup: getPersistentKeyboard()
+      })
+    }
   }
 }
 
@@ -204,7 +253,8 @@ export async function handlePrivacySettingsEdit(chatId: number, messageId: numbe
           text: showTgUsername ? '✅ 显示Tg用户名' : '❌ 隐藏Tg用户名',
           callback_data: 'toggle_show_tg_username'
         }
-      ]
+      ],
+      [{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]
     ]
 
     await editMessage(chatId, messageId, lines.join('\n'), {

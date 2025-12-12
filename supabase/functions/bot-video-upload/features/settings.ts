@@ -74,7 +74,7 @@ function getSettingsKeyboard(settings: any) {
           callback_data: 'settings:menu:new_post'
         }
       ],
-      [{ text: '❌ 关闭', callback_data: 'settings:close' }]
+      [{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]
     ]
   }
 }
@@ -101,11 +101,18 @@ function getSubMenuKeyboard(type: string) {
   }
 }
 
-export async function handleSettings(chatId: number) {
+export async function handleSettings(chatId: number, messageId?: number) {
   const settings = await getUserSettings(chatId)
-  await sendMessage(chatId, '🔔 <b>通知设置</b>\n\n点击下方按钮进行设置：', {
-    reply_markup: getSettingsKeyboard(settings)
-  })
+  if (messageId) {
+    await editMessage(chatId, messageId, '🔔 <b>通知设置</b>\n\n点击下方按钮进行设置：', {
+      reply_markup: getSettingsKeyboard(settings)
+    })
+  } else {
+    // 兼容 /settings 命令
+    await sendMessage(chatId, '🔔 <b>通知设置</b>\n\n点击下方按钮进行设置：', {
+      reply_markup: getSettingsKeyboard(settings)
+    })
+  }
 }
 
 export async function handleSettingsCallback(chatId: number, messageId: number, data: string) {

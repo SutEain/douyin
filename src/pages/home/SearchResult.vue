@@ -22,13 +22,15 @@
       <!-- 🔒 成人搜索锁定提示 -->
       <div v-if="searchType === 'adult' && adultLocked" class="locked-container">
         <div class="lock-icon">🔞</div>
-        <div class="lock-title">已开启成人搜索保护</div>
+        <div class="lock-title">邀请新用户注册</div>
         <div class="lock-desc">
-          为防止未成年人接触，成人内容搜索功能已被锁定。<br />
           请在 Telegram Bot 中点击「邀请好友解锁🔞」<br />
-          邀请新用户注册后，即可解锁无限刷成人内容。
+          邀请新用户注册后，即可解锁无限刷成人内容。<br />
+          • 成功邀请 1 人 → 解锁 24 小时无限刷<br />
+          • 成功邀请 2 人 → 解锁 3 天无限刷<br />
+          • 累计邀请 3 人 → 永久解锁无限刷
         </div>
-        <div class="lock-btn" @click="router.push('/home')">去观看推荐内容</div>
+        <div class="lock-btn" @click="router.push('/home')">去邀请新用户</div>
       </div>
 
       <div v-else-if="videoLoading && videoList.length === 0" class="loading-container">

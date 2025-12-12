@@ -112,47 +112,46 @@ export async function handleRequest(req: Request): Promise<Response> {
             const parts = message.text.split(' ')
             if (parts.length > 1) {
               const inviteCode = parts[1]
-              // 必须是新用户才算有效邀请（通过检查是否已有 invited_by 来近似判断，或依赖 profile 的 created_at 如果有的话）
-              // 但目前 handleInvitation 内部只检查了 invitee.invited_by 是否为空。
-              // 为了防止老用户刷量，我们应该在这里加一个限制：只有当用户还没有 invited_by 时才调用。
-              // 更好的做法是：如果是老用户点击，提示“您已经是老用户了”；如果是新用户，提示“邀请成功”。
-              // 这里的 profile 是刚刚 getOrCreate 的。
-              // 我们检查一下数据库里的 created_at (如果 profile 对象里没有，需要 fetch)
-              // 由于 getOrCreateProfile 返回的可能不够全，我们在 handleInvitation 里做更严格的检查。
-
-              // 如果 inviteCode 是数字且不是自己
+              // 必须是新用户才算有效邀请
               if (/^\d+$/.test(inviteCode) && String(inviteCode) !== String(profile.numeric_id)) {
                 await handleInvitation(profile.id, parseInt(inviteCode))
               }
             }
 
+            // 1. 先发送底部菜单（Persistent Keyboard）
+            await sendMessage(chatId, '请认准 @tg_douyin_bot', {
+              reply_markup: getPersistentKeyboard()
+            })
+
+            // 2. 后发送欢迎消息（Inline Keyboard）
             const welcomeText =
-              '👋 <b>欢迎来到 Douyin Bot</b>\n\n' +
-              '✅ 账号已就绪\n\n' +
-              '🚀 <b>3步上手</b>\n' +
-              '1) 直接发送/转发视频给我\n' +
-              '2) 等待处理完成（会弹出“已就绪”菜单）\n' +
-              '3) 按提示完善信息并发布\n\n' +
-              '📌 <b>入口</b>\n' +
-              '• 底部「📹 我的视频」：草稿/发布/上传中\n' +
-              '• 底部「👤 个人中心」：邀请、设置、使用说明\n\n' +
-              '🔗 <b>分享</b>\n' +
-              '在任意聊天输入 <code>@tg_douyin_bot video_</code> 可搜索并分享你的作品'
+              '👋 <b>欢迎来到 TG 抖音</b>\n\n' +
+              '这里是 Telegram 最大的视频分享平台\n' +
+              '趣闻 • 吃瓜 • 热点 • 🔞\n\n' +
+              '🚀 <b>共建内容生态</b>\n' +
+              '发现好玩的视频？直接转发给我\n' +
+              '分享你的快乐，让更多人看到！\n\n' +
+              '✅ 账号已就绪'
 
             const welcomeMarkup = getWelcomeKeyboard()
 
+            // 记录消息ID，用于后续单面板交互（首页消息）
+            let sentMessage
             if (welcomeMarkup) {
-              await sendMessage(chatId, welcomeText, {
+              const res = await sendMessage(chatId, welcomeText, {
                 reply_markup: welcomeMarkup
               })
-              // 补充发送底部菜单，因为带 Inline Button 的消息无法同时设置 Reply Keyboard
-              await sendMessage(chatId, '👇 更多功能请使用下方菜单', {
-                reply_markup: getPersistentKeyboard()
-              })
+              sentMessage = res.ok ? res.result : null
             } else {
-              await sendMessage(chatId, welcomeText, {
+              const res = await sendMessage(chatId, welcomeText, {
                 reply_markup: getPersistentKeyboard()
               })
+              sentMessage = res.ok ? res.result : null
+            }
+
+            // 初始化 dashboard_message_id 为首页消息
+            if (sentMessage) {
+              await updateUserState(chatId, { dashboard_message_id: sentMessage.message_id })
             }
           } else {
             await sendMessage(
@@ -165,9 +164,28 @@ export async function handleRequest(req: Request): Promise<Response> {
         else if (message.text === '/settings') {
           await handleSettings(chatId)
         }
-        // "我的视频"按钮
-        else if (message.text === '📹 我的视频') {
-          await handleMyVideos(chatId)
+        // "首页"按钮
+        else if (message.text === '🏠 首页') {
+          // 重新发送欢迎消息（首页）
+          const welcomeText =
+            '👋 <b>欢迎来到 TG 抖音</b>\n\n' +
+            '这里是 Telegram 最大的视频分享平台\n' +
+            '趣闻 • 吃瓜 • 热点 • 🔞\n\n' +
+            '🚀 <b>共建内容生态</b>\n' +
+            '发现好玩的视频？直接转发给我\n' +
+            '分享你的见闻，让更多人看到！\n\n' +
+            '✅ 账号已就绪'
+          const welcomeMarkup = getWelcomeKeyboard()
+
+          let sentMessage
+          if (welcomeMarkup) {
+            const res = await sendMessage(chatId, welcomeText, { reply_markup: welcomeMarkup })
+            sentMessage = res.ok ? res.result : null
+          }
+          // 更新 dashboard message id
+          if (sentMessage) {
+            await updateUserState(chatId, { dashboard_message_id: sentMessage.message_id })
+          }
         }
         // "个人中心"按钮
         else if (message.text === '👤 个人中心') {

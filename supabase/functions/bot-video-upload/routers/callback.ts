@@ -14,7 +14,8 @@ import {
   handleHelp,
   handleInviteUnlock,
   handlePrivacySettings,
-  handlePrivacySettingsEdit
+  handlePrivacySettingsEdit,
+  handleUserProfile
 } from '../features/profileCenter.ts'
 import { getEditKeyboard, getEditMenuText, parseVideoAction } from '../features/editor.ts'
 import {
@@ -42,24 +43,52 @@ export async function handleCallback(
     await updateUserState(chatId, { dashboard_message_id: messageId })
 
     // 🎯 个人中心相关回调
+    if (data === 'user_profile') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleUserProfile(chatId, messageId)
+      return
+    }
+
+    // 🎯 返回首页
+    if (data === 'back_home') {
+      await answerCallbackQuery(callbackQueryId)
+      const { getWelcomeKeyboard } = await import('../keyboards.ts')
+
+      const welcomeText =
+        '👋 <b>欢迎来到 TG 抖音</b>\n\n' +
+        '这里是 Telegram 最大的视频分享平台\n' +
+        '趣闻 • 吃瓜 • 热点 • 🔞\n\n' +
+        '🚀 <b>共建内容生态</b>\n' +
+        '发现好玩的视频？直接转发给我\n' +
+        '分享你的见闻，让更多人看到！\n\n' +
+        '✅ 账号已就绪'
+
+      const welcomeMarkup = getWelcomeKeyboard()
+
+      if (welcomeMarkup) {
+        await editMessage(chatId, messageId, welcomeText, { reply_markup: welcomeMarkup })
+      }
+      return
+    }
+
     if (data === 'profile_invite_unlock') {
       await answerCallbackQuery(callbackQueryId)
-      await handleInviteUnlock(chatId)
+      await handleInviteUnlock(chatId, messageId)
       return
     }
     if (data === 'profile_help') {
       await answerCallbackQuery(callbackQueryId)
-      await handleHelp(chatId)
+      await handleHelp(chatId, messageId)
       return
     }
     if (data === 'profile_settings_notify') {
       await answerCallbackQuery(callbackQueryId)
-      await handleSettings(chatId)
+      await handleSettings(chatId, messageId)
       return
     }
     if (data === 'profile_settings_privacy') {
       await answerCallbackQuery(callbackQueryId)
-      await handlePrivacySettings(chatId)
+      await handlePrivacySettings(chatId, messageId)
       return
     }
 
@@ -225,7 +254,7 @@ export async function handleCallback(
       await editMessage(
         chatId,
         messageId,
-        '🏷️ 请发送标签\n\n格式：多个标签用空格分隔\n例如：搞笑 日常 生活\n\n💡 发送 /cancel 可取消编辑',
+        '🏷️ 请发送标签\n\n格式：多个标签用空格分隔\n例如：吃瓜 短剧 新闻\n\n💡 发送 /cancel 可取消编辑',
         {
           reply_markup: {
             inline_keyboard: [[{ text: '← 返回', callback_data: `view_video_${videoId}` }]]
@@ -659,7 +688,9 @@ export async function handleCallback(
         await editMessage(
           chatId,
           messageId,
-          '🏷️ <b>编辑标签</b>\n\n' + '请输入标签，用空格分隔（3-5个）\n' + '例如: 旅游 风景 爬山',
+          '🏷️ <b>编辑标签</b>\n\n' +
+            '请输入标签，用空格分隔（3-5个）\n' +
+            '例如: 突发新闻 吃瓜 短剧',
           {
             reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'cancel_edit' }]] }
           }
