@@ -5,6 +5,7 @@ const CACHE_TTL_SECONDS = 259200 // 3 天
 const FETCH_TIMEOUT_MS = 30000 // 30秒超时
 const MAX_FILE_SIZE = 500 * 1024 * 1024 // 200MB
 const KV_UPDATE_INTERVAL = 3600 // ✅ 1小时才更新一次访问时间（减少KV写入）
+const HANDLED_HEADER = 'X-Worker-Handled'
 
 addEventListener('fetch', (event) => {
   event.respondWith(handleRequest(event.request))
@@ -25,10 +26,12 @@ async function handleRequest(request) {
   const fileId = url.searchParams.get('file_id')
 
   if (!fileId) {
-    return new Response('Missing file_id parameter', {
-      status: 400,
-      headers: { 'Content-Type': 'text/plain' }
-    })
+    return withHandled(
+      new Response('Missing file_id parameter', {
+        status: 400,
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    )
   }
 
   try {
@@ -77,7 +80,7 @@ async function handleRequest(request) {
           return handleRangeRequest(cached.clone(), rangeHeader)
         }
 
-        return cached
+        return withHandled(cached)
       }
     }
 
@@ -90,7 +93,7 @@ async function handleRequest(request) {
 
     if (!originResp.ok) {
       console.error(`[Telegram Error] fileId: ${fileId}, status: ${originResp.status}`)
-      return originResp
+      return withHandled(originResp)
     }
 
     // 检查文件大小
@@ -164,16 +167,18 @@ async function handleRequest(request) {
         return handleRangeRequest(responseToCache.clone(), rangeHeader)
       }
 
-      return responseToCache
+      return withHandled(responseToCache)
     }
 
-    return originResp
+    return withHandled(originResp)
   } catch (error) {
     console.error(`[Worker Error] fileId: ${fileId}, error: ${error.message}`)
-    return new Response(`Internal Server Error: ${error.message}`, {
-      status: 500,
-      headers: { 'Content-Type': 'text/plain' }
-    })
+    return withHandled(
+      new Response(`Internal Server Error: ${error.message}`, {
+        status: 500,
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    )
   }
 }
 
@@ -195,36 +200,40 @@ async function handleRangeRequest(response, rangeHeader) {
     const end = match[2] ? parseInt(match[2]) : totalSize - 1
 
     if (start >= totalSize || end >= totalSize || start > end) {
-      return new Response('Range Not Satisfiable', {
-        status: 416,
-        headers: {
-          'Content-Range': `bytes */${totalSize}`,
-          'Content-Type': response.headers.get('Content-Type') || 'video/mp4',
-          'Content-Disposition': 'inline'
-        }
-      })
+      return withHandled(
+        new Response('Range Not Satisfiable', {
+          status: 416,
+          headers: {
+            'Content-Range': `bytes */${totalSize}`,
+            'Content-Type': response.headers.get('Content-Type') || 'video/mp4',
+            'Content-Disposition': 'inline'
+          }
+        })
+      )
     }
 
     const slice = buffer.slice(start, end + 1)
 
     console.log(`[Range Request] bytes ${start}-${end}/${totalSize}`)
 
-    return new Response(slice, {
-      status: 206,
-      statusText: 'Partial Content',
-      headers: {
-        'Content-Range': `bytes ${start}-${end}/${totalSize}`,
-        'Content-Length': slice.byteLength.toString(),
-        'Content-Type': response.headers.get('Content-Type') || 'video/mp4',
-        'Content-Disposition': 'inline', // 🎯 强制浏览器内联显示
-        'Accept-Ranges': 'bytes',
-        'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
-        'Access-Control-Allow-Origin': '*'
-      }
-    })
+    return withHandled(
+      new Response(slice, {
+        status: 206,
+        statusText: 'Partial Content',
+        headers: {
+          'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+          'Content-Length': slice.byteLength.toString(),
+          'Content-Type': response.headers.get('Content-Type') || 'video/mp4',
+          'Content-Disposition': 'inline', // 🎯 强制浏览器内联显示
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
+          'Access-Control-Allow-Origin': '*'
+        }
+      })
+    )
   } catch (error) {
     console.error(`[Range Error] ${error.message}`)
-    return response
+    return withHandled(response)
   }
 }
 
@@ -245,19 +254,23 @@ async function fetchFromTelegram(fileId, botToken, rangeHeader = null) {
     clearTimeout(timeoutId)
 
     if (!metaResp.ok) {
-      return new Response(`Telegram API error: ${metaResp.status}`, {
-        status: 502,
-        headers: { 'Content-Type': 'text/plain' }
-      })
+      return withHandled(
+        new Response(`Telegram API error: ${metaResp.status}`, {
+          status: 502,
+          headers: { 'Content-Type': 'text/plain' }
+        })
+      )
     }
 
     const meta = await metaResp.json()
 
     if (!meta.ok || !meta.result || !meta.result.file_path) {
-      return new Response(JSON.stringify(meta), {
-        status: 502,
-        headers: { 'Content-Type': 'application/json' }
-      })
+      return withHandled(
+        new Response(JSON.stringify(meta), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
     }
 
     // 2. 下载文件
@@ -281,16 +294,33 @@ async function fetchFromTelegram(fileId, botToken, rangeHeader = null) {
   } catch (error) {
     if (error.name === 'AbortError') {
       console.error('[Timeout] Telegram request timeout')
-      return new Response('Request Timeout', {
-        status: 504,
-        headers: { 'Content-Type': 'text/plain' }
-      })
+      return withHandled(
+        new Response('Request Timeout', {
+          status: 504,
+          headers: { 'Content-Type': 'text/plain' }
+        })
+      )
     }
 
     console.error(`[Telegram Fetch Error] ${error.message}`)
-    return new Response(`Telegram fetch error: ${error.message}`, {
-      status: 503,
-      headers: { 'Content-Type': 'text/plain' }
-    })
+    return withHandled(
+      new Response(`Telegram fetch error: ${error.message}`, {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    )
   }
+}
+
+// 给所有响应打标，便于前端/调试确认请求是否经过 worker
+function withHandled(resp) {
+  const newHeaders = new Headers(resp.headers)
+  if (!newHeaders.has(HANDLED_HEADER)) {
+    newHeaders.set(HANDLED_HEADER, '1')
+  }
+  return new Response(resp.body, {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers: newHeaders
+  })
 }
