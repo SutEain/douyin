@@ -1,6 +1,12 @@
 import { Refine, Authenticated } from '@refinedev/core'
 import { ErrorComponent, useNotificationProvider, ThemedLayout } from '@refinedev/antd'
-import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom'
+import {
+  createBrowserRouter,
+  createRoutesFromElements,
+  Outlet,
+  Route,
+  RouterProvider
+} from 'react-router-dom'
 import routerProvider from '@refinedev/react-router'
 import { dataProvider, liveProvider } from '@refinedev/supabase'
 import { App as AntdApp, ConfigProvider } from 'antd'
@@ -15,92 +21,95 @@ import { Login } from './pages/login'
 import { authProvider } from './authProvider'
 import { Dashboard } from './pages/dashboard'
 
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <>
+      <Route path="/login" element={<Login />} />
+      <Route
+        element={
+          <Authenticated
+            key="authenticated-routes"
+            redirectOnFail="/login"
+            fallback={<div style={{ padding: 24 }}>加载中...</div>}
+          >
+            <ThemedLayout>
+              <Outlet />
+            </ThemedLayout>
+          </Authenticated>
+        }
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/videos">
+          <Route index element={<VideoList />} />
+          <Route path="show/:id" element={<VideoShow />} />
+          <Route path="edit/:id" element={<VideoEdit />} />
+        </Route>
+        <Route path="/users">
+          <Route index element={<UserList />} />
+          <Route path="show/:id" element={<UserShow />} />
+          <Route path="edit/:id" element={<UserEdit />} />
+        </Route>
+        <Route path="/recommendation-pool">
+          <Route index element={<RecommendationPoolList />} />
+        </Route>
+      </Route>
+      <Route path="*" element={<ErrorComponent />} />
+    </>
+  )
+)
+
 function App() {
   return (
-    <BrowserRouter>
-      <ConfigProvider locale={zhCN}>
-        <AntdApp>
-          <Refine
-            dataProvider={dataProvider(supabaseClient)}
-            liveProvider={liveProvider(supabaseClient)}
-            authProvider={authProvider}
-            routerProvider={routerProvider}
-            notificationProvider={useNotificationProvider}
-            resources={[
-              {
-                name: 'dashboard',
-                list: '/dashboard',
-                meta: {
-                  label: '运营看板'
-                }
-              },
-              {
-                name: 'videos',
-                list: '/videos',
-                edit: '/videos/edit/:id',
-                meta: {
-                  label: '视频管理'
-                }
-              },
-              {
-                name: 'profiles',
-                list: '/users',
-                edit: '/users/edit/:id',
-                meta: {
-                  label: '用户管理'
-                }
-              },
-              {
-                name: 'recommendation_pool',
-                list: '/recommendation-pool',
-                meta: {
-                  label: '推荐池管理'
-                }
+    <ConfigProvider locale={zhCN}>
+      <AntdApp>
+        <Refine
+          dataProvider={dataProvider(supabaseClient)}
+          liveProvider={liveProvider(supabaseClient)}
+          authProvider={authProvider}
+          routerProvider={routerProvider}
+          notificationProvider={useNotificationProvider}
+          resources={[
+            {
+              name: 'dashboard',
+              list: '/dashboard',
+              meta: {
+                label: '运营看板'
               }
-            ]}
-            options={{
-              syncWithLocation: true,
-              warnWhenUnsavedChanges: true
-            }}
-          >
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route
-                element={
-                  <Authenticated
-                    key="authenticated-routes"
-                    redirectOnFail="/login"
-                    fallback={<div style={{ padding: 24 }}>加载中...</div>}
-                  >
-                    <ThemedLayout>
-                      <Outlet />
-                    </ThemedLayout>
-                  </Authenticated>
-                }
-              >
-                {/* 默认首页为 Dashboard */}
-                <Route index element={<Dashboard />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/videos">
-                  <Route index element={<VideoList />} />
-                  <Route path="show/:id" element={<VideoShow />} />
-                  <Route path="edit/:id" element={<VideoEdit />} />
-                </Route>
-                <Route path="/users">
-                  <Route index element={<UserList />} />
-                  <Route path="show/:id" element={<UserShow />} />
-                  <Route path="edit/:id" element={<UserEdit />} />
-                </Route>
-                <Route path="/recommendation-pool">
-                  <Route index element={<RecommendationPoolList />} />
-                </Route>
-              </Route>
-              <Route path="*" element={<ErrorComponent />} />
-            </Routes>
-          </Refine>
-        </AntdApp>
-      </ConfigProvider>
-    </BrowserRouter>
+            },
+            {
+              name: 'videos',
+              list: '/videos',
+              edit: '/videos/edit/:id',
+              meta: {
+                label: '视频管理'
+              }
+            },
+            {
+              name: 'profiles',
+              list: '/users',
+              edit: '/users/edit/:id',
+              meta: {
+                label: '用户管理'
+              }
+            },
+            {
+              name: 'recommendation_pool',
+              list: '/recommendation-pool',
+              meta: {
+                label: '推荐池管理'
+              }
+            }
+          ]}
+          options={{
+            syncWithLocation: true,
+            warnWhenUnsavedChanges: true
+          }}
+        >
+          <RouterProvider router={router} />
+        </Refine>
+      </AntdApp>
+    </ConfigProvider>
   )
 }
 
