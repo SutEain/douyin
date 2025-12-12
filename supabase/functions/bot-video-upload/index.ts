@@ -41,9 +41,11 @@ function buildTelegramFileUrl(fileId: string): string | null {
 
 // 用户状态存储（使用数据库）
 interface UserState {
-  state: 'idle' | 'waiting_description' | 'waiting_tags' | 'waiting_location'
-  draft_video_id?: string // UUID
-  current_message_id?: number // 当前编辑的消息ID
+  // 注意：这里的 state 实际值在代码里比 union 更多（例如 editing_description 等）
+  state: string
+  draft_video_id?: string | null // UUID（用于“等待用户输入”的目标视频）
+  current_message_id?: number | null // 当前编辑的消息ID（用于“等待用户输入”时回写菜单）
+  dashboard_message_id?: number | null // “我的视频”主面板消息ID（单面板模式）
 }
 
 // Telegram API 调用
@@ -119,14 +121,15 @@ async function deleteTelegramMessage(chatId: number, messageId: number) {
   }
 }
 
-async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+async function answerCallbackQuery(callbackQueryId: string, text?: string, showAlert?: boolean) {
   const url = `${TG_API_BASE}/bot${BOT_TOKEN}/answerCallbackQuery`
   await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       callback_query_id: callbackQueryId,
-      text
+      text,
+      show_alert: showAlert
     })
   })
 }
@@ -613,17 +616,18 @@ function safeTruncate(str: string, maxLength: number): string {
 
 // 生成编辑菜单
 function getEditKeyboard(video: any) {
-  const keyboard = []
+  const keyboard: any[] = []
+  const vid = video.id
 
   // 第一行：描述和标签
   keyboard.push([
     {
       text: video.description ? '✏️ 修改描述' : '📝 添加描述',
-      callback_data: 'edit_description'
+      callback_data: `edit_description:${vid}`
     },
     {
       text: video.tags && video.tags.length > 0 ? '✏️ 修改标签' : '🏷️ 添加标签',
-      callback_data: 'edit_tags'
+      callback_data: `edit_tags:${vid}`
     }
   ])
 
@@ -631,11 +635,11 @@ function getEditKeyboard(video: any) {
   keyboard.push([
     {
       text: video.location_country ? '✏️ 修改位置' : '📍 添加位置',
-      callback_data: 'edit_location'
+      callback_data: `edit_location:${vid}`
     },
     {
       text: video.is_private ? '🔒 私密' : '🌍 公开',
-      callback_data: 'toggle_privacy'
+      callback_data: `toggle_privacy:${vid}`
     }
   ])
 
@@ -643,7 +647,7 @@ function getEditKeyboard(video: any) {
   keyboard.push([
     {
       text: video.is_adult ? '🔞 成人内容：是' : '🔞 成人内容：否',
-      callback_data: 'toggle_adult'
+      callback_data: `toggle_adult:${vid}`
     }
   ])
 
@@ -652,7 +656,7 @@ function getEditKeyboard(video: any) {
     keyboard.push([
       {
         text: video.is_top ? '📍 取消置顶' : '📌 置顶该视频',
-        callback_data: 'toggle_pin'
+        callback_data: `toggle_pin:${vid}`
       }
     ])
   }
@@ -661,11 +665,11 @@ function getEditKeyboard(video: any) {
   keyboard.push([
     {
       text: '✅ 立即发布',
-      callback_data: 'publish'
+      callback_data: `publish:${vid}`
     },
     {
       text: '💾 保存草稿',
-      callback_data: 'save_draft'
+      callback_data: `save_draft:${vid}`
     }
   ])
 
@@ -687,6 +691,29 @@ function getEditKeyboard(video: any) {
   }
 
   return { inline_keyboard: keyboard }
+}
+
+// 🎯 从 callback_data 中解析带 videoId 的动作（用于“视频已就绪”菜单）
+function parseVideoAction(data: string): { action: string; videoId: string } | null {
+  if (!data || !data.includes(':')) return null
+  const idx = data.indexOf(':')
+  const action = data.slice(0, idx)
+  const videoId = data.slice(idx + 1)
+  if (!videoId) return null
+
+  const supported = new Set([
+    'edit_description',
+    'edit_tags',
+    'edit_location',
+    'toggle_privacy',
+    'toggle_adult',
+    'toggle_pin',
+    'publish',
+    'save_draft',
+    'cancel_edit'
+  ])
+  if (!supported.has(action)) return null
+  return { action, videoId }
 }
 
 // 生成编辑菜单文本
@@ -1063,7 +1090,7 @@ async function handlePhoto(
       console.log('[handlePhoto] 创建新相册')
 
       // 处理 caption
-      let description = null
+      let description: string | null = null
       let tags: string[] = []
       if (caption && caption.length > 0) {
         description = safeTruncate(caption, 300)
@@ -1140,7 +1167,7 @@ async function saveSinglePhoto(
   console.log('[saveSinglePhoto] 保存单张图片')
 
   // 处理 caption
-  let description = null
+  let description: string | null = null
   let tags: string[] = []
   if (caption && caption.length > 0) {
     description = safeTruncate(caption, 300)
@@ -1222,7 +1249,7 @@ async function handleVideo(
 
   try {
     // 处理 caption（转发视频可能带有文案）
-    let description = null
+    let description: string | null = null
     let tags: string[] = []
 
     if (caption && caption.length > 0) {
@@ -1344,6 +1371,10 @@ async function handleCallback(
   console.log('[handleCallback] chatId:', chatId, 'messageId:', messageId, 'data:', data)
 
   try {
+    // ✅ 记录“我的视频”面板消息ID（单面板模式）
+    // 任何从面板点进来的回调，都把当前消息当作 dashboard_message_id 记住，避免丢失
+    await updateUserState(chatId, { dashboard_message_id: messageId })
+
     // 🎯 个人中心相关回调
     if (data === 'profile_invite_unlock') {
       await answerCallbackQuery(callbackQueryId)
@@ -1363,6 +1394,14 @@ async function handleCallback(
     if (data === 'profile_settings_privacy') {
       await answerCallbackQuery(callbackQueryId)
       await handlePrivacySettings(chatId)
+      return
+    }
+
+    // ✅ 上传中列表：查看单条处理任务
+    if (data.startsWith('view_processing_')) {
+      const videoId = data.replace('view_processing_', '')
+      await answerCallbackQuery(callbackQueryId)
+      await handleViewProcessing(chatId, messageId, videoId)
       return
     }
 
@@ -1715,6 +1754,159 @@ async function handleCallback(
       return
     }
 
+    // ✅ “视频已就绪”菜单：带 videoId 的回调（支持并发多条菜单）
+    const parsed = parseVideoAction(data)
+    if (parsed) {
+      const { action, videoId } = parsed
+
+      // 获取目标视频（必须属于当前用户）
+      const { data: video } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', videoId)
+        .eq('tg_user_id', chatId)
+        .single()
+
+      if (!video) {
+        await answerCallbackQuery(callbackQueryId, '视频不存在或无权限')
+        return
+      }
+
+      switch (action) {
+        case 'edit_description': {
+          await updateUserState(chatId, {
+            state: 'waiting_description',
+            draft_video_id: videoId,
+            current_message_id: messageId
+          })
+          await answerCallbackQuery(callbackQueryId)
+          await editMessage(
+            chatId,
+            messageId,
+            '✏️ 请发送视频描述\n\n💡 提示：发送 /cancel 可取消编辑',
+            {
+              reply_markup: {
+                inline_keyboard: [[{ text: '← 返回', callback_data: `cancel_edit:${videoId}` }]]
+              }
+            }
+          )
+          return
+        }
+        case 'edit_tags': {
+          await updateUserState(chatId, {
+            state: 'waiting_tags',
+            draft_video_id: videoId,
+            current_message_id: messageId
+          })
+          await answerCallbackQuery(callbackQueryId)
+          await editMessage(
+            chatId,
+            messageId,
+            '🏷️ 请发送标签\n\n格式：多个标签用空格分隔\n例如：搞笑 日常 生活\n\n💡 发送 /cancel 可取消编辑',
+            {
+              reply_markup: {
+                inline_keyboard: [[{ text: '← 返回', callback_data: `cancel_edit:${videoId}` }]]
+              }
+            }
+          )
+          return
+        }
+        case 'edit_location': {
+          await updateUserState(chatId, {
+            state: 'waiting_location',
+            draft_video_id: videoId,
+            current_message_id: messageId
+          })
+          await answerCallbackQuery(callbackQueryId)
+          await editMessage(
+            chatId,
+            messageId,
+            '📍 <b>设置位置</b>\n\n请发送位置信息\n点击输入框左侧 📎 → 位置',
+            {
+              reply_markup: {
+                inline_keyboard: [[{ text: '← 返回', callback_data: `cancel_edit:${videoId}` }]]
+              }
+            }
+          )
+          return
+        }
+        case 'toggle_privacy': {
+          await supabase.from('videos').update({ is_private: !video.is_private }).eq('id', video.id)
+          await answerCallbackQuery(
+            callbackQueryId,
+            !video.is_private ? '已设置为私密' : '已设置为公开'
+          )
+          const { data: updatedVideo } = await supabase
+            .from('videos')
+            .select('*')
+            .eq('id', video.id)
+            .single()
+          await editMessage(chatId, messageId, getEditMenuText(updatedVideo), {
+            reply_markup: getEditKeyboard(updatedVideo)
+          })
+          return
+        }
+        case 'toggle_adult': {
+          await supabase.from('videos').update({ is_adult: !video.is_adult }).eq('id', video.id)
+          await answerCallbackQuery(
+            callbackQueryId,
+            !video.is_adult ? '已标记为成人内容，请确保未涉及任何未成年人。' : '已取消成人内容标记'
+          )
+          const { data: updatedVideo } = await supabase
+            .from('videos')
+            .select('*')
+            .eq('id', video.id)
+            .single()
+          await editMessage(chatId, messageId, getEditMenuText(updatedVideo), {
+            reply_markup: getEditKeyboard(updatedVideo)
+          })
+          return
+        }
+        case 'toggle_pin': {
+          await answerCallbackQuery(callbackQueryId)
+          const updated = await toggleVideoPin(video)
+          await editMessage(chatId, messageId, getEditMenuText(updated), {
+            reply_markup: getEditKeyboard(updated)
+          })
+          return
+        }
+        case 'publish': {
+          await answerCallbackQuery(callbackQueryId)
+          await publishVideo(chatId, messageId, videoId)
+          return
+        }
+        case 'save_draft': {
+          await answerCallbackQuery(callbackQueryId)
+          await editMessage(
+            chatId,
+            messageId,
+            '💾 <b>已保存为草稿</b>\n\n点击底部「📹 我的视频」继续编辑'
+          )
+          await updateUserState(chatId, {
+            state: 'idle',
+            draft_video_id: null,
+            current_message_id: null
+          })
+          return
+        }
+        case 'cancel_edit': {
+          await updateUserState(chatId, { state: 'idle' })
+          await answerCallbackQuery(callbackQueryId, '✅ 已取消')
+          const { data: refreshed } = await supabase
+            .from('videos')
+            .select('*')
+            .eq('id', videoId)
+            .single()
+          if (refreshed) {
+            await editMessage(chatId, messageId, getEditMenuText(refreshed), {
+              reply_markup: getEditKeyboard(refreshed)
+            })
+          }
+          return
+        }
+      }
+    }
+
     // 从数据库获取用户状态
     const userState = await getUserState(chatId)
 
@@ -2048,8 +2240,8 @@ async function handleText(chatId: number, text: string, userMessageId: number) {
 
       // 解析位置：格式1: "城市 国家", 格式2: "国家"
       const parts = text.trim().split(/\s+/)
-      let city = null
-      let country = null
+      let city: string | null = null
+      let country: string | null = null
 
       if (parts.length === 1) {
         country = parts[0]
@@ -2398,6 +2590,9 @@ async function handleInvitation(inviteeId: string, inviterNumericId: number) {
 // 处理"我的视频"- 概览页
 async function handleMyVideos(chatId: number) {
   try {
+    // 单面板：尽量复用同一条消息
+    const userState = await getUserState(chatId)
+
     // 获取用户的所有视频统计
     const { data: videos, error } = await supabase
       .from('videos')
@@ -2406,20 +2601,22 @@ async function handleMyVideos(chatId: number) {
 
     if (error) {
       console.error('获取视频列表失败:', error)
-      await sendMessage(chatId, '❌ 获取视频列表失败', {
-        reply_markup: getPersistentKeyboard()
-      })
+      await sendMessage(chatId, '❌ 获取视频列表失败')
       return
     }
 
     if (!videos || videos.length === 0) {
-      await sendMessage(
-        chatId,
-        '📹 <b>我的视频</b>\n\n' + '暂无视频\n\n' + '<i>发送或转发视频即可上传</i>',
-        {
-          reply_markup: getPersistentKeyboard()
-        }
-      )
+      const text = '📹 <b>我的视频</b>\n\n暂无视频\n\n<i>发送或转发视频即可上传</i>'
+      const replyMarkup = { inline_keyboard: [] as any[] }
+      const dashId = (userState as any)?.dashboard_message_id
+      if (dashId) {
+        const edited = await editMessage(chatId, dashId, text, { reply_markup: replyMarkup })
+        if (edited?.ok) return
+      }
+      const sent = await sendMessage(chatId, text, { reply_markup: replyMarkup })
+      if (sent?.ok) {
+        await updateUserState(chatId, { dashboard_message_id: sent.result.message_id })
+      }
       return
     }
 
@@ -2449,7 +2646,7 @@ async function handleMyVideos(chatId: number) {
     lines.push(`👀 浏览 ${totalPlays}    ❤️ 点赞 ${totalLikes}    💬 评论 ${totalComments}`)
 
     // ✅ 构建按钮（如果有上传中的视频，优先显示）
-    const keyboard = []
+    const keyboard: any[] = []
 
     if (processing.length > 0) {
       keyboard.push([
@@ -2478,13 +2675,67 @@ async function handleMyVideos(chatId: number) {
       ])
     }
 
-    await sendMessage(chatId, lines.join('\n'), {
-      reply_markup: { inline_keyboard: keyboard }
-    })
+    const text = lines.join('\n')
+    const replyMarkup = { inline_keyboard: keyboard }
+
+    const dashId = (userState as any)?.dashboard_message_id
+    if (dashId) {
+      const edited = await editMessage(chatId, dashId, text, { reply_markup: replyMarkup })
+      if (edited?.ok) return
+    }
+
+    const sent = await sendMessage(chatId, text, { reply_markup: replyMarkup })
+    if (sent?.ok) {
+      await updateUserState(chatId, { dashboard_message_id: sent.result.message_id })
+    }
   } catch (error) {
     console.error('获取视频列表错误:', error)
-    await sendMessage(chatId, '❌ 获取视频列表时出错', {
-      reply_markup: getPersistentKeyboard()
+    await sendMessage(chatId, '❌ 获取视频列表时出错')
+  }
+}
+
+// ✅ 查看上传中的视频详情（processing）
+async function handleViewProcessing(chatId: number, messageId: number, videoId: string) {
+  try {
+    const { data: video, error } = await supabase
+      .from('videos')
+      .select('id, status, description, file_size, created_at')
+      .eq('id', videoId)
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (error || !video) {
+      await editMessage(chatId, messageId, '❌ 获取上传状态失败', {
+        reply_markup: { inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'my_processing' }]] }
+      })
+      return
+    }
+
+    const sizeMB = video.file_size ? (video.file_size / 1024 / 1024).toFixed(1) : '0.0'
+    const desc = video.description ? safeTruncate(video.description, 60) : '未命名视频'
+
+    const lines = [
+      '📤 <b>上传处理中</b>',
+      '',
+      `📝 ${desc}`,
+      `📦 文件大小：${sizeMB} MB`,
+      `⏱️ 创建时间：${new Date(video.created_at).toLocaleString()}`,
+      '',
+      '💡 处理完成后会自动给你发“视频已就绪”的编辑菜单'
+    ]
+
+    await editMessage(chatId, messageId, lines.join('\n'), {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🗑️ 删除此任务', callback_data: `delete_video_${video.id}` }],
+          [{ text: '⬅️ 返回', callback_data: 'my_processing' }]
+        ]
+      }
+    })
+  } catch (e) {
+    console.error('[handleViewProcessing] error:', e)
+    await editMessage(chatId, messageId, '❌ 获取上传状态失败', {
+      reply_markup: { inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'my_processing' }]] }
     })
   }
 }
@@ -2522,7 +2773,7 @@ async function handleMyProcessing(chatId: number, messageId: number) {
     const lines = [`📤 <b>上传中的视频 (${videos.length})</b>`, ``]
 
     // 构建按钮（每个视频一个删除按钮）
-    const keyboard = videos.map((video, index) => {
+    const keyboard: any[] = videos.map((video, index) => {
       const sizeMB = (video.file_size / 1024 / 1024).toFixed(1)
       const timeAgo = getTimeAgo(video.created_at)
       const desc = video.description ? safeTruncate(video.description, 25) : '未命名视频'
@@ -2575,80 +2826,9 @@ function getTimeAgo(dateStr: string): string {
 }
 
 // 处理"我的视频"- 编辑模式（用于返回时）
-async function handleMyVideosEdit(chatId: number, messageId: number) {
-  try {
-    const { data: videos } = await supabase
-      .from('videos')
-      .select('id, status, like_count, comment_count, view_count')
-      .eq('tg_user_id', chatId)
-
-    if (!videos || videos.length === 0) {
-      await editMessage(
-        chatId,
-        messageId,
-        '📼 <b>我的影片</b>\n\n暂无视频\n\n<i>发送或转发视频即可上传</i>'
-      )
-      return
-    }
-
-    // ✅ 分类统计（与 handleMyVideos 保持一致）
-    const processing = videos.filter((v) => v.status === 'processing')
-    const drafts = videos.filter((v) => v.status === 'draft' || v.status === 'ready')
-    const published = videos.filter((v) => v.status === 'published')
-
-    const totalPlays = published.reduce((sum, v) => sum + (v.view_count || 0), 0)
-    const totalLikes = published.reduce((sum, v) => sum + (v.like_count || 0), 0)
-    const totalComments = published.reduce((sum, v) => sum + (v.comment_count || 0), 0)
-
-    const lines = [`📹 <b>我的视频</b>`, ``, `共 ${videos.length} 个视频`]
-
-    if (processing.length > 0) {
-      lines.push(
-        `📤 上传中 ${processing.length} · 草稿 ${drafts.length} · 已发布 ${published.length}`
-      )
-    } else {
-      lines.push(`草稿 ${drafts.length} · 已发布 ${published.length}`)
-    }
-
-    lines.push(``)
-    lines.push(`📊 <b>数据总览</b>`)
-    lines.push(`👀 浏览 ${totalPlays}    ❤️ 点赞 ${totalLikes}    💬 评论 ${totalComments}`)
-
-    const keyboard = []
-
-    if (processing.length > 0) {
-      keyboard.push([
-        {
-          text: `📤 查看上传中的视频 (${processing.length})`,
-          callback_data: 'my_processing'
-        }
-      ])
-    }
-
-    if (drafts.length > 0) {
-      keyboard.push([
-        {
-          text: `📝 继续编辑草稿 (${drafts.length})`,
-          callback_data: 'my_drafts'
-        }
-      ])
-    }
-
-    if (published.length > 0) {
-      keyboard.push([
-        {
-          text: `📺 我发布的视频 (${published.length})`,
-          callback_data: 'my_published'
-        }
-      ])
-    }
-
-    await editMessage(chatId, messageId, lines.join('\n'), {
-      reply_markup: { inline_keyboard: keyboard }
-    })
-  } catch (error) {
-    console.error('获取视频列表错误:', error)
-  }
+// ✅ 单面板模式下不需要重复实现，统一复用 handleMyVideos()
+async function handleMyVideosEdit(chatId: number, _messageId: number) {
+  await handleMyVideos(chatId)
 }
 
 // 处理"我发布的视频"列表
@@ -2688,7 +2868,7 @@ async function handleMyPublished(chatId: number, messageId: number) {
     const lines = ['📺 <b>我发布的视频</b>', '']
 
     // 🎯 构建按钮（每个视频一个按钮：查看详情，私密视频显示🔒）
-    const keyboard = videos.map((v) => {
+    const keyboard: any[] = videos.map((v) => {
       const privacyIcon = v.is_private ? '🔒 ' : ''
       const desc = v.description ? safeTruncate(v.description, 20) : '无描述'
       const stats = `👀${v.view_count || 0} ❤️${v.like_count || 0}`
@@ -2768,7 +2948,7 @@ async function handleMyDrafts(chatId: number, messageId: number) {
     const lines = ['📝 <b>我的草稿</b>', '']
 
     // ✅ 构建按钮（每个草稿两个按钮：编辑和删除）
-    const keyboard = videos.map((v) => {
+    const keyboard: any[] = videos.map((v) => {
       const desc = v.description ? safeTruncate(v.description, 20) : '无描述'
       return [
         {
@@ -2877,7 +3057,7 @@ async function handleViewVideo(chatId: number, messageId: number, videoId: strin
     ]
 
     // 🎯 构建按钮（详情底部的完整编辑功能）
-    const keyboard = []
+    const keyboard: any[] = []
 
     // 第一行：编辑描述和标签
     keyboard.push([
