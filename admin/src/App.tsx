@@ -70,7 +70,7 @@ function App() {
                   <Authenticated
                     key="authenticated-routes"
                     redirectOnFail="/login"
-                    fallback={<div>Loading...</div>}
+                    fallback={<div style={{ padding: 24 }}>加载中...</div>}
                   >
                     <ThemedLayout>
                       <Outlet />
