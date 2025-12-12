@@ -234,7 +234,8 @@ let headerStartY = 0
 let headerStartTime = 0
 
 // 计算属性
-const canSend = computed(() => commentText.value.trim().length > 0)
+const isSending = ref(false)
+const canSend = computed(() => commentText.value.trim().length > 0 && !isSending.value)
 
 // 关闭评论区
 const handleClose = () => {
@@ -320,7 +321,9 @@ const loadMoreComments = async () => {
 // 发送评论
 const handleSend = async () => {
   const content = commentText.value.trim()
-  if (!content) return
+  if (!content || isSending.value) return
+
+  isSending.value = true
 
   try {
     // 🎯 如果是回复评论，传入 reply_to
@@ -354,6 +357,8 @@ const handleSend = async () => {
     emit('comment-success')
   } catch (error: any) {
     _notice(error?.message || '评论失败')
+  } finally {
+    isSending.value = false
   }
 }
 
