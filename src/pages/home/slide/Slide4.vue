@@ -114,13 +114,13 @@ async function loadMore() {
       return
     }
 
-    state.totalSize = res.data.total
+    const totalNum = Number(res.data.total)
+    state.totalSize = Number.isFinite(totalNum) ? totalNum : res.data.total
 
-    // 🎯 更新 hasMore 状态
-    // 优先使用 total 判断；若 total 缺失，再降级使用 hasMore 或数量判断
-    if (typeof res.data.total === 'number') {
+    // 🎯 更新 hasMore 状态：优先用 total；total 不可用再用 hasMore；最后用条数判断
+    if (Number.isFinite(totalNum)) {
       const nextLen = state.list.length + res.data.list.length
-      state.hasMore = nextLen < res.data.total
+      state.hasMore = nextLen < totalNum
     } else if (typeof res.data.hasMore === 'boolean') {
       state.hasMore = res.data.hasMore
     } else {
