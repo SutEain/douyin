@@ -234,65 +234,87 @@ async function requestSupabaseVideoList(
   params?: Record<string, any>,
   options: { requireAuth?: boolean; includeAuthIfAvailable?: boolean } = {}
 ) {
-  try {
-    const requireAuth = options.requireAuth !== undefined ? options.requireAuth : true
-    let accessToken: string | null = null
+  const requireAuth = options.requireAuth !== undefined ? options.requireAuth : true
+  let accessToken: string | null = null
 
+  try {
     if (requireAuth) {
       accessToken = await resolveAccessToken(true)
     } else if (options.includeAuthIfAvailable) {
       accessToken = await resolveAccessToken(false)
     }
-
-    const search = new URLSearchParams()
-    Object.entries(params || {}).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        search.set(key, String(value))
-      }
-    })
-    const query = search.toString()
-
-    // 🎯 构建请求头
-    const headers: Record<string, string> = {}
-
-    // 添加认证令牌
-    if (accessToken) {
-      headers.Authorization = `Bearer ${accessToken}`
-    }
-
-    // 🎯 添加 Telegram initData（用于后端解析深链接）
-    try {
-      // @ts-ignore
-      const tgWebApp = window.Telegram?.WebApp
-      if (tgWebApp && tgWebApp.initData) {
-        headers['X-Telegram-Init-Data'] = tgWebApp.initData
-        console.log('[API][requestSupabaseVideoList] 添加 Telegram initData 到请求头')
-      }
-    } catch (e) {
-      // 忽略错误，不影响正常请求
-    }
-
-    const response = await fetch(`${endpoint}${query ? `?${query}` : ''}`, {
-      headers
-    })
-
-    const payload = await response.json()
-    if (response.ok && payload.code === 0) {
-      return { success: true, data: payload.data }
-    }
-
-    throw new Error(payload?.msg || '加载我的视频失败')
   } catch (error: any) {
-    console.error('[myVideo] request failed:', error)
-    return {
-      success: false,
-      data: {
-        list: [],
-        total: 0,
-        pageNo: params?.pageNo ?? 0,
-        pageSize: params?.pageSize ?? 15,
-        message: error?.message || '加载失败'
+    console.error('[requestSupabaseVideoList] 获取 accessToken 失败:', error)
+  }
+
+  const search = new URLSearchParams()
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      search.set(key, String(value))
+    }
+  })
+  const query = search.toString()
+
+  // 🎯 构建请求头
+  const headers: Record<string, string> = {}
+
+  // 添加认证令牌
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  // 🎯 添加 Telegram initData（用于后端解析深链接）
+  try {
+    // @ts-ignore
+    const tgWebApp = window.Telegram?.WebApp
+    if (tgWebApp && tgWebApp.initData) {
+      headers['X-Telegram-Init-Data'] = tgWebApp.initData
+      console.log('[API][requestSupabaseVideoList] 添加 Telegram initData 到请求头')
+    }
+  } catch (e) {
+    // 忽略错误，不影响正常请求
+  }
+
+  const url = `${endpoint}${query ? `?${query}` : ''}`
+  const maxRetries = 2
+  let lastError: any = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, { headers })
+      const payload = await response.json()
+
+      if (response.ok && payload.code === 0) {
+        return { success: true, data: payload.data }
       }
+
+      lastError = new Error(payload?.msg || `接口返回异常，状态码 ${response.status}`)
+      console.warn('[requestSupabaseVideoList] 非 0 返回，准备重试', {
+        attempt,
+        message: lastError.message
+      })
+    } catch (error: any) {
+      lastError = error
+      console.warn('[requestSupabaseVideoList] 请求失败，准备重试', {
+        attempt,
+        message: error?.message
+      })
+    }
+
+    if (attempt < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)))
+    }
+  }
+
+  console.error('[requestSupabaseVideoList] 重试仍失败', lastError)
+  return {
+    success: false,
+    data: {
+      list: [],
+      total: 0,
+      pageNo: params?.pageNo ?? 0,
+      pageSize: params?.pageSize ?? 15,
+      message: lastError?.message || '加载失败'
     }
   }
 }
