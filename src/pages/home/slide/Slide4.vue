@@ -117,8 +117,15 @@ async function loadMore() {
     state.totalSize = res.data.total
 
     // 🎯 更新 hasMore 状态
-    // 如果后端返回了 hasMore 则使用它，否则降级为判断返回数量是否足够
-    state.hasMore = res.data.hasMore ?? res.data.list.length >= state.pageSize
+    // 优先使用 total 判断；若 total 缺失，再降级使用 hasMore 或数量判断
+    if (typeof res.data.total === 'number') {
+      const nextLen = state.list.length + res.data.list.length
+      state.hasMore = nextLen < res.data.total
+    } else if (typeof res.data.hasMore === 'boolean') {
+      state.hasMore = res.data.hasMore
+    } else {
+      state.hasMore = res.data.list.length >= state.pageSize
+    }
 
     // 🎯 前端去重（过滤掉列表中已存在的视频）
     const existingIds = new Set(state.list.map((v) => v.aweme_id || v.id))
