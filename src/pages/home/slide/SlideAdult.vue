@@ -21,9 +21,17 @@
 
       <!-- 配额耗尽提示 -->
       <div v-else-if="state.quotaExceeded" class="empty-state">
-        <p style="white-space: pre-line; text-align: center; line-height: 1.6">
-          {{ adultRuleText }}
-        </p>
+        <div class="quota-container">
+          <p style="white-space: pre-line; line-height: 1.6; margin-bottom: 20px">
+            {{ adultRuleText }}
+          </p>
+          <div v-if="inviteLink" class="invite-section">
+            <div class="invite-link-box" @click="copyLink">
+              {{ inviteLink }}
+            </div>
+            <div class="copy-btn" @click.stop="copyLink">点击复制专属邀请链接</div>
+          </div>
+        </div>
       </div>
 
       <!-- 空状态提示 -->
@@ -35,12 +43,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive } from 'vue'
+import { onMounted, reactive, computed } from 'vue'
 import SlideItem from '@/components/slide/SlideItem.vue'
 import VideoList from '@/components/video/VideoList.vue'
 import { adultVideoFeed } from '@/api/videos'
 import { useBaseStore } from '@/store/pinia'
 import type { VideoItem } from '@/types'
+import { _copy } from '@/utils'
 
 const store = useBaseStore()
 const props = defineProps({
@@ -64,6 +73,19 @@ const adultRuleText =
   '• 成功邀请 1 人 → 解锁 24 小时无限刷\n' +
   '• 成功邀请 2 人 → 解锁 3 天无限刷\n' +
   '• 累计邀请 3 人 → 永久解锁无限刷'
+
+const inviteLink = computed(() => {
+  if (store.userinfo.numeric_id) {
+    return `https://t.me/tg_douyin_bot?start=${store.userinfo.numeric_id}`
+  }
+  return ''
+})
+
+function copyLink() {
+  if (inviteLink.value) {
+    _copy(inviteLink.value)
+  }
+}
 
 async function loadMore() {
   console.log('[SlideAdult] loadMore 被调用', {
@@ -174,6 +196,49 @@ onMounted(() => {
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin-bottom: 15px;
+  }
+
+  .quota-container {
+    padding: 0 30px;
+    text-align: center;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .invite-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    width: 100%;
+  }
+
+  .invite-link-box {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    word-break: break-all;
+    user-select: text;
+    width: 100%;
+    box-sizing: border-box;
+    cursor: pointer;
+    border: 1px dashed rgba(255, 255, 255, 0.3);
+  }
+
+  .copy-btn {
+    background: #fe2c55;
+    color: white;
+    padding: 10px 24px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .copy-btn:active {
+    opacity: 0.8;
   }
 
   @keyframes spin {

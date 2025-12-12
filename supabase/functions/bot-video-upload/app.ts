@@ -13,7 +13,7 @@ import {
   handleViewProcessing,
   setPublishedCtx
 } from './features/myVideos.ts'
-import { getPersistentKeyboard } from './keyboards.ts'
+import { getPersistentKeyboard, getWelcomeKeyboard } from './keyboards.ts'
 import { handleUserProfile } from './features/profileCenter.ts'
 import { handleInvitation } from './features/invitation.ts'
 import { getOrCreateProfile } from './services/profile.ts'
@@ -126,23 +126,34 @@ export async function handleRequest(req: Request): Promise<Response> {
               }
             }
 
-            await sendMessage(
-              chatId,
+            const welcomeText =
               '👋 <b>欢迎来到 Douyin Bot</b>\n\n' +
-                '✅ 账号已就绪\n\n' +
-                '🚀 <b>3步上手</b>\n' +
-                '1) 直接发送/转发视频给我\n' +
-                '2) 等待处理完成（会弹出“已就绪”菜单）\n' +
-                '3) 按提示完善信息并发布\n\n' +
-                '📌 <b>入口</b>\n' +
-                '• 底部「📹 我的视频」：草稿/发布/上传中\n' +
-                '• 底部「👤 个人中心」：邀请、设置、使用说明\n\n' +
-                '🔗 <b>分享</b>\n' +
-                '在任意聊天输入 <code>@tg_douyin_bot video_</code> 可搜索并分享你的作品',
-              {
+              '✅ 账号已就绪\n\n' +
+              '🚀 <b>3步上手</b>\n' +
+              '1) 直接发送/转发视频给我\n' +
+              '2) 等待处理完成（会弹出“已就绪”菜单）\n' +
+              '3) 按提示完善信息并发布\n\n' +
+              '📌 <b>入口</b>\n' +
+              '• 底部「📹 我的视频」：草稿/发布/上传中\n' +
+              '• 底部「👤 个人中心」：邀请、设置、使用说明\n\n' +
+              '🔗 <b>分享</b>\n' +
+              '在任意聊天输入 <code>@tg_douyin_bot video_</code> 可搜索并分享你的作品'
+
+            const welcomeMarkup = getWelcomeKeyboard()
+
+            if (welcomeMarkup) {
+              await sendMessage(chatId, welcomeText, {
+                reply_markup: welcomeMarkup
+              })
+              // 补充发送底部菜单，因为带 Inline Button 的消息无法同时设置 Reply Keyboard
+              await sendMessage(chatId, '👇 更多功能请使用下方菜单', {
                 reply_markup: getPersistentKeyboard()
-              }
-            )
+              })
+            } else {
+              await sendMessage(chatId, welcomeText, {
+                reply_markup: getPersistentKeyboard()
+              })
+            }
           } else {
             await sendMessage(
               chatId,
