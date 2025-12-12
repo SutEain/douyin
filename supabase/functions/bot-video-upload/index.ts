@@ -558,10 +558,7 @@ async function notifyFollowersNewPost(
 // 获取持久化键盘
 function getPersistentKeyboard() {
   return {
-    keyboard: [
-      [{ text: '📹 我的视频' }, { text: '🔞 邀请解锁' }],
-      [{ text: '🔔 通知设置' }, { text: '⚙️ 隐私设置' }]
-    ],
+    keyboard: [[{ text: '📹 我的视频' }, { text: '👤 个人中心' }]],
     resize_keyboard: true,
     persistent: true
   }
@@ -1347,6 +1344,28 @@ async function handleCallback(
   console.log('[handleCallback] chatId:', chatId, 'messageId:', messageId, 'data:', data)
 
   try {
+    // 🎯 个人中心相关回调
+    if (data === 'profile_invite_unlock') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleInviteUnlock(chatId)
+      return
+    }
+    if (data === 'profile_help') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleHelp(chatId)
+      return
+    }
+    if (data === 'profile_settings_notify') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleSettings(chatId)
+      return
+    }
+    if (data === 'profile_settings_privacy') {
+      await answerCallbackQuery(callbackQueryId)
+      await handlePrivacySettings(chatId)
+      return
+    }
+
     // 🎯 通知设置
     if (data.startsWith('settings:')) {
       await handleSettingsCallback(chatId, messageId, data)
@@ -2151,6 +2170,74 @@ async function handleLocation(chatId: number, location: any, userMessageId: numb
         })
       }
     }
+  }
+}
+
+// 处理"使用说明"
+async function handleHelp(chatId: number) {
+  const text =
+    `📖 <b>使用说明</b>\n\n` +
+    `<b>1. 上传视频</b>\n` +
+    `• 直接发送视频文件给机器人\n` +
+    `• 转发其他频道的视频给机器人\n` +
+    `• 机器人会自动处理并保存\n\n` +
+    `<b>2. 分享视频</b>\n` +
+    `• 在任何聊天窗口输入 <code>@tg_douyin_bot video_</code> 即可搜索并分享您的视频\n` +
+    `• 也可以在视频详情页点击分享按钮\n\n` +
+    `<b>3. 邀请奖励</b>\n` +
+    `• 点击「个人中心」-「获取邀请链接」\n` +
+    `• 邀请好友使用机器人可获得成人内容解锁时长`
+
+  await sendMessage(chatId, text)
+}
+
+// 处理"个人中心"
+async function handleUserProfile(chatId: number) {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile) {
+      await sendMessage(chatId, '❌ 获取用户信息失败')
+      return
+    }
+
+    // 计算解锁状态
+    let statusText = '🔒 未解锁'
+    if (profile.adult_permanent_unlock) {
+      statusText = '♾️ 永久解锁'
+    } else if (profile.adult_unlock_until && new Date(profile.adult_unlock_until) > new Date()) {
+      const until = new Date(profile.adult_unlock_until)
+      const now = new Date()
+      const diffHours = Math.ceil((until.getTime() - now.getTime()) / (1000 * 3600))
+      statusText = `🔓 已解锁 (剩余 ${diffHours} 小时)`
+    }
+
+    const text =
+      `👤 <b>个人中心</b>\n\n` +
+      `🆔 <b>用户ID：</b> <code>${profile.numeric_id}</code>\n` +
+      `🔞 <b>成人权限：</b> ${statusText}\n` +
+      `👥 <b>累计邀请：</b> ${profile.invite_success_count || 0} 人\n\n` +
+      `<i>请选择下方操作：</i>`
+
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: '🔞 获取邀请链接', callback_data: 'profile_invite_unlock' }],
+        [{ text: '📖 使用说明', callback_data: 'profile_help' }],
+        [
+          { text: '🔔 通知设置', callback_data: 'profile_settings_notify' },
+          { text: '⚙️ 隐私设置', callback_data: 'profile_settings_privacy' }
+        ]
+      ]
+    }
+
+    await sendMessage(chatId, text, { reply_markup: keyboard })
+  } catch (error) {
+    console.error('handleUserProfile error:', error)
+    await sendMessage(chatId, '❌ 系统错误，请稍后重试')
   }
 }
 
@@ -3333,20 +3420,16 @@ serve(async (req) => {
           }
         }
         // /settings 命令
-        else if (message.text === '/settings' || message.text === '🔔 通知设置') {
+        else if (message.text === '/settings') {
           await handleSettings(chatId)
         }
         // "我的视频"按钮
         else if (message.text === '📹 我的视频') {
           await handleMyVideos(chatId)
         }
-        // "隐私设置"按钮
-        else if (message.text === '⚙️ 隐私设置') {
-          await handlePrivacySettings(chatId)
-        }
-        // "邀请解锁"按钮
-        else if (message.text === '🔞 邀请解锁') {
-          await handleInviteUnlock(chatId)
+        // "个人中心"按钮
+        else if (message.text === '👤 个人中心') {
+          await handleUserProfile(chatId)
         }
         // 📸 图片消息
         else if (message.photo) {
