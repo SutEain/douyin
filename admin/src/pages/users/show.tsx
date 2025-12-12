@@ -3,9 +3,37 @@ import { Avatar, Descriptions, Tag, Card, Row, Col, Statistic, Divider } from 'a
 import { useShow } from '@refinedev/core'
 import dayjs from 'dayjs'
 
+type Profile = {
+  id: string
+  nickname?: string
+  username?: string
+  bio?: string
+  avatar_url?: string
+  numeric_id?: string
+  auto_approve?: boolean
+  show_collect?: boolean
+  show_like?: boolean
+  show_tg_username?: boolean
+  gender?: number
+  birthday?: string | null
+  country?: string
+  tg_user_id?: string
+  tg_username?: string
+  auth_provider?: string
+  lang?: string
+  created_at?: string
+  last_active_at?: string
+  updated_at?: string
+  email_verified?: boolean
+  follower_count?: number
+  following_count?: number
+  video_count?: number
+  total_likes?: number
+}
+
 export const UserShow = () => {
-  const { queryResult } = useShow({ resource: 'profiles' })
-  const { data, isLoading } = queryResult
+  const { query } = useShow<Profile>({ resource: 'profiles' })
+  const { data, isLoading } = query
   const record = data?.data
 
   const genderMap: Record<number, string> = {
@@ -13,6 +41,8 @@ export const UserShow = () => {
     1: '男',
     2: '女'
   }
+
+  const genderText = record?.gender !== undefined ? genderMap[record.gender] : '未知'
 
   return (
     <Show isLoading={isLoading}>
@@ -67,7 +97,7 @@ export const UserShow = () => {
         <Descriptions.Item label="昵称">{record?.nickname || '-'}</Descriptions.Item>
         <Descriptions.Item label="用户名">@{record?.username || '-'}</Descriptions.Item>
         <Descriptions.Item label="数字ID">{record?.numeric_id || '-'}</Descriptions.Item>
-        <Descriptions.Item label="性别">{genderMap[record?.gender] || '未知'}</Descriptions.Item>
+        <Descriptions.Item label="性别">{genderText || '未知'}</Descriptions.Item>
         <Descriptions.Item label="生日">
           {record?.birthday ? dayjs(record.birthday).format('YYYY-MM-DD') : '-'}
         </Descriptions.Item>

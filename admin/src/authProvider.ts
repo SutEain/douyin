@@ -1,8 +1,8 @@
-import type { AuthBindings } from '@refinedev/core'
+import type { AuthProvider } from '@refinedev/core'
 import { supabaseClient } from './supabaseClient'
 
-export const authProvider: AuthBindings = {
-  login: async ({ email, password }) => {
+export const authProvider: AuthProvider = {
+  login: async ({ email, password }: { email: string; password: string }) => {
     const { data, error } = await supabaseClient.auth.signInWithPassword({
       email,
       password
@@ -86,13 +86,11 @@ export const authProvider: AuthBindings = {
       return {
         authenticated: true
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = (error as Error) || new Error('检查认证失败')
       return {
         authenticated: false,
-        error: error || {
-          message: '检查认证失败',
-          name: '未知错误'
-        },
+        error: err,
         logout: true,
         redirectTo: '/login'
       }
@@ -115,7 +113,7 @@ export const authProvider: AuthBindings = {
 
     return null
   },
-  onError: async (error) => {
+  onError: async (error: any) => {
     if (error?.code === 'PGRST301') {
       return {
         logout: true

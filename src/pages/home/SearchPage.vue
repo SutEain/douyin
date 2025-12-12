@@ -866,20 +866,20 @@ async function loadHotKeywords() {
 
 // 🔄 刷新热门搜索词（随机展示6条）
 function refreshHotKeywords() {
-  if (data.allHotKeywords.length <= 6) {
-    // 如果总数小于等于6，全部显示
-    data.randomGuess = data.allHotKeywords.map((item) => ({
-      name: item.text,
-      type: item.count > 50 ? 0 : -1 // 热度高的标记为热门
-    }))
-  } else {
-    // 随机取6条
-    const sampled = sampleSize(data.allHotKeywords, 6)
-    data.randomGuess = sampled.map((item: any) => ({
-      name: item.text,
-      type: item.count > 50 ? 0 : -1
-    }))
+  console.log('[SearchPage] 🔄 refreshHotKeywords click')
+
+  if (data.allHotKeywords.length === 0) {
+    data.randomGuess = []
+    return
   }
+
+  const count = Math.min(6, data.allHotKeywords.length)
+  // 小于等于6条时也做随机洗牌，避免看起来“没反应”
+  const sampled = sampleSize(data.allHotKeywords, count)
+  data.randomGuess = sampled.map((item: any) => ({
+    name: item.text,
+    type: item.count > 50 ? 0 : -1
+  }))
 }
 
 // 🔍 处理搜索（输入框搜索）

@@ -4,9 +4,16 @@ import { useShow } from '@refinedev/core'
 
 const { Title, Text } = Typography
 
+type VideoRecord = {
+  id: string
+  title?: string
+  description?: string
+  status?: string
+}
+
 export const VideoShow = () => {
-  const { queryResult } = useShow()
-  const { data, isLoading } = queryResult
+  const { query } = useShow<VideoRecord>()
+  const { data, isLoading } = query
   const record = data?.data
 
   return (

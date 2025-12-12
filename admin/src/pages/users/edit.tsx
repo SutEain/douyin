@@ -5,16 +5,45 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import dayjs from 'dayjs'
 
+type Profile = {
+  id: string
+  nickname?: string
+  username?: string
+  bio?: string
+  avatar_url?: string
+  cover_url?: string
+  gender?: number
+  birthday?: string | null
+  country?: string
+  tg_user_id?: string
+  tg_username?: string
+  lang?: string
+  video_count?: number
+  follower_count?: number
+  following_count?: number
+  total_likes?: number
+  auto_approve?: boolean
+  show_collect?: boolean
+  show_like?: boolean
+  show_tg_username?: boolean
+  invite_success_count?: number
+  adult_daily_limit?: number
+  adult_unlock_until?: string | null
+  adult_permanent_unlock?: boolean
+  numeric_id?: string
+}
+
 export const UserEdit = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
   // 手动获取数据
-  const { data, isLoading } = useOne({
+  const { query } = useOne<Profile>({
     resource: 'profiles',
     id: id!
   })
 
+  const { data, isLoading } = query
   const record = data?.data
 
   const { formProps, saveButtonProps, form } = useForm({

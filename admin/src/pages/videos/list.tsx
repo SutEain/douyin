@@ -64,7 +64,7 @@ export const VideoList = () => {
   const [previewImages, setPreviewImages] = useState<string[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
-  const { tableProps, searchFormProps, filters } = useTable({
+  const { tableProps, searchFormProps } = useTable({
     resource: 'videos',
     syncWithLocation: true,
     meta: {
@@ -75,7 +75,7 @@ export const VideoList = () => {
         { field: 'created_at', order: 'desc' } // 按创建时间倒序
       ]
     },
-    onSearch: (params) => {
+    onSearch: (params: Record<string, any>) => {
       const filters: any[] = []
 
       // 搜索描述
@@ -427,7 +427,8 @@ export const VideoList = () => {
               message.success(newRecommended ? '已加入推荐池' : '已从推荐池移除')
             },
             onError: (error) => {
-              message.error('操作失败：' + (error as Error).message)
+              const err = error as { message?: string }
+              message.error('操作失败：' + (err?.message || '未知错误'))
             }
           }
         )
@@ -457,7 +458,8 @@ export const VideoList = () => {
               message.success(newIsAdult ? '已标记为成人内容' : '已取消成人标记')
             },
             onError: (error) => {
-              message.error('操作失败：' + (error as Error).message)
+              const err = error as { message?: string }
+              message.error('操作失败：' + (err?.message || '未知错误'))
             }
           }
         )

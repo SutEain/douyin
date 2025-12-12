@@ -22,6 +22,30 @@ const reviewStatusOptions = [
   { value: 'appealing', label: '申诉中', color: 'orange' }
 ]
 
+type VideoRecord = {
+  id: string
+  description?: string
+  tags?: string[]
+  status?: string
+  review_status?: string
+  reject_reason?: string
+  is_adult?: boolean
+  is_private?: boolean
+  is_recommended?: boolean
+  is_top?: boolean
+  location_country?: string
+  location_city?: string
+  author_id?: string
+  created_at?: string
+  like_count?: number
+  view_count?: number
+  collect_count?: number
+  comment_count?: number
+  play_url?: string
+}
+
+type FormValues = Omit<VideoRecord, 'tags'> & { tags?: string | string[] }
+
 export const VideoEdit = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -29,16 +53,17 @@ export const VideoEdit = () => {
   console.log('[VideoEdit] URL中的ID:', id)
 
   // 手动获取数据
-  const { data, isLoading } = useOne({
+  const { query } = useOne<VideoRecord>({
     resource: 'videos',
     id: id!
   })
 
-  const videoData = data?.data
+  const { data, isLoading } = query
+  const videoData = data?.data as VideoRecord | undefined
 
   console.log('[VideoEdit] 获取到的数据:', videoData)
 
-  const { formProps, saveButtonProps, form } = useForm({
+  const { formProps, saveButtonProps, form } = useForm<VideoRecord, any, FormValues>({
     resource: 'videos',
     action: 'edit',
     id: id,
@@ -46,7 +71,7 @@ export const VideoEdit = () => {
     onMutationSuccess: async () => {
       // 🎯 避免后台小范围编辑把已发布视频打回待审核
       if (videoData && form) {
-        const values = form.getFieldsValue()
+        const values = form.getFieldsValue() as FormValues
         const originalStatus = videoData.status
         const originalReviewStatus = videoData.review_status
 
@@ -110,7 +135,7 @@ export const VideoEdit = () => {
       <Form
         {...formProps}
         layout="vertical"
-        onFinish={(values) => {
+        onFinish={(values: FormValues) => {
           // 🔧 将标签从自由文本转换为数组（用空格分隔）
           const tagsString = (values.tags || '') as string
           const tagsArray =
@@ -200,7 +225,8 @@ export const VideoEdit = () => {
               <strong>作者ID:</strong> {videoData.author_id}
             </p>
             <p>
-              <strong>创建时间:</strong> {new Date(videoData.created_at).toLocaleString('zh-CN')}
+              <strong>创建时间:</strong>{' '}
+              {videoData.created_at ? new Date(videoData.created_at).toLocaleString('zh-CN') : '-'}
             </p>
             <p>
               <strong>点赞数:</strong> {videoData.like_count || 0}

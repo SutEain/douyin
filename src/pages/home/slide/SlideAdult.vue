@@ -26,9 +26,6 @@
             {{ adultRuleText }}
           </p>
           <div v-if="inviteLink" class="invite-section">
-            <div class="invite-link-box" @click="copyLink">
-              {{ inviteLink }}
-            </div>
             <div class="copy-btn" @click.stop="copyLink">点击复制专属邀请链接</div>
           </div>
         </div>
