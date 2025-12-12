@@ -487,17 +487,39 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     console.warn(`${DEBUG_PREFIX} source:empty`, { slot: slot.role, key: slot.key, idx })
   }
   if (url) {
-    video.src = url
-    if (poster) {
-      video.poster = poster
+    // 避免重复设置同一个 src 触发重新缓冲，导致切换时卡顿
+    const resolvedUrl = new URL(url, window.location.href).href
+    const isSameSrc = video.src === resolvedUrl
+
+    if (!isSameSrc) {
+      video.src = resolvedUrl
+      if (poster) {
+        video.poster = poster
+      }
+      video.load()
     }
-    video.load()
+
     if (slot.role === 'current') {
       resetProgressState()
       bindCurrentVideoEvents(video)
     }
+
     if (!preloadOnly && slot.role === 'current') {
-      playCurrent()
+      // 如果已是同一个 src 且已经缓冲到可播放，直接播放，避免重新 load 带来的 1s 停顿
+      if (isSameSrc && video.readyState >= 3 /* HAVE_FUTURE_DATA */) {
+        video
+          .play()
+          .then(() => {
+            isPlaying.value = true
+            tryUnmute(video)
+          })
+          .catch((err) => {
+            console.warn(`${DEBUG_PREFIX} play:reuse-src-fail`, err)
+            playCurrent()
+          })
+      } else {
+        playCurrent()
+      }
     }
   }
 }
