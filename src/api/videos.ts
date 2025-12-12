@@ -276,45 +276,26 @@ async function requestSupabaseVideoList(
   }
 
   const url = `${endpoint}${query ? `?${query}` : ''}`
-  const maxRetries = 2
-  let lastError: any = null
+  try {
+    const response = await fetch(url, { headers })
+    const payload = await response.json()
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, { headers })
-      const payload = await response.json()
+    if (response.ok && payload.code === 0) {
+      return { success: true, data: payload.data }
+    }
 
-      if (response.ok && payload.code === 0) {
-        return { success: true, data: payload.data }
+    throw new Error(payload?.msg || `接口返回异常，状态码 ${response.status}`)
+  } catch (error: any) {
+    console.error('[requestSupabaseVideoList] 请求失败:', error)
+    return {
+      success: false,
+      data: {
+        list: [],
+        total: 0,
+        pageNo: params?.pageNo ?? 0,
+        pageSize: params?.pageSize ?? 15,
+        message: error?.message || '加载失败'
       }
-
-      lastError = new Error(payload?.msg || `接口返回异常，状态码 ${response.status}`)
-      console.warn('[requestSupabaseVideoList] 非 0 返回，准备重试', {
-        attempt,
-        message: lastError.message
-      })
-    } catch (error: any) {
-      lastError = error
-      console.warn('[requestSupabaseVideoList] 请求失败，准备重试', {
-        attempt,
-        message: error?.message
-      })
-    }
-
-    if (attempt < maxRetries) {
-      await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)))
-    }
-  }
-
-  console.error('[requestSupabaseVideoList] 重试仍失败', lastError)
-  return {
-    success: false,
-    data: {
-      list: [],
-      total: 0,
-      pageNo: params?.pageNo ?? 0,
-      pageSize: params?.pageSize ?? 15,
-      message: lastError?.message || '加载失败'
     }
   }
 }
