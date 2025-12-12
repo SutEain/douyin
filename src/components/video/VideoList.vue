@@ -35,6 +35,9 @@
             <p v-if="noMoreSubtext" class="no-more-subtext">
               {{ noMoreSubtext }}
             </p>
+            <button v-if="inviteLink" class="copy-invite-btn" @click="copyInviteLink">
+              点击复制专属邀请链接
+            </button>
           </div>
         </template>
 
@@ -132,8 +135,10 @@ import ImageViewer from './ImageViewer.vue'
 import AlbumSwiper from './AlbumSwiper.vue'
 import type { VideoItem } from '../../types'
 import { useVideoStore } from '@/stores/video'
+import { useBaseStore } from '@/store/pinia'
 import { parseImages, getContentType } from '@/utils/media'
 import { recordVideoView } from '@/api/videos'
+import { _copy } from '@/utils'
 
 const DEBUG_PREFIX = '[AutoPlayDebug]'
 // 🎯 观看历史记录追踪（避免重复记录）
@@ -230,6 +235,7 @@ const emit = defineEmits<{
 }>()
 
 const videoStore = useVideoStore()
+const baseStore = useBaseStore()
 
 const containerRef = ref<HTMLDivElement>()
 const currentIndex = ref(props.initialIndex)
@@ -246,7 +252,12 @@ const slots = reactive<SlotState[]>([
   {
     key: 'slotB',
     role: 'current',
-    videoIndex: props.initialIndex,
+    videoIndex:
+      props.items.length === 0 && !props.hasMore
+        ? null
+        : props.initialIndex < props.items.length
+          ? props.initialIndex
+          : null,
     muted: true,
     posterUrl: '',
     isPlaying: false
@@ -311,6 +322,21 @@ const currentItemLocal = ref<VideoItem | null>(
 )
 const isPlaying = ref(false)
 const isPausedOverlay = computed(() => !isPlaying.value)
+
+// 🎯 邀请链接
+const inviteLink = computed(() => {
+  if (baseStore.userinfo.numeric_id) {
+    return `https://t.me/tg_douyin_bot?start=${baseStore.userinfo.numeric_id}`
+  }
+  return ''
+})
+
+// 🎯 复制邀请链接
+function copyInviteLink() {
+  if (inviteLink.value) {
+    _copy(inviteLink.value)
+  }
+}
 
 // 🎯 当前内容类型
 const currentContentType = computed(() => getContentType(currentItem.value))
@@ -1101,6 +1127,22 @@ watch(
       nextSlot.videoIndex = currentIndex.value + 1
       updateSlotSource(nextSlot, true)
     }
+    // 🎯 当 items 为空且 hasMore 为 false 时，更新 slotB 显示 no-more-page
+    const currentSlot = getSlotByRole('current')
+    if (currentSlot && props.items.length === 0 && !props.hasMore) {
+      currentSlot.videoIndex = null
+    }
+  }
+)
+
+// 🎯 监听 hasMore 变化，当 items 为空且 hasMore 变为 false 时，显示 no-more-page
+watch(
+  () => props.hasMore,
+  () => {
+    const currentSlot = getSlotByRole('current')
+    if (currentSlot && props.items.length === 0 && !props.hasMore) {
+      currentSlot.videoIndex = null
+    }
   }
 )
 
@@ -1583,6 +1625,24 @@ defineExpose({
     color: rgba(255, 255, 255, 0.5);
     margin: 0;
     white-space: pre-line; // 支持多行规则展示
+  }
+
+  .copy-invite-btn {
+    margin-top: 30px;
+    background: #fe2c55;
+    color: white;
+    padding: 12px 40px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    min-width: 200px;
+  }
+
+  .copy-invite-btn:active {
+    opacity: 0.8;
   }
 
   @keyframes float {
