@@ -236,6 +236,7 @@ const emit = defineEmits<{
 
 const videoStore = useVideoStore()
 const baseStore = useBaseStore()
+const retryCounts = new Map<string, number>() // 每个视频的播放失败重试计数（仅 current，有限次）
 
 function stopVideo(slot: SlotState) {
   const video = slotRefs.get(slot.key)
@@ -435,6 +436,12 @@ function setSlotRef(key: string) {
             el.addEventListener(evt, () => log(evt))
           }
         )
+        // error 事件：非 current 静默，current 交给 play error 处理
+        el.addEventListener('error', () => {
+          const slot = slots.find((s) => s.key === key)
+          if (!slot || slot.role !== 'current') return
+          stopVideo(slot)
+        })
         boundVideos.add(el)
       }
     } else {
@@ -507,10 +514,17 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
       if (poster) {
         video.poster = poster
       }
-      video.load()
+      // 非 current 只预加载元数据，减少无谓缓冲
+      if (slot.role === 'current') {
+        video.load()
+      } else {
+        video.preload = 'metadata'
+      }
     }
 
     if (slot.role === 'current') {
+      const vid = slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id : undefined
+      if (vid) retryCounts.set(vid, 0) // 新 current 重置重试计数
       resetProgressState()
       bindCurrentVideoEvents(video)
     }
@@ -640,16 +654,7 @@ function playCurrent() {
       tryUnmute(video)
     })
     .catch((err) => {
-      console.warn(`${DEBUG_PREFIX} play:error`, {
-        id:
-          slot.videoIndex != null
-            ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8)
-            : 'none',
-        page: props.page,
-        error: err?.name
-      })
-      // 出错后不再重试，暂停当前，交由用户/后续滑动处理
-      stopVideo(slot)
+      handlePlayError(slot, err)
     })
 }
 
@@ -1283,6 +1288,61 @@ function togglePlay(slot: SlotState) {
   }
 }
 
+function handlePlayError(slot: SlotState, err: any) {
+  const video = slotRefs.get(slot.key)
+  console.warn(`${DEBUG_PREFIX} play:error`, {
+    id: slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8) : 'none',
+    page: props.page,
+    error: err?.name
+  })
+
+  // 只有 current 参与重试
+  if (slot.role !== 'current') {
+    if (video) video.pause()
+    return
+  }
+
+  if (video) {
+    video.pause()
+  }
+
+  const vid = slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id : undefined
+  if (!vid) return
+
+  const count = retryCounts.get(vid) ?? 0
+  const maxRetry = 2
+
+  if (count >= maxRetry) {
+    console.warn(`${DEBUG_PREFIX} play:max-retry-hit`, { id: vid, count })
+    return
+  }
+
+  retryCounts.set(vid, count + 1)
+
+  // 冷却后再尝试，确保资源有时间 ready，且仍是 current 同一条
+  const delay = 400 + count * 300
+  setTimeout(() => {
+    const currentSlot = getSlotByRole('current')
+    if (
+      !currentSlot ||
+      currentSlot.key !== slot.key ||
+      currentSlot.videoIndex !== slot.videoIndex
+    ) {
+      return
+    }
+    const v = slotRefs.get(slot.key)
+    if (!v || !v.src) return
+    v.play()
+      .then(() => {
+        isPlaying.value = true
+        tryUnmute(v)
+      })
+      .catch((err2) => {
+        console.warn(`${DEBUG_PREFIX} play:retry-fail`, { id: vid, err: err2?.name })
+      })
+  }, delay)
+}
+
 // 保存当前绑定的视频元素，防止多个视频同时更新进度条
 let currentBoundVideo: HTMLVideoElement | null = null
 
@@ -1336,11 +1396,6 @@ function bindCurrentVideoEvents(video: HTMLVideoElement) {
   }
 
   nextTick(computeStep)
-}
-
-function getCurrentVideoIndex() {
-  const current = getSlotByRole('current')
-  return current?.videoIndex ?? -1
 }
 
 // 进度条拖动
