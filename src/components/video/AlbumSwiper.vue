@@ -17,7 +17,6 @@
           class="slide-image"
           @load="onImageLoad(index)"
           @error="onImageError(index)"
-          @click.stop="openPreview(index)"
           draggable="false"
         />
       </div>
