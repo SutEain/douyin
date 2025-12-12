@@ -237,6 +237,16 @@ const emit = defineEmits<{
 const videoStore = useVideoStore()
 const baseStore = useBaseStore()
 
+function stopVideo(slot: SlotState) {
+  const video = slotRefs.get(slot.key)
+  if (video) {
+    video.pause()
+  }
+  if (slot.role === 'current') {
+    isPlaying.value = false
+  }
+}
+
 const containerRef = ref<HTMLDivElement>()
 const currentIndex = ref(props.initialIndex)
 const userRequestedSound = ref(!videoStore.isMuted)
@@ -638,34 +648,8 @@ function playCurrent() {
         page: props.page,
         error: err?.name
       })
-      // 如果源不受支持，直接放弃本次自动播放，避免无限重试
-      if (err?.name === 'NotSupportedError') {
-        slot.isPlaying = false
-        return
-      }
-      // 错误也要检查role
-      const currentSlot = getSlotByRole('current')
-      if (currentSlot?.key !== slot.key) {
-        console.warn(`${DEBUG_PREFIX} play失败且已不是current，放弃重试`)
-        return
-      }
-      video.muted = true
-      slot.muted = true
-      video
-        .play()
-        .then(() => {
-          // 重试成功后也要检查
-          const currentSlot2 = getSlotByRole('current')
-          if (currentSlot2?.key !== slot.key) {
-            video.pause()
-            return
-          }
-          isPlaying.value = true
-          tryUnmute(video)
-        })
-        .catch((err2) => {
-          console.error(`${DEBUG_PREFIX} play:retry-fail`, err2)
-        })
+      // 出错后不再重试，暂停当前，交由用户/后续滑动处理
+      stopVideo(slot)
     })
 }
 
