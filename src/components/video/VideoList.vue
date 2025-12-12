@@ -558,6 +558,16 @@ function playCurrent() {
     return
   }
 
+  // 🛡️ 避免空 src 或不支持的源导致 NotSupportedError
+  if (!video.src) {
+    console.warn(`${DEBUG_PREFIX} play:skip-no-src`, {
+      slotKey: slot.key,
+      videoIndex: slot.videoIndex,
+      role: slot.role
+    })
+    return
+  }
+
   // 先暂停所有其他视频
   slotRefs.forEach((v, k) => {
     if (k !== slot.key && !v.paused) {
@@ -605,6 +615,11 @@ function playCurrent() {
         page: props.page,
         error: err?.name
       })
+      // 如果源不受支持，直接放弃本次自动播放，避免无限重试
+      if (err?.name === 'NotSupportedError') {
+        slot.isPlaying = false
+        return
+      }
       // 错误也要检查role
       const currentSlot = getSlotByRole('current')
       if (currentSlot?.key !== slot.key) {
