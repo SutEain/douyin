@@ -3,7 +3,7 @@
 
 const CACHE_TTL_SECONDS = 259200 // 3 天
 const FETCH_TIMEOUT_MS = 30000 // 30秒超时
-const MAX_FILE_SIZE = 500 * 1024 * 1024 // 200MB
+const MAX_FILE_SIZE = 2000 * 1024 * 1024 // 200MB
 const KV_UPDATE_INTERVAL = 3600 // ✅ 1小时才更新一次访问时间（减少KV写入）
 const HANDLED_HEADER = 'X-Worker-Handled'
 
@@ -92,7 +92,21 @@ async function handleRequest(request) {
     const originResp = await fetchFromTelegram(fileId, TG_BOT_TOKEN)
 
     if (!originResp.ok) {
-      console.error(`[Telegram Error] fileId: ${fileId}, status: ${originResp.status}`)
+      console.error(
+        `[Telegram Error] fileId: ${fileId}, status: ${originResp.status}, statusText: ${originResp.statusText}`
+      )
+      // 将 Telegram 的 4xx 转为 404，避免浏览器无限重试或 303
+      if (originResp.status >= 400 && originResp.status < 500) {
+        return withHandled(
+          new Response('File not found or invalid file_id', {
+            status: 404,
+            headers: {
+              'Content-Type': 'text/plain',
+              'Access-Control-Allow-Origin': '*'
+            }
+          })
+        )
+      }
       return withHandled(originResp)
     }
 
