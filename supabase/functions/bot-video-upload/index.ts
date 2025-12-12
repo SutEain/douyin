@@ -46,6 +46,79 @@ interface UserState {
   draft_video_id?: string | null // UUID（用于“等待用户输入”的目标视频）
   current_message_id?: number | null // 当前编辑的消息ID（用于“等待用户输入”时回写菜单）
   dashboard_message_id?: number | null // “我的视频”主面板消息ID（单面板模式）
+  context?: any // jsonb：存放各业务临时上下文（如已发布搜索/翻页）
+}
+
+// ===== 已发布列表：搜索 + 游标翻页（稳定） =====
+type PublishedCursor = { published_at: string; id: string }
+type PublishedCtx = {
+  q?: string
+  cursorStack?: (PublishedCursor | null)[] // stack[0] = null，表示第一页
+  nextCursor?: PublishedCursor | null // 当前页“下一页”游标
+}
+
+function getPublishedCtx(userState: UserState): PublishedCtx {
+  const ctx = userState?.context || {}
+  const pub = ctx.published || {}
+  return {
+    q: typeof pub.q === 'string' ? pub.q : undefined,
+    cursorStack: Array.isArray(pub.cursorStack) ? pub.cursorStack : [null],
+    nextCursor:
+      pub.nextCursor && pub.nextCursor.published_at && pub.nextCursor.id ? pub.nextCursor : null
+  }
+}
+
+async function setPublishedCtx(chatId: number, next: PublishedCtx) {
+  const userState = await getUserState(chatId)
+  const ctx = (userState as any)?.context || {}
+  const merged = {
+    ...ctx,
+    published: {
+      q: next.q || null,
+      cursorStack: next.cursorStack && next.cursorStack.length ? next.cursorStack : [null],
+      nextCursor: next.nextCursor || null
+    }
+  }
+  await updateUserState(chatId, { context: merged })
+}
+
+function buildPublishedListKeyboard(opts: {
+  hasPrev: boolean
+  hasNext: boolean
+  hasQuery: boolean
+}) {
+  const rows: any[] = []
+
+  rows.push([{ text: '🔎 搜索', callback_data: 'published_search' }])
+  if (opts.hasQuery) {
+    rows.push([{ text: '❌ 清除搜索', callback_data: 'published_search_clear' }])
+  }
+
+  const pagerRow: any[] = []
+  if (opts.hasPrev) pagerRow.push({ text: '⬅️ 上一页', callback_data: 'published_prev' })
+  if (opts.hasNext) pagerRow.push({ text: '➡️ 下一页', callback_data: 'published_next' })
+  if (pagerRow.length) rows.push(pagerRow)
+
+  rows.push([{ text: '← 返回', callback_data: 'back_my_videos' }])
+
+  return { inline_keyboard: rows }
+}
+
+function applyPublishedCursorFilter(builder: any, cursor: PublishedCursor | null) {
+  if (!cursor) return builder
+  // 游标翻页：按 published_at DESC, id DESC
+  // 下一页 startAfter：published_at < cursor.published_at OR (published_at = cursor.published_at AND id < cursor.id)
+  const t = cursor.published_at
+  const id = cursor.id
+  return builder.or(`published_at.lt.${t},and(published_at.eq.${t},id.lt.${id})`)
+}
+
+function applyPublishedSearchFilter(builder: any, q?: string) {
+  const keyword = q?.trim()
+  if (!keyword) return builder
+  // description + tags（tags 是数组，使用 ::text 做模糊匹配）
+  const like = `%${keyword.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`
+  return builder.or(`description.ilike.${like},tags::text.ilike.${like}`)
 }
 
 // Telegram API 调用
@@ -1619,6 +1692,68 @@ async function handleCallback(
     // 查看已发布视频列表
     if (data === 'my_published') {
       await answerCallbackQuery(callbackQueryId)
+      // 进入已发布列表：默认重置为第一页（保持预期）
+      await setPublishedCtx(chatId, { q: undefined, cursorStack: [null], nextCursor: null })
+      await handleMyPublished(chatId, messageId)
+      return
+    }
+
+    // ===== 已发布列表：搜索/翻页 =====
+    if (data === 'published_search') {
+      await answerCallbackQuery(callbackQueryId)
+      await updateUserState(chatId, {
+        state: 'waiting_published_search',
+        current_message_id: messageId
+      })
+      await editMessage(
+        chatId,
+        messageId,
+        '🔎 <b>搜索已发布视频</b>\n\n请输入关键字（将匹配描述 + 标签）\n\n💡 发送 /cancel 可取消',
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: '← 取消', callback_data: 'published_search_cancel' }]]
+          }
+        }
+      )
+      return
+    }
+
+    if (data === 'published_search_cancel') {
+      await answerCallbackQuery(callbackQueryId, '✅ 已取消')
+      await updateUserState(chatId, { state: 'idle' })
+      await handleMyPublished(chatId, messageId)
+      return
+    }
+
+    if (data === 'published_search_clear') {
+      await answerCallbackQuery(callbackQueryId)
+      await setPublishedCtx(chatId, { q: undefined, cursorStack: [null], nextCursor: null })
+      await handleMyPublished(chatId, messageId)
+      return
+    }
+
+    if (data === 'published_next') {
+      await answerCallbackQuery(callbackQueryId)
+      const userState = await getUserState(chatId)
+      const pubCtx = getPublishedCtx(userState)
+      const stack = pubCtx.cursorStack && pubCtx.cursorStack.length ? pubCtx.cursorStack : [null]
+      if (pubCtx.nextCursor) {
+        stack.push(pubCtx.nextCursor)
+        await setPublishedCtx(chatId, { q: pubCtx.q, cursorStack: stack, nextCursor: null })
+      }
+      await handleMyPublished(chatId, messageId)
+      return
+    }
+
+    if (data === 'published_prev') {
+      await answerCallbackQuery(callbackQueryId)
+      const userState = await getUserState(chatId)
+      const pubCtx = getPublishedCtx(userState)
+      const stack = pubCtx.cursorStack && pubCtx.cursorStack.length ? pubCtx.cursorStack : [null]
+      if (stack.length > 1) {
+        stack.pop()
+        await setPublishedCtx(chatId, { q: pubCtx.q, cursorStack: stack, nextCursor: null })
+      }
       await handleMyPublished(chatId, messageId)
       return
     }
@@ -2087,6 +2222,30 @@ async function handleCallback(
 // 处理文本消息
 async function handleText(chatId: number, text: string, userMessageId: number) {
   const userState = await getUserState(chatId)
+
+  // ✅ 已发布搜索：不依赖 draft_video_id
+  if (userState.state === 'waiting_published_search') {
+    await deleteTelegramMessage(chatId, userMessageId)
+
+    const keyword = text.trim()
+    if (!userState.current_message_id) return
+
+    // /cancel 取消
+    if (keyword === '/cancel') {
+      await updateUserState(chatId, { state: 'idle' })
+      await handleMyPublished(chatId, userState.current_message_id)
+      return
+    }
+
+    await setPublishedCtx(chatId, {
+      q: keyword || undefined,
+      cursorStack: [null],
+      nextCursor: null
+    })
+    await updateUserState(chatId, { state: 'idle' })
+    await handleMyPublished(chatId, userState.current_message_id)
+    return
+  }
 
   if (!userState.draft_video_id || !userState.current_message_id) return
 
@@ -2836,13 +2995,28 @@ async function handleMyPublished(chatId: number, messageId: number) {
   console.log('[handleMyPublished] 开始获取已发布视频, chatId:', chatId, 'messageId:', messageId)
 
   try {
-    const { data: videos, error } = await supabase
+    const userState = await getUserState(chatId)
+    const pubCtx = getPublishedCtx(userState)
+    const cursorStack =
+      pubCtx.cursorStack && pubCtx.cursorStack.length ? pubCtx.cursorStack : [null]
+    const currentCursor = cursorStack[cursorStack.length - 1] || null
+    const pageNo = cursorStack.length
+
+    let query = supabase
       .from('videos')
-      .select('id, description, like_count, comment_count, view_count, is_private')
+      .select(
+        'id, description, like_count, comment_count, view_count, is_private, published_at, tags'
+      )
       .eq('tg_user_id', chatId)
       .eq('status', 'published')
       .order('published_at', { ascending: false })
+      .order('id', { ascending: false })
       .limit(10)
+
+    query = applyPublishedSearchFilter(query, pubCtx.q)
+    query = applyPublishedCursorFilter(query, currentCursor)
+
+    const { data: videos, error } = await query
 
     console.log('[handleMyPublished] 查询结果:', {
       videosCount: videos?.length || 0,
@@ -2859,13 +3033,21 @@ async function handleMyPublished(chatId: number, messageId: number) {
 
     if (!videos || videos.length === 0) {
       console.log('[handleMyPublished] 无已发布视频')
-      await editMessage(chatId, messageId, '📺 暂无已发布的视频', {
-        reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'back_my_videos' }]] }
+      const qLine = pubCtx.q ? `🔎 关键字：<code>${pubCtx.q}</code>\n\n` : ''
+      await editMessage(chatId, messageId, `📺 <b>我发布的视频</b>\n\n${qLine}暂无匹配结果`, {
+        reply_markup: buildPublishedListKeyboard({
+          hasPrev: cursorStack.length > 1,
+          hasNext: false,
+          hasQuery: !!pubCtx.q
+        })
       })
       return
     }
 
-    const lines = ['📺 <b>我发布的视频</b>', '']
+    const header: string[] = ['📺 <b>我发布的视频</b>', '']
+    if (pubCtx.q) header.push(`🔎 关键字：<code>${pubCtx.q}</code>`)
+    header.push(`📄 第 ${pageNo} 页 · 本页 ${videos.length} 条`)
+    header.push('')
 
     // 🎯 构建按钮（每个视频一个按钮：查看详情，私密视频显示🔒）
     const keyboard: any[] = videos.map((v) => {
@@ -2880,12 +3062,27 @@ async function handleMyPublished(chatId: number, messageId: number) {
       ]
     })
 
-    keyboard.push([{ text: '← 返回', callback_data: 'back_my_videos' }])
+    // 保存“下一页”游标：使用本页最后一条（最旧）作为 startAfter
+    const last = videos[videos.length - 1] as any
+    const nextCursor: PublishedCursor | null =
+      last?.published_at && last?.id ? { published_at: last.published_at, id: last.id } : null
+    const hasNext = videos.length === 10 && !!nextCursor
 
-    console.log('[handleMyPublished] 准备编辑消息, 按钮数:', keyboard.length)
+    // 更新上下文：记录当前页 nextCursor，next/prev 点击时再 push/pop stack
+    await setPublishedCtx(chatId, { q: pubCtx.q, cursorStack, nextCursor })
 
-    await editMessage(chatId, messageId, lines.join('\n'), {
-      reply_markup: { inline_keyboard: keyboard }
+    // 合并：视频按钮 + 控制按钮
+    const controls = buildPublishedListKeyboard({
+      hasPrev: cursorStack.length > 1,
+      hasNext,
+      hasQuery: !!pubCtx.q
+    }).inline_keyboard
+    const mergedKeyboard = [...keyboard, ...controls]
+
+    console.log('[handleMyPublished] 准备编辑消息, 按钮数:', mergedKeyboard.length)
+
+    await editMessage(chatId, messageId, header.join('\n'), {
+      reply_markup: { inline_keyboard: mergedKeyboard }
     })
 
     console.log('[handleMyPublished] 完成')
@@ -3580,14 +3777,17 @@ serve(async (req) => {
 
             await sendMessage(
               chatId,
-              '👋 <b>欢迎使用视频上传</b>\n\n' +
-                '✅ 账号已准备就绪\n\n' +
-                '直接发送或转发视频即可上传\n\n' +
-                '支持功能：\n' +
-                '• 自动识别转发文案\n' +
-                '• 描述、标签、位置\n' +
-                '• 隐私设置\n' +
-                '• 草稿保存',
+              '👋 <b>欢迎来到 Douyin Bot</b>\n\n' +
+                '✅ 账号已就绪\n\n' +
+                '🚀 <b>3步上手</b>\n' +
+                '1) 直接发送/转发视频给我\n' +
+                '2) 等待处理完成（会弹出“已就绪”菜单）\n' +
+                '3) 按提示完善信息并发布\n\n' +
+                '📌 <b>入口</b>\n' +
+                '• 底部「📹 我的视频」：草稿/发布/上传中\n' +
+                '• 底部「👤 个人中心」：邀请、设置、使用说明\n\n' +
+                '🔗 <b>分享</b>\n' +
+                '在任意聊天输入 <code>@tg_douyin_bot video_</code> 可搜索并分享你的作品',
               {
                 reply_markup: getPersistentKeyboard()
               }
