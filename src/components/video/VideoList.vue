@@ -357,8 +357,7 @@ function shareInvite() {
   try {
     if (tg?.shareMessage) {
       tg.shareMessage(text).catch(() => {
-        _copy(inviteLink.value)
-        _notice('已复制邀请链接')
+        _notice('请在 Telegram 客户端中重试分享')
       })
       return
     }
@@ -371,8 +370,7 @@ function shareInvite() {
   } catch (e) {
     // ignore fallback
   }
-  _copy(inviteLink.value)
-  _notice('已复制邀请链接')
+  _notice('请在 Telegram 客户端中重试分享')
 }
 
 // 🎯 当前内容类型

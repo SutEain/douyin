@@ -193,7 +193,7 @@ function showComments() {
   bus.emit(EVENT_KEY.OPEN_COMMENTS, props.item.aweme_id)
 }
 
-// 🎯 分享到 Telegram（优先调起联系人选择器，兜底复制）
+// 🎯 分享到 Telegram（只调用联系人选择器，不再复制兜底）
 function shareToTelegram() {
   if (!props.item?.aweme_id) {
     _notice('视频ID缺失，无法分享')
@@ -208,8 +208,7 @@ function shareToTelegram() {
   try {
     if (tg?.shareMessage) {
       tg.shareMessage(shareText).catch(() => {
-        _copy(shareText)
-        _notice('已复制链接，返回Telegram，分享吧～')
+        _notice('请在 Telegram 客户端中重试分享')
       })
       return
     }
@@ -220,12 +219,10 @@ function shareToTelegram() {
       return
     }
   } catch (error) {
-    console.error('[分享] 调用联系人失败，改为复制:', error)
+    console.error('[分享] 调用联系人失败:', error)
   }
 
-  // 兜底：复制
-  _copy(shareText)
-  _notice('已复制链接，返回Telegram，分享吧～')
+  _notice('请在 Telegram 客户端中重试分享')
 }
 
 const vClick = useClick()
