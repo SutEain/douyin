@@ -24,19 +24,22 @@
 
       <!-- 空状态提示 -->
       <div v-else class="empty-state">
-        <p>暂无更多成人内容</p>
+        <p>切换标签重试</p>
+        <p class="desc">分享专属邀请链接，解锁无限成人内容</p>
+        <button class="invite-btn" @click="shareInvite">选择联系人发送</button>
       </div>
     </div>
   </SlideItem>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive } from 'vue'
+import { onMounted, reactive, computed } from 'vue'
 import SlideItem from '@/components/slide/SlideItem.vue'
 import VideoList from '@/components/video/VideoList.vue'
 import { adultVideoFeed } from '@/api/videos'
 import { useBaseStore } from '@/store/pinia'
 import type { VideoItem } from '@/types'
+import { _copy, _notice } from '@/utils'
 
 const store = useBaseStore()
 const props = defineProps({
@@ -60,6 +63,40 @@ const adultRuleText =
   '• 成功邀请 1 人 → 解锁 24 小时无限刷\n' +
   '• 成功邀请 2 人 → 解锁 3 天无限刷\n' +
   '• 累计邀请 3 人 → 永久解锁无限刷'
+
+const inviteLink = computed(() => {
+  if (store.userinfo.numeric_id) {
+    return `https://t.me/tg_douyin_bot?start=${store.userinfo.numeric_id}`
+  }
+  return 'https://t.me/tg_douyin_bot'
+})
+
+function shareInvite() {
+  const text = `送你专属邀请链接，解锁无限成人内容：${inviteLink.value}`
+  const tg = (window as any)?.Telegram?.WebApp
+  try {
+    // WebApp 新版分享 API（如果可用）
+    if (tg?.shareMessage) {
+      tg.shareMessage(text).catch(() => {
+        _copy(inviteLink.value)
+        _notice('已复制邀请链接')
+      })
+      return
+    }
+    // 兼容旧版，打开 TG 客户端分享
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(
+        `tg://msg_url?url=${encodeURIComponent(inviteLink.value)}&text=${encodeURIComponent(text)}`
+      )
+      return
+    }
+  } catch (e) {
+    // ignore
+  }
+  // 兜底：复制到剪贴板
+  _copy(inviteLink.value)
+  _notice('已复制邀请链接')
+}
 
 async function loadMore() {
   console.log('[SlideAdult] loadMore 被调用', {
@@ -88,8 +125,9 @@ async function loadMore() {
   console.log('[SlideAdult] 开始请求 API', requestParams)
 
   const res = await adultVideoFeed(requestParams)
+  const resReason = (res as any)?.reason || res.data?.reason
 
-  if (res.data?.reason === 'quota_exceeded' || res.reason === 'quota_exceeded') {
+  if (resReason === 'quota_exceeded') {
     state.quotaExceeded = true
     state.hasMore = false
     store.loading = false
@@ -111,7 +149,7 @@ async function loadMore() {
     state.totalSize = res.data.total
     state.hasMore = res.data.list.length >= state.pageSize
 
-    const existingIds = new Set(state.list.map((v) => v.aweme_id || v.id))
+    const existingIds = new Set(state.list.map((v: any) => v.aweme_id || v.id))
     const uniqueNewList = res.data.list.filter((v: any) => !existingIds.has(v.aweme_id || v.id))
 
     if (uniqueNewList.length > 0) {
@@ -160,6 +198,26 @@ onMounted(() => {
     color: white;
     font-size: 16px;
     background: #000;
+
+    .desc {
+      margin-top: 8px;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.8);
+      text-align: center;
+      line-height: 1.4;
+      padding: 0 24px;
+    }
+
+    .invite-btn {
+      margin-top: 16px;
+      padding: 10px 18px;
+      border: none;
+      border-radius: 999px;
+      background: var(--primary-btn-color, #ff2d55);
+      color: #fff;
+      font-size: 15px;
+      cursor: pointer;
+    }
   }
 
   .loading-spinner {

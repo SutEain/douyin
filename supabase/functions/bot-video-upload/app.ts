@@ -119,7 +119,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
 
             // 1. 先发送底部菜单（Persistent Keyboard）
-            await sendMessage(chatId, '请认准 @tg_douyin_bot', {
+            await sendMessage(chatId, '开发阶段 bug反馈 @vip843', {
               reply_markup: getPersistentKeyboard()
             })
 
@@ -189,7 +189,8 @@ export async function handleRequest(req: Request): Promise<Response> {
         }
         // "个人中心"按钮
         else if (message.text === '👤 个人中心') {
-          await handleUserProfile(chatId)
+          // 底部键盘点击 -> 始终新发一条消息，避免编辑上一条
+          await handleUserProfile(chatId, undefined, { forceNew: true })
         }
         // 📸 图片消息
         else if (message.photo) {

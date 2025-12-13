@@ -29,7 +29,15 @@ export async function handleHelp(chatId: number, messageId?: number) {
 }
 
 // 处理"个人中心"
-export async function handleUserProfile(chatId: number, messageId?: number) {
+interface ProfileOptions {
+  forceNew?: boolean // 强制新发一条消息（不编辑旧消息）
+}
+
+export async function handleUserProfile(
+  chatId: number,
+  messageId?: number,
+  options?: ProfileOptions
+) {
   try {
     const { data: profile } = await supabase
       .from('profiles')
@@ -71,7 +79,7 @@ export async function handleUserProfile(chatId: number, messageId?: number) {
       ]
     }
 
-    if (messageId) {
+    if (messageId && !options?.forceNew) {
       await editMessage(chatId, messageId, text, { reply_markup: keyboard })
     } else {
       // 如果没有传入 messageId，尝试获取 userState 里的 dashboard_message_id
@@ -79,7 +87,7 @@ export async function handleUserProfile(chatId: number, messageId?: number) {
       const userState = await getUserState(chatId)
       const dashId = (userState as any)?.dashboard_message_id
 
-      if (dashId) {
+      if (!options?.forceNew && dashId) {
         const edited = await editMessage(chatId, dashId, text, { reply_markup: keyboard })
         if (edited?.ok) return
       }
