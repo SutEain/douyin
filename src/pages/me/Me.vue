@@ -69,7 +69,7 @@
         <!-- 详细信息 -->
         <div class="detail">
           <!-- ✅ 第1个：个性签名 -->
-          <div class="signature">
+          <div class="signature" @click.stop="$nav('/me/edit-userinfo-item', { type: 3 })">
             <template v-if="!userinfo.signature">
               <span>点击添加介绍，让大家认识你...</span>
               <img src="../../assets/img/icon/me/write-gray.png" alt="" />
