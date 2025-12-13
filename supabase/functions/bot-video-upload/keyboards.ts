@@ -4,7 +4,7 @@ import { TG_MINIAPP_URL } from './env.ts'
 
 export function getPersistentKeyboard() {
   return {
-    keyboard: [[{ text: '🏠 首页' }, { text: '👤 个人中心' }]],
+    keyboard: [[{ text: '🏠 首页' }, { text: '📹 上传视频' }, { text: '👤 个人中心' }]],
     resize_keyboard: true,
     persistent: true
   }
