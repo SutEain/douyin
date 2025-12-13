@@ -76,6 +76,18 @@ export const UserList = () => {
         <Table.Column dataIndex="follower_count" title="粉丝数" width={80} />
         <Table.Column dataIndex="total_likes" title="获赞数" width={80} />
         <Table.Column
+          dataIndex="balance_usdt"
+          title="余额(USDT)"
+          width={120}
+          render={(v) => <span style={{ fontFamily: 'monospace' }}>{v ?? '0'}</span>}
+        />
+        <Table.Column
+          dataIndex="frozen_usdt"
+          title="冻结(USDT)"
+          width={120}
+          render={(v) => <span style={{ fontFamily: 'monospace' }}>{v ?? '0'}</span>}
+        />
+        <Table.Column
           dataIndex="auto_approve"
           title="审核状态"
           width={100}

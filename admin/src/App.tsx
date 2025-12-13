@@ -11,6 +11,12 @@ import { supabaseClient } from './supabaseClient'
 import { VideoList, VideoShow, VideoEdit } from './pages/videos'
 import { UserList, UserShow, UserEdit } from './pages/users'
 import { RecommendationPoolList } from './pages/recommendation-pool'
+import { IncentiveRuleCreate, IncentiveRuleEdit, IncentiveRuleList } from './pages/incentive-rules'
+import {
+  UserIncentiveProgressList,
+  UserVideoIncentiveProgressList
+} from './pages/incentive-progress/index'
+import { WalletLedgerList } from './pages/wallet-ledger/index'
 import { Login } from './pages/login'
 import { authProvider } from './authProvider'
 import { Dashboard } from './pages/dashboard'
@@ -56,6 +62,28 @@ function App() {
                 meta: {
                   label: '推荐池管理'
                 }
+              },
+              {
+                name: 'incentive_rules',
+                list: '/incentive-rules',
+                create: '/incentive-rules/create',
+                edit: '/incentive-rules/edit/:id',
+                meta: { label: '任务/活动规则' }
+              },
+              {
+                name: 'user_video_incentive_progress',
+                list: '/incentive-progress/video',
+                meta: { label: '任务进度（作品）' }
+              },
+              {
+                name: 'user_incentive_progress',
+                list: '/incentive-progress/user',
+                meta: { label: '任务进度（用户）' }
+              },
+              {
+                name: 'wallet_ledger',
+                list: '/wallet-ledger',
+                meta: { label: '资金流水' }
               }
             ]}
             options={{
@@ -94,6 +122,16 @@ function App() {
                 <Route path="/recommendation-pool">
                   <Route index element={<RecommendationPoolList />} />
                 </Route>
+                <Route path="/incentive-rules">
+                  <Route index element={<IncentiveRuleList />} />
+                  <Route path="create" element={<IncentiveRuleCreate />} />
+                  <Route path="edit/:id" element={<IncentiveRuleEdit />} />
+                </Route>
+                <Route path="/incentive-progress">
+                  <Route path="video" element={<UserVideoIncentiveProgressList />} />
+                  <Route path="user" element={<UserIncentiveProgressList />} />
+                </Route>
+                <Route path="/wallet-ledger" element={<WalletLedgerList />} />
               </Route>
               <Route path="*" element={<ErrorComponent />} />
             </Routes>
