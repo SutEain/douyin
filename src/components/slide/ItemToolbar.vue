@@ -193,7 +193,7 @@ function showComments() {
   bus.emit(EVENT_KEY.OPEN_COMMENTS, props.item.aweme_id)
 }
 
-// 🎯 分享到 Telegram（使用 switchInlineQuery 调起聊天选择器）
+// 🎯 分享到 Telegram（复制链接）
 function shareToTelegram() {
   if (!props.item?.aweme_id) {
     _notice('视频ID缺失，无法分享')
@@ -202,16 +202,10 @@ function shareToTelegram() {
 
   const numericId = baseStore.userinfo?.numeric_id
   const inviteSuffix = numericId ? `_i${numericId}` : ''
-  const shareText = `video_${props.item.aweme_id}${inviteSuffix}`
-  const tg = (window as any)?.Telegram?.WebApp
+  const shareText = `@tg_douyin_bot video_${props.item.aweme_id}${inviteSuffix}`
 
-  // 🎯 使用 switchInlineQuery 调起聊天选择器
-  if (tg?.switchInlineQuery) {
-    tg.switchInlineQuery(shareText, ['users', 'groups', 'channels'])
-    return
-  }
-
-  _notice('请在 Telegram 客户端中重试分享')
+  _copy(shareText)
+  _notice('已复制链接，返回Telegram，分享吧～')
 }
 
 const vClick = useClick()
