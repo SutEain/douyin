@@ -193,30 +193,39 @@ function showComments() {
   bus.emit(EVENT_KEY.OPEN_COMMENTS, props.item.aweme_id)
 }
 
-// 🎯 分享到 Telegram
+// 🎯 分享到 Telegram（优先调起联系人选择器，兜底复制）
 function shareToTelegram() {
+  if (!props.item?.aweme_id) {
+    _notice('视频ID缺失，无法分享')
+    return
+  }
+
+  const numericId = baseStore.userinfo?.numeric_id
+  const inviteSuffix = numericId ? `_i${numericId}` : ''
+  const shareText = `@tg_douyin_bot video_${props.item.aweme_id}${inviteSuffix}`
+  const tg = (window as any)?.Telegram?.WebApp
+
   try {
-    if (!props.item?.aweme_id) {
-      _notice('视频ID缺失，无法分享')
+    if (tg?.shareMessage) {
+      tg.shareMessage(shareText).catch(() => {
+        _copy(shareText)
+        _notice('已复制链接，返回Telegram，分享吧～')
+      })
       return
     }
-
-    // 🎯 复制分享链接到剪贴板
-    const numericId = baseStore.userinfo?.numeric_id
-    const inviteSuffix = numericId ? `_i${numericId}` : ''
-    const shareText = `@tg_douyin_bot video_${props.item.aweme_id}${inviteSuffix}`
-
-    console.log('[分享] 复制分享链接:', shareText)
-
-    _copy(shareText)
-
-    _notice('已复制链接，返回Telegram，分享吧～')
-
-    console.log('[分享] ✅ 复制成功')
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(
+        `tg://msg_url?url=${encodeURIComponent(shareText)}&text=${encodeURIComponent(shareText)}`
+      )
+      return
+    }
   } catch (error) {
-    console.error('[分享] 复制失败:', error)
-    _notice('复制失败，请重试')
+    console.error('[分享] 调用联系人失败，改为复制:', error)
   }
+
+  // 兜底：复制
+  _copy(shareText)
+  _notice('已复制链接，返回Telegram，分享吧～')
 }
 
 const vClick = useClick()

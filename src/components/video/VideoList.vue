@@ -35,9 +35,10 @@
             <p v-if="noMoreSubtext" class="no-more-subtext">
               {{ noMoreSubtext }}
             </p>
-            <button v-if="inviteLink" class="copy-invite-btn" @click="copyInviteLink">
-              点击复制专属邀请链接
-            </button>
+            <template v-if="inviteLink">
+              <button class="share-invite-btn" @click="shareInvite">选择联系人发送</button>
+              <button class="copy-invite-btn" @click="copyInviteLink">点击复制专属邀请链接</button>
+            </template>
           </div>
         </template>
 
@@ -138,7 +139,7 @@ import { useVideoStore } from '@/stores/video'
 import { useBaseStore } from '@/store/pinia'
 import { parseImages, getContentType } from '@/utils/media'
 import { recordVideoView } from '@/api/videos'
-import { _copy } from '@/utils'
+import { _copy, _notice } from '@/utils'
 
 const DEBUG_PREFIX = '[AutoPlayDebug]'
 // 🎯 观看历史记录追踪（避免重复记录）
@@ -346,6 +347,32 @@ function copyInviteLink() {
   if (inviteLink.value) {
     _copy(inviteLink.value)
   }
+}
+
+// 🎯 分享邀请链接（调用 TG 选择联系人）
+function shareInvite() {
+  if (!inviteLink.value) return
+  const text = `送你专属邀请链接，解锁无限成人内容：${inviteLink.value}`
+  const tg = (window as any)?.Telegram?.WebApp
+  try {
+    if (tg?.shareMessage) {
+      tg.shareMessage(text).catch(() => {
+        _copy(inviteLink.value)
+        _notice('已复制邀请链接')
+      })
+      return
+    }
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(
+        `tg://msg_url?url=${encodeURIComponent(inviteLink.value)}&text=${encodeURIComponent(text)}`
+      )
+      return
+    }
+  } catch (e) {
+    // ignore fallback
+  }
+  _copy(inviteLink.value)
+  _notice('已复制邀请链接')
 }
 
 // 🎯 当前内容类型
@@ -1671,6 +1698,24 @@ defineExpose({
 
   .copy-invite-btn:active {
     opacity: 0.8;
+  }
+
+  .share-invite-btn {
+    margin-top: 30px;
+    background: #ff6b00;
+    color: white;
+    padding: 12px 40px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    min-width: 200px;
+  }
+
+  .share-invite-btn:active {
+    opacity: 0.85;
   }
 
   @keyframes float {
