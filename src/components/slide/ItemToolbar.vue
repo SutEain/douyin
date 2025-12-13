@@ -203,6 +203,9 @@ function shareToTelegram() {
   const numericId = baseStore.userinfo?.numeric_id
   const inviteSuffix = numericId ? `_i${numericId}` : ''
   const shareText = `@tg_douyin_bot video_${props.item.aweme_id}${inviteSuffix}`
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareText)}&text=${encodeURIComponent(
+    shareText
+  )}`
   const tg = (window as any)?.Telegram?.WebApp
 
   try {
@@ -213,9 +216,7 @@ function shareToTelegram() {
       return
     }
     if (tg?.openTelegramLink) {
-      tg.openTelegramLink(
-        `tg://msg_url?url=${encodeURIComponent(shareText)}&text=${encodeURIComponent(shareText)}`
-      )
+      tg.openTelegramLink(shareUrl)
       return
     }
   } catch (error) {

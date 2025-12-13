@@ -37,7 +37,7 @@
             </p>
             <template v-if="inviteLink">
               <button class="share-invite-btn" @click="shareInvite">选择联系人发送</button>
-              <button class="copy-invite-btn" @click="copyInviteLink">点击复制专属邀请链接</button>
+              <button class="copy-invite-btn" @click="copyInviteLink">复制专属邀请链接</button>
             </template>
           </div>
         </template>
@@ -145,7 +145,7 @@ const DEBUG_PREFIX = '[AutoPlayDebug]'
 // 🎯 观看历史记录追踪（避免重复记录）
 const recordedViews = new Set<string>() // 已记录开始观看
 const completedViews = new Set<string>() // 已记录完播
-let currentCompletionTimer: NodeJS.Timeout | null = null // 当前视频的完播计时器
+let currentCompletionTimer: ReturnType<typeof setTimeout> | null = null // 当前视频的完播计时器
 
 // 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
 function recordEnterCurrent(item: VideoItem | null, contentType: string) {
@@ -353,6 +353,9 @@ function copyInviteLink() {
 function shareInvite() {
   if (!inviteLink.value) return
   const text = `送你专属邀请链接，解锁无限成人内容：${inviteLink.value}`
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink.value)}&text=${encodeURIComponent(
+    text
+  )}`
   const tg = (window as any)?.Telegram?.WebApp
   try {
     if (tg?.shareMessage) {
@@ -362,9 +365,7 @@ function shareInvite() {
       return
     }
     if (tg?.openTelegramLink) {
-      tg.openTelegramLink(
-        `tg://msg_url?url=${encodeURIComponent(inviteLink.value)}&text=${encodeURIComponent(text)}`
-      )
+      tg.openTelegramLink(shareUrl)
       return
     }
   } catch (e) {
@@ -1498,11 +1499,6 @@ defineExpose({
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   transform-style: preserve-3d;
-
-  // 🎯 吸附动画由 computed 控制，不在这里设置
-  &.transitioning {
-    // transition 由 slideContainerStyle 控制
-  }
 }
 
 .slot {
