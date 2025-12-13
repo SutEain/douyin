@@ -4,7 +4,7 @@ import { TG_MINIAPP_URL } from './env.ts'
 
 export function getPersistentKeyboard() {
   return {
-    keyboard: [[{ text: '🏠 首页' }, { text: '📹 上传视频' }, { text: '👤 个人中心' }]],
+    keyboard: [[{ text: '🏠 首页' }, { text: '👤 个人中心' }]],
     resize_keyboard: true,
     persistent: true
   }
@@ -23,9 +23,12 @@ export function getWelcomeKeyboard() {
       ],
       [
         { text: '📹 我的视频', callback_data: 'my_videos' },
-        { text: '👤 个人中心', callback_data: 'user_profile' }
+        { text: '📤 上传视频', callback_data: 'upload_video' }
       ],
-      [{ text: '邀请解锁🔞专区', callback_data: 'profile_invite_unlock' }]
+      [
+        { text: '👤 个人中心', callback_data: 'user_profile' },
+        { text: '🔞 邀请解锁', callback_data: 'profile_invite_unlock' }
+      ]
     ]
   }
 }

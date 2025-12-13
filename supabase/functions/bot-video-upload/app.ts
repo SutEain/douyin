@@ -192,16 +192,6 @@ export async function handleRequest(req: Request): Promise<Response> {
           // 底部键盘点击 -> 始终新发一条消息，避免编辑上一条
           await handleUserProfile(chatId, undefined, { forceNew: true })
         }
-        // "上传视频"按钮
-        else if (message.text === '📹 上传视频') {
-          const uploadGuide =
-            '📹 <b>上传视频</b>\n\n' +
-            '点击输入框左侧的 📎 按钮\n' +
-            '选择要分享的视频发送给我\n\n' +
-            '<i>💡 支持转发其他频道的视频</i>\n' +
-            '<i>💡 可一次发送多个视频</i>'
-          await sendMessage(chatId, uploadGuide)
-        }
         // 📸 图片消息
         else if (message.photo) {
           // 检查是否是混合相册（视频+图片）

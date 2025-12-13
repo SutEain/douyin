@@ -76,6 +76,26 @@ export async function handleCallback(
       await handleInviteUnlock(chatId, messageId)
       return
     }
+
+    // 🎯 上传视频引导
+    if (data === 'upload_video') {
+      await answerCallbackQuery(callbackQueryId)
+      const uploadGuide =
+        '📤 <b>上传视频</b>\n\n' +
+        '点击输入框左侧的 📎 按钮\n' +
+        '选择要分享的视频发送给我\n\n' +
+        '<i>💡 选择1个视频发送给我</i>\n' +
+        '<i>💡 选择多个图片作为合集发送</i>\n' +
+        '<i>💡 转发其他频道的视频或图片相册给我</i>\n' +
+        '<i>(不支持图片视频混合上传)</i>'
+      await editMessage(chatId, messageId, uploadGuide, {
+        reply_markup: {
+          inline_keyboard: [[{ text: '⬅️ 返回首页', callback_data: 'back_home' }]]
+        }
+      })
+      return
+    }
+
     if (data === 'profile_help') {
       await answerCallbackQuery(callbackQueryId)
       await handleHelp(chatId, messageId)
