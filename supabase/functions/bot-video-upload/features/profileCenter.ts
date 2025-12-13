@@ -139,8 +139,15 @@ export async function handleInviteUnlock(chatId: number, messageId?: number) {
       `<i>💡 好友通过您的链接启动机器人即算邀请成功</i>\n\n` +
       `<i>💡 此解锁针对🔞的内容，推荐页内容无需解锁</i>`
 
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(
+      '送你专属邀请链接，解锁无限成人内容'
+    )}`
+
     const keyboard = {
-      inline_keyboard: [[{ text: '⬅️ 返回首页', callback_data: 'back_home' }]]
+      inline_keyboard: [
+        [{ text: '📤 分享给好友', url: shareUrl }],
+        [{ text: '⬅️ 返回首页', callback_data: 'back_home' }]
+      ]
     }
 
     if (messageId) {
