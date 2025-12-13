@@ -193,7 +193,7 @@ function showComments() {
   bus.emit(EVENT_KEY.OPEN_COMMENTS, props.item.aweme_id)
 }
 
-// 🎯 分享到 Telegram（只调用联系人选择器，不再复制兜底）
+// 🎯 分享到 Telegram（使用 switchInlineQuery 调起聊天选择器）
 function shareToTelegram() {
   if (!props.item?.aweme_id) {
     _notice('视频ID缺失，无法分享')
@@ -202,25 +202,13 @@ function shareToTelegram() {
 
   const numericId = baseStore.userinfo?.numeric_id
   const inviteSuffix = numericId ? `_i${numericId}` : ''
-  const shareText = `@tg_douyin_bot video_${props.item.aweme_id}${inviteSuffix}`
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareText)}&text=${encodeURIComponent(
-    shareText
-  )}`
+  const shareText = `video_${props.item.aweme_id}${inviteSuffix}`
   const tg = (window as any)?.Telegram?.WebApp
 
-  try {
-    if (tg?.shareMessage) {
-      tg.shareMessage(shareText).catch(() => {
-        _notice('请在 Telegram 客户端中重试分享')
-      })
-      return
-    }
-    if (tg?.openTelegramLink) {
-      tg.openTelegramLink(shareUrl)
-      return
-    }
-  } catch (error) {
-    console.error('[分享] 调用联系人失败:', error)
+  // 🎯 使用 switchInlineQuery 调起聊天选择器
+  if (tg?.switchInlineQuery) {
+    tg.switchInlineQuery(shareText, ['users', 'groups', 'channels'])
+    return
   }
 
   _notice('请在 Telegram 客户端中重试分享')

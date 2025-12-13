@@ -349,27 +349,15 @@ function copyInviteLink() {
   }
 }
 
-// 🎯 分享邀请链接（调用 TG 选择联系人）
+// 🎯 分享邀请链接（调用 TG switchInlineQuery 选择联系人）
 function shareInvite() {
   if (!inviteLink.value) return
-  const text = `送你专属邀请链接，解锁无限成人内容：${inviteLink.value}`
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink.value)}&text=${encodeURIComponent(
-    text
-  )}`
   const tg = (window as any)?.Telegram?.WebApp
-  try {
-    if (tg?.shareMessage) {
-      tg.shareMessage(text).catch(() => {
-        _notice('请在 Telegram 客户端中重试分享')
-      })
-      return
-    }
-    if (tg?.openTelegramLink) {
-      tg.openTelegramLink(shareUrl)
-      return
-    }
-  } catch (e) {
-    // ignore fallback
+  // 🎯 使用 switchInlineQuery 调起聊天选择器
+  if (tg?.switchInlineQuery) {
+    // 发送邀请链接作为 inline query，用户选择聊天后会发送
+    tg.switchInlineQuery(inviteLink.value, ['users', 'groups', 'channels'])
+    return
   }
   _notice('请在 Telegram 客户端中重试分享')
 }
