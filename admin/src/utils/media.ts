@@ -2,6 +2,10 @@
  * 媒体文件URL处理工具
  */
 
+// 期望配置为：
+// - https://douyin-videos.xxx.com            (推荐，会自动拼 /tg/<file_id>)
+// - https://douyin-videos.xxx.com/tg         (也支持)
+// - https://douyin-videos.xxx.com/?file_id=  (历史兼容)
 const CF_WORKER_URL = import.meta.env.VITE_TG_CDN_PROXY_URL || ''
 
 /**
@@ -30,7 +34,21 @@ export function buildCdnUrl(fileIdOrUrl: string): string {
     return ''
   }
 
-  return `${CF_WORKER_URL}?file_id=${encodeURIComponent(fileIdOrUrl)}`
+  const base = String(CF_WORKER_URL).replace(/\/$/, '')
+
+  // 兼容历史 query 形式：如果配置里本身带 ?，直接按 query 拼接
+  if (base.includes('?')) {
+    // 允许配置为 ...?file_id= 或 ...?x=1
+    const join = base.endsWith('?') || base.endsWith('&') ? '' : base.includes('=') ? '' : ''
+    const sep = base.includes('file_id=') ? '' : base.includes('?') ? '&' : '?'
+    return `${base}${join}${sep}file_id=${encodeURIComponent(fileIdOrUrl)}`
+  }
+
+  // 推荐：走 /tg/<file_id> 路径，方便按 Cloudflare Worker Routes 配置 /tg/*
+  if (base.endsWith('/tg')) {
+    return `${base}/${encodeURIComponent(fileIdOrUrl)}`
+  }
+  return `${base}/tg/${encodeURIComponent(fileIdOrUrl)}`
 }
 
 /**
