@@ -535,7 +535,10 @@ watch(
     if (props.currentItem.author.uid !== state.uid) {
       console.log('[UserPanel] UID 改变，重新加载视频')
       state.uid = props.currentItem.author.uid
-      emit('update:currentItem', Object.assign(props.currentItem, { aweme_list: [] }))
+      // ✅ 切换作者时重置分页状态，避免沿用上一位作者的 pageNo/total
+      state.videos.works.pageNo = 0
+      state.videos.works.total = -1
+      emit('update:currentItem', { ...props.currentItem, aweme_list: [] })
       await loadAuthorVideos()
     }
   }
@@ -715,6 +718,14 @@ async function loadAuthorInfo() {
 
 async function loadAuthorVideos() {
   try {
+    // ✅ 防止滚动到底部时并发触发导致重复追加
+    if (state.loadings.works) {
+      console.log('[UserPanel] loadAuthorVideos: loading中，跳过重复触发', {
+        pageNo: state.videos.works.pageNo
+      })
+      return
+    }
+
     console.log('[UserPanel] loadAuthorVideos 开始')
     console.log('[UserPanel] currentItem:', {
       hasAuthor: !!props.currentItem?.author,
@@ -740,7 +751,11 @@ async function loadAuthorVideos() {
 
     state.loadings.works = true // ✅ 开始加载
 
-    console.log('[UserPanel] 📡 调用 authorVideos API, authorId:', authorId)
+    console.log('[UserPanel] 📡 调用 authorVideos API', {
+      authorId,
+      pageNo: state.videos.works.pageNo,
+      pageSize: state.videos.works.pageSize
+    })
     // ✅ 分页加载作者作品
     const res = await authorVideos(authorId, {
       pageNo: state.videos.works.pageNo,
@@ -748,7 +763,11 @@ async function loadAuthorVideos() {
     })
     console.log('[UserPanel] API 响应:', {
       success: res?.success,
-      listLength: res?.data?.list?.length || 0
+      listLength: res?.data?.list?.length || 0,
+      firstIds: (res?.data?.list || [])
+        .slice(0, 5)
+        .map((v: any) => v?.aweme_id)
+        .filter(Boolean)
     })
 
     if (res?.success) {
@@ -761,7 +780,16 @@ async function loadAuthorVideos() {
       console.log('[UserPanel] ✅ 本次加载作品数量:', pageList.length)
 
       const existing = props.currentItem.aweme_list || []
-      const merged = state.videos.works.pageNo === 0 ? pageList : [...existing, ...pageList]
+      // ✅ 合并并去重（后端或并发重复返回时也能兜底）
+      const mergedRaw = state.videos.works.pageNo === 0 ? pageList : [...existing, ...pageList]
+      const seen = new Set<string>()
+      const merged = mergedRaw.filter((v: any) => {
+        const key = v?.aweme_id || v?.id
+        if (!key) return true
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
 
       console.log('[UserPanel] ✅ 合并后作品总数:', merged.length)
 
