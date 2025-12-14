@@ -16,9 +16,8 @@
               alt=""
               class="add"
             />
-            <span @click="followButton">{{
-              props.currentItem.author.follow_status ? '私信' : '关注'
-            }}</span>
+            <!-- ✅ 吸顶栏：仅在未关注时展示“关注”，已关注时不展示“私信”入口 -->
+            <span v-if="!props.currentItem.author.follow_status" @click="followButton">关注</span>
           </div>
         </transition>
       </div>
