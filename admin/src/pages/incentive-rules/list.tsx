@@ -1,5 +1,5 @@
 import { List, useTable } from '@refinedev/antd'
-import { Button, Form, Input, Select, Space, Switch, Table, Tag } from 'antd'
+import { Button, Form, Input, Select, Space, Table, Tag } from 'antd'
 import { useNavigate } from 'react-router-dom'
 
 const ruleTypeText: Record<string, { text: string; color: string }> = {
