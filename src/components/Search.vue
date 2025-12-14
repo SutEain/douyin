@@ -16,6 +16,8 @@
         @focus="$emit('focus', $event)"
         @blur="$emit('blur', $event)"
         @keydown.enter.prevent="$emit('notice')"
+        @keyup.enter="$emit('notice')"
+        @search="$emit('notice')"
       />
       <div class="suffix">
         <slot v-if="$slots.default"></slot>
@@ -144,6 +146,12 @@ export default {
       border: none;
       padding: 0 0 0 7rem;
       background: transparent;
+
+      // ✅ 避免 iOS/Safari 自带的清除按钮（type="search" 自带 cancel）
+      &::-webkit-search-cancel-button {
+        -webkit-appearance: none;
+        display: none;
+      }
 
       &::-webkit-input-placeholder {
         color: var(--second-text-color);
