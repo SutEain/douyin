@@ -12,7 +12,7 @@
               <span>编辑资料</span>
             </div>
             <div class="right">
-              <div class="item" @click.stop="_no">
+              <div class="item" @click.stop="$nav('/message/visitors')">
                 <Icon icon="eva:people-outline" />
               </div>
               <!-- ✅ 隐藏搜索按钮

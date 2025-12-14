@@ -24,13 +24,12 @@
       </div>
       <div class="right">
         <transition name="fade">
-          <div class="request" v-if="!state.floatFixed">
-            <img
-              @click="handleRequestUpdate"
-              src="@/assets/img/icon/me/finger-right.png"
-              alt=""
-              :style="state.loadings.requestUpdate ? 'opacity: .5;' : ''"
-            />
+          <div
+            class="request"
+            v-if="!state.floatFixed"
+            :style="state.loadings.requestUpdate ? 'pointer-events:none;opacity:.6;' : ''"
+          >
+            <img @click="handleRequestUpdate" src="@/assets/img/icon/me/finger-right.png" alt="" />
             <span @click="handleRequestUpdate">{{
               state.loadings.requestUpdate ? '发送中...' : '求更新'
             }}</span>
@@ -381,6 +380,7 @@ import {
   toggleFollowUser,
   getUserProfile,
   requestAuthorUpdate,
+  recordProfileVisit,
   likeVideo,
   collectedVideo
 } from '@/api/videos'
@@ -451,7 +451,10 @@ const state = reactive({
   canMoveMaxHeight: document.body.clientHeight / 4,
   //是否自动放大Cover
   isAutoScaleCover: false,
-  uid: null
+  uid: null,
+  // 🎯 本地防抖：避免同一作者短时间内重复上报访客
+  lastVisitAuthorId: '',
+  lastVisitAt: 0
 })
 
 // ✅ 本地响应式对象：存储作者统计数据（解决 API 更新延迟问题）
@@ -530,6 +533,28 @@ async function handleRequestUpdate() {
   }
 }
 
+// 🎯 进入别人主页时记录访客（后端会做 24h 去重 + 24h 通知限频）
+async function reportProfileVisit() {
+  try {
+    const authorId = props.currentItem?.author?.user_id
+    const myId = baseStore?.userinfo?.uid
+    if (!authorId || !myId) return
+    if (authorId === myId) return
+
+    const now = Date.now()
+    if (state.lastVisitAuthorId === authorId && now - (state.lastVisitAt || 0) < 2000) {
+      return
+    }
+    state.lastVisitAuthorId = authorId
+    state.lastVisitAt = now
+
+    console.log('[UserPanel] 👀 记录访客', { authorId })
+    await recordProfileVisit(authorId)
+  } catch (e) {
+    console.warn('[UserPanel] reportProfileVisit failed:', e)
+  }
+}
+
 // 🎯 固定tab列表
 const availableTabs = computed(() => ['作品', '喜欢', '收藏'])
 
@@ -549,6 +574,8 @@ watch(
 
       // ✅ 1. 先加载作者详细信息（名字、签名、统计数据等）
       await loadAuthorInfo()
+      // ✅ 记录访客（后端去重+限频）
+      await reportProfileVisit()
 
       // ✅ 2. 再加载作者视频列表
       if (!props.currentItem.aweme_list || !props.currentItem.aweme_list.length) {
@@ -575,6 +602,8 @@ watch(
     if (props.currentItem.author.uid !== state.uid) {
       console.log('[UserPanel] UID 改变，重新加载视频')
       state.uid = props.currentItem.author.uid
+      // ✅ 记录访客（切换到另一个作者）
+      await reportProfileVisit()
       // ✅ 切换作者时重置分页状态，避免沿用上一位作者的 pageNo/total
       state.videos.works.pageNo = 0
       state.videos.works.total = -1

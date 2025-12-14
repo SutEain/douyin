@@ -7,6 +7,7 @@ export type NotificationType =
   | 'follow'
   | 'new_post'
   | 'request_update'
+  | 'visit'
 
 export async function checkAndSendNotification(
   targetUserId: string,

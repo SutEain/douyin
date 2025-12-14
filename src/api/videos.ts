@@ -177,6 +177,34 @@ export async function requestAuthorUpdate(targetId: string) {
   }
 }
 
+// 🎯 记录主页访客（进入别人主页时调用）
+export async function recordProfileVisit(targetId: string) {
+  try {
+    const data = await callAppServer('/user/visit', {
+      method: 'POST',
+      body: { target_id: targetId }
+    })
+    return { success: true, data }
+  } catch (error: any) {
+    console.error('[recordProfileVisit] 请求失败:', error)
+    return { success: false, message: error?.message || '记录访客失败' }
+  }
+}
+
+// 🎯 获取我的访客列表
+export async function getMyVisitors(limit = 100) {
+  try {
+    const data = await callAppServer(`/user/visitors?limit=${encodeURIComponent(String(limit))}`, {
+      method: 'GET',
+      requireAuth: true
+    })
+    return { success: true, data: data?.list ?? [] }
+  } catch (error: any) {
+    console.error('[getMyVisitors] 请求失败:', error)
+    return { success: false, message: error?.message || '获取访客失败', data: [] }
+  }
+}
+
 // 获取指定用户的详细信息
 export async function getUserProfile(userId: string) {
   try {

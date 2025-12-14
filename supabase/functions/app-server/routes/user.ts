@@ -3,6 +3,189 @@ import { supabaseAdmin, DEFAULT_AVATAR } from '../lib/env.ts'
 import { checkAndSendNotification } from '../lib/notification.ts'
 import { HttpError, parseJsonBody, requireAuth, tryGetAuth } from '../lib/auth.ts'
 
+export async function handleVisitUserProfile(req: Request): Promise<Response> {
+  const { user, profile } = await requireAuth(req, { withProfile: true })
+  const body = await parseJsonBody<{ target_id?: string }>(req)
+  if (!body.target_id) {
+    throw new HttpError('Missing target_id', 400)
+  }
+  if (body.target_id === user.id) {
+    // 访问自己主页不记录
+    return successResponse({ recorded: false, reason: 'self' })
+  }
+
+  const visitorId = user.id
+  const visitedId = body.target_id
+  const nickname = profile.nickname || profile.username || '用户'
+
+  const now = new Date()
+  const nowIso = now.toISOString()
+  const cooldownMs = 24 * 3600 * 1000
+  const cutoffIso = new Date(now.getTime() - cooldownMs).toISOString()
+
+  console.log('[Visit] start', { visitorId, visitedId, nickname })
+
+  // ✅ 24h 去重：同一访客在 24h 内访问同一主页，只保留最新一条
+  const { error: delErr } = await supabaseAdmin
+    .from('profile_visits')
+    .delete()
+    .eq('visitor_id', visitorId)
+    .eq('visited_id', visitedId)
+    .gte('created_at', cutoffIso)
+
+  if (delErr) {
+    console.error('[Visit] delete recent visits failed:', delErr)
+  }
+
+  const { error: insErr } = await supabaseAdmin
+    .from('profile_visits')
+    .insert({ visitor_id: visitorId, visited_id: visitedId, created_at: nowIso })
+
+  if (insErr) {
+    console.error('[Visit] insert visit failed:', insErr)
+    return errorResponse('Failed to record visit', 1, 500)
+  }
+
+  // 🎯 通知限频：同一访客对同一主页 24h 仅一次
+  const { data: lastRow, error: lastErr } = await supabaseAdmin
+    .from('visit_notify_limits')
+    .select('last_sent_at')
+    .eq('visitor_id', visitorId)
+    .eq('visited_id', visitedId)
+    .maybeSingle()
+
+  if (lastErr) {
+    console.error('[Visit] query notify limit failed:', lastErr)
+  } else if (lastRow?.last_sent_at) {
+    const lastAt = new Date(lastRow.last_sent_at).getTime()
+    if (!Number.isNaN(lastAt) && now.getTime() - lastAt < cooldownMs) {
+      console.log('[Visit] notify cooldown hit', {
+        visitorId,
+        visitedId,
+        last_sent_at: lastRow.last_sent_at
+      })
+      return successResponse({ recorded: true, notified: false, reason: 'cooldown_24h' })
+    }
+  }
+
+  const { error: upsertErr } = await supabaseAdmin
+    .from('visit_notify_limits')
+    .upsert(
+      { visitor_id: visitorId, visited_id: visitedId, last_sent_at: nowIso, updated_at: nowIso },
+      { onConflict: 'visitor_id,visited_id' }
+    )
+
+  if (upsertErr) {
+    console.error('[Visit] upsert notify limit failed:', upsertErr)
+  }
+
+  // 尊重 notification_settings.visit
+  checkAndSendNotification(visitedId, 'visit', `👀 <b>${nickname}</b>查看了你的主页`, undefined)
+
+  return successResponse({ recorded: true, notified: true })
+}
+
+export async function handleGetMyVisitors(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+  const userId = user.id
+
+  const url = new URL(req.url)
+  const limit = Math.min(Number(url.searchParams.get('limit') || 100) || 100, 200)
+
+  // 先拉一批，再在代码里按 visitor_id 去重取最新（因为我们只保证 24h 内去重）
+  const { data: rows, error } = await supabaseAdmin
+    .from('profile_visits')
+    .select('visitor_id, created_at')
+    .eq('visited_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(300)
+
+  if (error) {
+    console.error('[Visitors] query profile_visits failed:', error)
+    return errorResponse('Failed to load visitors', 1, 500)
+  }
+
+  const deduped: Array<{ visitor_id: string; created_at: string }> = []
+  const seen = new Set<string>()
+  for (const r of rows || []) {
+    if (!r?.visitor_id || seen.has(r.visitor_id)) continue
+    seen.add(r.visitor_id)
+    deduped.push({ visitor_id: r.visitor_id, created_at: r.created_at })
+    if (deduped.length >= limit) break
+  }
+
+  const visitorIds = deduped.map((r) => r.visitor_id)
+  if (visitorIds.length === 0) {
+    return successResponse({ list: [] })
+  }
+
+  const { data: profiles, error: pErr } = await supabaseAdmin
+    .from('profiles')
+    .select('id, nickname, username, bio, avatar_url')
+    .in('id', visitorIds)
+
+  if (pErr) {
+    console.error('[Visitors] query visitor profiles failed:', pErr)
+    return errorResponse('Failed to load visitors', 1, 500)
+  }
+
+  const profileMap = new Map<string, any>()
+  for (const p of profiles || []) profileMap.set(p.id, p)
+
+  // 关系：我是否关注 TA / TA 是否关注我（分两次查，避免复杂 or 语法差异）
+  const iFollow = new Set<string>() // userId -> visitorId
+  const theyFollow = new Set<string>() // visitorId -> userId
+
+  const { data: rel1, error: relErr1 } = await supabaseAdmin
+    .from('follows')
+    .select('followee_id')
+    .eq('follower_id', userId)
+    .in('followee_id', visitorIds)
+
+  if (relErr1) {
+    console.error('[Visitors] query follows (iFollow) failed:', relErr1)
+  } else {
+    for (const r of rel1 || []) iFollow.add(r.followee_id)
+  }
+
+  const { data: rel2, error: relErr2 } = await supabaseAdmin
+    .from('follows')
+    .select('follower_id')
+    .eq('followee_id', userId)
+    .in('follower_id', visitorIds)
+
+  if (relErr2) {
+    console.error('[Visitors] query follows (theyFollow) failed:', relErr2)
+  } else {
+    for (const r of rel2 || []) theyFollow.add(r.follower_id)
+  }
+
+  const RELATE_ENUM = { FOLLOW_ME: 1, FOLLOW_EACH_OTHER: 2, FOLLOW_HE: 3 }
+
+  const list = deduped
+    .map((r) => {
+      const p = profileMap.get(r.visitor_id)
+      if (!p) return null
+      const i = iFollow.has(r.visitor_id)
+      const t = theyFollow.has(r.visitor_id)
+      // visitor 模式下：我已关注=已关注；互相关注=互相关注；否则统一显示“关注”按钮
+      const type =
+        i && t ? RELATE_ENUM.FOLLOW_EACH_OTHER : i ? RELATE_ENUM.FOLLOW_HE : RELATE_ENUM.FOLLOW_ME
+      return {
+        id: p.id,
+        name: p.nickname || p.username || '用户',
+        nickname: p.nickname || '',
+        signature: p.bio || '',
+        avatar_url: p.avatar_url || '',
+        visited_at: r.created_at,
+        type
+      }
+    })
+    .filter(Boolean)
+
+  return successResponse({ list })
+}
+
 export async function handleRequestUpdate(req: Request): Promise<Response> {
   const { user, profile } = await requireAuth(req, { withProfile: true })
   const body = await parseJsonBody<{ target_id?: string }>(req)

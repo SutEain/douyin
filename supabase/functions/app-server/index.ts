@@ -30,7 +30,9 @@ import {
   handleFollowUser,
   handleGetUserProfile,
   handleAutoInit,
-  handleRequestUpdate
+  handleRequestUpdate,
+  handleVisitUserProfile,
+  handleGetMyVisitors
 } from './routes/user.ts'
 import {
   handleSearchVideos,
@@ -120,6 +122,12 @@ serve(async (req) => {
     }
     if (route === '/user/request-update' && method === 'POST') {
       return handleRequestUpdate(req)
+    }
+    if (route === '/user/visit' && method === 'POST') {
+      return handleVisitUserProfile(req)
+    }
+    if (route === '/user/visitors' && method === 'GET') {
+      return handleGetMyVisitors(req)
     }
     if (route === '/user/profile' && method === 'GET') {
       return handleGetUserProfile(req)
