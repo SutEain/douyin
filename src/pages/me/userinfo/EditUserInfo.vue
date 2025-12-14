@@ -27,13 +27,6 @@
               <dy-back scale=".8" direction="right"></dy-back>
             </div>
           </div>
-          <div class="row" @click="nav('/me/edit-userinfo-item', { type: 2 })">
-            <div class="left">{{ $t('profile.douyinId') }}</div>
-            <div class="right">
-              <span>{{ isEmpty(_getUserDouyinId({ author: store.userinfo })) }}</span>
-              <dy-back scale=".8" direction="right"></dy-back>
-            </div>
-          </div>
           <div class="row" @click="nav('/me/edit-userinfo-item', { type: 3 })">
             <div class="left">{{ $t('profile.bio') }}</div>
             <div class="right">
@@ -94,14 +87,7 @@
 <script setup lang="ts">
 import MobileSelect from '../../../components/mobile-select/mobile-select'
 import { useBaseStore } from '@/store/pinia'
-import {
-  _checkImgUrl,
-  _getUserDouyinId,
-  _hideLoading,
-  _no,
-  _showLoading,
-  _showSelectDialog
-} from '@/utils'
+import { _checkImgUrl, _hideLoading, _no, _showLoading, _showSelectDialog } from '@/utils'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useNav } from '@/utils/hooks/useNav'
 import { useI18n } from 'vue-i18n'
