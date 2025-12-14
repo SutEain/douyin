@@ -334,7 +334,22 @@ export async function handleVideo(
       return
     }
 
+    // 🚫 单视频大小限制：最大 200 MiB
+    const MAX_VIDEO_BYTES = 200 * 1024 * 1024
     const videoSize = video.file_size || 0
+    if (videoSize > MAX_VIDEO_BYTES) {
+      const sizeMB = (videoSize / 1024 / 1024).toFixed(1)
+      console.log('[handleVideo] 视频超限，拒绝接收:', { chatId, sizeMB, file_id: video.file_id })
+      await sendMessage(
+        chatId,
+        `⚠️ <b>视频太大，无法接收</b>\n\n` +
+          `当前：${sizeMB} MiB\n` +
+          `限制：200 MiB\n\n` +
+          `请压缩后再发送（分辨率/码率调低即可）。`
+      )
+      return
+    }
+
     const sizeMB = (videoSize / 1024 / 1024).toFixed(1)
 
     console.log(`[handleVideo] 视频大小: ${sizeMB} MB, 准备转存 R2`)
