@@ -193,11 +193,31 @@ const publishDate = computed(() => {
       padding-right: 80rem; // ✅ 给按钮留出空间
     }
 
+    // ✅ 提升白色视频上的可读性：描述区域加渐变遮罩
+    .description-wrapper::before {
+      content: '';
+      position: absolute;
+      left: -16rem;
+      right: -16rem;
+      top: -24rem;
+      bottom: -12rem;
+      background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0.35) 45%,
+        rgba(0, 0, 0, 0.6) 100%
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+
     .description {
       font-size: 14rem;
       line-height: 1.4;
       white-space: pre-line;
       word-break: break-word;
+      position: relative;
+      z-index: 1;
 
       &.collapsed {
         display: -webkit-box;
