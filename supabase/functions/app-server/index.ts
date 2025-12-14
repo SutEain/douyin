@@ -26,7 +26,12 @@ import {
   handleCommentLike,
   handleCommentReplies
 } from './routes/comments.ts'
-import { handleFollowUser, handleGetUserProfile, handleAutoInit } from './routes/user.ts'
+import {
+  handleFollowUser,
+  handleGetUserProfile,
+  handleAutoInit,
+  handleRequestUpdate
+} from './routes/user.ts'
 import {
   handleSearchVideos,
   handleSearchAdultVideos,
@@ -112,6 +117,9 @@ serve(async (req) => {
     }
     if (route === '/user/follow' && method === 'POST') {
       return handleFollowUser(req)
+    }
+    if (route === '/user/request-update' && method === 'POST') {
+      return handleRequestUpdate(req)
     }
     if (route === '/user/profile' && method === 'GET') {
       return handleGetUserProfile(req)

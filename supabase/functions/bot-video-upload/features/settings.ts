@@ -7,7 +7,8 @@ const DEFAULT_NOTIFICATION_SETTINGS = {
   comment: { mute_until: 0 },
   collect: { mute_until: 0 },
   follow: { mute_until: 0 },
-  new_post: { mute_until: 0 } // 🎯 关注的人发布新作品
+  new_post: { mute_until: 0 }, // 🎯 关注的人发布新作品
+  request_update: { mute_until: 0 } // 🎯 粉丝“求更新”提醒
 }
 
 async function getUserSettings(chatId: number) {
@@ -36,6 +37,10 @@ async function getUserSettings(chatId: number) {
     new_post: {
       ...DEFAULT_NOTIFICATION_SETTINGS.new_post,
       ...(data.notification_settings?.new_post || {})
+    },
+    request_update: {
+      ...DEFAULT_NOTIFICATION_SETTINGS.request_update,
+      ...(data.notification_settings?.request_update || {})
     }
   }
 }
@@ -70,6 +75,12 @@ function getSettingsKeyboard(settings: any) {
       ],
       [
         {
+          text: `🫵 求更新: ${getStatus('request_update')}`,
+          callback_data: 'settings:menu:request_update'
+        }
+      ],
+      [
+        {
           text: `🎬 关注博主的新作品: ${getStatus('new_post')}`,
           callback_data: 'settings:menu:new_post'
         }
@@ -85,7 +96,8 @@ function getSubMenuKeyboard(type: string) {
     comment: '💬 评论',
     collect: '⭐ 收藏',
     follow: '➕ 关注',
-    new_post: '🎬 新作品'
+    new_post: '🎬 新作品',
+    request_update: '🫵 求更新'
   }
 
   return {

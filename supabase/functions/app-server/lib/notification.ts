@@ -1,6 +1,12 @@
 import { supabaseAdmin, TG_BOT_TOKEN } from './env.ts'
 
-export type NotificationType = 'like' | 'comment' | 'collect' | 'follow' | 'new_post'
+export type NotificationType =
+  | 'like'
+  | 'comment'
+  | 'collect'
+  | 'follow'
+  | 'new_post'
+  | 'request_update'
 
 export async function checkAndSendNotification(
   targetUserId: string,

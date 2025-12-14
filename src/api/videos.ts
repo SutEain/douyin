@@ -163,6 +163,20 @@ export async function toggleFollowUser(targetId: string, follow: boolean) {
   })
 }
 
+// 🎯 求更新：提醒作者更新作品（Bot 私信），同一用户对同一作者 24h 仅一次（后端限制）
+export async function requestAuthorUpdate(targetId: string) {
+  try {
+    const data = await callAppServer('/user/request-update', {
+      method: 'POST',
+      body: { target_id: targetId }
+    })
+    return { success: true, data }
+  } catch (error: any) {
+    console.error('[requestAuthorUpdate] 请求失败:', error)
+    return { success: false, message: error?.message || '求更新失败' }
+  }
+}
+
 // 获取指定用户的详细信息
 export async function getUserProfile(userId: string) {
   try {

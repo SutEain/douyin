@@ -25,8 +25,15 @@
       <div class="right">
         <transition name="fade">
           <div class="request" v-if="!state.floatFixed">
-            <img @click="_no" src="@/assets/img/icon/me/finger-right.png" alt="" />
-            <span>求更新</span>
+            <img
+              @click="handleRequestUpdate"
+              src="@/assets/img/icon/me/finger-right.png"
+              alt=""
+              :style="state.loadings.requestUpdate ? 'opacity: .5;' : ''"
+            />
+            <span @click="handleRequestUpdate">{{
+              state.loadings.requestUpdate ? '发送中...' : '求更新'
+            }}</span>
           </div>
         </transition>
         <!-- ✅ 隐藏搜索和三个点按钮
@@ -356,6 +363,7 @@ import {
   _copy,
   _formatNumber,
   _getUserDouyinId,
+  _notice,
   _no,
   _stopPropagation
 } from '@/utils'
@@ -372,6 +380,7 @@ import {
   authorVideos,
   toggleFollowUser,
   getUserProfile,
+  requestAuthorUpdate,
   likeVideo,
   collectedVideo
 } from '@/api/videos'
@@ -430,7 +439,8 @@ const state = reactive({
     profile: false, // ✅ 加载用户信息 loading
     works: false, // ✅ 加载作品列表 loading
     like: false, // 🎯 加载喜欢列表 loading
-    collect: false // 🎯 加载收藏列表 loading
+    collect: false, // 🎯 加载收藏列表 loading
+    requestUpdate: false // 🎯 求更新 loading
   },
   acceleration: 1.2,
   start: { x: 0, y: 0, time: 0 },
@@ -489,6 +499,36 @@ const isCollectPublic = computed(() => {
   const author = props.currentItem?.author
   return author?.show_collect !== false
 })
+
+async function handleRequestUpdate() {
+  try {
+    const authorId = props.currentItem?.author?.user_id
+    if (!authorId) {
+      console.log('[UserPanel] ❌ authorId 不存在，无法求更新')
+      _notice('作者ID缺失，稍后重试')
+      return
+    }
+    if (state.loadings.requestUpdate) return
+    state.loadings.requestUpdate = true
+
+    console.log('[UserPanel] 🫵 求更新', { authorId })
+    const res = await requestAuthorUpdate(authorId)
+    if (!res?.success) {
+      _notice(res?.message || '求更新失败')
+      return
+    }
+    if (res?.data?.sent === false) {
+      _notice('已提醒过一次，24小时后再来吧')
+      return
+    }
+    _notice('已通知作者更新作品')
+  } catch (e) {
+    console.error('[UserPanel] handleRequestUpdate error:', e)
+    _notice('求更新失败，请稍后重试')
+  } finally {
+    state.loadings.requestUpdate = false
+  }
+}
 
 // 🎯 固定tab列表
 const availableTabs = computed(() => ['作品', '喜欢', '收藏'])

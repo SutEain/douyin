@@ -3,6 +3,80 @@ import { supabaseAdmin, DEFAULT_AVATAR } from '../lib/env.ts'
 import { checkAndSendNotification } from '../lib/notification.ts'
 import { HttpError, parseJsonBody, requireAuth, tryGetAuth } from '../lib/auth.ts'
 
+export async function handleRequestUpdate(req: Request): Promise<Response> {
+  const { user, profile } = await requireAuth(req, { withProfile: true })
+  const body = await parseJsonBody<{ target_id?: string }>(req)
+  if (!body.target_id) {
+    throw new HttpError('Missing target_id', 400)
+  }
+  if (body.target_id === user.id) {
+    throw new HttpError('不能对自己求更新', 400)
+  }
+
+  const requesterId = user.id
+  const targetId = body.target_id
+  const nickname = profile.nickname || profile.username || '用户'
+
+  console.log('[RequestUpdate] start', { requesterId, targetId, nickname })
+
+  // 🎯 24h 限频：同一用户对同一作者，24小时内只能提醒一次
+  const now = new Date()
+  const nowIso = now.toISOString()
+  const cooldownMs = 24 * 3600 * 1000
+  const cutoff = new Date(now.getTime() - cooldownMs).toISOString()
+
+  const { data: lastRow, error: lastErr } = await supabaseAdmin
+    .from('request_update_limits')
+    .select('last_sent_at')
+    .eq('requester_id', requesterId)
+    .eq('target_id', targetId)
+    .maybeSingle()
+
+  if (lastErr) {
+    console.error('[RequestUpdate] query limit failed:', lastErr)
+    // 不因为限频查询失败而阻断（但会继续发通知，可能导致重复）
+  } else if (lastRow?.last_sent_at) {
+    const lastAt = new Date(lastRow.last_sent_at).getTime()
+    if (!Number.isNaN(lastAt) && now.getTime() - lastAt < cooldownMs) {
+      console.log('[RequestUpdate] cooldown hit', {
+        requesterId,
+        targetId,
+        last_sent_at: lastRow.last_sent_at
+      })
+      return successResponse({
+        sent: false,
+        reason: 'cooldown_24h'
+      })
+    }
+  }
+
+  // 先写入限频表（避免并发双击导致多发）
+  const { error: upsertErr } = await supabaseAdmin.from('request_update_limits').upsert(
+    {
+      requester_id: requesterId,
+      target_id: targetId,
+      last_sent_at: nowIso,
+      updated_at: nowIso
+    },
+    { onConflict: 'requester_id,target_id' }
+  )
+
+  if (upsertErr) {
+    console.error('[RequestUpdate] upsert limit failed:', upsertErr)
+    // 不阻断发送，但会失去限频效果
+  }
+
+  // 发送通知（尊重 notification_settings.request_update）
+  checkAndSendNotification(
+    targetId,
+    'request_update',
+    `🫵 <b>${nickname}</b>希望你快点更新作品`,
+    undefined
+  )
+
+  return successResponse({ sent: true })
+}
+
 export async function handleFollowUser(req: Request): Promise<Response> {
   const { user, profile } = await requireAuth(req, { withProfile: true })
   const body = await parseJsonBody<{ target_id?: string; follow?: boolean }>(req)

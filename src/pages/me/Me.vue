@@ -13,9 +13,6 @@
             </div>
             <div class="right">
               <div class="item" @click.stop="_no">
-                <Icon class="finger" icon="fluent-emoji-high-contrast:middle-finger" />
-              </div>
-              <div class="item" @click.stop="_no">
                 <Icon icon="eva:people-outline" />
               </div>
               <!-- ✅ 隐藏搜索按钮
