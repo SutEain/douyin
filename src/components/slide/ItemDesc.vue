@@ -197,8 +197,9 @@ const publishDate = computed(() => {
     .description-wrapper::before {
       content: '';
       position: absolute;
-      left: -16rem;
-      right: -16rem;
+      width: 100vw;
+      left: 50%;
+      transform: translateX(-50%);
       top: -24rem;
       bottom: -12rem;
       background: linear-gradient(
