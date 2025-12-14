@@ -325,7 +325,7 @@ function finishSwipe() {
 // 🎯 查看高清按钮
 .hd-tip {
   position: absolute;
-  bottom: 160px;
+  bottom: 200px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(255, 255, 255, 0.15);
@@ -337,7 +337,7 @@ function finishSwipe() {
   display: flex;
   align-items: center;
   gap: 6px;
-  z-index: 10;
+  z-index: 80;
   color: white;
   font-size: 14px;
   cursor: pointer;

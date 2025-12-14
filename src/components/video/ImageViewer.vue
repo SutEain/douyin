@@ -156,7 +156,7 @@ function onImageError() {
 // 🎯 查看高清按钮
 .hd-tip {
   position: absolute;
-  bottom: 120px;
+  bottom: 160px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(255, 255, 255, 0.15);
@@ -168,7 +168,7 @@ function onImageError() {
   display: flex;
   align-items: center;
   gap: 6px;
-  z-index: 10;
+  z-index: 80;
   color: white;
   font-size: 14px;
   cursor: pointer;
