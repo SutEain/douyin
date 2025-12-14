@@ -53,6 +53,26 @@ const fullDescription = computed(() => {
 })
 
 const showToggle = computed(() => fullDescription.value.length > 100)
+
+function formatBeijingDate(date: Date) {
+  // 输出 YYYY-MM-DD（北京时间）
+  const s = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date)
+  // zh-CN 通常是 YYYY/MM/DD，这里统一为 YYYY-MM-DD
+  return s.replace(/\//g, '-')
+}
+
+const publishDate = computed(() => {
+  const t = Number(currentItem.value?.create_time)
+  if (!Number.isFinite(t) || t <= 0) return ''
+  // create_time 既可能是秒，也可能是毫秒
+  const ms = t < 1e12 ? t * 1000 : t
+  return formatBeijingDate(new Date(ms))
+})
 </script>
 <template>
   <div class="item-desc ml1r mb1r">
@@ -71,6 +91,7 @@ const showToggle = computed(() => fullDescription.value.length > 100)
       <div class="name mb1r f18 fb" @click.stop="$emit('goUserInfo')">
         @{{ item?.author?.nickname }}
       </div>
+      <div v-if="publishDate" class="publish-date">发布于 {{ publishDate }}</div>
       <div class="description-wrapper" v-if="fullDescription">
         <div class="description" :class="{ collapsed: !state.expanded && showToggle }">
           {{ fullDescription }}
@@ -121,6 +142,13 @@ const showToggle = computed(() => fullDescription.value.length > 100)
   .content {
     color: #fff;
     text-align: left;
+
+    .publish-date {
+      font-size: 12rem;
+      color: rgba(255, 255, 255, 0.65);
+      margin-top: -6rem;
+      margin-bottom: 8rem;
+    }
 
     .location-wrapper {
       display: flex;
