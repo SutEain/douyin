@@ -419,12 +419,33 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
   if (!isNewUser) {
     const avatarUrl = user.photo_url || existingProfile!.avatar_url
 
+    // ✅ 重要：不要用 Telegram initData 覆盖用户在 App 内编辑过的资料
+    // 仅在数据库字段为空时，才用 Telegram 信息补齐
+    const nextNickname =
+      existingProfile!.nickname && String(existingProfile!.nickname).trim().length > 0
+        ? undefined
+        : user.first_name + (user.last_name ? ` ${user.last_name}` : '')
+
+    const nextUsername =
+      existingProfile!.username && String(existingProfile!.username).trim().length > 0
+        ? undefined
+        : user.username || `user_${user.id}`
+
+    console.log('[app-server] Profile 已存在，准备更新字段（不会覆盖用户编辑字段）:', {
+      userId,
+      tg_user_id: user.id,
+      willUpdateNickname: !!nextNickname,
+      willUpdateUsername: !!nextUsername,
+      willUpdateAvatar: !!avatarUrl,
+      willUpdateLang: !!user.language_code
+    })
+
     await supabaseAdmin
       .from('profiles')
       .update({
-        tg_username: user.username || existingProfile!.username || null,
-        nickname: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
-        username: user.username || existingProfile!.username || `user_${user.id}`,
+        tg_username: user.username || null,
+        nickname: nextNickname,
+        username: nextUsername,
         avatar_url: avatarUrl,
         lang: user.language_code || existingProfile!.lang,
         last_active_at: new Date().toISOString()
