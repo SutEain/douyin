@@ -1,8 +1,8 @@
 import { List, useTable } from '@refinedev/antd'
 import { Table, Space, Tag, Button, Modal, Input, Select, Form, message } from 'antd'
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useUpdate, useDelete } from '@refinedev/core'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   EyeOutlined,
   EditOutlined,
@@ -43,6 +43,7 @@ const reviewStatusMap: Record<string, { text: string; color: string }> = {
 
 export const VideoList = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const [rejectModalVisible, setRejectModalVisible] = useState(false)
   const [previewModalVisible, setPreviewModalVisible] = useState(false)
   const [descriptionModalVisible, setDescriptionModalVisible] = useState(false)
@@ -63,6 +64,24 @@ export const VideoList = () => {
   const [previewContentType, setPreviewContentType] = useState<'video' | 'image' | 'album'>('video')
   const [previewImages, setPreviewImages] = useState<string[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+
+  // ✅ 强制默认“时间倒序”（最近发布在最前）
+  // 说明：useTable 的 initial sorter 会被 URL（syncWithLocation）中的 sorters 覆盖；
+  // 如果用户曾点击过表头导致 URL 里保存了“正序”，这里会清掉 sorters，让 initial 生效。
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    let changed = false
+    for (const key of Array.from(params.keys())) {
+      if (key.startsWith('sorters')) {
+        params.delete(key)
+        changed = true
+      }
+    }
+    if (changed) {
+      const next = params.toString()
+      navigate(`${location.pathname}${next ? `?${next}` : ''}`, { replace: true })
+    }
+  }, [location.pathname, location.search, navigate])
 
   const { tableProps, searchFormProps } = useTable({
     resource: 'videos',
