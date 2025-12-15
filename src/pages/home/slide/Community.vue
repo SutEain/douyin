@@ -171,7 +171,8 @@ function showDetail(e, item) {
 
   let s = document.querySelector('.shadow')
 
-  _css(s, 'z-index', '1')
+  // ✅ 盖住首页顶部 Tab（IndicatorHome），避免详情页顶部还露出 tab
+  _css(s, 'z-index', '9999')
   _css(s, 'transition', 'all 0s')
   _css(s, 'top', domRect.top)
   _css(s, 'left', domRect.left)
@@ -222,7 +223,7 @@ function showDetail(e, item) {
   font-size: 14rem;
   color: white;
   padding-top: var(--home-header-height);
-  background: rgb(21, 23, 36);
+  background: #000;
 
   .Scroll {
     height: calc(
@@ -295,7 +296,8 @@ function showDetail(e, item) {
 
 .shadow {
   background: var(--color-message);
-  position: absolute;
+  // ✅ fixed：确保打开详情页时能覆盖整个 viewport（不受父容器影响）
+  position: fixed;
   left: 0;
   top: -200vh;
   width: 100%;

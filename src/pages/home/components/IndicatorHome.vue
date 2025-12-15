@@ -249,13 +249,15 @@ export default {
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
-      width: 75%;
+      // ✅ 收紧 Tab 占用宽度，给右侧搜索按钮留空间
+      width: 68%;
 
       .tabs {
         display: flex;
         justify-content: center;
         align-items: center;
-        gap: 30rem;
+        // ✅ Tab 间距小一点，避免侵占搜索按钮区域
+        gap: 18rem;
 
         .tab {
           transition: color 0.3s;
