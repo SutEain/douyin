@@ -72,7 +72,10 @@ export const VideoList = () => {
     },
     sorters: {
       initial: [
-        { field: 'created_at', order: 'desc' } // 按创建时间倒序
+        // ✅ 默认按发布时间倒序（更符合“视频管理”）
+        // 如果未发布导致 published_at 为空，则其次按创建时间倒序
+        { field: 'published_at', order: 'desc' },
+        { field: 'created_at', order: 'desc' }
       ]
     },
     onSearch: (params: Record<string, any>) => {
