@@ -301,6 +301,14 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
 }
 
 /**
+ * 图文 Tab：只返回 content_type in ('image','album') 且 is_shortdrama = false 且 is_adult = false 的已发布作品，按发布时间倒序
+ * GET /video/graphic-feed?pageNo=&pageSize=
+ *
+ * 说明：
+ * - 🎯 单独接口，不与 feed 流复用
+ * - 允许未登录访问；如已登录则附加 like/collect/follow 等标记
+ */
+/**
  * 成人内容流：只返回 is_adult = true 的已发布视频，按时间倒序
  * GET /video/adult-feed?pageNo=&pageSize=
  */

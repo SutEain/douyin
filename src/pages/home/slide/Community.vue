@@ -2,20 +2,13 @@
   <div id="Community" @dragstart="(e) => _stopPropagation(e)">
     <ScrollList class="Scroll" v-if="state.show" :api="recommendedPost">
       <template v-slot="{ list }">
-        <div class="search" @click="nav('/home/search')">
-          <div class="left">
-            <Icon class="icon" icon="ion:search" @click.stop="_no" />
-            <span>壁纸</span>
-          </div>
-          <div class="right">搜索</div>
-        </div>
-        <WaterfallList :list="list" class="list">
+        <WaterfallList :list="mergeOverrides(list)" class="list">
           <template v-slot="{ item }">
             <div class="card" @click="(e) => showDetail(e, item)">
               <img class="poster" v-lazy="_checkImgUrl(item.note_card?.cover?.url_default)" />
               <div class="bottom">
                 <div class="title">
-                  {{ item.note_card?.display_title }}
+                  {{ truncateTitle(item.note_card?.display_title) }}
                 </div>
                 <div class="b2">
                   <div class="user">
@@ -23,7 +16,7 @@
                     <div class="name">{{ item.note_card?.user?.nickname }}</div>
                   </div>
                   <div class="star">
-                    <Icon icon="solar:heart-linear" />
+                    <Icon :icon="item.isLoved ? 'solar:heart-bold' : 'solar:heart-linear'" />
                     <div class="num">
                       {{ item.note_card?.interact_info?.liked_count }}
                     </div>
@@ -39,7 +32,7 @@
     <teleport to="body">
       <div class="shadow">
         <div class="wrap"></div>
-        <AlbumDetail :detail="state.current" @close="close" />
+        <AlbumDetail :detail="state.current" @close="close" @update="handleDetailUpdate" />
       </div>
     </teleport>
   </div>
@@ -47,17 +40,14 @@
 
 <script setup>
 import { reactive, ref, watch } from 'vue'
-import { _checkImgUrl, _no, _stopPropagation, cloneDeep } from '@/utils'
+import { _checkImgUrl, _stopPropagation, cloneDeep } from '@/utils'
 import { recommendedPost } from '@/api/user'
-import { useNav } from '@/utils/hooks/useNav'
 import WaterfallList from '@/components/WaterfallList.vue'
 import ScrollList from '@/components/ScrollList.vue'
 import { useBaseStore } from '@/store/pinia'
 import AlbumDetail from '@/pages/other/AlbumDetail.vue'
-import Mock from 'mockjs'
 import { _css } from '@/utils/dom'
 
-const nav = useNav()
 const baseStore = useBaseStore()
 const props = defineProps({
   active: {
@@ -68,6 +58,7 @@ const props = defineProps({
 
 const state = reactive({
   show: false,
+  overrides: {},
   current: {
     id: '',
     note_card: {
@@ -93,6 +84,50 @@ watch(
   },
   { immediate: true }
 )
+
+function truncateTitle(text) {
+  const s = String(text || '')
+  if (s.length <= 60) return s
+  return s.slice(0, 60) + '…'
+}
+
+function applyPatchToItem(item, patch) {
+  if (!patch) return item
+  const next = {
+    ...item,
+    ...patch,
+    note_card: {
+      ...(item?.note_card || {}),
+      ...(patch?.note_card || {}),
+      interact_info: {
+        ...((item?.note_card || {})?.interact_info || {}),
+        ...((patch?.note_card || {})?.interact_info || {})
+      }
+    }
+  }
+  return next
+}
+
+function mergeOverrides(list) {
+  const arr = Array.isArray(list) ? list : []
+  return arr.map((item) => {
+    const id = item?.id || item?.note_card?.aweme_id
+    const patch = id ? state.overrides[String(id)] : null
+    return patch ? applyPatchToItem(item, patch) : item
+  })
+}
+
+function handleDetailUpdate(patch) {
+  const id = patch?.id || patch?.note_card?.aweme_id
+  if (!id) return
+  state.overrides[String(id)] = patch
+  // 同步当前打开的详情数据（避免关闭后再打开状态又回退）
+  const currentId = state.current?.id || state.current?.note_card?.aweme_id
+  if (String(currentId || '') === String(id)) {
+    state.current = applyPatchToItem(state.current, patch)
+  }
+  console.log('[Community] synced detail update to list:', { id, patch })
+}
 
 function close() {
   let s = document.querySelector('.shadow ')
@@ -125,18 +160,7 @@ function close() {
 }
 
 function showDetail(e, item) {
-  let data = Mock.mock({
-    'comment_list|3-50': [
-      {
-        name: '@cname',
-        text: '@cparagraph(3)'
-      }
-    ]
-  })
-  item.note_card.comment_list = data.comment_list
-  item.note_card.createTime = Mock.Random.date('MM-dd')
-  item.note_card.interact_info.collect_count = Mock.Random.integer(60, 3000)
-  item.note_card.interact_info.share_count = Mock.Random.integer(60, 3000)
+  // ✅ 不再使用 Mock 数据，直接使用接口返回结构
   state.current = cloneDeep(item)
   // console.log(state.current)
 
@@ -207,31 +231,6 @@ function showDetail(e, item) {
   }
 
   @p: 1rem;
-
-  .search {
-    margin-left: 2%;
-    width: 96%;
-    box-sizing: border-box;
-    padding: 10rem;
-    border: 1px solid #646464;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 16rem;
-    margin-bottom: 10rem;
-    border-radius: 8rem;
-
-    .left {
-      display: flex;
-      align-items: center;
-      gap: 5rem;
-      color: gray;
-
-      svg {
-        font-size: 16rem;
-      }
-    }
-  }
 
   .list {
     margin-left: 2%;

@@ -44,6 +44,7 @@ import {
   handleGetSearchHistory,
   handleDeleteSearchHistory
 } from './routes/search.ts'
+import { handlePostRecommended } from './routes/post.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -163,6 +164,11 @@ serve(async (req) => {
     }
     if (route === '/search/history' && method === 'DELETE') {
       return handleDeleteSearchHistory(req)
+    }
+
+    // 🧩 图文（壁纸）推荐
+    if (route === '/post/recommended' && method === 'GET') {
+      return handlePostRecommended(req)
     }
 
     return errorResponse('Not found', 1, 404)

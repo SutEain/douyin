@@ -352,11 +352,7 @@ function onAvatarError(e) {
           user-select: none;
         }
 
-        .option.speed .speed-item.active {
-          background: rgba(255, 255, 255, 0.15);
-          color: #fff;
-          font-weight: 600;
-        }
+        /* ✅ 去掉 active 高亮：当前倍速已在按钮文字显示 */
 
         img {
           width: 20rem;

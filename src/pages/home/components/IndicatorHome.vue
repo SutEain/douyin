@@ -11,23 +11,28 @@
             <span>视频</span>
           </div>
 
-          <!-- 短剧 Tab -->
+          <!-- 图文 Tab -->
           <div class="tab" :class="{ active: index === 1 }" @click.stop="change(1)">
+            <span>图文</span>
+          </div>
+
+          <!-- 短剧 Tab -->
+          <div class="tab" :class="{ active: index === 2 }" @click.stop="change(2)">
             <span>短剧</span>
           </div>
 
           <!-- 成人内容 Tab -->
-          <div class="tab" :class="{ active: index === 2 }" @click.stop="change(2)">
+          <div class="tab" :class="{ active: index === 3 }" @click.stop="change(3)">
             <span>成人</span>
           </div>
 
           <!-- 关注 - 可点击 -->
-          <div class="tab" :class="{ active: index === 3 }" @click.stop="change(3)">
+          <div class="tab" :class="{ active: index === 4 }" @click.stop="change(4)">
             <span>{{ $t('home.following') }}</span>
           </div>
 
           <!-- 推荐 -->
-          <div class="tab" :class="{ active: index === 4 }" @click.stop="change(4)">
+          <div class="tab" :class="{ active: index === 5 }" @click.stop="change(5)">
             <span>{{ $t('home.recommended') }}</span>
           </div>
         </div>

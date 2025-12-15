@@ -472,12 +472,6 @@ const vClick = useClick()
       border-radius: 8px;
       cursor: pointer;
       user-select: none;
-
-      &.active {
-        background: rgba(255, 255, 255, 0.15);
-        color: #fff;
-        font-weight: 600;
-      }
     }
   }
 
