@@ -3,13 +3,7 @@ import { Table, Space, Tag, Button, Modal, Input, Select, Form, message } from '
 import { useEffect, useState, useRef } from 'react'
 import { useUpdate, useDelete } from '@refinedev/core'
 import { useLocation, useNavigate } from 'react-router-dom'
-import {
-  EyeOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  LeftOutlined,
-  RightOutlined
-} from '@ant-design/icons'
+import { EditOutlined, DeleteOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
@@ -478,10 +472,8 @@ export const VideoList = () => {
   const handleToggleAdult = (record: any) => {
     const newIsAdult = !record.is_adult
     Modal.confirm({
-      title: newIsAdult ? '标记为成人内容' : '取消成人标记',
-      content: newIsAdult
-        ? '确定将该内容标记为成人内容（🔞）吗？\n标记后将只会出现在成人相关的列表/频道中。'
-        : '确定要取消该内容的成人标记吗？',
+      title: newIsAdult ? '确认标记成人' : '确认取消成人',
+      content: newIsAdult ? '确定将该内容标记为成人吗？' : '确定要取消该内容的成人标记吗？',
       onOk: () => {
         updateVideo(
           {
@@ -494,6 +486,35 @@ export const VideoList = () => {
           {
             onSuccess: () => {
               message.success(newIsAdult ? '已标记为成人内容' : '已取消成人标记')
+            },
+            onError: (error) => {
+              const err = error as { message?: string }
+              message.error('操作失败：' + (err?.message || '未知错误'))
+            }
+          }
+        )
+      }
+    })
+  }
+
+  // 🎯 切换短剧标记
+  const handleToggleShortDrama = (record: any) => {
+    const newValue = !record.is_shortdrama
+    Modal.confirm({
+      title: newValue ? '确认标记短剧' : '确认取消短剧',
+      content: newValue ? '确定将该作品标记为短剧吗？' : '确定要取消该作品的短剧标记吗？',
+      onOk: () => {
+        updateVideo(
+          {
+            resource: 'videos',
+            id: record.id,
+            values: {
+              is_shortdrama: newValue
+            }
+          },
+          {
+            onSuccess: () => {
+              message.success(newValue ? '已标记为短剧' : '已取消短剧')
             },
             onError: (error) => {
               const err = error as { message?: string }
@@ -668,7 +689,17 @@ export const VideoList = () => {
                   <img
                     src={coverUrl}
                     alt="封面"
-                    style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 4 }}
+                    style={{
+                      width: 80,
+                      height: 80,
+                      objectFit: 'cover',
+                      borderRadius: 4,
+                      cursor: 'pointer'
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handlePreview(record)
+                    }}
                     onError={(e) => {
                       ;(e.target as HTMLImageElement).src =
                         'https://via.placeholder.com/80x80?text=No+Image'
@@ -891,16 +922,6 @@ export const VideoList = () => {
             fixed="right"
             render={(_, record: any) => (
               <Space size="small">
-                {/* 预览按钮 */}
-                <Button
-                  type="default"
-                  size="small"
-                  icon={<EyeOutlined />}
-                  onClick={() => handlePreview(record)}
-                >
-                  预览
-                </Button>
-
                 {/* 审核按钮（草稿状态不显示） */}
                 {shouldShowReviewButtons(record) && (
                   <>
@@ -934,8 +955,24 @@ export const VideoList = () => {
                   size="small"
                   onClick={() => handleToggleAdult(record)}
                 >
-                  {record.is_adult ? '取消成人' : '标记成人'}
+                  {record.is_adult ? '取消' : '成人'}
                 </Button>
+
+                {/* 短剧标记按钮：仅视频类型显示 */}
+                {record.content_type === 'video' && (
+                  <Button
+                    type={record.is_shortdrama ? 'primary' : 'default'}
+                    size="small"
+                    onClick={() => handleToggleShortDrama(record)}
+                    style={
+                      record.is_shortdrama
+                        ? { background: '#722ed1', borderColor: '#722ed1', color: '#fff' }
+                        : { borderColor: '#722ed1', color: '#722ed1' }
+                    }
+                  >
+                    {record.is_shortdrama ? '取消' : '短剧'}
+                  </Button>
+                )}
 
                 <Button
                   type="default"

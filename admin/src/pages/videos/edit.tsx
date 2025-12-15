@@ -136,15 +136,24 @@ export const VideoEdit = () => {
     <Edit saveButtonProps={saveButtonProps} isLoading={isLoading}>
       <Form
         {...formProps}
+        form={form}
         layout="vertical"
         onFinish={(values: FormValues) => {
           // 🔧 将标签从自由文本转换为数组（用空格分隔）
-          const tagsString = (values.tags || '') as string
-          const tagsArray =
-            tagsString
-              .trim()
-              .split(/\s+/)
-              .filter((t) => !!t) || []
+          console.log('[VideoEdit] submit tags:', {
+            type: typeof values.tags,
+            value: values.tags
+          })
+          const raw =
+            typeof values.tags === 'string'
+              ? values.tags
+              : Array.isArray(values.tags)
+                ? values.tags.join(' ')
+                : ''
+          const tagsArray = raw
+            .trim()
+            .split(/\s+/)
+            .filter((t) => !!t)
 
           const payload = {
             ...values,
@@ -193,7 +202,7 @@ export const VideoEdit = () => {
           <Input.TextArea rows={3} placeholder="如果审核状态为已拒绝，请填写拒绝理由" />
         </Form.Item>
 
-        <Form.Item label="成人内容" name="is_adult" valuePropName="checked">
+        <Form.Item label="成人" name="is_adult" valuePropName="checked">
           <Switch checkedChildren="成人" unCheckedChildren="普通" />
         </Form.Item>
 
