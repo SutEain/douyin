@@ -372,6 +372,7 @@ export async function handleVideo(
 
     // 🚫 单视频大小限制：从系统设置读取（默认 200 MiB）
     const maxMb = await getBotMaxVideoSizeMB()
+    console.log('[handleVideo] 当前单视频大小限制(MiB):', maxMb)
     const MAX_VIDEO_BYTES = maxMb * 1024 * 1024
     const videoSize = video.file_size || 0
     if (videoSize > MAX_VIDEO_BYTES) {
