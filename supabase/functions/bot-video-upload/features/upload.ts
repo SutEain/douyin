@@ -9,6 +9,42 @@ import { getEditKeyboard, getEditMenuText } from './editor.ts'
 // 🚫 媒体组拒绝缓存（避免同一组发送多条提示）
 export const mediaGroupRejectCache = new Map<string, boolean>()
 
+// 🎯 系统配置缓存（Edge Function 实例内缓存，60s）
+const SYSTEM_SETTING_CACHE_TTL_MS = 60_000
+let cachedBotMaxVideoSizeMB: { value: number; fetchedAt: number } | null = null
+
+async function getBotMaxVideoSizeMB(): Promise<number> {
+  const now = Date.now()
+  if (
+    cachedBotMaxVideoSizeMB &&
+    now - cachedBotMaxVideoSizeMB.fetchedAt < SYSTEM_SETTING_CACHE_TTL_MS
+  ) {
+    return cachedBotMaxVideoSizeMB.value
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('value_int')
+      .eq('id', 'bot_max_video_size_mb')
+      .maybeSingle()
+
+    if (error) {
+      console.error('[system_settings] 读取 bot_max_video_size_mb 失败:', error)
+    }
+
+    const mb = Number(data?.value_int)
+    const value = Number.isFinite(mb) && mb > 0 ? mb : 200
+
+    cachedBotMaxVideoSizeMB = { value, fetchedAt: now }
+    return value
+  } catch (e) {
+    console.error('[system_settings] 读取 bot_max_video_size_mb 异常:', e)
+    cachedBotMaxVideoSizeMB = { value: 200, fetchedAt: now }
+    return 200
+  }
+}
+
 // 📸 图片信息接口
 interface AlbumPhoto {
   file_id: string
@@ -334,8 +370,9 @@ export async function handleVideo(
       return
     }
 
-    // 🚫 单视频大小限制：最大 200 MiB
-    const MAX_VIDEO_BYTES = 200 * 1024 * 1024
+    // 🚫 单视频大小限制：从系统设置读取（默认 200 MiB）
+    const maxMb = await getBotMaxVideoSizeMB()
+    const MAX_VIDEO_BYTES = maxMb * 1024 * 1024
     const videoSize = video.file_size || 0
     if (videoSize > MAX_VIDEO_BYTES) {
       const sizeMB = (videoSize / 1024 / 1024).toFixed(1)
@@ -344,7 +381,7 @@ export async function handleVideo(
         chatId,
         `⚠️ <b>视频太大，无法接收</b>\n\n` +
           `当前：${sizeMB} MiB\n` +
-          `限制：200 MiB\n\n` +
+          `限制：${maxMb} MiB\n\n` +
           `请压缩后再发送（分辨率/码率调低即可）。`
       )
       return

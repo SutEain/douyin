@@ -17,6 +17,7 @@ import {
   UserVideoIncentiveProgressList
 } from './pages/incentive-progress/index'
 import { WalletLedgerList } from './pages/wallet-ledger/index'
+import { SystemSettings } from './pages/system-settings'
 import { Login } from './pages/login'
 import { authProvider } from './authProvider'
 import { Dashboard } from './pages/dashboard'
@@ -84,6 +85,11 @@ function App() {
                 name: 'wallet_ledger',
                 list: '/wallet-ledger',
                 meta: { label: '资金流水' }
+              },
+              {
+                name: 'system_settings',
+                list: '/system-settings',
+                meta: { label: '系统设置' }
               }
             ]}
             options={{
@@ -132,6 +138,7 @@ function App() {
                   <Route path="user" element={<UserIncentiveProgressList />} />
                 </Route>
                 <Route path="/wallet-ledger" element={<WalletLedgerList />} />
+                <Route path="/system-settings" element={<SystemSettings />} />
               </Route>
               <Route path="*" element={<ErrorComponent />} />
             </Routes>
