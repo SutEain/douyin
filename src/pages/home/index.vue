@@ -11,8 +11,8 @@
 
       <!-- ✅ 视频内容区域：成人 / 关注 / 推荐 -->
       <div class="video-content">
-        <!-- 0=短剧（先复用推荐内容） -->
-        <Slide4 v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
+        <!-- 0=短剧（复用原“长视频”页：bilibili 风格） -->
+        <LongVideo v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
         <!-- 1=成人 -->
         <SlideAdult
           v-else-if="state.navIndex === 1"
@@ -98,6 +98,7 @@ import IndicatorHome from './components/IndicatorHome.vue'
 import Slide4 from './slide/Slide4.vue'
 import SlideAdult from './slide/SlideAdult.vue'
 import SlideFollow from './slide/SlideFollow.vue'
+import LongVideo from './slide/LongVideo.vue'
 import BaseFooter from '@/components/BaseFooter.vue'
 import Comment from '@/components/CommentNew.vue'
 import Share from '@/components/Share.vue'

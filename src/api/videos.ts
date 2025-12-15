@@ -29,7 +29,7 @@ export function recommendedLongVideo(params?: any) {
   const pageNo = params?.pageNo ?? 0
   const pageSize = params?.pageSize ?? 10
   return requestSupabaseVideoList(
-    `${getAppServerBase()}/video/feed`,
+    `${getAppServerBase()}/video/long-feed`,
     { pageNo, pageSize },
     { requireAuth: false, includeAuthIfAvailable: true }
   )

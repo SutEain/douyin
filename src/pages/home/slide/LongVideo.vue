@@ -1,9 +1,11 @@
 <script setup>
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { _checkImgUrl, _duration, _formatNumber, _stopPropagation } from '@/utils'
 import { recommendedLongVideo } from '@/api/videos'
 import ScrollList from '@/components/ScrollList.vue'
 import { useNav } from '@/utils/hooks/useNav'
+import { useVideoStore } from '@/stores/video'
+import bus, { EVENT_KEY } from '@/utils/bus'
 
 const props = defineProps({
   active: Boolean
@@ -11,10 +13,11 @@ const props = defineProps({
 
 const playingEl = ref()
 const state = reactive({
-  show: false,
-  muted: true,
-  danmu: false
+  show: false
 })
+
+const videoStore = useVideoStore()
+const isMuted = computed(() => videoStore.isMuted)
 
 watch(
   () => props.active,
@@ -78,6 +81,30 @@ const nav = useNav()
 const fallbackAvatar = new URL('@/assets/img/icon/avatar/0.png', import.meta.url).href
 const fallbackCover = new URL('@/assets/img/icon/me/code-bg.png', import.meta.url).href
 
+function getDurationSeconds(item) {
+  const d = item?.video?.duration ?? item?.duration ?? 0
+  if (typeof d === 'number' && d > 10000) return Math.floor(d / 1000) // 兜底：老数据可能是 ms
+  return d || 0
+}
+
+function toggleMute() {
+  const next = !videoStore.isMuted
+  videoStore.toggleMuted(next)
+  // 兼容旧逻辑（feed 的静音也在用）
+  window.isMuted = next
+  bus.emit(next ? EVENT_KEY.ADD_MUTED : EVENT_KEY.REMOVE_MUTED)
+
+  // 立即同步到页面内所有 video
+  const videoEls = document.querySelectorAll('.long-video video')
+  videoEls.forEach((v) => {
+    try {
+      v.muted = next
+    } catch {
+      // ignore
+    }
+  })
+}
+
 function onVideoError(e) {
   const video = e.target
   if (video) {
@@ -104,81 +131,79 @@ function onAvatarError(e) {
   <div class="long-video" @dragstart="(e) => _stopPropagation(e)">
     <ScrollList class="Scroll" v-if="state.show" :api="recommendedLongVideo">
       <template v-slot="{ list }">
-        <div class="list">
-          <div
-            class="item"
-            @click="nav('/video-detail', {}, { list, index: i })"
-            :class="[
-              i % 9 === 0 && 'big',
-              i % 9 === 0 ? '' : i % 2 === 1 && 'l',
-              i % 9 === 0 ? '' : i % 2 === 0 && 'r'
-            ]"
-            :key="i"
-            v-for="(item, i) in list"
-          >
-            <div class="video-wrapper" v-if="i % 9 === 0">
-              <video
-                muted
-                preload
-                loop
-                x5-video-player-type="h5-page"
-                :x5-video-player-fullscreen="false"
-                :webkit-playsinline="true"
-                :x5-playsinline="true"
-                :playsinline="true"
-                :fullscreen="false"
-                v-is-can-play
-                :poster="_checkImgUrl(item.video.cover.url_list[0])"
-                :src="item.video.play_addr.url_list[0]"
-                @error="onVideoError"
-              ></video>
-              <div class="options">
-                <div class="left"></div>
-                <div class="right">
-                  <div class="option" @click.stop="state.danmu = !state.danmu">
-                    <img v-if="state.danmu" src="@/assets/img/icon/danmu-open.svg" />
-                    <img v-else src="@/assets/img/icon/danmu-close.svg" />
-                  </div>
-                  <div class="option" @click.stop="state.muted = !state.muted">
-                    <Icon v-if="state.muted" icon="charm:sound-mute" />
-                    <Icon v-else icon="akar-icons:sound-on" />
-                  </div>
-                  <div class="option">
-                    <img src="@/assets/img/icon/rotate.svg" />
+        <!-- ✅ 短剧tab：后端接口已过滤图文/相册，仅返回视频 -->
+        <template v-if="list?.length">
+          <div class="list">
+            <div
+              class="item"
+              @click="nav('/video-detail', {}, { items: list, index: i })"
+              :class="[
+                i % 9 === 0 && 'big',
+                i % 9 === 0 ? '' : i % 2 === 1 && 'l',
+                i % 9 === 0 ? '' : i % 2 === 0 && 'r'
+              ]"
+              :key="item?.aweme_id || item?.id || i"
+              v-for="(item, i) in list"
+            >
+              <div class="video-wrapper" v-if="i % 9 === 0">
+                <video
+                  :muted="isMuted"
+                  preload
+                  loop
+                  x5-video-player-type="h5-page"
+                  :x5-video-player-fullscreen="false"
+                  :webkit-playsinline="true"
+                  :x5-playsinline="true"
+                  :playsinline="true"
+                  :fullscreen="false"
+                  v-is-can-play
+                  :poster="_checkImgUrl(item.video.cover.url_list[0])"
+                  :src="item.video.play_addr.url_list[0]"
+                  @error="onVideoError"
+                ></video>
+                <div class="options">
+                  <div class="left"></div>
+                  <div class="right">
+                    <!-- ✅ 仅保留声音按钮，并与 feed 静音状态同步 -->
+                    <div class="option" @click.stop="toggleMute">
+                      <Icon v-if="isMuted" icon="charm:sound-mute" />
+                      <Icon v-else icon="akar-icons:sound-on" />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-            <img
-              v-else
-              v-lazy="_checkImgUrl(item.video.cover.url_list[0])"
-              alt=""
-              class="poster"
-              @error="onCoverError"
-            />
-            <div class="duration">{{ _duration(item.duration / 1000) }}</div>
-            <div class="title">
-              {{ item.desc }}
-            </div>
-            <div class="bottom">
-              <div class="l">
-                <img
-                  v-lazy="_checkImgUrl(item.author.avatar_168x168.url_list[0])"
-                  alt=""
-                  class="avatar"
-                  @error="onAvatarError"
-                />
-                <div class="name">{{ item.author.nickname }}</div>
+              <img
+                v-else
+                v-lazy="_checkImgUrl(item.video.cover.url_list[0])"
+                alt=""
+                class="poster"
+                @error="onCoverError"
+              />
+              <div class="duration">{{ _duration(getDurationSeconds(item)) }}</div>
+              <div class="title">
+                {{ item.desc }}
               </div>
-              <div class="r">
-                <Icon icon="icon-park-outline:like" />
-                <div class="num">
-                  {{ _formatNumber(item.statistics.digg_count) }}
+              <div class="bottom">
+                <div class="l">
+                  <img
+                    v-lazy="_checkImgUrl(item.author.avatar_168x168.url_list[0])"
+                    alt=""
+                    class="avatar"
+                    @error="onAvatarError"
+                  />
+                  <div class="name">{{ item.author.nickname }}</div>
+                </div>
+                <div class="r">
+                  <Icon icon="icon-park-outline:like" />
+                  <div class="num">
+                    {{ _formatNumber(item.statistics.digg_count) }}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </template>
+        <div v-else class="empty">暂无短剧视频</div>
       </template>
     </ScrollList>
   </div>
@@ -201,14 +226,14 @@ function onAvatarError(e) {
 .list {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  row-gap: 15rem;
+  row-gap: 22rem;
   box-sizing: border-box;
 
   .item {
     margin: 0 10rem;
     display: flex;
     flex-direction: column;
-    gap: 8rem;
+    gap: 10rem;
     position: relative;
 
     .poster {
@@ -256,7 +281,9 @@ function onAvatarError(e) {
     }
 
     .title {
-      height: 36rem;
+      // ✅ 保障两行完整显示，不被裁切
+      min-height: 44rem;
+      line-height: 22rem;
       color: white;
       font-size: 14rem;
       overflow: hidden;
@@ -356,5 +383,11 @@ function onAvatarError(e) {
       margin-left: 5rem;
     }
   }
+}
+
+.empty {
+  padding: 20rem var(--page-padding);
+  color: var(--second-text-color);
+  text-align: center;
 }
 </style>

@@ -9,6 +9,7 @@ import {
   handleVideoCollect,
   handleVideoCollections,
   handleVideoFeed,
+  handleVideoLongFeed,
   handleVideoFollowing,
   handleVideoLike,
   handleVideoLikes,
@@ -66,6 +67,9 @@ serve(async (req) => {
     }
     if (route === '/video/feed' && method === 'GET') {
       return handleVideoFeed(req)
+    }
+    if (route === '/video/long-feed' && method === 'GET') {
+      return handleVideoLongFeed(req)
     }
     if (route === '/video/adult-feed' && method === 'GET') {
       return handleVideoAdultFeed(req)
