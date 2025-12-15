@@ -1,5 +1,5 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Avatar, Button, Tag, message, Modal } from 'antd'
+import { Table, Space, Avatar, Button, Tag, message, Modal, Form, Input } from 'antd'
 import { EyeOutlined, EditOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useUpdate } from '@refinedev/core'
@@ -8,11 +8,40 @@ export const UserList = () => {
   const navigate = useNavigate()
   const { mutate: updateProfile } = useUpdate()
 
-  const { tableProps } = useTable({
+  const { tableProps, searchFormProps } = useTable({
     resource: 'profiles',
     syncWithLocation: true,
     sorters: {
       initial: [{ field: 'created_at', order: 'desc' }]
+    },
+    onSearch: (params: Record<string, any>) => {
+      const filters: any[] = []
+
+      const q = String(params.q || '').trim()
+      const numericId = String(params.numeric_id || '').trim()
+      const tgUserId = String(params.tg_user_id || '').trim()
+      const uuid = String(params.id || '').trim()
+
+      if (q) {
+        // 昵称 / 用户名 模糊搜索（任意命中）
+        // refinedev/supabase 支持 operator: 'or'，value 为 Supabase 的 or 语法
+        filters.push({
+          operator: 'or',
+          value: `nickname.ilike.%${q}%,username.ilike.%${q}%,tg_username.ilike.%${q}%`
+        })
+      }
+
+      if (numericId) {
+        filters.push({ field: 'numeric_id', operator: 'eq', value: Number(numericId) })
+      }
+      if (tgUserId) {
+        filters.push({ field: 'tg_user_id', operator: 'eq', value: Number(tgUserId) })
+      }
+      if (uuid) {
+        filters.push({ field: 'id', operator: 'eq', value: uuid })
+      }
+
+      return filters
     }
   })
 
@@ -46,6 +75,25 @@ export const UserList = () => {
 
   return (
     <List>
+      <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
+        <Form.Item name="q" label="关键词">
+          <Input placeholder="昵称/用户名" allowClear style={{ width: 220 }} />
+        </Form.Item>
+        <Form.Item name="numeric_id" label="数字ID">
+          <Input placeholder="如 10086" allowClear style={{ width: 140 }} />
+        </Form.Item>
+        <Form.Item name="tg_user_id" label="TGID">
+          <Input placeholder="如 123456789" allowClear style={{ width: 160 }} />
+        </Form.Item>
+        <Form.Item name="id" label="UUID">
+          <Input placeholder="profiles.id" allowClear style={{ width: 260 }} />
+        </Form.Item>
+        <Form.Item>
+          <Button type="primary" htmlType="submit">
+            搜索
+          </Button>
+        </Form.Item>
+      </Form>
       <Table {...tableProps} rowKey="id" scroll={{ x: 1200 }}>
         <Table.Column
           dataIndex="avatar_url"
