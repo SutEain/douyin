@@ -250,6 +250,57 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
 }
 
 /**
+ * 普通视频 Tab：只返回 content_type = 'video' 且 is_shortdrama = false 且 is_adult = false 的已发布作品，按发布时间倒序
+ * GET /video/video-tab-feed?pageNo=&pageSize=
+ *
+ * 说明：
+ * - 🎯 单独接口，不与 feed 流复用
+ * - 允许未登录访问；如已登录则附加 like/collect/follow 等标记
+ */
+export async function handleVideoTabFeed(req: Request): Promise<Response> {
+  const url = new URL(req.url)
+  const { pageNo, pageSize, from, to } = parsePagination(url)
+  const { user } = await tryGetAuth(req)
+
+  const { data, error, count } = await supabaseAdmin
+    .from('videos')
+    .select('*', { count: 'exact' })
+    .eq('status', 'published')
+    .eq('is_adult', false)
+    .eq('content_type', 'video')
+    .eq('is_shortdrama', false)
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .range(from, to)
+
+  if (error) {
+    console.error('[VideoTabFeed] 查询视频失败:', error)
+    return errorResponse('Failed to load video tab feed', 1, 500)
+  }
+
+  await attachUserFlags(data ?? [], user?.id ?? null)
+
+  const profileCache = new Map<string, any>()
+  const list: any[] = []
+  for (const row of data ?? []) {
+    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+    const mapped = await mapVideoRow(row, authorProfile)
+    if (mapped) {
+      applyRowFlags(mapped, row)
+      list.push(mapped)
+    }
+  }
+
+  return successResponse({
+    list,
+    total: count ?? 0,
+    pageNo,
+    pageSize,
+    hasMore: list.length >= pageSize
+  })
+}
+
+/**
  * 成人内容流：只返回 is_adult = true 的已发布视频，按时间倒序
  * GET /video/adult-feed?pageNo=&pageSize=
  */

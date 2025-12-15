@@ -35,6 +35,17 @@ export function recommendedLongVideo(params?: any) {
   )
 }
 
+// 普通视频 Tab：只返回 content_type='video' 且 is_shortdrama=false 的已发布内容，按 published_at 倒序
+export function recommendedVideoTab(params?: any) {
+  const pageNo = params?.pageNo ?? 0
+  const pageSize = params?.pageSize ?? 10
+  return requestSupabaseVideoList(
+    `${getAppServerBase()}/video/video-tab-feed`,
+    { pageNo, pageSize },
+    { requireAuth: false, includeAuthIfAvailable: true }
+  )
+}
+
 // 成人内容视频列表（仅 is_adult = true）
 export function adultVideoFeed(params?: any) {
   const pageSize = params?.pageSize ?? 10

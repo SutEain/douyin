@@ -11,20 +11,25 @@
 
       <!-- ✅ 视频内容区域：成人 / 关注 / 推荐 -->
       <div class="video-content">
-        <!-- 0=短剧（复用原“长视频”页：bilibili 风格） -->
-        <LongVideo v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
-        <!-- 1=成人 -->
-        <SlideAdult
+        <!-- 0=视频（grid：普通视频，按 published_at 倒序） -->
+        <VideoTab v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
+        <!-- 1=短剧（grid：短剧视频，按 published_at 倒序） -->
+        <LongVideo
           v-else-if="state.navIndex === 1"
           :active="state.active && state.navIndex === 1"
         />
-        <!-- 2=关注 -->
-        <SlideFollow
+        <!-- 2=成人 -->
+        <SlideAdult
           v-else-if="state.navIndex === 2"
           :active="state.active && state.navIndex === 2"
         />
-        <!-- 3=推荐 -->
-        <Slide4 v-else :active="state.active && state.navIndex === 3" />
+        <!-- 3=关注 -->
+        <SlideFollow
+          v-else-if="state.navIndex === 3"
+          :active="state.active && state.navIndex === 3"
+        />
+        <!-- 4=推荐 -->
+        <Slide4 v-else :active="state.active && state.navIndex === 4" />
       </div>
 
       <!-- 底部导航栏 -->
@@ -99,6 +104,7 @@ import Slide4 from './slide/Slide4.vue'
 import SlideAdult from './slide/SlideAdult.vue'
 import SlideFollow from './slide/SlideFollow.vue'
 import LongVideo from './slide/LongVideo.vue'
+import VideoTab from './slide/VideoTab.vue'
 import BaseFooter from '@/components/BaseFooter.vue'
 import Comment from '@/components/CommentNew.vue'
 import Share from '@/components/Share.vue'
@@ -123,7 +129,7 @@ const router = useRouter()
 const share = ref()
 
 const state = reactive({
-  navIndex: 3, // 默认显示"推荐" tab (0=短剧, 1=成人, 2=关注, 3=推荐)
+  navIndex: 4, // 默认显示"推荐" tab (0=视频, 1=短剧, 2=成人, 3=关注, 4=推荐)
   test: '',
   isSharing: false,
   shareType: -1,

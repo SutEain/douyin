@@ -365,6 +365,28 @@ function shareInvite() {
 // 🎯 当前内容类型
 const currentContentType = computed(() => getContentType(currentItem.value))
 
+// 🎯 倍速播放：默认 1.0，仅对当前视频生效
+const playbackRate = ref<number>(1)
+function getCurrentVideoEl(): HTMLVideoElement | null {
+  const currentSlot = getSlotByRole('current')
+  if (!currentSlot) return null
+  return slotRefs.get(currentSlot.key) || null
+}
+function applyPlaybackRate(rate: number) {
+  const el = getCurrentVideoEl()
+  if (!el) return
+  try {
+    el.playbackRate = rate
+  } catch (e) {
+    console.warn('[VideoList] 设置 playbackRate 失败:', e)
+  }
+}
+function setPlaybackRate(rate: number) {
+  const safe = [0.5, 1, 1.25, 1.5, 2].includes(rate) ? rate : 1
+  playbackRate.value = safe
+  applyPlaybackRate(safe)
+}
+
 // 🎯 获取 slot 对应的内容类型
 function getSlotContentType(slot: SlotState): 'video' | 'image' | 'album' {
   if (slot.videoIndex == null) return 'video'
@@ -421,6 +443,18 @@ provide(
 provide(
   'isMuted',
   computed(() => videoStore.isMuted)
+)
+provide('playbackRate', playbackRate)
+provide('setPlaybackRate', setPlaybackRate)
+
+// 🎯 切换到新视频时，重置倍速为 1.0（仅对当前视频生效）
+watch(
+  () => currentItem.value?.aweme_id,
+  (newId, oldId) => {
+    if (newId && newId !== oldId) {
+      setPlaybackRate(1)
+    }
+  }
 )
 
 function setSlotRef(key: string) {
@@ -1253,6 +1287,10 @@ function onPlay(slot: SlotState) {
 function onPlaying(slot: SlotState) {
   // 🎯 视频真正播放时，隐藏 poster
   slot.isPlaying = true
+  // 🎯 同步倍速到“当前视频”
+  if (slot.role === 'current') {
+    applyPlaybackRate(playbackRate.value)
+  }
 }
 
 function onPause(slot: SlotState) {

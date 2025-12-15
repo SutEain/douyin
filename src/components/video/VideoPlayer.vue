@@ -1,11 +1,7 @@
 <template>
-  <div 
-    class="video-player" 
-    ref="wrapperRef"
-    :data-video-id="item.aweme_id"
-  >
+  <div class="video-player" ref="wrapperRef" :data-video-id="item.aweme_id">
     <!-- Loading 加载中 -->
-    <Loading v-if="state.loading" style="position: absolute; z-index: 10;" />
+    <Loading v-if="state.loading" style="position: absolute; z-index: 10" />
     <div v-if="state.loading" class="loading-text">加载中...</div>
 
     <!-- 视频元素 -->
@@ -29,7 +25,7 @@
       @error="handleError"
     />
     <Icon icon="fluent:play-28-filled" class="pause-icon" v-if="!isPlaying" />
-    
+
     <!-- 视频信息和工具栏 -->
     <div class="video-content" @click="handleClick">
       <!-- 拖动时隐藏其他内容 -->
@@ -41,17 +37,13 @@
       </div>
 
       <!-- 进度条触摸热区容器（大面积，方便拖动） -->
-      <div 
+      <div
         class="progress-container"
         @pointerdown.stop.prevent="handleProgressStart"
         @pointermove.stop.prevent="handleProgressMove"
         @pointerup.stop.prevent="handleProgressEnd"
       >
-        <div
-          class="progress-bar"
-          :class="progressClass"
-          ref="progressRef"
-        >
+        <div class="progress-bar" :class="progressClass" ref="progressRef">
           <div class="time" v-if="state.isMoving">
             <span class="currentTime">{{ formatTime(state.currentTime) }}</span>
             <span class="duration"> / {{ formatTime(state.duration) }}</span>
@@ -96,6 +88,18 @@ const videoRef = ref<HTMLVideoElement>()
 const wrapperRef = ref<HTMLDivElement>()
 const progressRef = ref<HTMLDivElement>()
 
+// 🎯 倍速播放：默认 1.0，仅对当前视频生效
+const playbackRate = ref<number>(1)
+function setPlaybackRate(rate: number) {
+  const safe = [0.5, 1, 1.25, 1.5, 2].includes(rate) ? rate : 1
+  playbackRate.value = safe
+  try {
+    if (videoRef.value) videoRef.value.playbackRate = safe
+  } catch (e) {
+    console.warn('[VideoPlayer] 设置 playbackRate 失败:', e)
+  }
+}
+
 // ========== State ==========
 const initialMuted = typeof window.isMuted === 'boolean' ? window.isMuted : true
 if (window.isMuted === undefined) {
@@ -112,8 +116,8 @@ const state = reactive({
   localItem: props.item,
   errorRetryCount: 0,
   // 进度条相关
-  playX: 0,  // 进度条像素位置
-  step: 0,   // 每秒对应的像素数
+  playX: 0, // 进度条像素位置
+  step: 0, // 每秒对应的像素数
   progressBarRect: null as DOMRect | null,
   start: { x: 0 },
   last: { x: 0, time: 0 }
@@ -126,9 +130,9 @@ const videoUrl = computed(() => {
 })
 
 const posterUrl = computed(() => {
-  return props.item.video?.dynamic_cover?.url_list?.[0] || 
-         props.item.video?.cover?.url_list?.[0] || 
-         ''
+  return (
+    props.item.video?.dynamic_cover?.url_list?.[0] || props.item.video?.cover?.url_list?.[0] || ''
+  )
 })
 
 const isPlaying = computed(() => {
@@ -145,13 +149,24 @@ const progressClass = computed(() => {
 
 // ========== Provide 数据给子组件 ==========
 // ItemDesc 和 ItemToolbar 需要通过 inject 获取这些值
-provide('item', computed(() => state.localItem))
-provide('position', computed(() => ({
-  uniqueId: props.page,
-  index: 0 // VideoList 会处理真实的 index
-})))
+provide(
+  'item',
+  computed(() => state.localItem)
+)
+provide(
+  'position',
+  computed(() => ({
+    uniqueId: props.page,
+    index: 0 // VideoList 会处理真实的 index
+  }))
+)
 provide('isPlaying', isPlaying)
-provide('isMuted', computed(() => state.isMuted))
+provide(
+  'isMuted',
+  computed(() => state.isMuted)
+)
+provide('playbackRate', playbackRate)
+provide('setPlaybackRate', setPlaybackRate)
 
 // ========== Methods ==========
 function formatTime(seconds: number): string {
@@ -162,9 +177,9 @@ function formatTime(seconds: number): string {
 
 async function play() {
   if (!videoRef.value) return
-  
+
   state.loading = true
-  
+
   try {
     await videoManager.play(props.item.aweme_id, props.page)
     videoStore.setCurrentPlaying(props.item.aweme_id, props.page)
@@ -177,7 +192,7 @@ async function play() {
 
 function pause() {
   if (!videoRef.value) return
-  
+
   videoManager.pause(props.item.aweme_id)
   if (videoStore.currentPlayingId === props.item.aweme_id) {
     videoStore.clearPlaying()
@@ -217,10 +232,10 @@ function handlePause() {
 
 function handleTimeUpdate() {
   if (!videoRef.value) return
-  
+
   state.currentTime = Math.ceil(videoRef.value.currentTime)
   state.playX = (state.currentTime - 1) * state.step
-  
+
   // 视频开始播放后隐藏 loading
   if (state.loading && state.currentTime > 0.1) {
     state.loading = false
@@ -237,7 +252,7 @@ function handleCanPlay() {
   // 视频可以播放
   if (!videoRef.value) return
   state.duration = videoRef.value.duration
-  
+
   // 计算进度条参数
   if (progressRef.value) {
     state.progressBarRect = progressRef.value.getBoundingClientRect()
@@ -251,9 +266,9 @@ function handleError(e: Event) {
     error: e,
     retryCount: state.errorRetryCount
   })
-  
+
   state.loading = false
-  
+
   // 重试一次
   if (state.errorRetryCount < 1 && videoRef.value) {
     state.errorRetryCount++
@@ -268,7 +283,7 @@ let isDragging = false
 
 function handleProgressStart(e: PointerEvent) {
   if (!videoRef.value) return
-  
+
   e.stopPropagation()
   isDragging = true
   state.start.x = e.pageX
@@ -278,20 +293,20 @@ function handleProgressStart(e: PointerEvent) {
 
 function handleProgressMove(e: PointerEvent) {
   if (!isDragging) return
-  
+
   e.stopPropagation()
   state.isMoving = true
-  
+
   // 暂停播放
   if (videoRef.value && !videoRef.value.paused) {
     videoRef.value.pause()
   }
-  
+
   // 计算拖动距离
   const dx = e.pageX - state.start.x
   state.playX = state.last.x + dx
   state.currentTime = state.last.time + Math.ceil(dx / state.step)
-  
+
   // 限制范围
   if (state.currentTime <= 0) state.currentTime = 0
   if (state.currentTime >= state.duration) state.currentTime = state.duration
@@ -299,10 +314,10 @@ function handleProgressMove(e: PointerEvent) {
 
 function handleProgressEnd(e: PointerEvent) {
   if (!isDragging) return
-  
+
   e.stopPropagation()
   isDragging = false
-  
+
   // 设置视频时间
   if (videoRef.value) {
     videoRef.value.currentTime = state.currentTime
@@ -319,16 +334,16 @@ function handleProgressEnd(e: PointerEvent) {
 // ========== 生命周期 ==========
 onMounted(() => {
   if (!videoRef.value) return
-  
+
   // 注册到视频管理器
   videoManager.register(props.item.aweme_id, videoRef.value, props.page)
-  
+
   console.log('[VideoPlayer] mounted', {
     videoId: props.item.aweme_id.substring(0, 8),
     page: props.page,
     autoplay: props.autoplay
   })
-  
+
   // 如果设置了自动播放
   if (props.autoplay) {
     setTimeout(() => play(), 100)
@@ -340,24 +355,29 @@ onUnmounted(() => {
     videoId: props.item.aweme_id.substring(0, 8),
     page: props.page
   })
-  
+
   // 从视频管理器注销
   videoManager.unregister(props.item.aweme_id)
 })
 
 // 监听 item 变化
-watch(() => props.item, (newItem) => {
-  state.localItem = newItem
-})
+watch(
+  () => props.item,
+  (newItem) => {
+    state.localItem = newItem
+    // 🎯 切换到新视频时，重置倍速为 1.0（仅对当前视频生效）
+    setPlaybackRate(1)
+  }
+)
 
 // 监听全局静音状态
 watch(
   () => videoStore.isMuted,
   (muted) => {
-  state.isMuted = muted
-  if (videoRef.value) {
-    videoRef.value.muted = muted
-  }
+    state.isMuted = muted
+    if (videoRef.value) {
+      videoRef.value.muted = muted
+    }
   },
   { immediate: true }
 )
@@ -370,13 +390,13 @@ watch(
   height: 100%;
   background: black;
   overflow: hidden;
-  
+
   video {
     width: 100%;
     height: 100%;
     object-fit: contain;
   }
-  
+
   .loading-text {
     position: absolute;
     top: 50%;
@@ -387,7 +407,7 @@ watch(
     margin-top: 40px;
     z-index: 11;
   }
-  
+
   .video-content {
     position: absolute;
     top: 0;
@@ -396,16 +416,16 @@ watch(
     bottom: 0;
     z-index: 1;
     pointer-events: none;
-    
+
     > * {
       pointer-events: auto;
     }
-    
+
     .normal {
       transition: opacity 0.3s;
     }
   }
-  
+
   // 进度条触摸热区容器（大面积，方便拖动）
   .progress-container {
     z-index: 5;
@@ -479,7 +499,7 @@ watch(
       transform: translate(-2rem, -1rem);
     }
   }
-  
+
   // 拖动时的样式
   .move {
     .bg {
@@ -497,7 +517,7 @@ watch(
       height: 12rem;
     }
   }
-  
+
   // 暂停时的样式
   .stop {
     .bg {
@@ -535,4 +555,3 @@ watch(
   }
 }
 </style>
-

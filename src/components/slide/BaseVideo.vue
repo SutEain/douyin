@@ -1,11 +1,7 @@
 <template>
-  <div 
-    class="video-wrapper" 
-    ref="videoWrapper" 
-    :class="positionName"
-  >
+  <div class="video-wrapper" ref="videoWrapper" :class="positionName">
     <!-- ✅ Loading 加载中提示 -->
-    <Loading v-if="state.loading" style="position: absolute; z-index: 10;" />
+    <Loading v-if="state.loading" style="position: absolute; z-index: 10" />
     <!-- ✅ 加载文字提示（可选，让用户更清楚） -->
     <div v-if="state.loading" class="loading-text">加载中...</div>
     <!--    <video :src="item.video + '?v=123'"-->
@@ -33,11 +29,11 @@
       <p>您的浏览器不支持 video 标签。</p>
     </video>
     <Icon icon="fluent:play-28-filled" class="pause-icon" v-if="!isPlaying" />
-    <div 
-      class="float" 
+    <div
+      class="float"
       @click="handleVideoClick"
       @touchend="handleVideoClick"
-      style="pointer-events: auto; z-index: 1;"
+      style="pointer-events: auto; z-index: 1"
     >
       <template v-if="isLive">
         <div class="living">点击进入直播间</div>
@@ -71,17 +67,13 @@
           </div>
         </div>
         <!-- 进度条触摸热区容器（大面积，方便拖动） -->
-        <div 
+        <div
           class="progress-container"
           @pointerdown.stop.prevent="handleProgressPointerDown"
           @pointermove.stop.prevent="handleProgressPointerMove"
           @pointerup.stop.prevent="handleProgressPointerUp"
         >
-          <div
-            class="progress"
-            :class="progressClass"
-            ref="progressEl"
-          >
+          <div class="progress" :class="progressClass" ref="progressEl">
             <div class="time" v-if="state.isMove">
               <span class="currentTime">{{ _duration(state.currentTime) }}</span>
               <span class="duration"> / {{ _duration(state.duration) }}</span>
@@ -105,7 +97,7 @@ import ItemToolbar from './ItemToolbar.vue'
 import ItemDesc from './ItemDesc.vue'
 import bus, { EVENT_KEY } from '../../utils/bus'
 import { SlideItemPlayStatus } from '@/utils/const_var'
-import { computed, onMounted, onUnmounted, onUpdated, provide, reactive, watch } from 'vue'
+import { computed, onMounted, onUnmounted, onUpdated, provide, reactive, ref, watch } from 'vue'
 import { _css } from '@/utils/dom'
 import { Icon } from '@iconify/vue'
 import { toggleVideoLike } from '@/api/videos'
@@ -152,6 +144,18 @@ const props = defineProps({
 
 const videoStore = useVideoStore()
 
+// 🎯 倍速播放：默认 1.0，仅对当前视频生效
+const playbackRate = ref<number>(1)
+function setPlaybackRate(rate: number) {
+  const safe = [0.5, 1, 1.25, 1.5, 2].includes(rate) ? rate : 1
+  playbackRate.value = safe
+  try {
+    if (videoEl) videoEl.playbackRate = safe
+  } catch (e) {
+    console.warn('[BaseVideo] 设置 playbackRate 失败:', e)
+  }
+}
+
 const positionState = computed(() => props.position)
 provide(
   'isPlaying',
@@ -166,6 +170,8 @@ provide(
   'item',
   computed(() => props.item)
 )
+provide('playbackRate', playbackRate)
+provide('setPlaybackRate', setPlaybackRate)
 
 const videoEl = $ref<HTMLVideoElement>()
 const progressEl = $ref<HTMLDivElement>()
@@ -225,6 +231,16 @@ watch(
     }
   }
 )
+
+// 🎯 切换到新视频时，重置倍速为 1.0（仅对当前视频生效）
+watch(
+  () => (props.item as any)?.aweme_id,
+  (newId, oldId) => {
+    if (newId && newId !== oldId) {
+      setPlaybackRate(1)
+    }
+  }
+)
 const poster = $computed(() => {
   return _checkImgUrl(props.item.video.poster ?? props.item.video.cover.url_list[0])
 })
@@ -249,13 +265,12 @@ const progressClass = $computed(() => {
 // props.item 不会变化，因为 DOM 不会被复用
 
 onMounted(() => {
-  
   state.height = document.body.clientHeight
   state.width = document.body.clientWidth
   if (videoEl) {
     videoEl.currentTime = 0
   }
-  
+
   let fun = (e) => {
     state.currentTime = Math.ceil(e.target.currentTime)
     state.playX = (state.currentTime - 1) * state.step
@@ -279,7 +294,7 @@ onMounted(() => {
         if (e === 'waiting') {
           if (!state.paused && !state.ignoreWaiting) {
             state.loading = true
-            state.loadingHidden = false  // 重置标志，因为需要重新缓冲
+            state.loadingHidden = false // 重置标志，因为需要重新缓冲
           }
         }
         let s = false
@@ -309,7 +324,7 @@ onMounted(() => {
     // playing 事件表示视频开始播放，但画面可能还没渲染
     // 继续等待 timeupdate 确认
   })
-  
+
   // ✅ 监听 timeupdate，确保画面真正开始播放后才隐藏 loading
   videoEl.addEventListener('timeupdate', () => {
     // 只有当视频时间>0.1秒且正在播放时，才隐藏 loading
@@ -319,12 +334,12 @@ onMounted(() => {
       // 视频开始播放，隐藏 loading
     }
   })
-  
+
   // ✅ 当视频暂停或跳转时，重置标志
   videoEl.addEventListener('pause', () => {
     state.loadingHidden = false
   })
-  
+
   videoEl.addEventListener('seeking', () => {
     state.loadingHidden = false
   })
@@ -350,17 +365,17 @@ onMounted(() => {
 
   bus.on(EVENT_KEY.REMOVE_MUTED, removeMuted)
   bus.on(EVENT_KEY.ADD_MUTED, addMuted)
-  
+
   // 监听视频加载错误（303等网络错误）
   if (videoEl) {
     videoEl.addEventListener('error', handleVideoError)
   }
-  
+
   // 预加载视频 - 在元素挂载后立即开始加载
   if (videoEl && videoEl.readyState === 0) {
     videoEl.load()
   }
-  
+
   // ✅ 如果是第一个视频（isPlay=true），设置 currentVideo 并调用 play()
   if (props.isPlay && state.localItem) {
     videoStore.setCurrentVideo(state.localItem as any, (props.position as any)?.index)
@@ -378,7 +393,7 @@ const MAX_ERROR_RETRY = 1
 function handleVideoError(e: Event) {
   const target = e.target as HTMLVideoElement | HTMLSourceElement
   const isSourceError = target.tagName === 'SOURCE'
-  
+
   console.error('[video] ❌ 加载错误', {
     videoId: props.item.aweme_id?.substring(0, 8),
     errorType: isSourceError ? 'SOURCE元素错误' : 'VIDEO元素错误',
@@ -390,16 +405,18 @@ function handleVideoError(e: Event) {
     errorCode: videoEl?.error?.code,
     errorMessage: videoEl?.error?.message,
     errorRetryCount,
-    allSources: Array.from(videoEl?.querySelectorAll('source') || []).map(s => ({
+    allSources: Array.from(videoEl?.querySelectorAll('source') || []).map((s) => ({
       src: s.src.substring(s.src.length - 30),
       type: s.type
     }))
   })
-  
+
   // 303等网络错误，尝试重新加载一次
   if (errorRetryCount < MAX_ERROR_RETRY && videoEl) {
     errorRetryCount++
-    console.log(`[video] 🔄 重试加载 (${errorRetryCount}/${MAX_ERROR_RETRY}), videoId=${props.item.aweme_id?.substring(0, 8)}`)
+    console.log(
+      `[video] 🔄 重试加载 (${errorRetryCount}/${MAX_ERROR_RETRY}), videoId=${props.item.aweme_id?.substring(0, 8)}`
+    )
     setTimeout(() => {
       if (videoEl) {
         videoEl.load()
@@ -419,7 +436,9 @@ function handleVideoError(e: Event) {
   } else {
     // 超过最大重试次数，隐藏 loading
     state.loading = false
-    console.error(`[video] ❌ 加载失败且超过最大重试次数, videoId=${props.item.aweme_id?.substring(0, 8)}`)
+    console.error(
+      `[video] ❌ 加载失败且超过最大重试次数, videoId=${props.item.aweme_id?.substring(0, 8)}`
+    )
   }
 }
 
@@ -428,23 +447,23 @@ function handleVideoError(e: Event) {
 
 onUnmounted(() => {
   // 组件卸载
-  
+
   // 强制暂停并清理
   if (videoEl && !videoEl.paused) {
     videoEl.pause()
     videoEl.currentTime = 0
   }
-  
+
   // 移除error事件监听
   if (videoEl) {
     videoEl.removeEventListener('error', handleVideoError)
   }
-  
+
   // 如果当前是正在播放的视频，清理管理器引用
   if (videoPlaybackManager.getCurrentVideoId() === props.item.aweme_id) {
     videoPlaybackManager.clear()
   }
-  
+
   bus.off(EVENT_KEY.SINGLE_CLICK_BROADCAST, click)
   bus.off(EVENT_KEY.DIALOG_MOVE, onDialogMove)
   bus.off(EVENT_KEY.DIALOG_END, onDialogEnd)
@@ -520,7 +539,7 @@ function onCloseComments() {
 
 function click({ uniqueId, index, type }) {
   const matched = props.position.uniqueId === uniqueId && props.position.index === index
-  
+
   if (matched) {
     if (type === EVENT_KEY.ITEM_TOGGLE) {
       if (props.isLive) {
@@ -557,41 +576,41 @@ function play() {
   if (!videoEl) {
     return
   }
-  
+
   // ✅ 立即显示 loading 并重置标志（让用户知道正在加载）
   state.loading = true
-  state.loadingHidden = false  // 重置隐藏标志
-  
+  state.loadingHidden = false // 重置隐藏标志
+
   // 重置错误重试计数
   errorRetryCount = 0
-  
+
   // ✅ 设置当前视频到 videoStore（供 UserPanel 使用）
   videoStore.setCurrentVideo(state.localItem as any, (props.position as any)?.index)
-  
+
   // 通过全局管理器注册当前视频（会自动暂停之前的视频）
   videoPlaybackManager.setCurrentVideo(videoEl, props.item.aweme_id)
-  
+
   // ✅ 不再重置 currentTime，保持上次暂停的位置
   // （切换视频时，ITEM_PLAY 事件会在528行重置 currentTime）
-  
+
   // ✅ 方案 C：每个视频都有独立的 DOM，如果 readyState 为 0，调用 load()
   if (videoEl.readyState === 0) {
     videoEl.load()
   }
-  
+
   // 设置状态 - 明确同步静音状态
   state.status = SlideItemPlayStatus.Play
   state.isMuted = window.isMuted
   videoEl.muted = window.isMuted
-  
+
   // 确保视频已加载足够数据再播放
   const tryPlay = () => {
     if (videoEl.readyState < 2) {
       return false
     }
-    
+
     const playPromise = videoEl.play()
-    
+
     if (playPromise?.catch) {
       playPromise
         .then(() => {
@@ -615,20 +634,20 @@ function play() {
     }
     return true
   }
-  
+
   // 如果视频还未加载，等待canplay事件（有足够数据开始播放）
   if (videoEl.readyState < 2) {
     state.loading = true
-    
+
     let canplayFired = false
-    
+
     const onCanPlay = () => {
       if (canplayFired) return
       canplayFired = true
       tryPlay()
       cleanup()
     }
-    
+
     const onLoadedData = () => {
       if (canplayFired) return
       if (videoEl.readyState >= 2) {
@@ -637,21 +656,23 @@ function play() {
         cleanup()
       }
     }
-    
+
     const cleanup = () => {
       videoEl.removeEventListener('canplay', onCanPlay)
       videoEl.removeEventListener('loadeddata', onLoadedData)
     }
-    
+
     videoEl.addEventListener('canplay', onCanPlay, { once: true })
     videoEl.addEventListener('loadeddata', onLoadedData)
-    
+
     // 设置超时，最多等待1000ms
     setTimeout(() => {
       if (!canplayFired) {
-        console.log(`[BaseVideo] ⚠️ canplay 超时, readyState=${videoEl.readyState}, index=${(props.position as any)?.index}`)
+        console.log(
+          `[BaseVideo] ⚠️ canplay 超时, readyState=${videoEl.readyState}, index=${(props.position as any)?.index}`
+        )
         cleanup()
-        
+
         if (videoEl.readyState >= 2) {
           tryPlay()
         } else if (videoEl.readyState === 1) {
@@ -714,7 +735,7 @@ function handleProgressPointerDown(e: PointerEvent) {
 function handleProgressPointerMove(e: PointerEvent) {
   _stopPropagation(e)
   if (!isDraggingProgress) return
-  
+
   state.isMove = true
   pause()
   let dx = e.pageX - state.start.x
@@ -748,7 +769,7 @@ async function handleDoubleLike() {
   if (!state.localItem?.aweme_id || likeLoading || state.localItem.isLoved) {
     return
   }
-  
+
   ensureStatistics()
   const previous = cloneDeep(state.localItem)
   state.localItem.isLoved = true
@@ -758,7 +779,7 @@ async function handleDoubleLike() {
   )
   syncLocalItemState()
   likeLoading = true
-  
+
   try {
     const res = await toggleVideoLike(state.localItem.aweme_id, true)
     if (typeof res?.like_count === 'number') {
@@ -776,21 +797,21 @@ async function handleDoubleLike() {
 
 function handleVideoClick(e: Event) {
   const target = e.target as HTMLElement
-  
+
   // 忽略特定区域的点击
   if (
-    target.closest('.toolbar') || 
-    target.closest('.progress') || 
-    target.closest('.toggle-desc') ||  // 展开/收起按钮
-    target.closest('.description-wrapper') ||  // 描述区域
+    target.closest('.toolbar') ||
+    target.closest('.progress') ||
+    target.closest('.toggle-desc') || // 展开/收起按钮
+    target.closest('.description-wrapper') || // 描述区域
     target.closest('button')
   ) {
     return
   }
-  
+
   const now = Date.now()
   const timeDiff = now - lastTapTime
-  
+
   if (lastTapTime && timeDiff <= DOUBLE_TAP_THRESHOLD) {
     e.preventDefault()
     e.stopPropagation()

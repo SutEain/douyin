@@ -1,11 +1,12 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { _checkImgUrl, _duration, _formatNumber, _stopPropagation } from '@/utils'
-import { recommendedLongVideo } from '@/api/videos'
+import { recommendedVideoTab } from '@/api/videos'
 import ScrollList from '@/components/ScrollList.vue'
 import { useNav } from '@/utils/hooks/useNav'
 import { useVideoStore } from '@/stores/video'
 import bus, { EVENT_KEY } from '@/utils/bus'
+import { Icon } from '@iconify/vue'
 
 const props = defineProps({
   active: Boolean
@@ -26,7 +27,7 @@ watch(
   (n) => {
     if (n) {
       if (state.show) {
-        let el = playingEl.value
+        const el = playingEl.value
         if (el) {
           el.parentNode.parentNode.classList.remove('pause')
           el.play()
@@ -35,7 +36,7 @@ watch(
         state.show = true
       }
     } else {
-      let el = playingEl.value
+      const el = playingEl.value
       if (el) {
         el.parentNode.parentNode.classList.add('pause')
         el.pause()
@@ -52,7 +53,7 @@ const vIsCanPlay = {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          let videoEls = document.querySelectorAll('.long-video video')
+          const videoEls = document.querySelectorAll('.video-tab video')
           videoEls.forEach((item) => {
             item.pause()
             if (item.parentNode?.parentNode) {
@@ -81,9 +82,7 @@ const vIsCanPlay = {
     obList.push(observer)
   },
   unmounted() {
-    obList.map((v) => {
-      v.disconnect()
-    })
+    obList.map((v) => v.disconnect())
   }
 }
 
@@ -100,12 +99,10 @@ function getDurationSeconds(item) {
 function toggleMute() {
   const next = !videoStore.isMuted
   videoStore.toggleMuted(next)
-  // 兼容旧逻辑（feed 的静音也在用）
   window.isMuted = next
   bus.emit(next ? EVENT_KEY.ADD_MUTED : EVENT_KEY.REMOVE_MUTED)
 
-  // 立即同步到页面内所有 video
-  const videoEls = document.querySelectorAll('.long-video video')
+  const videoEls = document.querySelectorAll('.video-tab video')
   videoEls.forEach((v) => {
     try {
       v.muted = next
@@ -142,23 +139,18 @@ function onVideoError(e) {
 }
 
 function onCoverError(e) {
-  if (e?.target) {
-    e.target.src = fallbackCover
-  }
+  if (e?.target) e.target.src = fallbackCover
 }
 
 function onAvatarError(e) {
-  if (e?.target) {
-    e.target.src = fallbackAvatar
-  }
+  if (e?.target) e.target.src = fallbackAvatar
 }
 </script>
 
 <template>
-  <div class="long-video" @dragstart="(e) => _stopPropagation(e)">
-    <ScrollList class="Scroll" v-if="state.show" :api="recommendedLongVideo">
+  <div class="video-tab" @dragstart="(e) => _stopPropagation(e)">
+    <ScrollList class="Scroll" v-if="state.show" :api="recommendedVideoTab">
       <template v-slot="{ list }">
-        <!-- ✅ 短剧tab：后端接口已过滤图文/相册，仅返回视频 -->
         <template v-if="list?.length">
           <div class="list">
             <div
@@ -207,7 +199,7 @@ function onAvatarError(e) {
                         </div>
                       </div>
                     </div>
-                    <!-- ✅ 仅保留声音按钮，并与 feed 静音状态同步 -->
+                    <!-- ✅ 静音按钮（与全局静音状态同步） -->
                     <div class="option" @click.stop="toggleMute">
                       <Icon v-if="isMuted" icon="charm:sound-mute" />
                       <Icon v-else icon="akar-icons:sound-on" />
@@ -215,6 +207,7 @@ function onAvatarError(e) {
                   </div>
                 </div>
               </div>
+
               <img
                 v-else
                 v-lazy="_checkImgUrl(item.video.cover.url_list[0])"
@@ -246,14 +239,14 @@ function onAvatarError(e) {
             </div>
           </div>
         </template>
-        <div v-else class="empty">暂无短剧视频</div>
+        <div v-else class="empty">暂无视频</div>
       </template>
     </ScrollList>
   </div>
 </template>
 
 <style scoped lang="less">
-.long-video {
+.video-tab {
   font-size: 14rem;
   color: white;
   padding-top: var(--home-header-height);
@@ -369,16 +362,15 @@ function onAvatarError(e) {
     }
 
     .title {
-      // ✅ 保障两行完整显示，不被裁切
       min-height: 44rem;
       line-height: 22rem;
       color: white;
       font-size: 14rem;
       overflow: hidden;
       text-overflow: ellipsis;
-      display: -webkit-box; //作为弹性伸缩盒子模型显示。
-      -webkit-box-orient: vertical; //设置伸缩盒子的子元素排列方式--从上到下垂直排列
-      -webkit-line-clamp: 2; //显示的行
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
     }
 
     .f {
@@ -408,9 +400,9 @@ function onAvatarError(e) {
         .name {
           overflow: hidden;
           text-overflow: ellipsis;
-          display: -webkit-box; //作为弹性伸缩盒子模型显示。
-          -webkit-box-orient: vertical; //设置伸缩盒子的子元素排列方式--从上到下垂直排列
-          -webkit-line-clamp: 1; //显示的行
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 1;
         }
 
         .avatar {

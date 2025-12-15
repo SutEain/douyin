@@ -2,7 +2,7 @@
 import { _formatNumber, cloneDeep, _notice, _copy } from '@/utils'
 import bus, { EVENT_KEY } from '@/utils/bus'
 import { useClick } from '@/utils/hooks/useClick'
-import { computed, inject, onMounted, onUnmounted, ref } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { toggleVideoLike, toggleVideoCollect, toggleFollowUser } from '@/api/videos'
 import { useVideoStore } from '@/stores/video'
@@ -26,6 +26,40 @@ const props = defineProps({
 const position = inject<any>('position')
 const videoStore = useVideoStore()
 const baseStore = useBaseStore()
+
+// 🎯 倍速播放（仅对当前视频生效，由上层播放器提供 setPlaybackRate）
+const injectedPlaybackRate = inject<any>('playbackRate', null)
+const injectedSetPlaybackRate = inject<any>('setPlaybackRate', null)
+const showSpeedPanel = ref(false)
+const speedOptions = [0.5, 1.0, 1.25, 1.5, 2.0]
+const playbackRateText = computed(() => {
+  const r = injectedPlaybackRate?.value ?? 1
+  // 统一显示 1x / 1.25x
+  return `${r}x`
+})
+
+function toggleSpeedPanel() {
+  showSpeedPanel.value = !showSpeedPanel.value
+}
+
+function choosePlaybackRate(rate: number) {
+  if (typeof injectedSetPlaybackRate === 'function') {
+    injectedSetPlaybackRate(rate)
+  } else {
+    console.warn('[ItemToolbar] setPlaybackRate 未注入，无法设置倍速')
+  }
+  showSpeedPanel.value = false
+}
+
+// 🎯 切换到新视频时：重置倍速面板状态（倍速本身由播放器在切换时重置为 1.0）
+watch(
+  () => (props.item as any)?.aweme_id,
+  (newId, oldId) => {
+    if (newId && newId !== oldId) {
+      showSpeedPanel.value = false
+    }
+  }
+)
 
 // 🎯 声音提示气泡
 const showSoundTip = ref(false)
@@ -265,6 +299,26 @@ const vClick = useClick()
       <img src="../../assets/img/icon/menu-white.png" alt="" class="share-image" />
     </div>
 
+    <!-- 倍速开关 -->
+    <div class="speed-toggle mb2r" @click.stop="toggleSpeedPanel">
+      <Icon icon="mdi:speedometer" class="icon" style="color: white" />
+      <div class="speed-text">{{ playbackRateText }}</div>
+
+      <transition name="fade">
+        <div v-if="showSpeedPanel" class="speed-panel" @click.stop>
+          <div
+            v-for="r in speedOptions"
+            :key="r"
+            class="speed-item"
+            :class="{ active: (injectedPlaybackRate?.value ?? 1) === r }"
+            @click="choosePlaybackRate(r)"
+          >
+            {{ r }}x
+          </div>
+        </div>
+      </transition>
+    </div>
+
     <!-- 静音开关 -->
     <div class="mute-toggle mb2r" v-click="toggleMute" @click.stop>
       <Icon v-if="isMuted" icon="ph:speaker-simple-slash-fill" class="icon" style="color: white" />
@@ -380,6 +434,51 @@ const vClick = useClick()
   // 🎯 静音开关容器
   .mute-toggle {
     position: relative;
+  }
+
+  // 🎯 倍速开关容器
+  .speed-toggle {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    .speed-text {
+      font-size: 11rem;
+      margin-top: 2rem;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .speed-panel {
+      position: absolute;
+      right: 50px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 120;
+      min-width: 84px;
+    }
+
+    .speed-item {
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 13px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      user-select: none;
+
+      &.active {
+        background: rgba(255, 255, 255, 0.15);
+        color: #fff;
+        font-weight: 600;
+      }
+    }
   }
 
   // 🎯 声音提示气泡
