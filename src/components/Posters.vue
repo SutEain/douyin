@@ -7,6 +7,11 @@
           <Icon icon="icon-park-outline:like" />
           <span>{{ _formatNumber(i.statistics.digg_count) }}</span>
         </div>
+        <!-- 🎯 播放量：仅在 Me 页作品列表（showLabels=true）显示 -->
+        <div class="views" v-if="showLabels">
+          <Icon icon="mdi:eye-outline" />
+          <span>{{ _formatNumber(i.view_count || 0) }}</span>
+        </div>
         <!-- 🎯 内容类型标识：图片/相册 -->
         <div class="content-type-badge" v-if="i.content_type === 'image'">
           <Icon icon="solar:gallery-bold" />
@@ -176,6 +181,17 @@ function getMonth(time) {
       height: 14rem;
       margin-right: 5rem;
     }
+  }
+
+  .views {
+    color: white;
+    position: absolute;
+    bottom: 5rem;
+    right: 5rem;
+    display: flex;
+    align-items: center;
+    font-size: 14rem;
+    gap: 3rem;
   }
 
   // 🎯 图片/相册类型标识
