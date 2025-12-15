@@ -493,11 +493,13 @@ function close() {
   .slide-imgs {
     position: relative;
     height: 70vh;
+    background: #000;
 
     img {
       height: 100%;
       width: 100%;
-      object-fit: cover;
+      // ✅ 方案 A：完整展示，不裁切
+      object-fit: contain;
     }
 
     .indicator-bar {
