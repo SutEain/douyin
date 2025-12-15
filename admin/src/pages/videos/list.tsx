@@ -1,7 +1,7 @@
 import { List, useTable } from '@refinedev/antd'
 import { Table, Space, Tag, Button, Modal, Input, Select, Form, message } from 'antd'
 import { useEffect, useState, useRef } from 'react'
-import { useUpdate, useDelete } from '@refinedev/core'
+import { useInvalidate, useUpdate, useDelete } from '@refinedev/core'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { EditOutlined, DeleteOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -52,6 +52,7 @@ export const VideoList = () => {
   const [rejectForm] = Form.useForm()
   const { mutate: updateVideo } = useUpdate()
   const { mutate: deleteVideo } = useDelete()
+  const invalidate = useInvalidate()
   const videoRef = useRef<HTMLVideoElement>(null)
 
   // 📸 图片/相册预览相关状态
@@ -486,6 +487,11 @@ export const VideoList = () => {
           {
             onSuccess: () => {
               message.success(newIsAdult ? '已标记为成人内容' : '已取消成人标记')
+              console.log('[VideoList] toggle adult done, refetch admin_videos_list:', {
+                id: record.id,
+                is_adult: newIsAdult
+              })
+              invalidate({ resource: 'admin_videos_list', invalidates: ['list'] })
             },
             onError: (error) => {
               const err = error as { message?: string }
@@ -515,6 +521,11 @@ export const VideoList = () => {
           {
             onSuccess: () => {
               message.success(newValue ? '已标记为短剧' : '已取消短剧')
+              console.log('[VideoList] toggle shortdrama done, refetch admin_videos_list:', {
+                id: record.id,
+                is_shortdrama: newValue
+              })
+              invalidate({ resource: 'admin_videos_list', invalidates: ['list'] })
             },
             onError: (error) => {
               const err = error as { message?: string }
@@ -954,8 +965,13 @@ export const VideoList = () => {
                   danger={record.is_adult}
                   size="small"
                   onClick={() => handleToggleAdult(record)}
+                  style={
+                    record.is_adult
+                      ? undefined
+                      : { borderColor: '#ff4d4f', color: '#ff4d4f', background: 'transparent' }
+                  }
                 >
-                  {record.is_adult ? '取消' : '成人'}
+                  成人
                 </Button>
 
                 {/* 短剧标记按钮：仅视频类型显示 */}
@@ -970,7 +986,7 @@ export const VideoList = () => {
                         : { borderColor: '#722ed1', color: '#722ed1' }
                     }
                   >
-                    {record.is_shortdrama ? '取消' : '短剧'}
+                    短剧
                   </Button>
                 )}
 
