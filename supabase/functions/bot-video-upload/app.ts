@@ -125,13 +125,17 @@ export async function handleRequest(req: Request): Promise<Response> {
 
             // 2. 后发送欢迎消息（Inline Keyboard）
             const welcomeText =
-              '👋 <b>欢迎来到 TG 抖音</b>\n\n' +
-              '这里是 Telegram 最大的视频分享平台\n' +
-              '趣闻 • 吃瓜 • 热点 • 🔞\n\n' +
-              '🚀 <b>共建内容生态</b>\n' +
-              '发现好玩的视频？直接转发给我\n' +
-              '分享你的快乐，让更多人看到！\n\n' +
-              '✅ 账号已就绪'
+              '<b>👋 欢迎来到 TG 抖音 — Telegram 最大的视频&amp;直播分享平台!🌍</b>\n\n' +
+              '<b>🔥 这里有你想要的精彩内容 🔥</b>\n' +
+              '📰 全球资讯 • 🍉 热门八卦 • 💥 网络热点\n' +
+              '🔞 成人专区 • 🎤 娱乐直播 • 🌟 海量资源等你探索！\n\n' +
+              '<b>🚀 诚邀您成为我们的“内容共建官”！</b>\n' +
+              '📱 发现有趣视频？随手分享给我们\n' +
+              '🎯 你的分享，将被千万用户看见\n' +
+              '💎 优质内容创作者，更有专属福利\n\n' +
+              '<b>💬 互动|分享|发现|快乐，尽在TG抖音！❤️</b>\n\n' +
+              '📢 TG抖音官方频道：<a href="https://t.me/laidouyin">@laidouyin</a>\n' +
+              '🎬 TG 抖音，你的视界，由你定义！✨'
 
             const welcomeMarkup = getWelcomeKeyboard()
 
@@ -168,13 +172,17 @@ export async function handleRequest(req: Request): Promise<Response> {
         else if (message.text === '🏠 首页') {
           // 重新发送欢迎消息（首页）
           const welcomeText =
-            '👋 <b>欢迎来到 TG 抖音</b>\n\n' +
-            '这里是 Telegram 最大的视频分享平台\n' +
-            '趣闻 • 吃瓜 • 热点 • 🔞\n\n' +
-            '🚀 <b>共建内容生态</b>\n' +
-            '发现好玩的视频？直接转发给我\n' +
-            '分享你的见闻，让更多人看到！\n\n' +
-            '✅ 账号已就绪'
+            '<b>👋 欢迎来到 TG 抖音 — Telegram 最大的视频&amp;直播分享平台!🌍</b>\n\n' +
+            '<b>🔥 这里有你想要的精彩内容 🔥</b>\n' +
+            '📰 全球资讯 • 🍉 热门八卦 • 💥 网络热点\n' +
+            '🔞 成人专区 • 🎤 娱乐直播 • 🌟 海量资源等你探索！\n\n' +
+            '<b>🚀 诚邀您成为我们的“内容共建官”！</b>\n' +
+            '📱 发现有趣视频？随手分享给我们\n' +
+            '🎯 你的分享，将被千万用户看见\n' +
+            '💎 优质内容创作者，更有专属福利\n\n' +
+            '<b>💬 互动|分享|发现|快乐，尽在TG抖音！❤️</b>\n\n' +
+            '📢 TG抖音官方频道：<a href="https://t.me/laidouyin">@laidouyin</a>\n' +
+            '🎬 TG 抖音，你的视界，由你定义！✨'
           const welcomeMarkup = getWelcomeKeyboard()
 
           let sentMessage

@@ -47,6 +47,14 @@ export async function handleVideoComments(req: Request): Promise<Response> {
     return errorResponse('Failed to load comments', 1, 500)
   }
 
+  // ✅ 父评论昵称映射（用于 children 里的 reply_to_user）
+  const parentNickMap = new Map<string, string>()
+  for (const row of data ?? []) {
+    const p: any = (row as any).profiles || {}
+    const nickname = p.nickname || p.username || '用户'
+    parentNickMap.set((row as any).id, nickname)
+  }
+
   // 🎯 查询每个主评论的回复数量
   const commentIds = (data ?? []).map((row) => row.id)
   const replyCounts = new Map<string, number>()
@@ -67,10 +75,57 @@ export async function handleVideoComments(req: Request): Promise<Response> {
     }
   }
 
+  // ✅ 默认带回每个主评论的“第一条回复”（用于前端默认展示 1 条回复）
+  const firstReplyMap = new Map<string, any>()
+  if (commentIds.length > 0) {
+    const { data: replyRows, error: replyError } = await supabaseAdmin
+      .from('video_comments')
+      .select(
+        `
+        id,
+        video_id,
+        user_id,
+        content,
+        like_count,
+        created_at,
+        reply_to,
+        profiles:user_id (
+          id,
+          nickname,
+          username,
+          avatar_url,
+          country,
+          city
+        )
+      `
+      )
+      .in('reply_to', commentIds)
+      .eq('review_status', 'approved')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: true })
+
+    if (replyError) {
+      console.error('[app-server] Load comment preview replies failed:', replyError)
+    } else {
+      for (const row of replyRows ?? []) {
+        const parentId = (row as any).reply_to as string | null
+        if (!parentId) continue
+        if (firstReplyMap.has(parentId)) continue
+        const formatted = formatCommentRow(row)
+        formatted.user_id = (row as any).user_id
+        formatted.reply_to_user = parentNickMap.get(parentId) || '用户'
+        firstReplyMap.set(parentId, formatted)
+      }
+    }
+  }
+
   const list = (data ?? []).map((row) => {
     const formatted = formatCommentRow(row)
     formatted.user_id = row.user_id
     formatted.sub_comment_count = replyCounts.get(row.id) || 0 // 🎯 设置真实的回复数量
+    const first = firstReplyMap.get(row.id)
+    formatted.children = first ? [first] : []
+    formatted.showChildren = !!first
     return formatted
   })
   return successResponse({

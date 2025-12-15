@@ -58,24 +58,115 @@
           </header>
           <div v-if="comments.loading" class="loading">加载中...</div>
           <div v-else-if="!comments.list.length" class="empty">暂无评论，快来抢沙发～</div>
-          <div v-else class="comment" :key="c.comment_id || i" v-for="(c, i) in comments.list">
-            <img :src="_checkImgUrl(c.avatar)" alt="" class="avatar" />
-            <span class="content">
-              <b class="nick">{{ c.nickname || '用户' }}</b>
-              ：{{ c.content }}
-            </span>
-          </div>
 
-          <div
-            v-if="comments.hasMore && !comments.loadingMore"
-            class="load-more"
-            @click.stop="loadMoreComments"
-          >
-            加载更多
+          <!-- ✅ 复用 CommentNew 的结构：主评论 + 回复 + 展开更多 + 评论点赞 -->
+          <div v-else class="comment-items">
+            <div
+              v-for="(item, i) in comments.list"
+              :key="item.comment_id || i"
+              class="comment-item"
+            >
+              <div class="comment-main">
+                <img :src="_checkImgUrl(item.avatar)" class="avatar" />
+                <div class="comment-body">
+                  <div class="username">{{ item.nickname }}</div>
+                  <div class="comment-text" :class="{ 'text-gray': item.user_buried }">
+                    {{ item.user_buried ? '该评论已折叠' : item.content }}
+                  </div>
+                  <div class="comment-footer">
+                    <div class="footer-left">
+                      <span class="time">{{ _time(item.create_time) }}</span>
+                      <span v-if="item.ip_location" class="location">{{ item.ip_location }}</span>
+                      <span class="reply-btn" @click="handleReply(item)">回复</span>
+                    </div>
+                    <div class="footer-right">
+                      <div
+                        class="action-btn"
+                        :class="{ active: item.user_digged }"
+                        @click="handleCommentLike(item)"
+                      >
+                        <Icon
+                          :icon="
+                            item.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
+                          "
+                        />
+                        <span v-if="item.digg_count">{{ _formatNumber(item.digg_count) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="item.showChildren && item.children?.length" class="reply-list">
+                <div
+                  v-for="(child, j) in item.children"
+                  :key="child.comment_id || j"
+                  class="reply-item"
+                >
+                  <img :src="_checkImgUrl(child.avatar)" class="avatar" />
+                  <div class="reply-body">
+                    <div class="username">{{ child.nickname }}</div>
+                    <div class="reply-text">
+                      <span v-if="child.reply_to_user" class="reply-to"
+                        >回复 @{{ child.reply_to_user }}：</span
+                      >
+                      {{ child.content }}
+                    </div>
+                    <div class="reply-footer">
+                      <div class="footer-left">
+                        <span class="time">{{ _time(child.create_time) }}</span>
+                        <span v-if="child.ip_location" class="location">{{
+                          child.ip_location
+                        }}</span>
+                        <span class="reply-btn" @click="handleReply(item)">回复</span>
+                      </div>
+                      <div class="footer-right">
+                        <div
+                          class="action-btn"
+                          :class="{ active: child.user_digged }"
+                          @click="handleCommentLike(child)"
+                        >
+                          <Icon
+                            :icon="
+                              child.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
+                            "
+                          />
+                          <span v-if="child.digg_count">{{ _formatNumber(child.digg_count) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-if="
+                  Number(item.sub_comment_count) &&
+                  (!item.showChildren || item.children.length < item.sub_comment_count)
+                "
+                class="expand-replies"
+                @click="handleExpandReplies(item)"
+              >
+                <div class="expand-line"></div>
+                <span class="expand-text">
+                  展开{{ item.showChildren ? '更多' : `${item.sub_comment_count}条` }}回复
+                </span>
+                <Icon icon="ep:arrow-down-bold" />
+              </div>
+            </div>
+
+            <div v-if="comments.loadingMore" class="loading-more">加载中...</div>
+            <div v-else-if="comments.hasMore" class="load-more" @click.stop="loadMoreComments">
+              加载更多
+            </div>
           </div>
-          <div v-else-if="comments.loadingMore" class="loading-more">加载中...</div>
         </div>
       </div>
+    </div>
+
+    <div v-if="replyingTo" class="reply-hint-bar">
+      <span>回复 @{{ replyingTo.nickname }}</span>
+      <Icon icon="ic:round-close" class="close" @click.stop="cancelReply" />
     </div>
     <div class="toolbar">
       <div class="input-wrap">
@@ -83,17 +174,18 @@
           v-model="comments.input"
           class="comment-input"
           type="text"
-          placeholder="说点什么..."
+          :placeholder="replyingTo ? `回复 @${replyingTo.nickname}` : '说点什么...'"
           @keyup.enter="sendComment"
         />
-        <div
-          class="send-btn"
-          :class="[comments.input.trim() && 'active']"
-          :style="comments.sending ? 'pointer-events:none;opacity:.6;' : ''"
-          @click.stop="sendComment"
-        >
-          发送
-        </div>
+      </div>
+      <!-- ✅ 发送按钮：放到输入框右侧，避免挤在 input 里面 -->
+      <div
+        class="send-btn"
+        :class="[comments.input.trim() && 'active']"
+        :style="comments.sending ? 'pointer-events:none;opacity:.6;' : ''"
+        @click.stop="sendComment"
+      >
+        发送
       </div>
       <div class="options">
         <div
@@ -135,9 +227,19 @@
 import SlideHorizontal from '@/components/slide/SlideHorizontal.vue'
 import SlideItem from '@/components/slide/SlideItem.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { _checkImgUrl, _copy, _formatNumber, _notice, _stopPropagation, cloneDeep } from '@/utils'
 import {
+  _checkImgUrl,
+  _copy,
+  _formatNumber,
+  _notice,
+  _stopPropagation,
+  cloneDeep,
+  _time
+} from '@/utils'
+import {
+  getCommentReplies,
   sendVideoComment,
+  toggleCommentLike,
   toggleFollowUser,
   toggleVideoCollect,
   toggleVideoLike,
@@ -178,7 +280,8 @@ const commentList = computed(() => {
 const commentCount = computed(() => commentList.value.length)
 
 const displayCommentCount = computed(() => {
-  // 优先显示真实拉取到的评论数；否则用接口返回的 comment_count；否则 fallback
+  // 优先显示接口 total；其次显示已加载数量；否则用接口返回的 comment_count；否则 fallback
+  if (comments.total) return comments.total
   if (comments.list.length) return comments.list.length
   const n = props.detail?.note_card?.interact_info?.comment_count
   if (typeof n === 'number') return n
@@ -210,11 +313,14 @@ const comments = reactive({
   loading: false,
   loadingMore: false,
   hasMore: false,
+  total: 0,
   pageNo: 0,
-  pageSize: 50,
+  pageSize: 20,
   input: '',
   sending: false
 })
+
+const replyingTo = ref(null)
 
 watch(
   () => props.detail,
@@ -312,18 +418,30 @@ async function loadComments(reset = false) {
     if (!res?.success) {
       throw new Error(res?.message || '加载失败')
     }
-    const data = res.data || []
-    const nextList = Array.isArray(data) ? data : data?.list || []
+    const data = res.data || {}
+    const nextListRaw = Array.isArray(data?.list) ? data.list : Array.isArray(data) ? data : []
+    const nextList = nextListRaw.map((v) => ({
+      ...v,
+      showChildren: !!(v.showChildren || (v.children && v.children.length)),
+      user_buried: false,
+      user_digged: !!v.user_digged,
+      children: Array.isArray(v.children)
+        ? v.children.map((c) => ({ ...c, user_digged: !!c.user_digged }))
+        : [],
+      digg_count: Number(v.digg_count ?? 0),
+      sub_comment_count: Number(v.sub_comment_count ?? 0),
+      __fullRepliesLoaded: false
+    }))
     if (reset) {
       comments.list = nextList
     } else {
       comments.list = [...comments.list, ...nextList]
     }
 
-    // hasMore：尽量兼容两种返回结构
-    const hasMore =
-      typeof data?.hasMore === 'boolean' ? data.hasMore : nextList.length >= comments.pageSize
-    comments.hasMore = !!hasMore
+    comments.total = Number(data?.total ?? comments.total ?? 0) || 0
+    comments.hasMore = comments.total
+      ? comments.list.length < comments.total
+      : nextList.length >= comments.pageSize
     comments.pageNo = comments.pageNo + 1
   } catch (error) {
     console.error('[AlbumDetail] loadComments failed:', error)
@@ -351,24 +469,98 @@ async function sendComment() {
   comments.sending = true
   console.log('[AlbumDetail] sendComment:', { videoId: id, length: content.length })
   try {
-    await sendVideoComment(id, content)
+    const replyToId = replyingTo.value?.comment_id || null
+    const result = await sendVideoComment(id, content, replyToId)
+    const formatted = {
+      ...result,
+      showChildren: false,
+      user_digged: false,
+      user_buried: false,
+      children: []
+    }
+
+    if (replyToId && replyingTo.value) {
+      const parent = comments.list.find((c) => c.comment_id === replyToId)
+      if (parent) {
+        parent.sub_comment_count = (parent.sub_comment_count || 0) + 1
+        parent.showChildren = true
+        formatted.reply_to_user = replyingTo.value.nickname
+        // 默认只展示 1 条回复；如果已展开完整回复，则直接插入到列表
+        if (parent.__fullRepliesLoaded) {
+          parent.children = [formatted, ...(parent.children || [])]
+        } else {
+          parent.children = [formatted]
+        }
+      }
+    } else {
+      comments.list.unshift(formatted)
+      comments.total = (comments.total || 0) + 1
+    }
+
     comments.input = ''
-    // 发送成功后：刷新第一页（保证显示的是后端真实数据）
-    await loadComments(true)
-    // ✅ 同步 comment_count：不要直接改 props，走 update 回传到列表/当前详情
+    replyingTo.value = null
+
     emit('update', {
       id,
       note_card: {
         aweme_id: id,
-        interact_info: {
-          comment_count: comments.list.length
-        }
+        interact_info: { comment_count: comments.total || comments.list.length }
       }
     })
   } catch (error) {
     _notice(error?.message || '发送失败')
   } finally {
     comments.sending = false
+  }
+}
+
+function handleReply(item) {
+  replyingTo.value = item
+}
+
+function cancelReply() {
+  replyingTo.value = null
+  comments.input = ''
+}
+
+async function handleCommentLike(item) {
+  const newLikedState = !item.user_digged
+  const oldLikedState = item.user_digged
+  const oldCount = Number(item.digg_count ?? 0)
+
+  item.user_digged = newLikedState
+  item.digg_count = newLikedState ? oldCount + 1 : Math.max(0, oldCount - 1)
+
+  try {
+    const result = await toggleCommentLike(item.comment_id, newLikedState)
+    item.digg_count = result?.like_count ?? item.digg_count
+  } catch (error) {
+    item.user_digged = oldLikedState
+    item.digg_count = oldCount
+    _notice(error?.message || '操作失败')
+  }
+}
+
+async function handleExpandReplies(item) {
+  if (item.__fullRepliesLoaded) {
+    item.showChildren = true
+    return
+  }
+  try {
+    const res = await getCommentReplies(item.comment_id)
+    if (res.success) {
+      item.children = (res.data || []).map((v) => ({
+        ...v,
+        user_digged: false,
+        user_buried: false
+      }))
+      item.showChildren = true
+      item.__fullRepliesLoaded = true
+    } else {
+      _notice(res.message || '加载回复失败')
+    }
+  } catch (error) {
+    _notice(error?.message || '加载回复失败')
   }
 }
 
@@ -569,36 +761,143 @@ function close() {
         }
       }
 
-      .comment {
-        margin-bottom: 16rem;
+      // ✅ CommentNew 同款结构样式（主评论 + 回复 + 展开更多）
+      .comment-items {
+        display: flex;
+        flex-direction: column;
+        gap: 12rem;
+      }
+
+      .comment-item {
+        width: 100%;
+      }
+
+      .comment-main,
+      .reply-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 8rem;
+      }
+
+      .avatar {
+        width: 28rem;
+        height: 28rem;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .comment-body,
+      .reply-body {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .username {
+        font-size: 13rem;
+        color: rgba(255, 255, 255, 0.95);
+        font-weight: 600;
+      }
+
+      .comment-text,
+      .reply-text {
+        margin-top: 4rem;
+        font-size: 13rem;
+        line-height: 18rem;
+        color: rgba(255, 255, 255, 0.9);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2; // ✅ 默认最多两行
+        line-clamp: 2;
+        word-break: break-word;
+      }
+
+      .text-gray {
+        color: rgba(255, 255, 255, 0.45);
+      }
+
+      .comment-footer,
+      .reply-footer {
+        margin-top: 6rem;
         display: flex;
         align-items: center;
-        gap: 5rem;
+        justify-content: space-between;
+        font-size: 11rem;
+        color: rgba(255, 255, 255, 0.55);
+      }
 
-        .content {
-          display: inline-block;
-          flex: 1;
-          word-break: break-all;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
+      .footer-left {
+        display: flex;
+        align-items: center;
+        gap: 8rem;
+        min-width: 0;
+      }
 
-          .nick {
-            font-weight: 600;
-            margin-right: 4rem;
-          }
+      .time,
+      .location {
+        white-space: nowrap;
+      }
+
+      .reply-btn {
+        color: rgba(255, 255, 255, 0.75);
+        white-space: nowrap;
+      }
+
+      .footer-right {
+        display: flex;
+        align-items: center;
+        gap: 10rem;
+      }
+
+      .action-btn {
+        display: flex;
+        align-items: center;
+        gap: 4rem;
+        white-space: nowrap;
+        user-select: none;
+        cursor: pointer;
+        color: rgba(255, 255, 255, 0.75);
+
+        svg {
+          font-size: 14rem;
+        }
+      }
+
+      .action-btn.active {
+        color: var(--primary-btn-color);
+      }
+
+      .reply-list {
+        margin-left: 36rem;
+        margin-top: 8rem;
+        display: flex;
+        flex-direction: column;
+        gap: 8rem;
+      }
+
+      .reply-to {
+        color: rgba(255, 255, 255, 0.75);
+      }
+
+      .expand-replies {
+        margin-left: 36rem;
+        margin-top: 6rem;
+        display: flex;
+        align-items: center;
+        gap: 8rem;
+        font-size: 12rem;
+        color: rgba(255, 255, 255, 0.65);
+        cursor: pointer;
+
+        svg {
+          font-size: 14rem;
         }
 
-        img {
-          border-radius: 50%;
-          width: 20rem;
-          height: 20rem;
-        }
-
-        &:last-child {
-          margin-bottom: 0;
+        .expand-line {
+          width: 18rem;
+          height: 1px;
+          background: rgba(255, 255, 255, 0.25);
         }
       }
 
@@ -698,19 +997,28 @@ function close() {
         color: white;
         font-size: 13rem;
       }
+    }
 
-      .send-btn {
-        font-size: 12rem;
-        padding: 4rem 10rem;
-        border-radius: 20rem;
-        background: rgba(255, 255, 255, 0.12);
-        color: gray;
-      }
+    // ✅ 发送按钮：独立在输入框右侧
+    .send-btn {
+      height: 34rem;
+      min-width: 54rem;
+      margin-right: 8rem;
+      padding: 0 12rem;
+      border-radius: 18rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12rem;
+      background: rgba(255, 255, 255, 0.12);
+      color: gray;
+      user-select: none;
+    }
 
-      .send-btn.active {
-        background: var(--primary-btn-color);
-        color: white;
-      }
+    .send-btn.active {
+      background: var(--primary-btn-color);
+      color: white;
+      font-weight: 600;
     }
 
     .options {
@@ -736,6 +1044,29 @@ function close() {
         color: var(--primary-btn-color);
       }
     }
+  }
+}
+
+// ✅ 回复提示条：固定在输入框上方
+.reply-hint-bar {
+  position: fixed;
+  left: 0;
+  width: 100vw;
+  bottom: 56rem; // 约等于 toolbar 高度
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8rem 12rem;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12rem;
+
+  .close {
+    font-size: 16rem;
+    color: rgba(255, 255, 255, 0.85);
   }
 }
 </style>
