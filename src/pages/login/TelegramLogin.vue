@@ -8,22 +8,6 @@
       <div v-if="errorMessage" class="error-box">
         <p class="error-icon">⚠️</p>
         <p class="error-text">{{ errorMessage }}</p>
-
-        <!-- 环境变量检查提示 -->
-        <div v-if="envCheck" class="env-info">
-          <p class="env-title">🔍 配置检查：</p>
-          <div class="env-item" :class="{ missing: !envCheck.hasAnonKey }">
-            {{ envCheck.hasAnonKey ? '✅' : '❌' }} ANON_KEY
-          </div>
-          <div class="env-item" :class="{ missing: !envCheck.hasAppServerUrl }">
-            {{ envCheck.hasAppServerUrl ? '✅' : '❌' }} APP_SERVER_URL
-          </div>
-          <div class="env-item" :class="{ missing: !envCheck.hasSupabaseUrl }">
-            {{ envCheck.hasSupabaseUrl ? '✅' : '❌' }} SUPABASE_URL
-          </div>
-        </div>
-
-        <button @click="retry" class="retry-btn">重试</button>
       </div>
     </div>
   </div>
@@ -40,11 +24,6 @@ const router = useRouter()
 const baseStore = useBaseStore()
 const isLoading = ref(true)
 const errorMessage = ref('')
-const envCheck = ref<{
-  hasAnonKey: boolean
-  hasAppServerUrl: boolean
-  hasSupabaseUrl: boolean
-} | null>(null)
 
 onMounted(() => {
   initTelegramLogin()
@@ -52,15 +31,6 @@ onMounted(() => {
 
 const initTelegramLogin = async () => {
   try {
-    // ✅ 检查环境变量
-    envCheck.value = {
-      hasAnonKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
-      hasAppServerUrl: !!import.meta.env.VITE_APP_SERVER_URL,
-      hasSupabaseUrl: !!import.meta.env.VITE_SUPABASE_URL
-    }
-
-    console.log('[TelegramLogin] 📝 环境变量检查:', envCheck.value)
-
     // ✅ 等待 Telegram WebApp 准备就绪
     const tg = await waitForTelegram()
 
@@ -182,12 +152,6 @@ const getInitData = (): string | null => {
 
   console.error('[TelegramLogin] ❌ 无法获取 initData')
   return null
-}
-
-const retry = () => {
-  errorMessage.value = ''
-  isLoading.value = true
-  initTelegramLogin()
 }
 </script>
 
