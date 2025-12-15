@@ -6,18 +6,23 @@
     <div class="toolbar" ref="toolbar" :style="toolbarStyle">
       <div class="tab-ctn">
         <div class="tabs" ref="tabs">
-          <!-- 成人内容 Tab -->
+          <!-- 短剧 Tab -->
           <div class="tab" :class="{ active: index === 0 }" @click.stop="change(0)">
+            <span>短剧</span>
+          </div>
+
+          <!-- 成人内容 Tab -->
+          <div class="tab" :class="{ active: index === 1 }" @click.stop="change(1)">
             <span>成人</span>
           </div>
 
           <!-- 关注 - 可点击 -->
-          <div class="tab" :class="{ active: index === 1 }" @click.stop="change(1)">
+          <div class="tab" :class="{ active: index === 2 }" @click.stop="change(2)">
             <span>{{ $t('home.following') }}</span>
           </div>
 
           <!-- 推荐 -->
-          <div class="tab" :class="{ active: index === 2 }" @click.stop="change(2)">
+          <div class="tab" :class="{ active: index === 3 }" @click.stop="change(3)">
             <span>{{ $t('home.recommended') }}</span>
           </div>
         </div>

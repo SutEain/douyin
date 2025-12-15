@@ -11,12 +11,20 @@
 
       <!-- ✅ 视频内容区域：成人 / 关注 / 推荐 -->
       <div class="video-content">
-        <SlideAdult v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
-        <SlideFollow
+        <!-- 0=短剧（先复用推荐内容） -->
+        <Slide4 v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
+        <!-- 1=成人 -->
+        <SlideAdult
           v-else-if="state.navIndex === 1"
           :active="state.active && state.navIndex === 1"
         />
-        <Slide4 v-else :active="state.active && state.navIndex === 2" />
+        <!-- 2=关注 -->
+        <SlideFollow
+          v-else-if="state.navIndex === 2"
+          :active="state.active && state.navIndex === 2"
+        />
+        <!-- 3=推荐 -->
+        <Slide4 v-else :active="state.active && state.navIndex === 3" />
       </div>
 
       <!-- 底部导航栏 -->
@@ -114,7 +122,7 @@ const router = useRouter()
 const share = ref()
 
 const state = reactive({
-  navIndex: 2, // 默认显示"推荐" tab (0=长视频, 1=关注, 2=推荐)
+  navIndex: 3, // 默认显示"推荐" tab (0=短剧, 1=成人, 2=关注, 3=推荐)
   test: '',
   isSharing: false,
   shareType: -1,
