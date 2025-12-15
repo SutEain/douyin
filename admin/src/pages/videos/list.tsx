@@ -84,16 +84,14 @@ export const VideoList = () => {
   }, [location.pathname, location.search, navigate])
 
   const { tableProps, searchFormProps } = useTable({
-    resource: 'videos',
+    // ✅ 后台视频列表使用视图（支持业务优先级排序 + 用户多字段搜索）
+    resource: 'admin_videos_list',
     syncWithLocation: true,
-    meta: {
-      select: '*, profiles:author_id(nickname, avatar_url)'
-    },
     sorters: {
       initial: [
-        // ✅ 默认按发布时间倒序（更符合“视频管理”）
-        // 如果未发布导致 published_at 为空，则其次按创建时间倒序
-        { field: 'published_at', order: 'desc' },
+        // ✅ 默认：待审核/就绪 优先，其次按时间倒序
+        { field: 'admin_sort_rank', order: 'asc' },
+        { field: 'admin_sort_time', order: 'desc' },
         { field: 'created_at', order: 'desc' }
       ]
     },
@@ -109,13 +107,27 @@ export const VideoList = () => {
         })
       }
 
-      // 搜索用户名
-      if (params.username) {
-        filters.push({
-          field: 'profiles.nickname',
-          operator: 'contains',
-          value: params.username
-        })
+      // 搜索用户（author uuid / numeric_id / username / nickname）
+      const rawUserQ = String(params.user_q || '').trim()
+      if (rawUserQ) {
+        const q = rawUserQ.replace(/,/g, ' ') // supabase or 语法用逗号分隔，避免破坏
+        const isUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q)
+        const isNumeric = /^[0-9]+$/.test(q)
+
+        if (isUuid) {
+          filters.push({ field: 'author_id', operator: 'eq', value: q })
+        } else if (isNumeric) {
+          filters.push({
+            operator: 'or',
+            value: `author_numeric_id.eq.${Number(q)},author_username.ilike.%${q}%,author_nickname.ilike.%${q}%`
+          })
+        } else {
+          filters.push({
+            operator: 'or',
+            value: `author_username.ilike.%${q}%,author_nickname.ilike.%${q}%`
+          })
+        }
       }
 
       // 筛选状态
@@ -563,8 +575,8 @@ export const VideoList = () => {
       <List>
         {/* 搜索和筛选表单 */}
         <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
-          <Form.Item name="username" label="搜索用户">
-            <Input placeholder="输入用户名" style={{ width: 150 }} />
+          <Form.Item name="user_q" label="搜索用户">
+            <Input placeholder="作者ID/数字ID/用户名/昵称" style={{ width: 220 }} />
           </Form.Item>
           <Form.Item name="description" label="搜索描述">
             <Input placeholder="输入视频描述" style={{ width: 200 }} />
