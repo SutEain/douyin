@@ -29,8 +29,62 @@ onMounted(() => {
   initTelegramLogin()
 })
 
+// ✅ 优先从 URL 解析 tgWebAppData（即使 Telegram.WebApp 还没注入，也能登录）
+const getInitDataFromUrl = (): string | null => {
+  try {
+    const href = window.location.href || ''
+
+    // 1) query: ?tgWebAppData=...
+    try {
+      const url = new URL(href)
+      const q = url.searchParams.get('tgWebAppData')
+      if (q) return decodeURIComponent(q)
+    } catch {
+      // ignore
+    }
+
+    // 2) hash: #tgWebAppData=...&tgWebAppVersion=...
+    const hash = window.location.hash || ''
+    if (hash.includes('tgWebAppData')) {
+      const raw = hash.startsWith('#') ? hash.slice(1) : hash
+      const params = new URLSearchParams(raw)
+      const v = params.get('tgWebAppData')
+      if (v) return decodeURIComponent(v)
+    }
+
+    return null
+  } catch (e) {
+    console.warn('[TelegramLogin] 解析 tgWebAppData 失败:', e)
+    return null
+  }
+}
+
 const initTelegramLogin = async () => {
   try {
+    // ✅ 0) 优先从 URL 取 initData（避免 Telegram.WebApp 注入慢导致误判）
+    const urlInitData = getInitDataFromUrl()
+    if (urlInitData) {
+      // @ts-ignore
+      window.__TG_INIT_DATA__ = { raw: urlInitData, source: 'url' }
+      console.log(
+        '[TelegramLogin] ✅ 从 URL tgWebAppData 获取到 initData, len=',
+        urlInitData.length
+      )
+
+      console.log('[TelegramLogin] 🔐 准备登录（URL initData）...')
+      const result = await loginWithTelegram(urlInitData)
+      if (result?.user) {
+        baseStore.applyProfile(result.user)
+        console.log('[TelegramLogin] ✅ 登录成功（URL initData）')
+      }
+
+      // 🎯 等待 session 写入
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      await supabase.auth.getSession()
+      router.replace('/')
+      return
+    }
+
     // ✅ 等待 Telegram WebApp 准备就绪
     const tg = await waitForTelegram()
 
@@ -101,7 +155,8 @@ const waitForTelegram = (): Promise<any> => {
 
     // 轮询检查（最多等待 5 秒）
     let attempts = 0
-    const maxAttempts = 50
+    // ✅ 延长等待：部分机型/网络下 Telegram 注入可能更慢
+    const maxAttempts = 150 // 15s
     const checkInterval = setInterval(() => {
       attempts++
       // @ts-ignore
@@ -131,6 +186,15 @@ const getInitData = (): string | null => {
     }
   } catch (e) {
     console.warn('[TelegramLogin] __TG_INIT_DATA__ 不可用:', e)
+  }
+
+  // ✅ 兜底：从 URL 解析 tgWebAppData
+  const urlInitData = getInitDataFromUrl()
+  if (urlInitData) {
+    console.log('[TelegramLogin] ✅ 从 URL tgWebAppData 获取到 initData')
+    // @ts-ignore
+    window.__TG_INIT_DATA__ = { raw: urlInitData, source: 'url' }
+    return urlInitData
   }
 
   // 从 Telegram WebApp 获取
