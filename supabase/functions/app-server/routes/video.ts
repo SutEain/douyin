@@ -130,12 +130,13 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
         .select('*')
         .eq('status', 'published')
         .eq('is_adult', false)
+        .eq('is_shortdrama', false)
         .order('created_at', { ascending: false })
         .limit(pageSize)
       rows = fallbackData || []
     } else {
-      // 🎯 即使 RPC 返回了成人内容，这里也强制过滤掉
-      rows = (data || []).filter((r: any) => !r.is_adult)
+      // 🎯 强制过滤：成人 & 短剧 都不进入推荐 feed
+      rows = (data || []).filter((r: any) => !r.is_adult && !r.is_shortdrama)
     }
   } else {
     // 未登录用户：按时间倒序
@@ -144,6 +145,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
       .select('*')
       .eq('status', 'published')
       .eq('is_adult', false)
+      .eq('is_shortdrama', false)
       .order('created_at', { ascending: false })
       .limit(pageSize)
     rows = data || []
@@ -185,6 +187,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     .select('*', { count: 'exact', head: true })
     .eq('status', 'published')
     .eq('is_adult', false)
+    .eq('is_shortdrama', false)
 
   return successResponse({
     list,
@@ -214,6 +217,7 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
     .eq('status', 'published')
     .eq('is_adult', false)
     .eq('content_type', 'video')
+    .eq('is_shortdrama', true)
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
     .range(from, to)

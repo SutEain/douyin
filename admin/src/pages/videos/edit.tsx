@@ -30,6 +30,7 @@ type VideoRecord = {
   review_status?: string
   reject_reason?: string
   is_adult?: boolean
+  is_shortdrama?: boolean
   is_private?: boolean
   is_recommended?: boolean
   is_top?: boolean
@@ -113,6 +114,7 @@ export const VideoEdit = () => {
         review_status: videoData.review_status,
         reject_reason: videoData.reject_reason,
         is_adult: videoData.is_adult,
+        is_shortdrama: videoData.is_shortdrama,
         is_private: videoData.is_private,
         is_recommended: videoData.is_recommended,
         is_top: videoData.is_top,
@@ -193,6 +195,10 @@ export const VideoEdit = () => {
 
         <Form.Item label="成人内容" name="is_adult" valuePropName="checked">
           <Switch checkedChildren="成人" unCheckedChildren="普通" />
+        </Form.Item>
+
+        <Form.Item label="短剧" name="is_shortdrama" valuePropName="checked">
+          <Switch checkedChildren="短剧" unCheckedChildren="非短剧" />
         </Form.Item>
 
         <Form.Item label="公开/私密" name="is_private" valuePropName="checked">

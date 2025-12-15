@@ -144,6 +144,15 @@ export const VideoList = () => {
         })
       }
 
+      // 筛选短剧
+      if (params.is_shortdrama) {
+        filters.push({
+          field: 'is_shortdrama',
+          operator: 'eq',
+          value: params.is_shortdrama === 'true'
+        })
+      }
+
       return filters
     }
   })
@@ -577,6 +586,12 @@ export const VideoList = () => {
             <Select placeholder="是否成人" allowClear style={{ width: 110 }}>
               <Select.Option value="true">🔞 成人</Select.Option>
               <Select.Option value="false">普通</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="is_shortdrama" label="短剧">
+            <Select placeholder="是否短剧" allowClear style={{ width: 110 }}>
+              <Select.Option value="true">短剧</Select.Option>
+              <Select.Option value="false">非短剧</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item>
