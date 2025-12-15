@@ -110,7 +110,7 @@ export const VideoList = () => {
       // 搜索用户（author uuid / numeric_id / username / nickname）
       const rawUserQ = String(params.user_q || '').trim()
       if (rawUserQ) {
-        const q = rawUserQ.replace(/,/g, ' ') // supabase or 语法用逗号分隔，避免破坏
+        const q = rawUserQ.trim()
         const isUuid =
           /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q)
         const isNumeric = /^[0-9]+$/.test(q)
@@ -118,15 +118,10 @@ export const VideoList = () => {
         if (isUuid) {
           filters.push({ field: 'author_id', operator: 'eq', value: q })
         } else if (isNumeric) {
-          filters.push({
-            operator: 'or',
-            value: `author_numeric_id.eq.${Number(q)},author_username.ilike.%${q}%,author_nickname.ilike.%${q}%`
-          })
+          filters.push({ field: 'author_numeric_id', operator: 'eq', value: Number(q) })
         } else {
-          filters.push({
-            operator: 'or',
-            value: `author_username.ilike.%${q}%,author_nickname.ilike.%${q}%`
-          })
+          // ✅ 避免 dataProvider 的 OR 过滤结构兼容性问题：改用视图字段 author_search
+          filters.push({ field: 'author_search', operator: 'contains', value: q.toLowerCase() })
         }
       }
 
