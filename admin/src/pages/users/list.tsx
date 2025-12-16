@@ -9,14 +9,9 @@ export const UserList = () => {
   const { mutate: updateProfile } = useUpdate()
 
   const { tableProps, searchFormProps } = useTable({
-    resource: 'profiles',
+    // ✅ 用视图直接 join 邀请人，避免 PostgREST 自关联 embed（PGRST200）
+    resource: 'admin_profiles_list',
     syncWithLocation: true,
-    meta: {
-      // ✅ 关联 invited_by -> profiles.id，取邀请者信息用于列表展示
-      // 注意：refinedev/supabase 支持 PostgREST 的 select 语法
-      // 用列名提示关系，避免 PostgREST schema cache 没识别到外键名导致 PGRST200
-      select: '*,inviter:profiles!invited_by(id,nickname,username,numeric_id)'
-    },
     sorters: {
       initial: [{ field: 'created_at', order: 'desc' }]
     },
@@ -133,8 +128,9 @@ export const UserList = () => {
           title="邀请人"
           width={160}
           render={(_, record: any) => {
-            const inviter = record?.inviter
-            const name = inviter?.nickname || inviter?.username || '-'
+            const inviterRaw = record?.inviter
+            const inviter = Array.isArray(inviterRaw) ? inviterRaw?.[0] : inviterRaw
+            const name = inviter?.nickname || inviter?.username || inviter?.numeric_id || '-'
             return <span>{name}</span>
           }}
         />

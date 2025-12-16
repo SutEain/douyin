@@ -4,10 +4,99 @@
 -- - 为了让后台列表（admin_videos_list）不被普通用户读取，这里在 VIEW 内增加基于 JWT claim 的过滤：
 --   auth.jwt()->'app_metadata'->>'role' = 'admin'
 -- - 非 admin 将查询不到任何行（返回空列表）
+-- - ⚠️ 使用“显式列名列表”以避免 CREATE OR REPLACE VIEW 因列顺序/列名不一致触发 42P16
 
-CREATE OR REPLACE VIEW public.admin_videos_list AS
+CREATE OR REPLACE VIEW public.admin_videos_list (
+  id,
+  author_id,
+  title,
+  description,
+  play_url,
+  cover_url,
+  duration,
+  width,
+  height,
+  file_size,
+  view_count,
+  like_count,
+  comment_count,
+  share_count,
+  collect_count,
+  is_private,
+  review_status,
+  tags,
+  category,
+  created_at,
+  updated_at,
+  location_country,
+  location_country_code,
+  status,
+  published_at,
+  tg_file_id,
+  tg_unique_id,
+  tg_thumbnail_file_id,
+  storage_type,
+  tg_user_id,
+  location_city,
+  is_top,
+  reject_reason,
+  media_group_id,
+  content_type,
+  images,
+  is_recommended,
+  recommended_at,
+  is_adult,
+  admin_sort_rank,
+  admin_sort_time,
+  author_numeric_id,
+  author_username,
+  author_nickname,
+  author_avatar_url,
+  profiles,
+  author_search,
+  is_shortdrama
+) AS
 SELECT
-  v.*,
+  -- ✅ 基础字段（顺序必须与线上 view 一致）
+  v.id,
+  v.author_id,
+  v.title,
+  v.description,
+  v.play_url,
+  v.cover_url,
+  v.duration,
+  v.width,
+  v.height,
+  v.file_size,
+  v.view_count,
+  v.like_count,
+  v.comment_count,
+  v.share_count,
+  v.collect_count,
+  v.is_private,
+  v.review_status,
+  v.tags,
+  v.category,
+  v.created_at,
+  v.updated_at,
+  v.location_country,
+  v.location_country_code,
+  v.status,
+  v.published_at,
+  v.tg_file_id,
+  v.tg_unique_id,
+  v.tg_thumbnail_file_id,
+  v.storage_type,
+  v.tg_user_id,
+  v.location_city,
+  v.is_top,
+  v.reject_reason,
+  v.media_group_id,
+  v.content_type,
+  v.images,
+  v.is_recommended,
+  v.recommended_at,
+  v.is_adult,
 
   -- ✅ 排序优先级（数字越小越靠前）
   CASE
@@ -48,7 +137,10 @@ SELECT
       coalesce(p.username, ''),
       coalesce(p.nickname, '')
     )
-  ) AS author_search
+  ) AS author_search,
+
+  -- ✅ 末尾：短剧标记（必须在最后，保持列顺序不变）
+  v.is_shortdrama
 FROM public.videos v
 LEFT JOIN public.profiles p ON p.id = v.author_id
 WHERE (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin';
