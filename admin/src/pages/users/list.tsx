@@ -11,6 +11,11 @@ export const UserList = () => {
   const { tableProps, searchFormProps } = useTable({
     resource: 'profiles',
     syncWithLocation: true,
+    meta: {
+      // ✅ 关联 invited_by -> profiles.id，取邀请者信息用于列表展示
+      // 注意：refinedev/supabase 支持 PostgREST 的 select 语法
+      select: '*,inviter:profiles!profiles_invited_by_fkey(id,nickname,username,numeric_id)'
+    },
     sorters: {
       initial: [{ field: 'created_at', order: 'desc' }]
     },
@@ -123,6 +128,15 @@ export const UserList = () => {
         <Table.Column dataIndex="video_count" title="视频数" width={80} />
         <Table.Column dataIndex="follower_count" title="粉丝数" width={80} />
         <Table.Column dataIndex="total_likes" title="获赞数" width={80} />
+        <Table.Column
+          title="邀请人"
+          width={160}
+          render={(_, record: any) => {
+            const inviter = record?.inviter
+            const name = inviter?.nickname || inviter?.username || '-'
+            return <span>{name}</span>
+          }}
+        />
         <Table.Column
           dataIndex="balance_usdt"
           title="余额(USDT)"
