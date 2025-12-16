@@ -14,7 +14,8 @@ export const UserList = () => {
     meta: {
       // ✅ 关联 invited_by -> profiles.id，取邀请者信息用于列表展示
       // 注意：refinedev/supabase 支持 PostgREST 的 select 语法
-      select: '*,inviter:profiles!profiles_invited_by_fkey(id,nickname,username,numeric_id)'
+      // 用列名提示关系，避免 PostgREST schema cache 没识别到外键名导致 PGRST200
+      select: '*,inviter:profiles!invited_by(id,nickname,username,numeric_id)'
     },
     sorters: {
       initial: [{ field: 'created_at', order: 'desc' }]
