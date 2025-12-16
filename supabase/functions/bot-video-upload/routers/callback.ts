@@ -55,22 +55,28 @@ export async function handleCallback(
       const { getWelcomeKeyboard } = await import('../keyboards.ts')
 
       const welcomeText =
-        '<b>👋 欢迎来到 TG 抖音 — Telegram 最大的视频&amp;直播分享平台!🌍</b>\n\n' +
-        '<b>🔥 这里有你想要的精彩内容 🔥</b>\n' +
-        '📰 全球资讯 • 🍉 热门八卦 • 💥 网络热点\n' +
-        '🔞 成人专区 • 🎤 娱乐直播 • 🌟 海量资源等你探索！\n\n' +
-        '<b>🚀 诚邀您成为我们的“内容共建官”！</b>\n' +
+        '👋 欢迎来到 TG 抖音 🚀\n' +
+        'Telegram 最大的视频&amp;直播分享平台!\n\n' +
+        '🔥 这里有你想要的精彩内容 🔥\n' +
+        '📰 全球资讯 •  🍉 热门八卦 •  💥 网络热点\n' +
+        '🔞 成人专区 •  🎤 娱乐直播 •  🎬 热门短剧\n' +
+        '🌟 更多内容等你来探索！\n\n' +
+        '🚀 诚邀您成为我们的“内容共建官”！\n' +
         '📱 发现有趣视频？随手分享给我们\n' +
         '🎯 你的分享，将被千万用户看见\n' +
         '💎 优质内容创作者，更有专属福利\n\n' +
-        '<b>💬 互动|分享|发现|快乐，尽在TG抖音！❤️</b>\n\n' +
-        '📢 TG抖音官方频道：<a href="https://t.me/laidouyin">@laidouyin</a>\n' +
-        '🎬 TG 抖音，你的视界，由你定义！✨'
+        '💬 互动|分享|发现|快乐|尽在TG抖音！❤️\n' +
+        '--------------------------------------\n' +
+        '📢 TG抖音官方频道：@laidouyin\n' +
+        '🎬 TG 抖音-你的视界-由你定义！✨'
 
       const welcomeMarkup = getWelcomeKeyboard()
 
       if (welcomeMarkup) {
-        await editMessage(chatId, messageId, welcomeText, { reply_markup: welcomeMarkup })
+        await editMessage(chatId, messageId, welcomeText, {
+          reply_markup: welcomeMarkup,
+          disable_web_page_preview: true
+        })
       }
       return
     }
