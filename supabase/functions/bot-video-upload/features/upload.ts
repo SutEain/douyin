@@ -340,8 +340,8 @@ export async function handleVideo(
     let tags: string[] = []
 
     if (caption && caption.length > 0) {
-      // ✅ 视频：仍然限制 300 字（与历史行为一致）
-      description = safeTruncate(caption, 300)
+      // ✅ 不做字数限制：完整保存 caption（展示截断在前端完成）
+      description = String(caption).trim()
       tags = extractTags(caption)
     }
 

@@ -48,11 +48,6 @@ export async function handleText(chatId: number, text: string, userMessageId: nu
     case 'waiting_description': {
       await deleteTelegramMessage(chatId, userMessageId)
 
-      if (text.length > 300) {
-        await sendSelfDestructMessage(chatId, '❌ 描述最多 300 字，请重新输入')
-        return
-      }
-
       await supabase.from('videos').update({ description: text }).eq('id', video.id)
       await updateUserState(chatId, { state: 'idle' })
 
@@ -96,11 +91,6 @@ export async function handleText(chatId: number, text: string, userMessageId: nu
 
     case 'editing_description': {
       await deleteTelegramMessage(chatId, userMessageId)
-
-      if (text.length > 300) {
-        await sendSelfDestructMessage(chatId, '❌ 描述最多 300 字，请重新输入')
-        return
-      }
 
       await supabase.from('videos').update({ description: text }).eq('id', video.id)
 
