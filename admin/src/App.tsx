@@ -1,12 +1,13 @@
-import { Refine, Authenticated } from '@refinedev/core'
+import { Refine } from '@refinedev/core'
 import { ErrorComponent, useNotificationProvider, ThemedLayout } from '@refinedev/antd'
-import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import routerProvider from '@refinedev/react-router'
 import { dataProvider, liveProvider } from '@refinedev/supabase'
 import { App as AntdApp, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import '@refinedev/antd/dist/reset.css'
 
+import { useEffect, useState } from 'react'
 import { supabaseClient } from './supabaseClient'
 import { VideoList, VideoShow, VideoEdit } from './pages/videos'
 import { UserList, UserShow, UserEdit } from './pages/users'
@@ -21,6 +22,67 @@ import { SystemSettings } from './pages/system-settings'
 import { Login } from './pages/login'
 import { authProvider } from './authProvider'
 import { Dashboard } from './pages/dashboard'
+
+function AdminGuard() {
+  const [checking, setChecking] = useState(true)
+  const [ok, setOk] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const { data } = await supabaseClient.auth.getSession()
+        const session = data?.session
+        if (!session) {
+          if (mounted) {
+            setOk(false)
+            setChecking(false)
+          }
+          return
+        }
+
+        const role = session.user?.app_metadata?.role
+        if (role !== 'admin') {
+          await supabaseClient.auth.signOut()
+          if (mounted) {
+            setOk(false)
+            setChecking(false)
+          }
+          return
+        }
+
+        if (mounted) {
+          setOk(true)
+          setChecking(false)
+        }
+      } catch (e) {
+        console.error('[AdminGuard] check session failed:', e)
+        if (mounted) {
+          setOk(false)
+          setChecking(false)
+        }
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  if (checking) {
+    return <div style={{ padding: 24 }}>加载中...</div>
+  }
+
+  if (!ok) {
+    return <Navigate to="/login" replace />
+  }
+
+  return (
+    <ThemedLayout>
+      <Outlet />
+    </ThemedLayout>
+  )
+}
 
 function App() {
   return (
@@ -99,19 +161,7 @@ function App() {
           >
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route
-                element={
-                  <Authenticated
-                    key="authenticated-routes"
-                    redirectOnFail="/login"
-                    fallback={<div style={{ padding: 24 }}>加载中...</div>}
-                  >
-                    <ThemedLayout>
-                      <Outlet />
-                    </ThemedLayout>
-                  </Authenticated>
-                }
-              >
+              <Route element={<AdminGuard />}>
                 {/* 默认首页为 Dashboard */}
                 <Route index element={<Dashboard />} />
                 <Route path="/dashboard" element={<Dashboard />} />
