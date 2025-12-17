@@ -17,6 +17,11 @@ const props = defineProps({
   }
 })
 
+const emit = defineEmits<{
+  goUserInfo: []
+  viewDetail: []
+}>()
+
 const item = inject<any>('item')
 
 const { t } = useI18n()
@@ -54,6 +59,13 @@ const fullDescription = computed(() => {
 
 const showToggle = computed(() => fullDescription.value.length > 100)
 
+const isGraphic = computed(() => {
+  const t = String(currentItem.value?.content_type || 'video')
+  return t === 'image' || t === 'album'
+})
+
+const showViewDetail = computed(() => showToggle.value && state.expanded && isGraphic.value)
+
 function formatBeijingDate(date: Date) {
   // 输出 YYYY-MM-DD（北京时间）
   const s = new Intl.DateTimeFormat('zh-CN', {
@@ -88,7 +100,7 @@ const publishDate = computed(() => {
         </div>
       </div>
       <div class="live" v-if="props.isLive">直播中</div>
-      <div class="name mb1r f18 fb" @click.stop="$emit('goUserInfo')">
+      <div class="name mb1r f18 fb" @click.stop="emit('goUserInfo')">
         @{{ item?.author?.nickname }}
       </div>
       <div v-if="publishDate" class="publish-date">发布于 {{ publishDate }}</div>
@@ -103,6 +115,14 @@ const publishDate = computed(() => {
           @touchend.stop.prevent="state.expanded = !state.expanded"
         >
           {{ state.expanded ? '收起 ▲' : '展开 ▼' }}
+        </span>
+        <span
+          class="view-detail"
+          v-if="showViewDetail"
+          @click.stop.prevent="emit('viewDetail')"
+          @touchend.stop.prevent="emit('viewDetail')"
+        >
+          查看详情
         </span>
       </div>
       <!--      <div class="music" @click.stop="bus.emit('nav','/home/music')">-->
@@ -244,6 +264,28 @@ const publishDate = computed(() => {
       min-width: 64rem;
       text-align: center;
       z-index: 60; // ✅ 高于进度条热区(50)，与静音icon同级
+
+      &:active {
+        opacity: 0.8;
+        background: rgba(0, 0, 0, 0.3);
+      }
+    }
+
+    .view-detail {
+      position: absolute;
+      right: 48rem;
+      bottom: 40px;
+      font-size: 14rem;
+      color: rgba(255, 255, 255, 0.9);
+      cursor: pointer;
+      padding: 8rem 12rem;
+      white-space: nowrap;
+      user-select: none;
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 4rem;
+      min-width: 64rem;
+      text-align: center;
+      z-index: 60;
 
       &:active {
         opacity: 0.8;

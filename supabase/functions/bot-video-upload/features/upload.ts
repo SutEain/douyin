@@ -184,7 +184,8 @@ export async function handlePhoto(
       let description: string | null = null
       let tags: string[] = []
       if (caption && caption.length > 0) {
-        description = safeTruncate(caption, 300)
+        // ✅ 上传不做字数限制：完整保存 caption（feed 侧再做展示截断）
+        description = String(caption).trim()
         tags = extractTags(caption)
       }
 
@@ -259,7 +260,8 @@ export async function saveSinglePhoto(
   let description: string | null = null
   let tags: string[] = []
   if (caption && caption.length > 0) {
-    description = safeTruncate(caption, 300)
+    // ✅ 上传不做字数限制：完整保存 caption（feed 侧再做展示截断）
+    description = String(caption).trim()
     tags = extractTags(caption)
   }
 
@@ -338,6 +340,7 @@ export async function handleVideo(
     let tags: string[] = []
 
     if (caption && caption.length > 0) {
+      // ✅ 视频：仍然限制 300 字（与历史行为一致）
       description = safeTruncate(caption, 300)
       tags = extractTags(caption)
     }

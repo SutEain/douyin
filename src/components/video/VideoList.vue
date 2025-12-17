@@ -92,7 +92,11 @@
       <!-- 🎯 UI 元素（描述、点赞、进度条等）：放在 slide-container 里，跟随整体移动 -->
       <div class="overlay" v-if="currentItem">
         <ItemToolbar v-model:item="currentItemLocal" @update:item="handleItemUpdate" />
-        <ItemDesc v-model:item="currentItemLocal" @update:item="handleItemUpdate" />
+        <ItemDesc
+          v-model:item="currentItemLocal"
+          @update:item="handleItemUpdate"
+          @view-detail="openGraphicDetail"
+        />
 
         <!-- 进度条：只在视频类型时显示 -->
         <div
@@ -125,6 +129,17 @@
     </div>
     <!-- 🎯 关闭 slide-container -->
   </div>
+
+  <!-- 🖼️ 图文详情（推荐流里刷到 image/album 时：展开后点“查看详情”弹出） -->
+  <teleport to="body">
+    <div v-if="graphicDetail.visible" class="graphic-detail-shadow">
+      <AlbumDetail
+        :detail="graphicDetail.detail"
+        @close="closeGraphicDetail"
+        @update="handleGraphicDetailUpdate"
+      />
+    </div>
+  </teleport>
 </template>
 
 <script setup lang="ts">
@@ -137,9 +152,10 @@ import AlbumSwiper from './AlbumSwiper.vue'
 import type { VideoItem } from '../../types'
 import { useVideoStore } from '@/stores/video'
 import { useBaseStore } from '@/store/pinia'
-import { parseImages, getContentType } from '@/utils/media'
+import { parseImages, getContentType, buildCdnUrl } from '@/utils/media'
 import { recordVideoView } from '@/api/videos'
 import { _copy, _notice } from '@/utils'
+import AlbumDetail from '@/pages/other/AlbumDetail.vue'
 
 const DEBUG_PREFIX = '[AutoPlayDebug]'
 // 🎯 观看历史记录追踪（避免重复记录）
@@ -237,6 +253,120 @@ const emit = defineEmits<{
 
 const videoStore = useVideoStore()
 const baseStore = useBaseStore()
+
+const graphicDetail = reactive<{
+  visible: boolean
+  detail: any
+}>({
+  visible: false,
+  detail: null
+})
+
+function formatMMDDFromSeconds(sec?: number) {
+  const t = Number(sec)
+  if (!Number.isFinite(t) || t <= 0) return ''
+  const ms = t < 1e12 ? t * 1000 : t
+  const d = new Date(ms)
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${mm}-${dd}`
+}
+
+function buildNoteCardDetailFromItem(item: VideoItem) {
+  const imgs = parseImages(item?.images)
+  const imageList = Array.isArray(imgs)
+    ? imgs
+        .map((img: any) => ({
+          info_list: [
+            {
+              url: img?.url || buildCdnUrl(String(img?.file_id || ''))
+            }
+          ]
+        }))
+        .filter((x: any) => !!x?.info_list?.[0]?.url)
+    : []
+
+  const coverUrl = imageList?.[0]?.info_list?.[0]?.url || ''
+  const nickname = item?.author?.nickname || '用户'
+  const avatar =
+    item?.author?.avatar_168x168?.url_list?.[0] ||
+    item?.author?.avatar_thumb?.url_list?.[0] ||
+    item?.author?.avatar_300x300?.url_list?.[0] ||
+    ''
+  const authorId = item?.author?.user_id || null
+
+  return {
+    id: item.aweme_id,
+    isLoved: !!(item as any).isLoved,
+    isCollect: !!(item as any).isCollect,
+    isAttention: !!(item as any).isAttention,
+    note_card: {
+      aweme_id: item.aweme_id,
+      cover: { url_default: coverUrl },
+      image_list: imageList,
+      display_title: (item as any).desc || '',
+      user: {
+        id: authorId,
+        avatar,
+        nickname,
+        nick_name: nickname
+      },
+      interact_info: {
+        liked_count: (item as any)?.statistics?.digg_count ?? 0,
+        comment_count: (item as any)?.statistics?.comment_count ?? 0,
+        collect_count: (item as any)?.statistics?.collect_count ?? 0,
+        share_count: (item as any)?.statistics?.share_count ?? 0
+      },
+      comment_list: [],
+      createTime: formatMMDDFromSeconds((item as any)?.create_time)
+    }
+  }
+}
+
+function openGraphicDetail() {
+  const item = currentItemLocal.value
+  if (!item) return
+  const t = String((item as any)?.content_type || 'video')
+  if (t !== 'image' && t !== 'album') return
+  graphicDetail.detail = buildNoteCardDetailFromItem(item)
+  graphicDetail.visible = true
+  console.log('[VideoList] open graphic detail from feed:', { id: item.aweme_id, type: t })
+}
+
+function closeGraphicDetail() {
+  graphicDetail.visible = false
+  graphicDetail.detail = null
+}
+
+function handleGraphicDetailUpdate(patch: any) {
+  const idx = currentIndex.value
+  const origin = idx >= 0 && idx < props.items.length ? props.items[idx] : null
+  if (!origin) return
+  if (patch?.id && String(patch.id) !== String(origin.aweme_id)) return
+
+  if (typeof patch?.isLoved === 'boolean') (origin as any).isLoved = patch.isLoved
+  if (typeof patch?.isCollect === 'boolean') (origin as any).isCollect = patch.isCollect
+  if (typeof patch?.isAttention === 'boolean') (origin as any).isAttention = patch.isAttention
+
+  const interact = patch?.note_card?.interact_info || {}
+  if ((origin as any).statistics) {
+    if (interact.liked_count != null)
+      (origin as any).statistics.digg_count = Number(interact.liked_count)
+    if (interact.comment_count != null)
+      (origin as any).statistics.comment_count = Number(interact.comment_count)
+    if (interact.collect_count != null)
+      (origin as any).statistics.collect_count = Number(interact.collect_count)
+    if (interact.share_count != null)
+      (origin as any).statistics.share_count = Number(interact.share_count)
+  }
+
+  // 同步当前 UI
+  currentItemLocal.value = JSON.parse(JSON.stringify(origin))
+  console.log('[VideoList] synced AlbumDetail update to feed item:', {
+    id: origin.aweme_id,
+    patch
+  })
+}
 
 function stopVideo(slot: SlotState) {
   const video = slotRefs.get(slot.key)
