@@ -143,7 +143,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, watch } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  provide,
+  reactive,
+  ref,
+  watch
+} from 'vue'
 import { Icon } from '@iconify/vue'
 import ItemToolbar from '../slide/ItemToolbar.vue'
 import ItemDesc from '../slide/ItemDesc.vue'
@@ -155,7 +165,9 @@ import { useBaseStore } from '@/store/pinia'
 import { parseImages, getContentType, buildCdnUrl } from '@/utils/media'
 import { recordVideoView } from '@/api/videos'
 import { _copy, _notice } from '@/utils'
-import AlbumDetail from '@/pages/other/AlbumDetail.vue'
+// ✅ 避免循环依赖导致的 “Cannot access 'Y' before initialization”
+// 只在需要打开图文详情时再异步加载
+const AlbumDetail = defineAsyncComponent(() => import('@/pages/other/AlbumDetail.vue'))
 
 const DEBUG_PREFIX = '[AutoPlayDebug]'
 // 🎯 观看历史记录追踪（避免重复记录）
@@ -1643,6 +1655,18 @@ defineExpose({
   overscroll-behavior: contain;
   touch-action: auto; // 允许评论区域自身滚动
   overflow: visible; // 避免评论弹层被父容器裁剪
+}
+
+// 🖼️ 推荐流图文详情弹层（teleport to body）
+.graphic-detail-shadow {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: calc(var(--vh, 1vh) * 100);
+  background: #000;
+  z-index: 99999;
+  overflow: hidden;
 }
 
 // 🎯 滑动容器：整体移动
