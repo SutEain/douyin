@@ -1667,6 +1667,12 @@ defineExpose({
   background: #000;
   z-index: 99999;
   overflow: hidden;
+
+  // ✅ AlbumDetail 默认 .goods-detail opacity=0（用于 Community 的开启动画）
+  // 推荐页直接渲染时没有动画逻辑，会导致“黑屏”，这里强制显示
+  :deep(.goods-detail) {
+    opacity: 1 !important;
+  }
 }
 
 // 🎯 滑动容器：整体移动

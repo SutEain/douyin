@@ -108,22 +108,24 @@ const publishDate = computed(() => {
         <div class="description" :class="{ collapsed: !state.expanded && showToggle }">
           {{ fullDescription }}
         </div>
-        <span
-          class="toggle-desc"
-          v-if="showToggle"
-          @click.stop.prevent="state.expanded = !state.expanded"
-          @touchend.stop.prevent="state.expanded = !state.expanded"
-        >
-          {{ state.expanded ? '收起 ▲' : '展开 ▼' }}
-        </span>
-        <span
-          class="view-detail"
-          v-if="showViewDetail"
-          @click.stop.prevent="emit('viewDetail')"
-          @touchend.stop.prevent="emit('viewDetail')"
-        >
-          查看详情
-        </span>
+        <div class="desc-actions" v-if="showToggle || showViewDetail">
+          <span
+            class="view-detail"
+            v-if="showViewDetail"
+            @click.stop.prevent="emit('viewDetail')"
+            @touchend.stop.prevent="emit('viewDetail')"
+          >
+            查看详情
+          </span>
+          <span
+            class="toggle-desc"
+            v-if="showToggle"
+            @click.stop.prevent="state.expanded = !state.expanded"
+            @touchend.stop.prevent="state.expanded = !state.expanded"
+          >
+            {{ state.expanded ? '收起 ▲' : '展开 ▼' }}
+          </span>
+        </div>
       </div>
       <!--      <div class="music" @click.stop="bus.emit('nav','/home/music')">-->
       <!--        <img src="../../assets/img/icon/music.svg" alt="" class="music-image">-->
@@ -213,6 +215,16 @@ const publishDate = computed(() => {
       padding-right: 80rem; // ✅ 给按钮留出空间
     }
 
+    .desc-actions {
+      position: absolute;
+      right: -40px;
+      bottom: 40px; // ✅ 与原“展开/收起”位置对齐
+      display: flex;
+      flex-direction: column;
+      gap: 8rem;
+      z-index: 60; // ✅ 高于进度条热区(50)，与静音icon同级
+    }
+
     // ✅ 提升白色视频上的可读性：描述区域加渐变遮罩
     .description-wrapper::before {
       content: '';
@@ -250,9 +262,7 @@ const publishDate = computed(() => {
     }
 
     .toggle-desc {
-      position: absolute;
-      right: -40px;
-      bottom: 40px; // ✅ 固定在底部（折叠后的4行文字底部）
+      position: relative;
       font-size: 14rem;
       color: rgba(255, 255, 255, 0.9);
       cursor: pointer;
@@ -263,7 +273,6 @@ const publishDate = computed(() => {
       border-radius: 4rem;
       min-width: 64rem;
       text-align: center;
-      z-index: 60; // ✅ 高于进度条热区(50)，与静音icon同级
 
       &:active {
         opacity: 0.8;
@@ -272,9 +281,7 @@ const publishDate = computed(() => {
     }
 
     .view-detail {
-      position: absolute;
-      right: 48rem;
-      bottom: 40px;
+      position: relative;
       font-size: 14rem;
       color: rgba(255, 255, 255, 0.9);
       cursor: pointer;
@@ -285,7 +292,6 @@ const publishDate = computed(() => {
       border-radius: 4rem;
       min-width: 64rem;
       text-align: center;
-      z-index: 60;
 
       &:active {
         opacity: 0.8;
