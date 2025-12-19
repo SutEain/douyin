@@ -148,6 +148,18 @@ app.use(i18n)
 app.mount('#app')
 app.directive('click', vClick)
 
+// ✅ Vercel Web Analytics + Speed Insights（仅生产环境启用）
+// - Web Analytics 脚本：/_vercel/insights/script.js
+// - Speed Insights 脚本：/_vercel/speed-insights/script.js
+if (import.meta.env.PROD) {
+  Promise.allSettled([
+    import('@vercel/analytics').then((m: any) => m?.inject?.({ framework: 'vue' })).catch(() => {}),
+    import('@vercel/speed-insights')
+      .then((m: any) => m?.injectSpeedInsights?.({ framework: 'vue' }))
+      .catch(() => {})
+  ])
+}
+
 //放到最后才可以使用pinia
 setTimeout(() => {
   bus.emit(EVENT_KEY.HIDE_MUTED_NOTICE)
