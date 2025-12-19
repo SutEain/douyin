@@ -158,8 +158,8 @@ const publishDate = computed(() => {
 <style scoped lang="less">
 .item-desc {
   position: absolute;
-  bottom: 0;
-  width: 70%;
+  bottom: -5rem;
+  width: 76%;
 
   .content {
     color: #fff;

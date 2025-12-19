@@ -347,15 +347,20 @@ const vClick = useClick()
   flex-direction: column;
   align-items: center;
 
+  // ✅ 全平台：更紧凑一点（A 档）
+  .mb2r {
+    margin-bottom: 14rem !important;
+  }
+
   .avatar-ctn {
     position: relative;
 
-    @w: 45rem;
+    @w: 40rem;
 
     .avatar {
       width: @w;
       height: @w;
-      border: 3rem solid white;
+      border: 2rem solid white;
       border-radius: 50%;
     }
 
@@ -411,7 +416,7 @@ const vClick = useClick()
     justify-content: center;
     align-items: center;
 
-    @width: 35rem;
+    @width: 32rem;
 
     img {
       width: @width;
@@ -424,7 +429,7 @@ const vClick = useClick()
   }
 
   .icon {
-    font-size: 40rem;
+    font-size: 36rem;
   }
 
   .loved {
@@ -507,61 +512,6 @@ const vClick = useClick()
       border-bottom: 6px solid transparent;
       border-left: 6px solid rgba(0, 0, 0, 0.8);
     }
-  }
-}
-
-// ✅ 仅针对 Windows Telegram Desktop：缩小右侧操作栏，避免小窗口时覆盖顶部搜索
-:global(html.tg-desktop-win) .toolbar {
-  right: 8rem;
-
-  // 收紧整体纵向间距
-  .mb2r {
-    margin-bottom: 12rem !important;
-  }
-
-  // 头像缩小
-  .avatar-ctn {
-    .avatar {
-      width: 38rem !important;
-      height: 38rem !important;
-      border-width: 2rem !important;
-    }
-
-    .options {
-      width: 16rem !important;
-      height: 16rem !important;
-
-      img {
-        width: 12rem !important;
-        height: 12rem !important;
-      }
-    }
-  }
-
-  // 图标/按钮缩小
-  .love,
-  .message,
-  .share {
-    img {
-      width: 30rem !important;
-      height: 30rem !important;
-    }
-  }
-
-  .icon {
-    font-size: 34rem !important;
-  }
-
-  // 倍速面板/提示气泡稍微靠近，避免超出屏幕
-  .speed-toggle {
-    .speed-panel {
-      right: 44px !important;
-      min-width: 76px !important;
-    }
-  }
-
-  .sound-tip-bubble {
-    right: 44px !important;
   }
 }
 

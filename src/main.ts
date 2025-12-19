@@ -23,37 +23,6 @@ if (typeof window !== 'undefined') {
     window.TelegramGameProxy.receiveEvent = () => {}
   }
 
-  // ✅ Telegram Mini App (Windows Telegram Desktop) 适配：
-  // - Windows Telegram Desktop 小窗口时，右侧操作栏可能覆盖顶部搜索
-  // - 这里给 <html> 打标，供组件做定向样式（不影响 mac/手机）
-  ;(() => {
-    let marked = false
-    const mark = (from: string) => {
-      if (marked) return
-      const tg = (window as any).Telegram?.WebApp
-      const platform = tg?.platform
-      const ua = window.navigator?.userAgent || ''
-      const isWindows = /Windows/i.test(ua)
-      const isTelegramDesktop = platform === 'tdesktop'
-      if (isWindows && isTelegramDesktop) {
-        marked = true
-        document.documentElement.classList.add('tg-desktop-win')
-        console.log('[TG][Env] ✅ detect Windows Telegram Desktop -> add class tg-desktop-win', {
-          from,
-          platform,
-          ua: ua.slice(0, 120)
-        })
-      } else if (tg) {
-        // 仅在 tg 已注入时打印一次环境信息，便于排查（不会刷屏）
-        console.log('[TG][Env] WebApp detected (not Windows tdesktop)', { from, platform })
-      }
-    }
-    // Telegram Desktop 注入可能稍慢，做几次轻量重试
-    mark('immediate')
-    setTimeout(() => mark('t+300ms'), 300)
-    setTimeout(() => mark('t+1200ms'), 1200)
-  })()
-
   const fallbackImage = new URL('./assets/img/icon/img-loading.png', import.meta.url).href
 
   const handleGlobalError = (event: Event | ErrorEvent) => {
