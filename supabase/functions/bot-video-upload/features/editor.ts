@@ -1,4 +1,3 @@
-import { safeTruncate } from '../utils/text.ts'
 import { getFlag } from '../utils/geo.ts'
 
 // 生成编辑菜单
@@ -94,7 +93,9 @@ export function getEditMenuText(video: any): string {
 
   let descText = '未设置'
   if (video.description) {
-    descText = safeTruncate(video.description, 100)
+    // ✅ 就绪/编辑菜单：描述展示完整（不截断）
+    // 说明：长度限制已由 DB 约束取消；展示截断交给前端（App 内）处理
+    descText = String(video.description)
   }
 
   let tagsText = '未设置'

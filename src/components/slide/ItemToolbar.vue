@@ -510,6 +510,61 @@ const vClick = useClick()
   }
 }
 
+// ✅ 仅针对 Windows Telegram Desktop：缩小右侧操作栏，避免小窗口时覆盖顶部搜索
+:global(html.tg-desktop-win) .toolbar {
+  right: 8rem;
+
+  // 收紧整体纵向间距
+  .mb2r {
+    margin-bottom: 12rem !important;
+  }
+
+  // 头像缩小
+  .avatar-ctn {
+    .avatar {
+      width: 38rem !important;
+      height: 38rem !important;
+      border-width: 2rem !important;
+    }
+
+    .options {
+      width: 16rem !important;
+      height: 16rem !important;
+
+      img {
+        width: 12rem !important;
+        height: 12rem !important;
+      }
+    }
+  }
+
+  // 图标/按钮缩小
+  .love,
+  .message,
+  .share {
+    img {
+      width: 30rem !important;
+      height: 30rem !important;
+    }
+  }
+
+  .icon {
+    font-size: 34rem !important;
+  }
+
+  // 倍速面板/提示气泡稍微靠近，避免超出屏幕
+  .speed-toggle {
+    .speed-panel {
+      right: 44px !important;
+      min-width: 76px !important;
+    }
+  }
+
+  .sound-tip-bubble {
+    right: 44px !important;
+  }
+}
+
 // 🎯 气泡动画
 .bubble-enter-active {
   animation: bubble-in 0.3s ease-out;
