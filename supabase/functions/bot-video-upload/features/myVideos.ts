@@ -3,6 +3,11 @@ import { editMessage, sendMessage } from '../telegram.ts'
 import { safeTruncate } from '../utils/text.ts'
 import { getUserState, updateUserState } from '../state.ts'
 
+export type PanelResult =
+  | { mode: 'edited'; messageId: number }
+  | { mode: 'sent'; messageId: number }
+  | { mode: 'failed' }
+
 // ===== 已发布列表：搜索 + 游标翻页（稳定） =====
 export type PublishedCursor = { published_at: string; id: string }
 export type PublishedCtx = {
@@ -82,7 +87,10 @@ function applyPublishedSearchFilter(builder: any, q?: string) {
 }
 
 // 处理"我的视频"- 概览页（单面板模式）
-export async function handleMyVideos(chatId: number) {
+export async function handleMyVideos(
+  chatId: number,
+  preferredMessageId?: number
+): Promise<PanelResult> {
   try {
     const userState = await getUserState(chatId)
 
@@ -94,7 +102,7 @@ export async function handleMyVideos(chatId: number) {
     if (error) {
       console.error('获取视频列表失败:', error)
       await sendMessage(chatId, '❌ 获取视频列表失败')
-      return
+      return { mode: 'failed' }
     }
 
     if (!videos || videos.length === 0) {
@@ -103,15 +111,19 @@ export async function handleMyVideos(chatId: number) {
         inline_keyboard: [[{ text: '⬅️ 返回首页', callback_data: 'back_home' }]]
       }
       const dashId = (userState as any)?.dashboard_message_id
-      if (dashId) {
-        const edited = await editMessage(chatId, dashId, text, { reply_markup: replyMarkup })
-        if (edited?.ok) return
+      const candidates = [preferredMessageId, dashId].filter(
+        (v): v is number => typeof v === 'number' && Number.isFinite(v)
+      )
+      for (const mid of candidates) {
+        const edited = await editMessage(chatId, mid, text, { reply_markup: replyMarkup })
+        if (edited?.ok) return { mode: 'edited', messageId: mid }
       }
       const sent = await sendMessage(chatId, text, { reply_markup: replyMarkup })
       if (sent?.ok) {
         await updateUserState(chatId, { dashboard_message_id: sent.result.message_id })
+        return { mode: 'sent', messageId: sent.result.message_id }
       }
-      return
+      return { mode: 'failed' }
     }
 
     const processing = videos.filter((v) => v.status === 'processing')
@@ -162,24 +174,30 @@ export async function handleMyVideos(chatId: number) {
     const replyMarkup = { inline_keyboard: keyboard }
 
     const dashId = (userState as any)?.dashboard_message_id
-    if (dashId) {
-      const edited = await editMessage(chatId, dashId, text, { reply_markup: replyMarkup })
-      if (edited?.ok) return
+    const candidates = [preferredMessageId, dashId].filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v)
+    )
+    for (const mid of candidates) {
+      const edited = await editMessage(chatId, mid, text, { reply_markup: replyMarkup })
+      if (edited?.ok) return { mode: 'edited', messageId: mid }
     }
 
     const sent = await sendMessage(chatId, text, { reply_markup: replyMarkup })
     if (sent?.ok) {
       await updateUserState(chatId, { dashboard_message_id: sent.result.message_id })
+      return { mode: 'sent', messageId: sent.result.message_id }
     }
+    return { mode: 'failed' }
   } catch (error) {
     console.error('获取视频列表错误:', error)
     await sendMessage(chatId, '❌ 获取视频列表时出错')
+    return { mode: 'failed' }
   }
 }
 
 // 处理"我的视频"- 编辑模式（单面板模式下复用 handleMyVideos）
-export async function handleMyVideosEdit(chatId: number, _messageId: number) {
-  await handleMyVideos(chatId)
+export async function handleMyVideosEdit(chatId: number, messageId: number): Promise<PanelResult> {
+  return await handleMyVideos(chatId, messageId)
 }
 
 // ✅ 查看上传中的视频详情（processing）

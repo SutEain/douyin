@@ -26,7 +26,12 @@ import {
   publishVideo,
   toggleVideoPin
 } from '../features/videoActions.ts'
-import { answerCallbackQuery, editMessage, sendMessage } from '../telegram.ts'
+import {
+  answerCallbackQuery,
+  editMessage,
+  editMessageReplyMarkup,
+  sendMessage
+} from '../telegram.ts'
 
 // 处理回调按钮
 export async function handleCallback(
@@ -39,8 +44,11 @@ export async function handleCallback(
   console.log('[handleCallback] chatId:', chatId, 'messageId:', messageId, 'data:', data)
 
   try {
-    // ✅ 记录“我的视频”面板消息ID（单面板模式）
-    await updateUserState(chatId, { dashboard_message_id: messageId })
+    // ✅ “noop/禁用按钮”回调：只提示，不做任何动作
+    if (data === 'noop') {
+      await answerCallbackQuery(callbackQueryId, '⏳ 正在处理中，请稍等…')
+      return
+    }
 
     // 🎯 个人中心相关回调
     if (data === 'user_profile') {
@@ -413,8 +421,80 @@ export async function handleCallback(
     }
 
     if (data === 'my_videos') {
-      await answerCallbackQuery(callbackQueryId)
-      await handleMyVideosEdit(chatId, messageId)
+      // ✅ 防止连续点击：用户级点击锁（4秒）
+      const userState = await getUserState(chatId)
+      const now = Date.now()
+      const ctx = (userState as any)?.context || {}
+      const uiLocks = ctx.ui_locks || {}
+      const until = Number(uiLocks.my_videos_until || 0)
+      if (until && until > now) {
+        await answerCallbackQuery(callbackQueryId, '⏳ 正在打开「我的视频」…')
+        return
+      }
+
+      await updateUserState(chatId, {
+        context: {
+          ...ctx,
+          ui_locks: {
+            ...uiLocks,
+            my_videos_until: now + 4000
+          }
+        }
+      })
+
+      await answerCallbackQuery(callbackQueryId, '⏳ 加载中…')
+
+      // 尝试把“📹 我的视频”按钮替换为 loading（不改文本）
+      try {
+        const { getWelcomeKeyboard } = await import('../keyboards.ts')
+        const kb = getWelcomeKeyboard()
+        if (kb?.inline_keyboard?.length) {
+          const cloned = JSON.parse(JSON.stringify(kb))
+          // 第二行第一个按钮通常是“📹 我的视频”
+          if (cloned.inline_keyboard?.[1]?.[0]?.callback_data === 'my_videos') {
+            cloned.inline_keyboard[1][0] = { text: '⏳ 加载中…', callback_data: 'noop' }
+          }
+          await editMessageReplyMarkup(chatId, messageId, cloned)
+        }
+      } catch (e) {
+        console.warn('[my_videos] update keyboard to loading failed:', e)
+      }
+
+      let result: any = null
+      try {
+        result = await handleMyVideosEdit(chatId, messageId)
+      } finally {
+        // 释放锁
+        try {
+          const latest = await getUserState(chatId)
+          const latestCtx = (latest as any)?.context || {}
+          const latestLocks = latestCtx.ui_locks || {}
+          await updateUserState(chatId, {
+            context: {
+              ...latestCtx,
+              ui_locks: {
+                ...latestLocks,
+                my_videos_until: 0
+              }
+            }
+          })
+        } catch (e) {
+          console.warn('[my_videos] unlock failed:', e)
+        }
+      }
+
+      // 如果这次没有成功编辑当前消息（例如编辑失败只能 send 新消息），就把按钮恢复，避免旧消息一直“加载中”
+      try {
+        if (!result || result.mode !== 'edited' || result.messageId !== messageId) {
+          const { getWelcomeKeyboard } = await import('../keyboards.ts')
+          const kb = getWelcomeKeyboard()
+          if (kb) {
+            await editMessageReplyMarkup(chatId, messageId, kb)
+          }
+        }
+      } catch (e) {
+        console.warn('[my_videos] restore keyboard failed:', e)
+      }
       return
     }
 

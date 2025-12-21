@@ -19,6 +19,7 @@ import {
 } from './pages/incentive-progress/index'
 import { WalletLedgerList } from './pages/wallet-ledger/index'
 import { SystemSettings } from './pages/system-settings'
+import { LiveRoomCreate, LiveRoomEdit, LiveRoomList } from './pages/live-rooms'
 import { Login } from './pages/login'
 import { authProvider } from './authProvider'
 import { Dashboard } from './pages/dashboard'
@@ -152,6 +153,13 @@ function App() {
                 name: 'system_settings',
                 list: '/system-settings',
                 meta: { label: '系统设置' }
+              },
+              {
+                name: 'live_rooms',
+                list: '/live-rooms',
+                create: '/live-rooms/create',
+                edit: '/live-rooms/edit/:id',
+                meta: { label: '直播间管理' }
               }
             ]}
             options={{
@@ -189,6 +197,11 @@ function App() {
                 </Route>
                 <Route path="/wallet-ledger" element={<WalletLedgerList />} />
                 <Route path="/system-settings" element={<SystemSettings />} />
+                <Route path="/live-rooms">
+                  <Route index element={<LiveRoomList />} />
+                  <Route path="create" element={<LiveRoomCreate />} />
+                  <Route path="edit/:id" element={<LiveRoomEdit />} />
+                </Route>
               </Route>
               <Route path="*" element={<ErrorComponent />} />
             </Routes>

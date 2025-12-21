@@ -16,23 +16,28 @@
             <span>图文</span>
           </div>
 
-          <!-- 短剧 Tab -->
+          <!-- 直播 Tab -->
           <div class="tab" :class="{ active: index === 2 }" @click.stop="change(2)">
+            <span>直播</span>
+          </div>
+
+          <!-- 短剧 Tab -->
+          <div class="tab" :class="{ active: index === 3 }" @click.stop="change(3)">
             <span>短剧</span>
           </div>
 
           <!-- 成人内容 Tab -->
-          <div class="tab" :class="{ active: index === 3 }" @click.stop="change(3)">
+          <div class="tab" :class="{ active: index === 4 }" @click.stop="change(4)">
             <span>成人</span>
           </div>
 
           <!-- 关注 - 可点击 -->
-          <div class="tab" :class="{ active: index === 4 }" @click.stop="change(4)">
+          <div class="tab" :class="{ active: index === 5 }" @click.stop="change(5)">
             <span>{{ $t('home.following') }}</span>
           </div>
 
           <!-- 推荐 -->
-          <div class="tab" :class="{ active: index === 5 }" @click.stop="change(5)">
+          <div class="tab" :class="{ active: index === 6 }" @click.stop="change(6)">
             <span>{{ $t('home.recommended') }}</span>
           </div>
         </div>
@@ -168,6 +173,8 @@ export default {
     initTabs() {
       let tabs = this.$refs.tabs
       this.indicatorRef = this.$refs.indicator
+      // ✅ 重新计算时清空，避免多次 mounted/keep-alive 导致 lefts 累积错位
+      this.lefts = []
       let indicatorWidth = _css(this.indicatorRef, 'width')
       for (let i = 0; i < tabs.children.length; i++) {
         let item = tabs.children[i]
@@ -250,14 +257,14 @@ export default {
       left: 50%;
       transform: translateX(-50%);
       // ✅ 收紧 Tab 占用宽度，给右侧搜索按钮留空间
-      width: 68%;
+      width: 74%;
 
       .tabs {
         display: flex;
         justify-content: center;
         align-items: center;
         // ✅ Tab 间距小一点，避免侵占搜索按钮区域
-        gap: 18rem;
+        gap: 12rem;
 
         .tab {
           transition: color 0.3s;

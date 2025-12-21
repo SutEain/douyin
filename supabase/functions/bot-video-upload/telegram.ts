@@ -80,6 +80,35 @@ export async function editMessage(
   }
 }
 
+// ✅ 仅更新消息键盘（不改文本），用于“loading/禁用按钮”等场景
+export async function editMessageReplyMarkup(chatId: number, messageId: number, replyMarkup: any) {
+  const url = `${TG_API_BASE}/bot${BOT_TOKEN}/editMessageReplyMarkup`
+  try {
+    const payload = {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: replyMarkup
+    }
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const result = await response.json()
+    if (!result.ok) {
+      console.error('[editMessageReplyMarkup] 失败:', JSON.stringify(result))
+      console.error(
+        '[editMessageReplyMarkup] 请求payload:',
+        JSON.stringify(payload).substring(0, 500)
+      )
+    }
+    return result
+  } catch (error) {
+    console.error('[editMessageReplyMarkup] 异常:', error)
+    throw error
+  }
+}
+
 export async function deleteTelegramMessage(chatId: number, messageId: number) {
   const url = `${TG_API_BASE}/bot${BOT_TOKEN}/deleteMessage`
   try {

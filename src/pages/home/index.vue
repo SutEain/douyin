@@ -18,23 +18,25 @@
           v-else-if="state.navIndex === 1"
           :active="state.active && state.navIndex === 1"
         />
-        <!-- 2=短剧（grid：短剧视频，按 published_at 倒序） -->
+        <!-- 2=直播 -->
+        <LiveTab v-else-if="state.navIndex === 2" :active="state.active && state.navIndex === 2" />
+        <!-- 3=短剧（grid：短剧视频，按 published_at 倒序） -->
         <LongVideo
-          v-else-if="state.navIndex === 2"
-          :active="state.active && state.navIndex === 2"
-        />
-        <!-- 3=成人 -->
-        <SlideAdult
           v-else-if="state.navIndex === 3"
           :active="state.active && state.navIndex === 3"
         />
-        <!-- 4=关注 -->
-        <SlideFollow
+        <!-- 4=成人 -->
+        <SlideAdult
           v-else-if="state.navIndex === 4"
           :active="state.active && state.navIndex === 4"
         />
-        <!-- 5=推荐 -->
-        <Slide4 v-else :active="state.active && state.navIndex === 5" />
+        <!-- 5=关注 -->
+        <SlideFollow
+          v-else-if="state.navIndex === 5"
+          :active="state.active && state.navIndex === 5"
+        />
+        <!-- 6=推荐 -->
+        <Slide4 v-else :active="state.active && state.navIndex === 6" />
       </div>
 
       <!-- 底部导航栏 -->
@@ -111,6 +113,7 @@ import SlideFollow from './slide/SlideFollow.vue'
 import LongVideo from './slide/LongVideo.vue'
 import VideoTab from './slide/VideoTab.vue'
 import Community from './slide/Community.vue'
+import LiveTab from './slide/LiveTab.vue'
 import BaseFooter from '@/components/BaseFooter.vue'
 import Comment from '@/components/CommentNew.vue'
 import Share from '@/components/Share.vue'
@@ -135,7 +138,7 @@ const router = useRouter()
 const share = ref()
 
 const state = reactive({
-  navIndex: 5, // 默认显示"推荐" tab (0=视频, 1=图文, 2=短剧, 3=成人, 4=关注, 5=推荐)
+  navIndex: 6, // 默认显示"推荐" tab (0=视频, 1=图文, 2=直播, 3=短剧, 4=成人, 5=关注, 6=推荐)
   test: '',
   isSharing: false,
   shareType: -1,

@@ -38,19 +38,14 @@ if (typeof window !== 'undefined') {
     }
 
     if (target instanceof HTMLVideoElement) {
-      console.warn('[GlobalError][video]', target.currentSrc || target.src)
-      event.preventDefault?.()
+      // ✅ 不再打印“视频URL”，也不要 preventDefault 以免影响播放器/第三方库接管错误处理
+      // 需要排查时可在 URL 加 ?dpdebug=1 看 DPPlayer 的详细日志
       return false
     }
 
     // ✅ 处理 <source> 标签加载失败（通常是网络问题，不应中断播放）
     if (target instanceof HTMLSourceElement) {
-      console.warn(
-        '[GlobalError][source]',
-        target.src,
-        '- 视频源加载失败，浏览器会尝试其他源或重试'
-      )
-      event.preventDefault?.()
+      // 同上：不拦截也不刷屏
       return false
     }
 

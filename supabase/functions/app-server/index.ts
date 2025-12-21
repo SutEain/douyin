@@ -45,6 +45,7 @@ import {
   handleDeleteSearchHistory
 } from './routes/search.ts'
 import { handlePostRecommended } from './routes/post.ts'
+import { handleLiveRooms } from './routes/live.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -169,6 +170,11 @@ serve(async (req) => {
     // 🧩 图文（壁纸）推荐
     if (route === '/post/recommended' && method === 'GET') {
       return handlePostRecommended(req)
+    }
+
+    // 📺 直播间列表（后台维护）
+    if (route === '/live/rooms' && method === 'GET') {
+      return handleLiveRooms(req)
     }
 
     return errorResponse('Not found', 1, 404)
