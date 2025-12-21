@@ -1,5 +1,5 @@
 import { Edit, useForm } from '@refinedev/antd'
-import { Form, Input, Upload, Button, message, Image } from 'antd'
+import { Form, Input, Upload, Button, message, Image, InputNumber, Switch } from 'antd'
 import type { UploadProps } from 'antd'
 import { supabaseClient } from '../../supabaseClient'
 
@@ -65,6 +65,18 @@ export const LiveRoomEdit = () => {
 
         <Form.Item label="描述(description)" name="description">
           <Input placeholder="列表副标题（可选）" />
+        </Form.Item>
+
+        <Form.Item label="类别(category)" name="category">
+          <Input placeholder="待用（可选）" />
+        </Form.Item>
+
+        <Form.Item label="排序(sort_order)" name="sort_order">
+          <InputNumber style={{ width: '100%' }} />
+        </Form.Item>
+
+        <Form.Item label="启用(is_active)" name="is_active" valuePropName="checked">
+          <Switch checkedChildren="启用" unCheckedChildren="停用" />
         </Form.Item>
 
         <Form.Item label="封面URL(cover_url)" name="cover_url">

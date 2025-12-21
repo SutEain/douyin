@@ -12,12 +12,18 @@
     <div class="player">
       <DPPlayer
         :key="state.playerKey"
+        ref="dpRef"
         :src="src"
         :poster="poster"
-        :muted="true"
+        :muted="state.muted"
         :debug="debug"
         @error="onPlayerError"
       />
+
+      <div v-if="state.showUnmuteHint" class="unmute">
+        <div class="btn" @click="enableSound">点一下开声音</div>
+      </div>
+
       <div v-if="state.errorText" class="error">
         <div class="msg">{{ state.errorText }}</div>
         <div class="actions">
@@ -29,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import DPPlayer from '@/components/live/DPPlayer.vue'
 
 interface Props {
@@ -60,7 +66,9 @@ const debug = computed(() => {
 const state = reactive({
   landscape: false,
   errorText: '',
-  playerKey: 1
+  playerKey: 1,
+  muted: false,
+  showUnmuteHint: false
 })
 
 function retry() {
@@ -70,7 +78,35 @@ function retry() {
 
 function onPlayerError(payload: any) {
   // 这里展示给用户的文案尽量简洁；详细信息仍在 console（若开启 dpdebug）
-  state.errorText = payload?.message || payload?.detail || '播放失败，请重试'
+  const name = payload?.detail?.name
+  const msg = payload?.message || payload?.detail || '播放失败，请重试'
+
+  // ✅ 默认有声音：先尝试 muted=false。如果被自动播放策略拦截，自动降级静音并重试。
+  if (!state.muted && name === 'NotAllowedError') {
+    state.muted = true
+    state.showUnmuteHint = true
+    state.errorText = ''
+    state.playerKey++
+    return
+  }
+
+  state.errorText = msg
+}
+
+const dpRef = ref<any>(null)
+
+async function enableSound() {
+  // 用户手势触发：尽量在同一点击里完成“开声+play”
+  state.muted = false
+  state.showUnmuteHint = false
+  state.errorText = ''
+
+  const ok = await dpRef.value?.unmuteAndPlay?.()
+  if (!ok) {
+    // 如果仍失败，回退到静音继续播
+    state.muted = true
+    state.showUnmuteHint = true
+  }
 }
 
 async function toggleOrientation() {
@@ -157,6 +193,16 @@ onBeforeUnmount(() => {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.unmute {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 22rem;
+  display: flex;
+  justify-content: center;
+  z-index: 2;
 }
 
 .error {

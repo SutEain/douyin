@@ -62,6 +62,27 @@ const emit = defineEmits<{
   (e: 'error', payload: { src: string; message: string; detail?: any }): void
 }>()
 
+// 供外部“用户手势”触发播放/开声（提高通过自动播放策略的概率）
+async function unmuteAndPlay() {
+  const video = videoRef.value
+  if (!video) return false
+  try {
+    video.muted = false
+    await video.play()
+    return true
+  } catch (err: any) {
+    const name = err?.name || 'Error'
+    const msg = err?.message || String(err)
+    if (name !== 'AbortError' && debugEnabled.value) {
+      console.error('[DPPlayer] unmuteAndPlay failed:', { err })
+    }
+    emit('error', { src: props.src, message: msg, detail: { name } })
+    return false
+  }
+}
+
+defineExpose({ unmuteAndPlay })
+
 function pushDebug(type: string, data?: any) {
   if (!debugEnabled.value) return
   const entry = { t: Date.now(), type, data }
@@ -257,6 +278,16 @@ watch(
       return
     }
     setSource(src)
+  },
+  { immediate: true }
+)
+
+watch(
+  [() => props.muted, videoRef],
+  ([muted]) => {
+    const video = videoRef.value
+    if (!video) return
+    video.muted = !!muted
   },
   { immediate: true }
 )
