@@ -163,6 +163,17 @@ function onTap(e?: any) {
   if (now - lastTapAt < 250) return
   lastTapAt = now
 
+  // ✅ 如果点在 header（返回/横竖屏/标题区域）上，不要触发显隐切换
+  try {
+    const el = e?.target as HTMLElement | null
+    if (el && el.closest && el.closest('.header')) {
+      showHeaderThenAutoHide()
+      return
+    }
+  } catch {
+    /* noop */
+  }
+
   // B：显示状态再点一下立刻隐藏；隐藏状态点一下显示并计时
   if (state.headerVisible) {
     state.headerVisible = false
