@@ -1,12 +1,22 @@
 <template>
-  <div class="overlay" :class="{ landscape: state.landscape }">
-    <div class="topbar">
-      <div class="btn" @click="emit('close')">返回</div>
-      <div class="title">
-        <div class="t">{{ title || '直播中' }}</div>
-        <div v-if="description" class="d">{{ description }}</div>
+  <div
+    class="overlay"
+    :class="{ landscape: state.landscape }"
+    @click.capture="onTap"
+    @pointerup.capture="onTap"
+    @touchend.capture="onTap"
+  >
+    <!-- 悬浮 Header：默认显示，点击屏幕浮现，2秒后自动隐藏 -->
+    <div class="header" :class="{ show: state.headerVisible }">
+      <div class="header-bar">
+        <div class="btn" @click.stop="onBack">返回</div>
+        <div class="title">
+          <div class="t">{{ title || '直播中' }}</div>
+        </div>
+        <div class="btn" @click.stop="onToggleOrientation">
+          {{ state.landscape ? '竖屏' : '横屏' }}
+        </div>
       </div>
-      <div class="btn" @click="toggleOrientation">{{ state.landscape ? '竖屏' : '横屏' }}</div>
     </div>
 
     <div class="player">
@@ -20,14 +30,14 @@
         @error="onPlayerError"
       />
 
-      <div v-if="state.showUnmuteHint" class="unmute">
-        <div class="btn" @click="enableSound">点一下开声音</div>
+      <div v-if="state.showUnmuteHint" class="unmute" @click.stop="enableSound">
+        <div class="btn primary">点一下开声音</div>
       </div>
 
-      <div v-if="state.errorText" class="error">
+      <div v-if="state.errorText" class="error" @click.stop>
         <div class="msg">{{ state.errorText }}</div>
         <div class="actions">
-          <div class="btn" @click="retry">重试</div>
+          <div class="btn primary" @click="retry">重试</div>
         </div>
       </div>
     </div>
@@ -35,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import DPPlayer from '@/components/live/DPPlayer.vue'
 
 interface Props {
@@ -68,12 +78,14 @@ const state = reactive({
   errorText: '',
   playerKey: 1,
   muted: false,
-  showUnmuteHint: false
+  showUnmuteHint: false,
+  headerVisible: true
 })
 
 function retry() {
   state.errorText = ''
   state.playerKey++
+  showHeaderThenAutoHide()
 }
 
 function onPlayerError(payload: any) {
@@ -87,10 +99,12 @@ function onPlayerError(payload: any) {
     state.showUnmuteHint = true
     state.errorText = ''
     state.playerKey++
+    showHeaderThenAutoHide()
     return
   }
 
   state.errorText = msg
+  showHeaderThenAutoHide()
 }
 
 const dpRef = ref<any>(null)
@@ -107,6 +121,8 @@ async function enableSound() {
     state.muted = true
     state.showUnmuteHint = true
   }
+
+  showHeaderThenAutoHide()
 }
 
 async function toggleOrientation() {
@@ -123,7 +139,56 @@ async function toggleOrientation() {
   }
 }
 
+let hideTimer: any = null
+let lastTapAt = 0
+
+function clearHideTimer() {
+  if (hideTimer) {
+    clearTimeout(hideTimer)
+    hideTimer = null
+  }
+}
+
+function showHeaderThenAutoHide() {
+  state.headerVisible = true
+  clearHideTimer()
+  hideTimer = setTimeout(() => {
+    state.headerVisible = false
+  }, 2000)
+}
+
+function onTap(e?: any) {
+  // ✅ 防双触发：某些端会同时触发 click + pointer/touch
+  const now = Date.now()
+  if (now - lastTapAt < 250) return
+  lastTapAt = now
+
+  // B：显示状态再点一下立刻隐藏；隐藏状态点一下显示并计时
+  if (state.headerVisible) {
+    state.headerVisible = false
+    clearHideTimer()
+  } else {
+    showHeaderThenAutoHide()
+  }
+}
+
+function onBack() {
+  showHeaderThenAutoHide()
+  emit('close')
+}
+
+function onToggleOrientation() {
+  showHeaderThenAutoHide()
+  toggleOrientation()
+}
+
+onMounted(() => {
+  // 1：首次进入先显示，再自动消失
+  showHeaderThenAutoHide()
+})
+
 onBeforeUnmount(() => {
+  clearHideTimer()
   // 尝试恢复竖屏（不保证成功）
   try {
     const anyScreen: any = window.screen as any
@@ -148,14 +213,38 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-.topbar {
-  height: 48rem;
-  padding: 0 12rem;
+.header {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-6rem);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+
+  &.show {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+}
+
+.header-bar {
+  padding: calc(8rem + env(safe-area-inset-top)) 12rem 10rem;
   display: flex;
   align-items: center;
   gap: 10rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  flex: 0 0 auto;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.65),
+    rgba(0, 0, 0, 0.35),
+    rgba(0, 0, 0, 0)
+  );
+  backdrop-filter: blur(10px);
 }
 
 .btn {
@@ -166,6 +255,10 @@ onBeforeUnmount(() => {
   user-select: none;
   cursor: pointer;
   white-space: nowrap;
+
+  &.primary {
+    background: rgba(255, 255, 255, 0.18);
+  }
 }
 
 .title {
@@ -175,14 +268,6 @@ onBeforeUnmount(() => {
   .t {
     font-size: 13rem;
     font-weight: 800;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .d {
-    margin-top: 4rem;
-    font-size: 11rem;
-    color: rgba(255, 255, 255, 0.6);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -199,7 +284,7 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 22rem;
+  bottom: 26rem;
   display: flex;
   justify-content: center;
   z-index: 2;
@@ -209,7 +294,7 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 12rem;
   right: 12rem;
-  bottom: 12rem;
+  bottom: 26rem;
   background: rgba(0, 0, 0, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12rem;
@@ -221,10 +306,12 @@ onBeforeUnmount(() => {
     color: rgba(255, 160, 160, 0.95);
     line-height: 1.4;
   }
+
   .actions {
     margin-top: 10rem;
     display: flex;
     justify-content: flex-end;
+    gap: 10rem;
   }
 }
 
