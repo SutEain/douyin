@@ -111,6 +111,20 @@ export const LiveRoomList = () => {
     }
   }
 
+  function play(record: LiveRoomRow) {
+    const url = record?.stream_url
+    if (!url) {
+      message.warning('未填写直播地址')
+      return
+    }
+    try {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      console.error('[LiveRoomList] window.open failed:', e)
+      message.error('打开失败，请复制链接到新标签页')
+    }
+  }
+
   return (
     <List
       title="直播间管理"
@@ -187,6 +201,9 @@ export const LiveRoomList = () => {
           dataIndex="actions"
           render={(_, record: LiveRoomRow) => (
             <Space>
+              <Button size="small" type="default" onClick={() => play(record)}>
+                播放
+              </Button>
               <Button size="small" onClick={() => probeOne(record)}>
                 探测
               </Button>
