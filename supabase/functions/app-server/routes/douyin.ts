@@ -1,6 +1,7 @@
 import { successResponse, errorResponse } from '../../_shared/response.ts'
 import { supabaseAdmin } from '../lib/env.ts'
 import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
+import { TIKHUB_API_TOKEN } from '../lib/env.ts'
 
 const SYSTEM_AUTHOR_ID = '647fd608-d277-4e15-b5ea-891b57dfd2b5'
 
@@ -11,7 +12,7 @@ function isAdminUser(user: any): boolean {
 function extractDouyinUrl(text: string): string | null {
   if (!text) return null
   // 优先匹配 v.douyin.com 短链
-  const m1 = text.match(/https?:\/\/v\.douyin\.com\/[0-9A-Za-z]+\/?/i)
+  const m1 = text.match(/https?:\/\/v\.douyin\.com\/[^\s]+/i)
   if (m1?.[0]) return m1[0]
 
   // 其次匹配 share/video 长链
@@ -23,6 +24,34 @@ function extractDouyinUrl(text: string): string | null {
   return m3?.[0] || null
 }
 
+function extractDouyinUrlWithReason(
+  text: string
+): { url: string; reason: 'v_douyin' | 'iesdouyin_share' | 'fallback' } | null {
+  if (!text) return null
+  const m1 = text.match(/https?:\/\/v\.douyin\.com\/[^\s]+/i)
+  if (m1?.[0]) {
+    // 防呆：短链 path 太短（例如只剩 "Rsz"）基本一定是截断/粘连导致，交给 fallback 再找一次
+    const raw = m1[0]
+    try {
+      const u = new URL(raw)
+      const seg = (u.pathname || '').replace(/^\/+/, '').split('/')[0] || ''
+      if (seg.length >= 5) {
+        return { url: raw, reason: 'v_douyin' }
+      }
+    } catch {
+      // URL 解析失败就先返回，后面 normalize 会做兜底清洗
+      return { url: raw, reason: 'v_douyin' }
+    }
+  }
+
+  const m2 = text.match(/https?:\/\/www\.iesdouyin\.com\/share\/video\/\d+\/[^ \n\r\t]*/i)
+  if (m2?.[0]) return { url: m2[0], reason: 'iesdouyin_share' }
+
+  const m3 = text.match(/https?:\/\/[^\s]+/i)
+  if (m3?.[0]) return { url: m3[0], reason: 'fallback' }
+  return null
+}
+
 function pickFirstUrl(urlList: any): string | null {
   if (Array.isArray(urlList) && urlList.length) return String(urlList[0])
   return null
@@ -30,6 +59,19 @@ function pickFirstUrl(urlList: any): string | null {
 
 function safeText(v: any): string {
   return typeof v === 'string' ? v : v == null ? '' : String(v)
+}
+
+function normalizeShareUrl(input: string): string {
+  let u = (input || '').trim()
+  // 去掉常见尾部标点/引号/括号（抖音复制文案里经常带）
+  u = u.replace(/[)\]'"”’）】]+$/g, '')
+  u = u.replace(/[。．，、；;！!？?]+$/g, '')
+  // 去掉尾部非 URL 合法字符（例如中文/emoji 等粘连）
+  // 注意：字符类里 `[` 放在开头即可表示字面量，不需要写成 `\[`（eslint no-useless-escape）
+  u = u.replace(/[^[0-9A-Za-z\-._~:/?#\]@!$&'()*+,;=%]+$/g, '')
+  // 去掉尾部多余斜杠
+  u = u.replace(/\/+$/g, '')
+  return u
 }
 
 type ParseReq = { text?: string }
@@ -43,21 +85,91 @@ export async function handleAdminDouyinParse(req: Request): Promise<Response> {
     const rawText = safeText(body?.text).trim()
     if (!rawText) return errorResponse('缺少 text', 1, 400)
 
-    const sourceUrl = extractDouyinUrl(rawText)
+    const extracted = extractDouyinUrlWithReason(rawText)
+    const sourceUrl = extracted?.url || extractDouyinUrl(rawText)
     if (!sourceUrl) return errorResponse('未识别到抖音链接', 1, 400)
+    const normalizedUrl = normalizeShareUrl(sourceUrl)
 
-    const api = `https://douyin.wtf/api/hybrid/video_data?url=${encodeURIComponent(sourceUrl)}`
-    const resp = await fetch(api, {
-      method: 'GET',
-      headers: { 'User-Agent': 'Mozilla/5.0 (admin-douyin-parse)' }
+    if (!TIKHUB_API_TOKEN) {
+      return errorResponse('Server misconfigured: missing TIKHUB_API_TOKEN', 1, 500)
+    }
+
+    // ✅ TikHub（付费接口）：根据分享链接获取单个作品数据
+    // 文档：https://api.tikhub.io/#/Douyin-App-V3-API/fetch_one_video_by_share_url_api_v1_douyin_app_v3_fetch_one_video_by_share_url_get
+    const api = `https://api.tikhub.io/api/v1/douyin/app/v3/fetch_one_video_by_share_url?share_url=${encodeURIComponent(
+      normalizedUrl
+    )}`
+
+    // 🔎 关键日志：不打印 token，只打印链接规范化结果
+    console.log('[admin_douyin_parse] share_url:', {
+      extract_reason: extracted?.reason || 'unknown',
+      raw_text_preview: rawText.slice(0, 180),
+      sourceUrl,
+      normalizedUrl,
+      changed: sourceUrl !== normalizedUrl,
+      request: { method: 'GET', url: api }
     })
-    if (!resp.ok) {
-      console.error('[admin_douyin_parse] upstream failed:', { status: resp.status })
+
+    let resp: Response | null = null
+    let raw = ''
+    let json: any = null
+    const maxAttempts = 3 // 1 次 + 自动重试 2 次
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      resp = await fetch(api, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${TIKHUB_API_TOKEN}`,
+          'User-Agent': 'Mozilla/5.0 (admin-douyin-parse)',
+          Accept: 'application/json'
+        }
+      })
+
+      raw = await resp.text().catch(() => '')
+      try {
+        json = raw ? JSON.parse(raw) : null
+      } catch {
+        json = null
+      }
+
+      if (resp.ok) break
+
+      const requestId = json?.detail?.request_id || json?.request_id
+      const msgZh = json?.detail?.message_zh || json?.message_zh
+      console.error('[admin_douyin_parse] upstream attempt failed:', {
+        attempt,
+        maxAttempts,
+        status: resp.status,
+        request_id: requestId,
+        message_zh: msgZh,
+        body_preview: raw ? raw.slice(0, 500) : ''
+      })
+
+      if (attempt < maxAttempts) {
+        // TikHub 400 也可能是临时失败（文案提示 retry），做一个很短的退避
+        const backoffMs = 200 * attempt
+        await new Promise((r) => setTimeout(r, backoffMs))
+      }
+    }
+
+    if (!resp || !resp.ok) {
       return errorResponse('解析失败（上游异常）', 1, 502)
     }
-    const json: any = await resp.json()
+
+    // TikHub 通常用 code=200 表示成功
+    const upstreamCode = Number(json?.code)
+    if (Number.isFinite(upstreamCode) && upstreamCode !== 200) {
+      const msg = json?.message_zh || json?.message || '解析失败（上游返回异常）'
+      console.error('[admin_douyin_parse] upstream code not ok:', {
+        code: upstreamCode,
+        msg,
+        body_preview: raw ? raw.slice(0, 500) : ''
+      })
+      return errorResponse(msg, 1, 502)
+    }
+
     const data = json?.data || {}
-    const aweme = data?.aweme_detail || data
+    // 兼容：有些返回是 aweme_detail，有些直接就是 aweme 对象
+    const aweme = data?.aweme_detail || data?.aweme || data
     const video = aweme?.video || {}
 
     const playUrl =
@@ -65,11 +177,15 @@ export async function handleAdminDouyinParse(req: Request): Promise<Response> {
     const coverUrl = pickFirstUrl(video?.cover?.url_list) // ✅ 你指定用 cover
     const desc = safeText(aweme?.desc)
     const awemeId = safeText(aweme?.aweme_id)
-    const durationMs = Number(video?.duration || 0)
-    const durationSec = durationMs ? Math.max(0, Math.floor(durationMs / 1000)) : 0
+    const rawDuration = Number(video?.duration || aweme?.duration || 0)
+    // 兼容：可能是毫秒，也可能是秒
+    const durationSec =
+      rawDuration > 10_000
+        ? Math.max(0, Math.floor(rawDuration / 1000))
+        : Math.max(0, Math.floor(rawDuration))
     const width = Number(video?.width || 0) || null
     const height = Number(video?.height || 0) || null
-    const expire = Number(video?.cdn_url_expired || 0) || null
+    const expire = Number(video?.cdn_url_expired || aweme?.cdn_url_expired || 0) || null
 
     if (!playUrl) {
       return errorResponse('解析失败：未拿到播放地址', 1, 500)

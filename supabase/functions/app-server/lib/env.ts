@@ -9,7 +9,11 @@ export const SUPABASE_SERVICE_ROLE_KEY =
   ''
 
 export const TG_BOT_TOKEN = Deno.env.get('TG_BOT_TOKEN')
-export const TG_FILE_PROXY_URL = Deno.env.get('TG_CDN_PROXY_URL') || Deno.env.get('TG_VIDEO_PROXY_URL')
+export const TG_FILE_PROXY_URL =
+  Deno.env.get('TG_CDN_PROXY_URL') || Deno.env.get('TG_VIDEO_PROXY_URL')
+
+// TikHub（付费抖音解析）
+export const TIKHUB_API_TOKEN = Deno.env.get('TIKHUB_API_TOKEN') || ''
 
 export const DEFAULT_COVER =
   Deno.env.get('DEFAULT_VIDEO_COVER') ||
@@ -24,4 +28,3 @@ export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KE
     persistSession: false
   }
 })
-
