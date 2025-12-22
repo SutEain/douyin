@@ -2,6 +2,7 @@ import { List, useTable } from '@refinedev/antd'
 import { Table, Space, Button, Image, Switch, InputNumber, message, Tag } from 'antd'
 import { useInvalidate, useUpdate } from '@refinedev/core'
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import dayjs from 'dayjs'
 import { supabaseClient } from '../../supabaseClient'
 
@@ -26,14 +27,20 @@ export const LiveRoomList = () => {
   const navigate = useNavigate()
   const invalidate = useInvalidate()
   const { mutate: updateOne } = useUpdate()
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
+  const [bulkProbing, setBulkProbing] = useState(false)
 
   const { tableProps } = useTable<LiveRoomRow>({
     resource: 'live_rooms',
     sorters: {
       initial: [
+        { field: 'is_active', order: 'desc' },
         { field: 'sort_order', order: 'desc' },
         { field: 'updated_at', order: 'desc' }
       ]
+    },
+    pagination: {
+      pageSize: 100
     }
   })
 
@@ -111,6 +118,61 @@ export const LiveRoomList = () => {
     }
   }
 
+  async function probeSelectedSequential() {
+    const ids = selectedRowKeys.map((k) => String(k)).filter(Boolean)
+    if (!ids.length) {
+      message.warning('请先勾选要探测的直播间')
+      return
+    }
+    if (bulkProbing) return
+
+    try {
+      setBulkProbing(true)
+
+      const { data } = await supabaseClient.auth.getSession()
+      const token = data?.session?.access_token
+      if (!token) {
+        message.error('未登录或会话已过期')
+        return
+      }
+
+      const msgKey = 'live_rooms_bulk_probe'
+      message.loading({ content: `开始探测 0/${ids.length}`, key: msgKey, duration: 0 })
+
+      let okCount = 0
+      let failCount = 0
+
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        message.loading({ content: `正在探测 ${i + 1}/${ids.length}`, key: msgKey, duration: 0 })
+
+        try {
+          const res = await fetch(`${import.meta.env.VITE_APP_SERVER_URL}/live/rooms/probe`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ ids: [id] })
+          })
+          const json = await res.json().catch(() => null)
+          if (res.ok && json && json.code === 0) okCount++
+          else failCount++
+        } catch {
+          failCount++
+        }
+
+        // 轻微间隔，避免后端瞬时压力
+        await new Promise((r) => setTimeout(r, 150))
+      }
+
+      message.success({ content: `探测完成：成功 ${okCount}，失败 ${failCount}`, key: msgKey })
+      invalidate({ resource: 'live_rooms', invalidates: ['list'] })
+    } finally {
+      setBulkProbing(false)
+    }
+  }
+
   function play(record: LiveRoomRow) {
     const url = record?.stream_url
     if (!url) {
@@ -129,12 +191,41 @@ export const LiveRoomList = () => {
     <List
       title="直播间管理"
       headerButtons={
-        <Button type="primary" onClick={() => navigate('/live-rooms/create')}>
-          新增直播间
-        </Button>
+        <Space>
+          <Button type="primary" onClick={() => navigate('/live-rooms/create')}>
+            新增直播间
+          </Button>
+          <Button
+            onClick={() => probeSelectedSequential()}
+            disabled={bulkProbing || selectedRowKeys.length === 0}
+            loading={bulkProbing}
+          >
+            勾选探测
+          </Button>
+          <Button
+            onClick={() => setSelectedRowKeys([])}
+            disabled={bulkProbing || selectedRowKeys.length === 0}
+          >
+            清空勾选
+          </Button>
+        </Space>
       }
     >
-      <Table {...tableProps} rowKey="id" size="middle">
+      <Table
+        {...tableProps}
+        rowKey="id"
+        size="middle"
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (keys) => setSelectedRowKeys(keys)
+        }}
+        pagination={{
+          ...(tableProps.pagination as any),
+          pageSize: 100,
+          showSizeChanger: true,
+          pageSizeOptions: [20, 50, 100, 200]
+        }}
+      >
         <Table.Column
           title="封面"
           dataIndex="cover_url"
