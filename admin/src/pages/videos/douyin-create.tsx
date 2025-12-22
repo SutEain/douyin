@@ -59,7 +59,8 @@ export const VideoDouyinCreate = () => {
     try {
       const data = await callAppServer('/admin/douyin/parse', { text, mode })
       if (!data) return
-      setParsed(data as ParseResult)
+      const next = data as ParseResult
+      setParsed(next)
       message.success('解析成功')
     } finally {
       setLoadingParse(false)
@@ -160,7 +161,19 @@ export const VideoDouyinCreate = () => {
                   </div>
                   <div style={{ marginBottom: 8, wordBreak: 'break-all' }}>
                     <b>播放地址（存 play_url）：</b>
-                    <div>{parsed.play_url}</div>
+                    <div style={{ marginTop: 6 }}>
+                      <Space>
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            window.open(parsed.play_url, '_blank', 'noopener,noreferrer')
+                          }}
+                        >
+                          新标签打开
+                        </Button>
+                      </Space>
+                    </div>
+                    <div style={{ marginTop: 6 }}>{parsed.play_url}</div>
                   </div>
                   <div style={{ marginBottom: 8 }}>
                     <b>描述（存 description）：</b>

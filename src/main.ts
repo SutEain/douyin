@@ -14,10 +14,23 @@ declare global {
     TelegramGameProxy?: {
       receiveEvent?: (...args: any[]) => void
     }
+    __rawConsole__?: Console
   }
 }
 
 if (typeof window !== 'undefined') {
+  // ✅ A2: 前端全环境静默 console 输出（开发环境也不输出）
+  // 如需临时排查，可在控制台手动使用 window.__rawConsole__ 查看原始 console
+  if (!window.__rawConsole__) {
+    window.__rawConsole__ = window.console
+  }
+  const noop = () => {}
+  ;(window.console.log as any) = noop
+  ;(window.console.info as any) = noop
+  ;(window.console.debug as any) = noop
+  ;(window.console.warn as any) = noop
+  ;(window.console.error as any) = noop
+
   window.TelegramGameProxy = window.TelegramGameProxy || {}
   if (typeof window.TelegramGameProxy.receiveEvent !== 'function') {
     window.TelegramGameProxy.receiveEvent = () => {}

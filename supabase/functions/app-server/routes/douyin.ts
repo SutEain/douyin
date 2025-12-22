@@ -3,7 +3,8 @@ import { supabaseAdmin } from '../lib/env.ts'
 import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
 import { TIKHUB_API_TOKEN } from '../lib/env.ts'
 
-const SYSTEM_AUTHOR_ID = '647fd608-d277-4e15-b5ea-891b57dfd2b5'
+// ✅ Admin 上传/抖音发布固定作者
+const SYSTEM_AUTHOR_ID = '11c77e88-545b-4aa3-bbb1-db87e7d637f0'
 
 function isAdminUser(user: any): boolean {
   return user?.app_metadata?.role === 'admin'
@@ -55,6 +56,39 @@ function extractDouyinUrlWithReason(
 function pickFirstUrl(urlList: any): string | null {
   if (Array.isArray(urlList) && urlList.length) return String(urlList[0])
   return null
+}
+
+function pickBestPlayUrl(lists: any[]): string | null {
+  const all: string[] = []
+  for (const list of lists) {
+    if (Array.isArray(list)) {
+      for (const u of list) all.push(String(u))
+    }
+  }
+  const urls = all.map((s) => String(s || '').trim()).filter((s) => /^https?:\/\//i.test(s))
+
+  if (!urls.length) return null
+
+  // ✅ 选择“更适合浏览器播放”的链接：
+  // - 优先 douyin.com 的 /aweme/v1/play（通常是官方播放入口，兼容性更强）
+  // - 其次 douyin.com 域
+  // - 尽量避免 zjcdn 直链（后台浏览器环境经常 403）
+  let best = urls[0]
+  let bestScore = -1e9
+  for (const u of urls) {
+    let score = 0
+    if (/\/aweme\/v1\/play\/?/i.test(u)) score += 100
+    if (/https?:\/\/www\.douyin\.com\//i.test(u)) score += 80
+    if (/https?:\/\/[^/]*douyin\.com\//i.test(u)) score += 40
+    if (/zjcdn\.com/i.test(u)) score -= 30
+    // 更短的链接通常更“入口化”（如 /aweme/v1/play），稍微加权
+    score += Math.max(0, 2000 - u.length) / 2000
+    if (score > bestScore) {
+      bestScore = score
+      best = u
+    }
+  }
+  return best
 }
 
 function safeKeys(v: any, limit = 40): string[] {
@@ -283,14 +317,7 @@ export async function handleAdminDouyinParse(req: Request): Promise<Response> {
 
     const playAddrList = video?.play_addr?.url_list
     const playAddrH264List = video?.play_addr_h264?.url_list
-    const playFromPlayAddr = pickFirstUrl(playAddrList)
-    const playFromPlayAddrH264 = pickFirstUrl(playAddrH264List)
-    const playUrl = playFromPlayAddr || playFromPlayAddrH264
-    const playSource = playFromPlayAddr
-      ? 'video.play_addr.url_list[0]'
-      : playFromPlayAddrH264
-        ? 'video.play_addr_h264.url_list[0]'
-        : null
+    const playUrl = pickBestPlayUrl([playAddrList, playAddrH264List])
     const coverUrl = pickFirstUrl(video?.cover?.url_list) // ✅ 你指定用 cover
     const desc = safeText(aweme?.desc || aweme?.description)
     const awemeId = safeText(aweme?.aweme_id || aweme?.awemeId || aweme?.id)
@@ -323,7 +350,6 @@ export async function handleAdminDouyinParse(req: Request): Promise<Response> {
       aweme_keys: safeKeys(aweme),
       video_keys: safeKeys(video),
       play: {
-        source: playSource,
         play_addr_len: Array.isArray(playAddrList) ? playAddrList.length : 0,
         play_addr_h264_len: Array.isArray(playAddrH264List) ? playAddrH264List.length : 0,
         play_url_preview: playUrl ? String(playUrl).slice(0, 120) : null

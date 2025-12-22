@@ -1037,15 +1037,32 @@ export const VideoList = () => {
       >
         {/* 视频预览 */}
         {previewContentType === 'video' && currentVideoUrl && (
-          <video
-            ref={videoRef}
-            src={currentVideoUrl}
-            controls
-            controlsList="nodownload"
-            style={{ width: '100%', maxHeight: '70vh' }}
-            muted={false}
-            playsInline
-          />
+          <div>
+            <div style={{ marginBottom: 12 }}>
+              <Space>
+                <Button
+                  size="small"
+                  onClick={() => window.open(currentVideoUrl, '_blank', 'noopener,noreferrer')}
+                >
+                  新标签打开
+                </Button>
+              </Space>
+            </div>
+
+            <video
+              key={currentVideoUrl}
+              ref={videoRef}
+              src={currentVideoUrl}
+              controls
+              controlsList="nodownload"
+              style={{ width: '100%', maxHeight: '70vh' }}
+              muted={false}
+              playsInline
+              onError={() => {
+                message.warning('预览播放失败（可能 403 防盗链）')
+              }}
+            />
+          </div>
         )}
 
         {/* 图片/相册预览 */}
