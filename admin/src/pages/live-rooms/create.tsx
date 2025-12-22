@@ -54,9 +54,10 @@ export const LiveRoomCreate = () => {
         <Form.Item
           label="直播地址(stream_url)"
           name="stream_url"
+          initialValue="https://live.nofu.ai/douyin/rid/"
           rules={[{ required: true, message: '请输入直播地址' }]}
         >
-          <Input placeholder="例如：http://45.63.119.152:35455/douyin/rid/921169302662" />
+          <Input placeholder="例如：https://live.nofu.ai/douyin/rid/921169302662?stream=hls" />
         </Form.Item>
 
         <Form.Item label="标题(title)" name="title">

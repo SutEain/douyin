@@ -46,6 +46,7 @@ import {
 } from './routes/search.ts'
 import { handlePostRecommended } from './routes/post.ts'
 import { handleLiveRooms, handleLiveRoomsProbe } from './routes/live.ts'
+import { handleAdminDouyinParse, handleAdminDouyinPublish } from './routes/douyin.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -179,6 +180,14 @@ serve(async (req) => {
     // 🧪 探测直播间在线状态（仅 admin）
     if (route === '/live/rooms/probe' && method === 'POST') {
       return handleLiveRoomsProbe(req)
+    }
+
+    // 🎬 后台：抖音解析/发布（仅 admin）
+    if (route === '/admin/douyin/parse' && method === 'POST') {
+      return handleAdminDouyinParse(req)
+    }
+    if (route === '/admin/douyin/publish' && method === 'POST') {
+      return handleAdminDouyinPublish(req)
     }
 
     return errorResponse('Not found', 1, 404)

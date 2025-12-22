@@ -94,18 +94,19 @@ export async function handleMyVideos(
   try {
     const userState = await getUserState(chatId)
 
-    const { data: videos, error } = await supabase
+    // ✅ 概览页不要 select 全量 rows：Supabase/PostgREST 默认最多返回 1000 行，会导致“总数=1000”假象
+    const { count: totalCount, error: totalErr } = await supabase
       .from('videos')
-      .select('id, status, like_count, comment_count, view_count')
+      .select('id', { count: 'exact', head: true })
       .eq('tg_user_id', chatId)
-
-    if (error) {
-      console.error('获取视频列表失败:', error)
-      await sendMessage(chatId, '❌ 获取视频列表失败')
+    if (totalErr) {
+      console.error('[MyVideos] total count failed:', totalErr)
+      await sendMessage(chatId, '❌ 获取视频统计失败')
       return { mode: 'failed' }
     }
 
-    if (!videos || videos.length === 0) {
+    const total = totalCount ?? 0
+    if (total === 0) {
       const text = '📹 <b>我的视频</b>\n\n暂无视频\n\n<i>直接发送或转发视频给我即可上传</i>'
       const replyMarkup = {
         inline_keyboard: [[{ text: '⬅️ 返回首页', callback_data: 'back_home' }]]
@@ -126,27 +127,97 @@ export async function handleMyVideos(
       return { mode: 'failed' }
     }
 
-    const processing = videos.filter((v) => v.status === 'processing')
-    const drafts = videos.filter((v) => v.status === 'draft' || v.status === 'ready')
-    const published = videos.filter((v) => v.status === 'published')
+    const [{ count: processingCount }, { count: draftCount }, { count: publishedCount }] =
+      await Promise.all([
+        supabase
+          .from('videos')
+          .select('id', { count: 'exact', head: true })
+          .eq('tg_user_id', chatId)
+          .eq('status', 'processing'),
+        supabase
+          .from('videos')
+          .select('id', { count: 'exact', head: true })
+          .eq('tg_user_id', chatId)
+          .in('status', ['draft', 'ready']),
+        supabase
+          .from('videos')
+          .select('id', { count: 'exact', head: true })
+          .eq('tg_user_id', chatId)
+          .eq('status', 'published')
+      ])
 
-    const totalPlays = published.reduce((sum, v) => sum + (v.view_count || 0), 0)
-    const totalLikes = published.reduce((sum, v) => sum + (v.like_count || 0), 0)
-    const totalComments = published.reduce((sum, v) => sum + (v.comment_count || 0), 0)
+    const processing = processingCount ?? 0
+    const drafts = draftCount ?? 0
+    const published = publishedCount ?? 0
+
+    // ✅ 统计已发布的浏览/点赞/评论总和：优先用聚合；如果上游不支持则分页累加
+    let totalPlays = 0
+    let totalLikes = 0
+    let totalComments = 0
+    try {
+      const { data: agg, error: aggErr } = await supabase
+        .from('videos')
+        .select(
+          'sum_view:view_count.sum(), sum_like:like_count.sum(), sum_comment:comment_count.sum()'
+        )
+        .eq('tg_user_id', chatId)
+        .eq('status', 'published')
+        .limit(1)
+
+      if (aggErr) throw aggErr
+      const row: any = Array.isArray(agg) ? agg[0] : null
+      totalPlays = Number(row?.sum_view ?? 0) || 0
+      totalLikes = Number(row?.sum_like ?? 0) || 0
+      totalComments = Number(row?.sum_comment ?? 0) || 0
+    } catch (e) {
+      console.warn('[MyVideos] aggregate not available, fallback to paged sum:', e)
+      const pageSize = 1000
+      let from = 0
+      for (;;) {
+        const { data: rows, error: pageErr } = await supabase
+          .from('videos')
+          .select('view_count, like_count, comment_count')
+          .eq('tg_user_id', chatId)
+          .eq('status', 'published')
+          .range(from, from + pageSize - 1)
+
+        if (pageErr) {
+          console.error('[MyVideos] sum page failed:', pageErr)
+          break
+        }
+        const list: any[] = rows || []
+        for (const r of list) {
+          totalPlays += Number(r?.view_count ?? 0) || 0
+          totalLikes += Number(r?.like_count ?? 0) || 0
+          totalComments += Number(r?.comment_count ?? 0) || 0
+        }
+        if (list.length < pageSize) break
+        from += pageSize
+      }
+    }
+
+    console.log('[MyVideos] stats:', {
+      chatId,
+      total,
+      processing,
+      drafts,
+      published,
+      totalPlays,
+      totalLikes,
+      totalComments
+    })
 
     const lines = [
       `📹 <b>我的视频</b>`,
       ``,
-      `共 ${videos.length} 个视频`,
+      `共 ${total} 个视频`,
       ``,
       `💡 <b>上传方式：</b> 直接发送/转发视频给我`
     ]
-    if (processing.length > 0) {
-      lines.push(
-        `📤 上传中 ${processing.length} · 草稿 ${drafts.length} · 已发布 ${published.length}`
-      )
+    if (processing > 0) {
+      lines.push(`📤 上传中 ${processing} · 草稿 ${drafts} · 已发布 ${published}`)
     } else {
-      lines.push(`草稿 ${drafts.length} · 已发布 ${published.length}`)
+      lines.push(`草稿 ${drafts} · 已发布 ${published}`)
     }
 
     lines.push(``)
@@ -154,18 +225,16 @@ export async function handleMyVideos(
     lines.push(`👀 浏览 ${totalPlays}    ❤️ 点赞 ${totalLikes}    💬 评论 ${totalComments}`)
 
     const keyboard: any[] = []
-    if (processing.length > 0) {
+    if (processing > 0) {
       keyboard.push([
-        { text: `📤 查看上传中的视频 (${processing.length})`, callback_data: 'my_processing' }
+        { text: `📤 查看上传中的视频 (${processing})`, callback_data: 'my_processing' }
       ])
     }
-    if (drafts.length > 0) {
-      keyboard.push([{ text: `📝 继续编辑草稿 (${drafts.length})`, callback_data: 'my_drafts' }])
+    if (drafts > 0) {
+      keyboard.push([{ text: `📝 继续编辑草稿 (${drafts})`, callback_data: 'my_drafts' }])
     }
-    if (published.length > 0) {
-      keyboard.push([
-        { text: `📺 我发布的视频 (${published.length})`, callback_data: 'my_published' }
-      ])
+    if (published > 0) {
+      keyboard.push([{ text: `📺 我发布的视频 (${published})`, callback_data: 'my_published' }])
     }
 
     keyboard.push([{ text: '⬅️ 返回首页', callback_data: 'back_home' }])

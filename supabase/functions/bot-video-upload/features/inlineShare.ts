@@ -169,9 +169,12 @@ export async function handleInlineQuery(inlineQuery: any) {
         title,
         description: desc,
         input_message_content: {
-          message_text: `<a href="${deepLink}">${linkText}</a>`,
-          parse_mode: 'HTML',
+          // 不用文字超链接，改为按钮打开 miniapp
+          message_text: linkText,
           disable_web_page_preview: true
+        },
+        reply_markup: {
+          inline_keyboard: [[{ text: '👉 立即查看', url: deepLink }]]
         }
       }
     })
@@ -248,8 +251,12 @@ export async function handleInlineQuery(inlineQuery: any) {
     title: '🎬 分享视频',
     description: fullDesc.substring(0, 100),
     input_message_content: {
-      message_text: `<a href="${deepLink}">${linkText}</a>`,
-      parse_mode: 'HTML'
+      // 不用文字超链接，改为按钮打开 miniapp
+      message_text: linkText,
+      disable_web_page_preview: true
+    },
+    reply_markup: {
+      inline_keyboard: [[{ text: '👉 立即查看', url: deepLink }]]
     }
     // 暂不添加 thumb_url（Telegram API 对缩略图格式要求严格）
   }

@@ -9,7 +9,7 @@ import '@refinedev/antd/dist/reset.css'
 
 import { useEffect, useState } from 'react'
 import { supabaseClient } from './supabaseClient'
-import { VideoList, VideoShow, VideoEdit } from './pages/videos'
+import { VideoList, VideoShow, VideoEdit, VideoDouyinCreate } from './pages/videos'
 import { UserList, UserShow, UserEdit } from './pages/users'
 import { RecommendationPoolList } from './pages/recommendation-pool'
 import { IncentiveRuleCreate, IncentiveRuleEdit, IncentiveRuleList } from './pages/incentive-rules'
@@ -177,6 +177,7 @@ function App() {
                   <Route index element={<VideoList />} />
                   <Route path="show/:id" element={<VideoShow />} />
                   <Route path="edit/:id" element={<VideoEdit />} />
+                  <Route path="douyin-create" element={<VideoDouyinCreate />} />
                 </Route>
                 <Route path="/users">
                   <Route index element={<UserList />} />

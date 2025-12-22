@@ -599,7 +599,16 @@ export const VideoList = () => {
 
   return (
     <>
-      <List>
+      <List
+        title="视频管理"
+        headerButtons={
+          <Space>
+            <Button type="primary" onClick={() => navigate('/videos/douyin-create')}>
+              抖音解析新增
+            </Button>
+          </Space>
+        }
+      >
         {/* 搜索和筛选表单 */}
         <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
           <Form.Item name="user_q" label="搜索用户">
