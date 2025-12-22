@@ -49,7 +49,7 @@ export const VideoDouyinCreate = () => {
     return json.data
   }
 
-  async function handleParse() {
+  async function handleParse(mode: 'app_v3_share' | 'app_v3_v2' | 'web_share') {
     const text = rawText.trim()
     if (!text) {
       message.warning('请粘贴抖音复制内容')
@@ -57,7 +57,7 @@ export const VideoDouyinCreate = () => {
     }
     setLoadingParse(true)
     try {
-      const data = await callAppServer('/admin/douyin/parse', { text })
+      const data = await callAppServer('/admin/douyin/parse', { text, mode })
       if (!data) return
       setParsed(data as ParseResult)
       message.success('解析成功')
@@ -94,8 +94,14 @@ export const VideoDouyinCreate = () => {
     <div style={{ padding: 16 }}>
       <Space style={{ marginBottom: 12 }}>
         <Button onClick={() => navigate('/videos')}>返回列表</Button>
-        <Button type="primary" onClick={handleParse} loading={loadingParse}>
-          解析
+        <Button type="primary" onClick={() => handleParse('app_v3_share')} loading={loadingParse}>
+          解析(AppV3)
+        </Button>
+        <Button type="default" onClick={() => handleParse('app_v3_v2')} loading={loadingParse}>
+          解析(V2)
+        </Button>
+        <Button type="default" onClick={() => handleParse('web_share')} loading={loadingParse}>
+          解析(Web)
         </Button>
         <Button type="primary" onClick={handlePublish} loading={loadingSave} disabled={!parsed}>
           保存并发布

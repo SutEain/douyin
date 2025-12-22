@@ -57,6 +57,15 @@ function pickFirstUrl(urlList: any): string | null {
   return null
 }
 
+function safeKeys(v: any, limit = 40): string[] {
+  if (!v || typeof v !== 'object') return []
+  try {
+    return Object.keys(v).slice(0, limit)
+  } catch {
+    return []
+  }
+}
+
 function safeText(v: any): string {
   return typeof v === 'string' ? v : v == null ? '' : String(v)
 }
@@ -68,13 +77,61 @@ function normalizeShareUrl(input: string): string {
   u = u.replace(/[。．，、；;！!？?]+$/g, '')
   // 去掉尾部非 URL 合法字符（例如中文/emoji 等粘连）
   // 注意：字符类里 `[` 放在开头即可表示字面量，不需要写成 `\[`（eslint no-useless-escape）
-  u = u.replace(/[^[0-9A-Za-z\-._~:/?#\]@!$&'()*+,;=%]+$/g, '')
+  // 允许的 URL 字符：RFC3986 unreserved + reserved（常见 URL 组成）
+  // 这里匹配“尾部不属于允许集合的字符”，用于清理粘连的中文/emoji/标点等
+  u = u.replace(/[^0-9A-Za-z._~:/?#[\]@!$&'()*+,;=%-]+$/g, '')
   // 去掉尾部多余斜杠
   u = u.replace(/\/+$/g, '')
   return u
 }
 
-type ParseReq = { text?: string }
+type ParseMode = 'app_v3_share' | 'app_v3_v2' | 'web_share'
+type ParseReq = { text?: string; mode?: ParseMode }
+
+function extractAwemeIdFromUrl(url: string): string | null {
+  const m = String(url || '').match(/\/share\/video\/(\d+)\//i)
+  return m?.[1] || null
+}
+
+async function resolveAwemeIdFromShareUrl(shareUrl: string): Promise<string | null> {
+  // 1) 直接从长链里取
+  const direct = extractAwemeIdFromUrl(shareUrl)
+  if (direct) return direct
+
+  // 2) v.douyin.com 短链：尝试拿 302 Location（免费请求抖音）
+  try {
+    const resp = await fetch(shareUrl, {
+      method: 'HEAD',
+      redirect: 'manual',
+      headers: { 'User-Agent': 'Mozilla/5.0 (admin-douyin-parse-awemeid)' }
+    })
+    const loc = resp.headers.get('location') || resp.headers.get('Location')
+    if (loc) {
+      const id = extractAwemeIdFromUrl(loc)
+      if (id) return id
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3) HEAD 失败：用 GET + manual 再试一次
+  try {
+    const resp = await fetch(shareUrl, {
+      method: 'GET',
+      redirect: 'manual',
+      headers: { 'User-Agent': 'Mozilla/5.0 (admin-douyin-parse-awemeid)' }
+    })
+    const loc = resp.headers.get('location') || resp.headers.get('Location')
+    if (loc) {
+      const id = extractAwemeIdFromUrl(loc)
+      if (id) return id
+    }
+  } catch {
+    // ignore
+  }
+
+  return null
+}
 
 export async function handleAdminDouyinParse(req: Request): Promise<Response> {
   try {
@@ -84,6 +141,7 @@ export async function handleAdminDouyinParse(req: Request): Promise<Response> {
     const body = await parseJsonBody<ParseReq>(req)
     const rawText = safeText(body?.text).trim()
     if (!rawText) return errorResponse('缺少 text', 1, 400)
+    const mode: ParseMode = (body?.mode as ParseMode) || 'app_v3_share'
 
     const extracted = extractDouyinUrlWithReason(rawText)
     const sourceUrl = extracted?.url || extractDouyinUrl(rawText)
@@ -94,19 +152,39 @@ export async function handleAdminDouyinParse(req: Request): Promise<Response> {
       return errorResponse('Server misconfigured: missing TIKHUB_API_TOKEN', 1, 500)
     }
 
-    // ✅ TikHub（付费接口）：根据分享链接获取单个作品数据
-    // 文档：https://api.tikhub.io/#/Douyin-App-V3-API/fetch_one_video_by_share_url_api_v1_douyin_app_v3_fetch_one_video_by_share_url_get
-    const api = `https://api.tikhub.io/api/v1/douyin/app/v3/fetch_one_video_by_share_url?share_url=${encodeURIComponent(
-      normalizedUrl
-    )}`
+    // ✅ TikHub 上游选择（3种）
+    // - app_v3_share: GET /api/v1/douyin/app/v3/fetch_one_video_by_share_url?share_url=...
+    // - web_share:    GET /api/v1/douyin/web/fetch_one_video_by_share_url?share_url=...
+    // - app_v3_v2:    GET /api/v1/douyin/app/v3/fetch_one_video_v2?aweme_id=...（需先从短链解出 aweme_id）
+    let api = ''
+    let awemeIdForV2: string | null = null
+    if (mode === 'web_share') {
+      api = `https://api.tikhub.io/api/v1/douyin/web/fetch_one_video_by_share_url?share_url=${encodeURIComponent(
+        normalizedUrl
+      )}`
+    } else if (mode === 'app_v3_v2') {
+      awemeIdForV2 = await resolveAwemeIdFromShareUrl(normalizedUrl)
+      if (!awemeIdForV2) {
+        return errorResponse('解析失败：未能从分享链接解析出 aweme_id', 1, 500)
+      }
+      api = `https://api.tikhub.io/api/v1/douyin/app/v3/fetch_one_video_v2?aweme_id=${encodeURIComponent(
+        awemeIdForV2
+      )}`
+    } else {
+      api = `https://api.tikhub.io/api/v1/douyin/app/v3/fetch_one_video_by_share_url?share_url=${encodeURIComponent(
+        normalizedUrl
+      )}`
+    }
 
     // 🔎 关键日志：不打印 token，只打印链接规范化结果
     console.log('[admin_douyin_parse] share_url:', {
+      mode,
       extract_reason: extracted?.reason || 'unknown',
       raw_text_preview: rawText.slice(0, 180),
       sourceUrl,
       normalizedUrl,
       changed: sourceUrl !== normalizedUrl,
+      aweme_id_for_v2: awemeIdForV2,
       request: { method: 'GET', url: api }
     })
 
@@ -155,6 +233,10 @@ export async function handleAdminDouyinParse(req: Request): Promise<Response> {
       return errorResponse('解析失败（上游异常）', 1, 502)
     }
 
+    const upstreamRequestId = json?.detail?.request_id || json?.request_id || null
+    const upstreamMsgZh = json?.detail?.message_zh || json?.message_zh || ''
+    const upstreamMsg = json?.detail?.message || json?.message || ''
+
     // TikHub 通常用 code=200 表示成功
     const upstreamCode = Number(json?.code)
     if (Number.isFinite(upstreamCode) && upstreamCode !== 200) {
@@ -168,16 +250,51 @@ export async function handleAdminDouyinParse(req: Request): Promise<Response> {
     }
 
     const data = json?.data || {}
-    // 兼容：有些返回是 aweme_detail，有些直接就是 aweme 对象
-    const aweme = data?.aweme_detail || data?.aweme || data
+    // 兼容：TikHub 返回结构可能是 data.aweme_details[] / data.aweme_detail / data 直接是 aweme
+    let aweme: any = null
+    let awemeSource = ''
+    if (Array.isArray((data as any)?.aweme_details) && (data as any).aweme_details.length) {
+      aweme = (data as any).aweme_details[0]
+      awemeSource = 'data.aweme_details[0]'
+    } else if ((data as any)?.aweme_detail) {
+      aweme = (data as any).aweme_detail
+      awemeSource = 'data.aweme_detail'
+    } else if ((data as any)?.aweme) {
+      aweme = (data as any).aweme
+      awemeSource = 'data.aweme'
+    } else {
+      aweme = data
+      awemeSource = 'data'
+    }
+
+    // 有些版本会再包一层 aweme_detail / aweme_info / aweme
+    if (aweme?.aweme_detail) {
+      aweme = aweme.aweme_detail
+      awemeSource += '.aweme_detail'
+    } else if (aweme?.aweme_info) {
+      aweme = aweme.aweme_info
+      awemeSource += '.aweme_info'
+    } else if (aweme?.aweme) {
+      aweme = aweme.aweme
+      awemeSource += '.aweme'
+    }
+
     const video = aweme?.video || {}
 
-    const playUrl =
-      pickFirstUrl(video?.play_addr?.url_list) || pickFirstUrl(video?.play_addr_h264?.url_list)
+    const playAddrList = video?.play_addr?.url_list
+    const playAddrH264List = video?.play_addr_h264?.url_list
+    const playFromPlayAddr = pickFirstUrl(playAddrList)
+    const playFromPlayAddrH264 = pickFirstUrl(playAddrH264List)
+    const playUrl = playFromPlayAddr || playFromPlayAddrH264
+    const playSource = playFromPlayAddr
+      ? 'video.play_addr.url_list[0]'
+      : playFromPlayAddrH264
+        ? 'video.play_addr_h264.url_list[0]'
+        : null
     const coverUrl = pickFirstUrl(video?.cover?.url_list) // ✅ 你指定用 cover
-    const desc = safeText(aweme?.desc)
-    const awemeId = safeText(aweme?.aweme_id)
-    const rawDuration = Number(video?.duration || aweme?.duration || 0)
+    const desc = safeText(aweme?.desc || aweme?.description)
+    const awemeId = safeText(aweme?.aweme_id || aweme?.awemeId || aweme?.id)
+    const rawDuration = Number(video?.duration || aweme?.duration || aweme?.video_duration || 0)
     // 兼容：可能是毫秒，也可能是秒
     const durationSec =
       rawDuration > 10_000
@@ -187,7 +304,55 @@ export async function handleAdminDouyinParse(req: Request): Promise<Response> {
     const height = Number(video?.height || 0) || null
     const expire = Number(video?.cdn_url_expired || aweme?.cdn_url_expired || 0) || null
 
+    console.log('[admin_douyin_parse] parsed:', {
+      upstream: {
+        httpStatus: resp.status,
+        request_id: upstreamRequestId,
+        code: json?.code,
+        message_zh: upstreamMsgZh,
+        message: upstreamMsg
+      },
+      tikhub: {
+        data_keys: safeKeys(data),
+        aweme_details_len: Array.isArray((data as any)?.aweme_details)
+          ? (data as any).aweme_details.length
+          : 0,
+        aweme_source: awemeSource
+      },
+      aweme_id: awemeId || null,
+      aweme_keys: safeKeys(aweme),
+      video_keys: safeKeys(video),
+      play: {
+        source: playSource,
+        play_addr_len: Array.isArray(playAddrList) ? playAddrList.length : 0,
+        play_addr_h264_len: Array.isArray(playAddrH264List) ? playAddrH264List.length : 0,
+        play_url_preview: playUrl ? String(playUrl).slice(0, 120) : null
+      },
+      cover: {
+        cover_len: Array.isArray(video?.cover?.url_list) ? video.cover.url_list.length : 0,
+        cover_url_preview: coverUrl ? String(coverUrl).slice(0, 120) : null
+      },
+      meta: {
+        duration_raw: rawDuration || 0,
+        duration_sec: durationSec || 0,
+        width,
+        height,
+        cdn_url_expired: expire
+      },
+      desc_preview: desc ? desc.slice(0, 80) : ''
+    })
+
     if (!playUrl) {
+      console.error('[admin_douyin_parse] play url missing:', {
+        request_id: upstreamRequestId,
+        aweme_source: awemeSource,
+        aweme_id: awemeId || null,
+        aweme_keys: safeKeys(aweme),
+        video_keys: safeKeys(video),
+        play_addr_len: Array.isArray(playAddrList) ? playAddrList.length : 0,
+        play_addr_h264_len: Array.isArray(playAddrH264List) ? playAddrH264List.length : 0,
+        body_preview: raw ? raw.slice(0, 800) : ''
+      })
       return errorResponse('解析失败：未拿到播放地址', 1, 500)
     }
 
