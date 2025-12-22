@@ -1,8 +1,9 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Button, Image, Switch, InputNumber, message } from 'antd'
+import { Table, Space, Button, Image, Switch, InputNumber, message, Tag } from 'antd'
 import { useInvalidate, useUpdate } from '@refinedev/core'
 import { useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
+import { supabaseClient } from '../../supabaseClient'
 
 type LiveRoomRow = {
   id: string
@@ -13,6 +14,10 @@ type LiveRoomRow = {
   cover_url?: string | null
   sort_order?: number | null
   is_active?: boolean
+  status?: 'online' | 'offline' | 'unknown' | string | null
+  last_checked_at?: string | null
+  check_count?: number | null
+  last_error?: string | null
   updated_at?: string | null
   created_at?: string | null
 }
@@ -72,6 +77,40 @@ export const LiveRoomList = () => {
     )
   }
 
+  async function probeOne(record: LiveRoomRow) {
+    try {
+      const { data } = await supabaseClient.auth.getSession()
+      const token = data?.session?.access_token
+      if (!token) {
+        message.error('未登录或会话已过期')
+        return
+      }
+
+      const res = await fetch(`${import.meta.env.VITE_APP_SERVER_URL}/live/rooms/probe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ ids: [record.id] })
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json) {
+        message.error('探测失败')
+        return
+      }
+      if (json.code !== 0) {
+        message.error(json.msg || '探测失败')
+        return
+      }
+      message.success('已探测')
+      invalidate({ resource: 'live_rooms', invalidates: ['list'] })
+    } catch (e: any) {
+      console.error('[LiveRoomList] probeOne failed:', e)
+      message.error(e?.message || '探测失败')
+    }
+  }
+
   return (
     <List
       title="直播间管理"
@@ -122,6 +161,23 @@ export const LiveRoomList = () => {
           )}
         />
         <Table.Column
+          title="探测状态"
+          dataIndex="status"
+          render={(v: any) => {
+            const vv = String(v || 'unknown')
+            if (vv === 'online') return <Tag color="green">在线</Tag>
+            if (vv === 'offline') return <Tag color="red">离线</Tag>
+            return <Tag>未知</Tag>
+          }}
+        />
+        <Table.Column
+          title="上次探测"
+          dataIndex="last_checked_at"
+          render={(v: any) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-')}
+        />
+        <Table.Column title="探测次数" dataIndex="check_count" render={(v: any) => v ?? 0} />
+        <Table.Column title="错误" dataIndex="last_error" render={(v: any) => v || '-'} />
+        <Table.Column
           title="更新时间"
           dataIndex="updated_at"
           render={(v: any) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-')}
@@ -131,6 +187,9 @@ export const LiveRoomList = () => {
           dataIndex="actions"
           render={(_, record: LiveRoomRow) => (
             <Space>
+              <Button size="small" onClick={() => probeOne(record)}>
+                探测
+              </Button>
               <Button size="small" onClick={() => navigate(`/live-rooms/edit/${record.id}`)}>
                 编辑
               </Button>

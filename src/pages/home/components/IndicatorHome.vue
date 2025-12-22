@@ -158,6 +158,10 @@ export default {
     })
     bus.on(this.name + '-end', this.end)
   },
+  // ✅ 从视频详情返回 Home（keep-alive 激活）时，重新计算 Tab 白线位置，避免错位
+  activated() {
+    this.scheduleInitTabs('activated')
+  },
   unmounted() {
     bus.off(this.name + '-moveX', this.move)
     bus.off(this.name + '-moveY')
@@ -165,6 +169,24 @@ export default {
   },
 
   methods: {
+    _tabDebugEnabled() {
+      try {
+        return new URLSearchParams(window.location.search).get('tabdebug') === '1'
+      } catch {
+        return false
+      }
+    },
+    scheduleInitTabs(from = 'unknown') {
+      // nextTick + rAF：确保 DOM 已稳定（避免返回瞬间测量不准）
+      this.$nextTick(() => {
+        requestAnimationFrame(() => {
+          if (this._tabDebugEnabled()) {
+            console.log('[IndicatorHome] scheduleInitTabs', { from, index: this.index })
+          }
+          this.initTabs()
+        })
+      })
+    },
     change(index) {
       this.$emit('update:index', index)
       _css(this.indicatorRef, 'transition-duration', `300ms`)
@@ -188,6 +210,15 @@ export default {
       this.indicatorSpace = this.lefts[1] - this.lefts[0]
       _css(this.indicatorRef, 'transition-duration', `300ms`)
       _css(this.indicatorRef, 'left', this.lefts[this.index] + 'px')
+      if (this._tabDebugEnabled()) {
+        const rect = tabs?.getBoundingClientRect?.()
+        console.log('[IndicatorHome] initTabs', {
+          index: this.index,
+          tabsWidth: rect?.width,
+          indicatorWidth,
+          left: this.lefts?.[this.index]
+        })
+      }
     },
     move(e) {
       _css(this.indicatorRef, 'transition-duration', `0ms`)
