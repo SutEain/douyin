@@ -347,10 +347,19 @@ export default {
     // - right 预留搜索按钮区域：icon(24rem) + 右侧 padding(15rem) + 缓冲(≈21rem) => 60rem
     @media screen and (max-width: 500px) {
       .tab-ctn {
-        left: 15rem; // 与 toolbar padding 对齐
-        right: 60rem; // ✅ 预留搜索按钮区域（更保守，避免覆盖）
+        left: 60rem; // ✅ 左右对称：左边也预留与右边搜索按钮相同的距离
+        right: 60rem; // ✅ 预留搜索按钮区域
         width: auto;
         transform: none;
+
+        .tabs {
+          justify-content: space-between; // ✅ 在对称区域内均匀铺满
+          gap: 0;
+
+          .tab + .tab {
+            margin-left: 8rem;
+          }
+        }
       }
     }
 
