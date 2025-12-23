@@ -19,17 +19,6 @@ declare global {
 }
 
 if (typeof window !== 'undefined') {
-  // ✅ 仅安卓：加一个根节点 class，方便做样式兜底（不影响 iOS/desktop）
-  try {
-    const ua = navigator.userAgent || ''
-    const isAndroid = /Android/i.test(ua)
-    if (isAndroid) {
-      document.documentElement.classList.add('is-android')
-    }
-  } catch {
-    // ignore
-  }
-
   // ✅ A2: 前端全环境静默 console 输出（开发环境也不输出）
   // 如需临时排查，可在控制台手动使用 window.__rawConsole__ 查看原始 console
   if (!window.__rawConsole__) {

@@ -357,37 +357,5 @@ export default {
     height: calc(var(--vh, 1vh) * 100);
     background: #00000066;
   }
-
-  // ✅ 仅安卓：部分 WebView 对 flex gap 支持不稳定，导致 tab 文案“挤成一串”
-  // - 用 margin-left 作为兜底间距（iOS/desktop 仍使用 gap）
-  // - 同时让 tab 容器吃满搜索按钮之外的宽度，避免明明有空间却被锁死在 74%
-  :global(html.is-android) & {
-    .toolbar {
-      .tab-ctn {
-        left: 15rem;
-        right: 54rem; // 预留搜索按钮区域（24rem icon + padding）
-        width: auto;
-        transform: none;
-      }
-
-      .tab-ctn {
-        .tabs {
-          gap: 0;
-          justify-content: flex-start;
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: none;
-
-          &::-webkit-scrollbar {
-            display: none;
-          }
-
-          .tab + .tab {
-            margin-left: 12rem;
-          }
-        }
-      }
-    }
-  }
 }
 </style>
