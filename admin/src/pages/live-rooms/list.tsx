@@ -2,7 +2,7 @@ import { List, useTable } from '@refinedev/antd'
 import { Table, Space, Button, Image, Switch, InputNumber, message, Tag } from 'antd'
 import { useInvalidate, useUpdate } from '@refinedev/core'
 import { useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import dayjs from 'dayjs'
 import { supabaseClient } from '../../supabaseClient'
 
@@ -43,6 +43,26 @@ export const LiveRoomList = () => {
       pageSize: 100
     }
   })
+
+  // ✅ 前端兜底排序：确保启用的始终在最前面，不被 provider 的排序/分页策略打乱
+  const sortedDataSource = useMemo(() => {
+    const raw = (tableProps.dataSource ?? []) as LiveRoomRow[]
+    const list = [...raw]
+    list.sort((a, b) => {
+      const aActive = a?.is_active === true ? 1 : 0
+      const bActive = b?.is_active === true ? 1 : 0
+      if (aActive !== bActive) return bActive - aActive
+
+      const aSort = typeof a?.sort_order === 'number' ? a.sort_order : 0
+      const bSort = typeof b?.sort_order === 'number' ? b.sort_order : 0
+      if (aSort !== bSort) return bSort - aSort
+
+      const aTime = a?.updated_at ? Date.parse(a.updated_at) : 0
+      const bTime = b?.updated_at ? Date.parse(b.updated_at) : 0
+      return bTime - aTime
+    })
+    return list
+  }, [tableProps.dataSource])
 
   function toggleActive(record: LiveRoomRow, next: boolean) {
     updateOne(
@@ -213,6 +233,7 @@ export const LiveRoomList = () => {
     >
       <Table
         {...tableProps}
+        dataSource={sortedDataSource}
         rowKey="id"
         size="middle"
         rowSelection={{
