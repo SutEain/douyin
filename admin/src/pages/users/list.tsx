@@ -25,10 +25,14 @@ export const UserList = () => {
 
       if (q) {
         // 昵称 / 用户名 模糊搜索（任意命中）
-        // refinedev/supabase 支持 operator: 'or'，value 为 Supabase 的 or 语法
+        // 使用标准 Refine 逻辑过滤器数组语法，修复 e.value.map is not a function 错误
         filters.push({
           operator: 'or',
-          value: `nickname.ilike.%${q}%,username.ilike.%${q}%,tg_username.ilike.%${q}%`
+          value: [
+            { field: 'nickname', operator: 'contains', value: q },
+            { field: 'username', operator: 'contains', value: q },
+            { field: 'tg_username', operator: 'contains', value: q }
+          ]
         })
       }
 

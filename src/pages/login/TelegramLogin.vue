@@ -8,6 +8,7 @@
       <div v-if="errorMessage" class="error-box">
         <p class="error-icon">⚠️</p>
         <p class="error-text">{{ errorMessage }}</p>
+        <button class="retry-btn" @click="initTelegramLogin">点此重试</button>
       </div>
     </div>
   </div>
@@ -138,7 +139,11 @@ const initTelegramLogin = async () => {
     router.replace('/')
   } catch (error: any) {
     console.error('[TelegramLogin] ❌ 登录失败:', error)
-    errorMessage.value = error?.message || '登录失败，请重试'
+    let msg = error?.message || '登录失败，请重试'
+    if (msg === 'Failed to fetch') {
+      msg = '网络连接失败，请检查网络或 VPN 设置'
+    }
+    errorMessage.value = msg
     isLoading.value = false
   }
 }

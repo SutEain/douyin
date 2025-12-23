@@ -354,8 +354,9 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
     })
   }
 
-  // 已登录用户：先检查成人观看配额
-  const quota = await getAdultQuota(user.id)
+  // 已登录用户：不再检查成人观看配额，全部开放
+  // const quota = await getAdultQuota(user.id)
+  /*
   if (!quota.unlimited && quota.remaining <= 0) {
     return successResponse({
       list: [],
@@ -367,6 +368,7 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
       quota
     })
   }
+  */
 
   // 使用 get_adult_feed，排除 watch_history 里的视频
   let rows: any[] = []
@@ -439,6 +441,18 @@ export async function getAdultQuota(userId: string) {
 
   const now = new Date()
 
+  // 🎯 A方案修复：强制返回无限配额，修正变量引用错误
+  return {
+    unlimited: true,
+    limit: dailyLimit,
+    used: 0,
+    remaining: 999999,
+    unlock_until: unlockUntil ? unlockUntil.toISOString() : null,
+    permanent: true,
+    invite_success_count: profile?.invite_success_count ?? 0
+  }
+
+  /* 原始限制逻辑已注释
   if (permanent || (unlockUntil && unlockUntil > now)) {
     return {
       unlimited: true,
@@ -488,6 +502,7 @@ export async function getAdultQuota(userId: string) {
     permanent: false,
     invite_success_count: profile?.invite_success_count ?? 0
   }
+  */
 }
 
 /**
