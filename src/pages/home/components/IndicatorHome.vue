@@ -342,6 +342,18 @@ export default {
       }
     }
 
+    // ✅ 小屏：Tab 容器撑满“除右上角搜索按钮之外”的区域（不改 JS，避免风险）
+    // - 桌面不动；移动端更宽松
+    // - right 预留搜索按钮区域：icon(24rem) + 右侧 padding(15rem) + 缓冲(≈21rem) => 60rem
+    @media screen and (max-width: 500px) {
+      .tab-ctn {
+        left: 15rem; // 与 toolbar padding 对齐
+        right: 60rem; // ✅ 预留搜索按钮区域（更保守，避免覆盖）
+        width: auto;
+        transform: none;
+      }
+    }
+
     .search {
       position: absolute;
       right: 15rem;
