@@ -297,6 +297,16 @@ export default {
         // ✅ Tab 间距小一点，避免侵占搜索按钮区域
         gap: 12rem;
 
+        // ✅ 最安全兜底：部分安卓 WebView 不支持 flex gap，会导致 Tab 文案“挤成一串”
+        // 仅在不支持 gap 的环境下启用 margin 间距；支持 gap 的 iOS/desktop 不受影响
+        @supports not (gap: 1px) {
+          gap: 0;
+
+          .tab + .tab {
+            margin-left: 12rem;
+          }
+        }
+
         .tab {
           transition: color 0.3s;
           color: rgba(white, 0.7);
