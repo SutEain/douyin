@@ -352,22 +352,6 @@ export default {
       }
     }
 
-    // ✅ 小屏（安卓为主）：释放 tab 容器宽度并靠左，避免“挤在一起”
-    // - 不覆盖右上角搜索：通过 right 预留搜索区域
-    // - 不启用横向滚动：先用“增加容器宽度”解决
-    @media screen and (max-width: 500px) {
-      .tab-ctn {
-        left: 15rem;
-        right: 54rem; // 预留搜索按钮区域（icon + padding）
-        width: auto; // ≈ 90% 可用空间
-        transform: none;
-
-        .tabs {
-          justify-content: flex-start; // 靠左
-        }
-      }
-    }
-
     .search {
       position: absolute;
       right: 15rem;
