@@ -208,7 +208,7 @@ export async function handleMyVideos(
     })
 
     const lines = [
-      `📹 <b>我的视频</b>`,
+      `📹 <b>我的作品</b>`,
       ``,
       `共 ${total} 个视频`,
       ``,

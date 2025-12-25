@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card, Col, Drawer, Row, Spin, Statistic, Table, Typography } from 'antd'
+import { useNavigate } from 'react-router-dom'
 import { supabaseClient } from '../../supabaseClient'
 
 const { Title, Text } = Typography
 
 interface DashboardStats {
   totalUsers: number
+  usersWithVideos: number
   newUsersToday: number
   activeUsersToday: number
   totalVideos: number
@@ -82,6 +84,7 @@ function formatShanghaiTime(iso?: string | null): string {
 }
 
 export const Dashboard = () => {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<DashboardStats | null>(null)
 
@@ -104,6 +107,7 @@ export const Dashboard = () => {
 
         const [
           totalUsersRes,
+          usersWithVideosRes,
           newUsersRes,
           activeUsersRes,
           totalVideosRes,
@@ -115,6 +119,10 @@ export const Dashboard = () => {
           newAdultVideosRes
         ] = await Promise.all([
           supabaseClient.from('profiles').select('*', { count: 'exact', head: true }),
+          supabaseClient
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .gt('video_count', 0),
           supabaseClient
             .from('profiles')
             .select('*', { count: 'exact', head: true })
@@ -164,6 +172,7 @@ export const Dashboard = () => {
 
         setStats({
           totalUsers: totalUsersRes.count ?? 0,
+          usersWithVideos: usersWithVideosRes.count ?? 0,
           newUsersToday: newUsersRes.count ?? 0,
           activeUsersToday: activeUsersRes.count ?? 0,
           totalVideos: totalVideosRes.count ?? 0,
@@ -397,6 +406,23 @@ export const Dashboard = () => {
         </Row>
 
         <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+          <Col xs={24} sm={12} md={6}>
+            <Card
+              style={{ cursor: 'pointer', border: '1px solid #1890ff' }}
+              onClick={() => navigate('/users?has_videos=true')}
+            >
+              <Statistic
+                title="已发作品用户 (总)"
+                value={stats?.usersWithVideos ?? 0}
+                valueStyle={{ color: '#1890ff' }}
+                suffix={
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    一键查看
+                  </Text>
+                }
+              />
+            </Card>
+          </Col>
           <Col xs={24} sm={12} md={6}>
             <Card>
               <Statistic title="总用户数" value={stats?.totalUsers ?? 0} />

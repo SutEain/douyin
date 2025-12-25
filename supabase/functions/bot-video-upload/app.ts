@@ -121,7 +121,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             // 1. 先发送底部菜单（Persistent Keyboard）
             await sendMessage(
               chatId,
-              '👋 欢迎加入 [TG 抖音]  🔥\n👇 这里有你想要的一切 👇\n请认准 @tg_douyin_bot',
+              '👋 欢迎加入 [TG 抖音]  🔥\n 接受一切资源合作洽谈。成为股东，请联系 @vip843',
               {
                 reply_markup: getPersistentKeyboard()
               }

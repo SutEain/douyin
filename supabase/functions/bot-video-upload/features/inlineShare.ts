@@ -89,8 +89,8 @@ export async function handleInlineQuery(inlineQuery: any) {
     const result = {
       type: 'article',
       id: `promo_${numericId || '0'}`,
-      title: '🌟  欢迎来到 TG 抖音',
-      description: numericId ? `🔥Telegram 最大的视频&直播分享平台!` : '开始刷抖音吧',
+      title: '🌟 送你专属邀请链接',
+      description: '点击分享，解锁无限成人内容',
       input_message_content: {
         message_text: welcomeText,
         parse_mode: 'HTML',
@@ -98,7 +98,12 @@ export async function handleInlineQuery(inlineQuery: any) {
       },
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🚀 开始刷TG抖音', url: `https://t.me/tg_douyin_bot?start=${numericId || ''}` }]
+          [
+            {
+              text: '🚀 立即解锁无限内容',
+              url: `https://t.me/tg_douyin_bot?start=${numericId || ''}`
+            }
+          ]
         ]
       }
     }

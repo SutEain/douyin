@@ -126,26 +126,18 @@ export async function handleInviteUnlock(chatId: number, messageId?: number) {
     }
 
     const text =
-      `🔞 <b>邀请解锁无限刷</b>\n\n` +
+      `🔞 <b>解锁无限刷</b>\n\n` +
       `当前状态：${statusText}\n` +
       `已邀请人数：${count} 人\n\n` +
       `<b>专属邀请链接：</b>\n` +
       `${inviteLink}\n` +
       `(点击上方链接复制)\n\n` +
-      `<b>🎁 解锁规则：</b>\n` +
-      `• 邀请 1 人 → 解锁 24 小时无限刷\n` +
-      `• 邀请 2 人 → 解锁 3 天无限刷\n` +
-      `• 邀请 3 人 → 永久解锁无限刷\n\n` +
-      `<i>💡 好友通过您的链接启动机器人即算邀请成功</i>\n\n` +
-      `<i>💡 此解锁针对🔞的内容，推荐页内容无需解锁</i>`
-
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(
-      '送你专属邀请链接，解锁无限成人内容'
-    )}`
+      `<b>邀请好友折现金即将上线</b>\n\n` +
+      `<i>💡 好友通过您的链接启动机器人即算邀请成功</i>\n\n`
 
     const keyboard = {
       inline_keyboard: [
-        [{ text: '📤 分享给好友', url: shareUrl }],
+        [{ text: '📤 分享给好友', switch_inline_query: '' }],
         [{ text: '⬅️ 返回首页', callback_data: 'back_home' }]
       ]
     }

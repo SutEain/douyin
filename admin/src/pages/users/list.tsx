@@ -1,5 +1,5 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Avatar, Button, Tag, message, Modal, Form, Input } from 'antd'
+import { Table, Space, Avatar, Button, Tag, message, Modal, Form, Input, Select } from 'antd'
 import { EyeOutlined, EditOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useUpdate } from '@refinedev/core'
@@ -19,9 +19,11 @@ export const UserList = () => {
       const filters: any[] = []
 
       const q = String(params.q || '').trim()
+      const inviterId = String(params.inviter_id || '').trim()
       const numericId = String(params.numeric_id || '').trim()
       const tgUserId = String(params.tg_user_id || '').trim()
       const uuid = String(params.id || '').trim()
+      const hasVideos = params.has_videos
 
       if (q) {
         // 昵称 / 用户名 模糊搜索（任意命中）
@@ -36,6 +38,16 @@ export const UserList = () => {
         })
       }
 
+      if (inviterId) {
+        // 搜索邀请人：直接用邀请人的数字 ID 搜索
+        // 注意：这里利用 Supabase/PostgREST 对 JSONB 字段的过滤能力
+        filters.push({
+          field: 'inviter->numeric_id',
+          operator: 'eq',
+          value: Number(inviterId)
+        })
+      }
+
       if (numericId) {
         filters.push({ field: 'numeric_id', operator: 'eq', value: Number(numericId) })
       }
@@ -44,6 +56,12 @@ export const UserList = () => {
       }
       if (uuid) {
         filters.push({ field: 'id', operator: 'eq', value: uuid })
+      }
+
+      if (hasVideos === 'true' || hasVideos === true) {
+        filters.push({ field: 'video_count', operator: 'gt', value: 0 })
+      } else if (hasVideos === 'false' || hasVideos === false) {
+        filters.push({ field: 'video_count', operator: 'eq', value: 0 })
       }
 
       return filters
@@ -82,16 +100,25 @@ export const UserList = () => {
     <List>
       <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
         <Form.Item name="q" label="关键词">
-          <Input placeholder="昵称/用户名" allowClear style={{ width: 220 }} />
+          <Input placeholder="昵称/用户名" allowClear style={{ width: 180 }} />
+        </Form.Item>
+        <Form.Item name="inviter_id" label="邀请人ID">
+          <Input placeholder="邀请人数字ID" allowClear style={{ width: 140 }} />
         </Form.Item>
         <Form.Item name="numeric_id" label="数字ID">
-          <Input placeholder="如 10086" allowClear style={{ width: 140 }} />
+          <Input placeholder="如 10086" allowClear style={{ width: 120 }} />
         </Form.Item>
         <Form.Item name="tg_user_id" label="TGID">
           <Input placeholder="如 123456789" allowClear style={{ width: 160 }} />
         </Form.Item>
         <Form.Item name="id" label="UUID">
           <Input placeholder="profiles.id" allowClear style={{ width: 260 }} />
+        </Form.Item>
+        <Form.Item name="has_videos" label="是否有作品">
+          <Select allowClear placeholder="全部" style={{ width: 100 }}>
+            <Select.Option value="true">是</Select.Option>
+            <Select.Option value="false">否</Select.Option>
+          </Select>
         </Form.Item>
         <Form.Item>
           <Button type="primary" htmlType="submit">
