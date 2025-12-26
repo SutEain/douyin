@@ -19,7 +19,11 @@
       <div class="top">
         <div class="left">
           <div class="liver">
-            <img class="avatar" :src="_checkImgUrl(roomInfo.anchor_info?.avatar_url)" alt="" />
+            <img
+              class="avatar"
+              :src="_checkImgUrl(roomInfo.anchor_info?.avatar_url) || fallbackAvatar"
+              alt=""
+            />
             <div class="desc-wrapper">
               <div class="name">{{ roomInfo.anchor_info?.nickname || '主播' }}</div>
               <div class="count">{{ viewerCount }} 人正在看</div>
@@ -34,9 +38,10 @@
             <div class="viewer-avatars" v-if="viewers.length">
               <img
                 v-for="v in viewers"
-                :key="v.id"
-                :src="_checkImgUrl(v.avatar)"
+                :key="v.renderKey"
+                :src="_checkImgUrl(v.avatar) || fallbackAvatar"
                 class="v-avatar"
+                @error="(e: any) => (e.target.src = fallbackAvatar)"
               />
             </div>
             <div class="round count" @click="showViewerList">{{ viewerCount }}</div>
@@ -121,6 +126,7 @@ const comments = ref<HTMLElement | null>(null)
 const commentInput = ref<HTMLInputElement | null>(null) // 新增 Ref
 const viewerCount = ref(0)
 const viewers = ref<any[]>([]) // 存储前几名观众
+const fallbackAvatar = new URL('../../assets/img/icon/avatar/0.png', import.meta.url).href
 
 // 监听输入框显示，自动聚焦
 watch(showInput, (val) => {
@@ -139,12 +145,13 @@ function showViewerList() {
 }
 
 // --- 动画通知模板 ---
-const userJoinedTemplate = (nickname: string) => {
+const userJoinedTemplate = (nickname: string, rank?: number) => {
+  const levelImg = new URL('../../assets/img/icon/home/level.webp', import.meta.url).href
   return `
     <div class="user-joined">
       <div class="rank-badge">
-        <img src="/images/icon/home/level.webp" alt="">
-        <span>${Math.floor(Math.random() * 30) + 1}</span>
+        <img src="${levelImg}" alt="">
+        <span>${rank || 1}</span>
       </div>
       <span class="name">${nickname}</span>
       <span class="text">加入了直播间</span>
@@ -153,8 +160,8 @@ const userJoinedTemplate = (nickname: string) => {
 }
 
 const sendGiftTemplate = (nickname: string, avatar: string, giftName: string, amount: number) => {
-  const avatarUrl = avatar || '/images/icon/avatar/1.png'
-  const giftIcon = '/images/icon/love.webp'
+  const avatarUrl = _checkImgUrl(avatar) || fallbackAvatar
+  const giftIcon = new URL('../../assets/img/icon/home/love.webp', import.meta.url).href
   return `
     <div class="send-gift">
       <div class="left">
@@ -178,10 +185,10 @@ const sendGiftTemplate = (nickname: string, avatar: string, giftName: string, am
 }
 
 // --- 触发动画通知 ---
-function triggerUserJoinedAnim(nickname: string) {
+function triggerUserJoinedAnim(nickname: string, rank?: number) {
   if (!page.value) return
   const domPage = new Dom(page.value)
-  const user = new Dom().create(userJoinedTemplate(nickname))
+  const user = new Dom().create(userJoinedTemplate(nickname, rank))
   user.on('animationend', () => user.remove())
   domPage.append(user)
 }
@@ -365,18 +372,32 @@ onMounted(async () => {
     )
     .on('presence', { event: 'sync' }, () => {
       const state = channel.presenceState()
-      const presences = Object.values(state).flat() as any[]
-      viewerCount.value = Math.max(presences.length, 1)
-      viewers.value = presences
-        .map((p: any) => ({
-          id: p.user_id,
-          nickname: p.nickname || '路人',
-          avatar: p.avatar || '/images/icon/avatar/0.png'
-        }))
-        .slice(0, 5)
+      // 提取所有在线连接
+      const allPresences = Object.entries(state).flatMap(([key, presences]) => {
+        return (presences as any[]).map((p) => ({ ...p, presence_key: key }))
+      })
+
+      // 更新总人数
+      viewerCount.value = Math.max(allPresences.length, 1)
+
+      // 提取头像流（去重显示，每个人只占一个坑位）
+      const uniqueViewers = new Map()
+      allPresences.forEach((p) => {
+        if (p.user_id && !uniqueViewers.has(p.user_id)) {
+          uniqueViewers.set(p.user_id, {
+            id: p.user_id,
+            nickname: p.nickname || '路人',
+            avatar: p.avatar,
+            renderKey: `${p.user_id}_${p.presence_key}` // 唯一的渲染 Key
+          })
+        }
+      })
+
+      viewers.value = Array.from(uniqueViewers.values()).slice(0, 5)
     })
     .on('broadcast', { event: 'user_joined' }, (payload) => {
       const nickname = payload.payload.nickname || '路人'
+      const rank = payload.payload.rank || 1
       // 1. 添加到列表
       messages.value.push({
         id: Date.now(),
@@ -386,7 +407,7 @@ onMounted(async () => {
       })
       scrollToBottom()
       // 2. 触发抖音进场动画
-      triggerUserJoinedAnim(nickname)
+      triggerUserJoinedAnim(nickname, rank)
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
@@ -396,28 +417,30 @@ onMounted(async () => {
         if (user) {
           const { data: me } = await supabase
             .from('profiles')
-            .select('nickname, avatar_url')
+            .select('nickname, avatar_url, invite_success_count')
             .eq('id', user.id)
             .single()
           const nickname = me?.nickname || '路人'
           const avatar = me?.avatar_url || ''
+          const rank = me?.invite_success_count || 1
 
           // 追踪 Presence
           channel.track({
             user_id: user.id,
             nickname: nickname,
-            avatar: avatar
+            avatar: avatar,
+            rank: rank
           })
 
           // 广播进入
           channel.send({
             type: 'broadcast',
             event: 'user_joined',
-            payload: { nickname }
+            payload: { nickname, rank }
           })
 
           // 自己也显示进场动画
-          triggerUserJoinedAnim(nickname)
+          triggerUserJoinedAnim(nickname, rank)
         }
       }
     })
@@ -619,7 +642,7 @@ onBeforeUnmount(() => {
         display: flex;
         align-items: center;
         gap: 6rem;
-        min-width: 140rem;
+        max-width: 180rem; /* 限制最大宽度 */
 
         .avatar {
           width: 32rem;
@@ -648,6 +671,7 @@ onBeforeUnmount(() => {
             font-size: 9rem;
             opacity: 0.8;
             line-height: 1.2;
+            white-space: nowrap;
           }
         }
 
@@ -674,6 +698,7 @@ onBeforeUnmount(() => {
         display: flex;
         align-items: center;
         gap: 8rem;
+        flex-shrink: 0; /* 强制右侧区域不被压缩 */
 
         .viewer-avatars {
           display: flex;
@@ -684,8 +709,11 @@ onBeforeUnmount(() => {
             width: 24rem;
             height: 24rem;
             border-radius: 50%;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.4);
             margin-left: -8rem; /* 头像重叠效果 */
+            flex-shrink: 0; /* 强制头像保持大小 */
+            object-fit: cover;
+            background: #333;
             &:first-child {
               margin-left: 0;
             }
@@ -700,11 +728,13 @@ onBeforeUnmount(() => {
           font-weight: 600;
           min-width: 20rem;
           text-align: center;
+          flex-shrink: 0;
         }
         .close {
           width: 24rem;
           height: 24rem;
           opacity: 0.8;
+          flex-shrink: 0;
         }
       }
     }
