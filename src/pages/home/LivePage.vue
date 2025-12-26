@@ -116,7 +116,7 @@ import DPPlayer from '@/components/live/DPPlayer.vue'
 import Dom from '@/utils/dom'
 
 const route = useRoute()
-const roomId = route.query.id as string
+const roomId = computed(() => route.query.id as string)
 const page = ref<HTMLElement | null>(null)
 
 const state = reactive({
@@ -133,6 +133,40 @@ const commentInput = ref<HTMLInputElement | null>(null) // 新增 Ref
 const viewerCount = ref(0)
 const viewers = ref<any[]>([]) // 存储前几名观众
 const fallbackAvatar = new URL('../../assets/img/icon/avatar/0.png', import.meta.url).href
+
+// --- 房间切换核心逻辑 ---
+async function initRoom() {
+  console.log('[LivePage] initRoom', roomId)
+  // 1. 先清理旧的订阅
+  if (channel) {
+    await supabase.removeChannel(channel)
+    channel = null
+  }
+
+  // 2. 重置基础状态，防止残影
+  roomInfo.value = {}
+  messages.value = []
+  viewerCount.value = 0
+  viewers.value = []
+
+  // 3. 加载新数据
+  await fetchRoomInfo()
+  await fetchHistoryMessages()
+
+  // 4. 开启新的订阅
+  setupSubscription()
+}
+
+// 监听路由参数变化，实现直播间无缝切换
+watch(
+  () => route.query.id,
+  (newId) => {
+    if (newId) {
+      // 也可以不刷新页面，手动执行 init
+      initRoom()
+    }
+  }
+)
 
 // 监听输入框显示，自动聚焦
 watch(showInput, (val) => {
@@ -219,13 +253,14 @@ function triggerGiftAnim(nickname: string, avatar: string, giftName: string, amo
 
 // 获取直播间信息
 async function fetchRoomInfo() {
+  const currentRoomId = roomId.value
   const isExternal = route.query.type === 'external'
 
   if (isExternal) {
     const { data, error } = await supabase
       .from('live_rooms')
       .select('id, title, stream_url, cover_url')
-      .eq('id', roomId)
+      .eq('id', currentRoomId)
       .single()
 
     if (data) {
@@ -248,7 +283,7 @@ async function fetchRoomInfo() {
       node:live_broadcast_nodes(domain_name)
     `
     )
-    .eq('id', roomId)
+    .eq('id', currentRoomId)
     .single()
 
   if (data) {
@@ -297,10 +332,11 @@ function buildPlayUrl(url: string) {
 
 // 获取历史评论
 async function fetchHistoryMessages() {
+  const currentRoomId = roomId.value
   const { data } = await supabase
     .from('live_broadcast_messages')
     .select('id, content, user_id, msg_type, profiles(nickname)')
-    .eq('room_id', roomId)
+    .eq('room_id', currentRoomId)
     .order('created_at', { ascending: false })
     .limit(20)
 
@@ -325,7 +361,7 @@ async function handleSendComment() {
   if (!user) return alert('请先登录')
 
   const { error } = await supabase.from('live_broadcast_messages').insert({
-    room_id: roomId,
+    room_id: roomId.value,
     user_id: user.id,
     content: inputText.value.trim()
   })
@@ -381,20 +417,20 @@ async function attention() {
 
 let channel: any = null
 
-onMounted(async () => {
-  await fetchRoomInfo()
-  await fetchHistoryMessages()
+function setupSubscription() {
+  const currentRoomId = route.query.id as string
+  if (!currentRoomId) return
 
   // 订阅实时消息
   channel = supabase
-    .channel(`live_room_${roomId}`)
+    .channel(`live_room_${currentRoomId}`)
     .on(
       'postgres_changes',
       {
         event: 'INSERT',
         schema: 'public',
         table: 'live_broadcast_messages',
-        filter: `room_id=eq.${roomId}`
+        filter: `room_id=eq.${currentRoomId}`
       },
       async (payload) => {
         const { data: profile } = await supabase
@@ -497,6 +533,10 @@ onMounted(async () => {
         }
       }
     })
+}
+
+onMounted(async () => {
+  await initRoom()
 })
 
 onBeforeUnmount(() => {
