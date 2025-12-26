@@ -32,7 +32,7 @@ export const UserList = () => {
   const [adjustForm] = Form.useForm()
   const [isAdjusting, setIsAdjusting] = useState(false)
 
-  const { tableProps, searchFormProps, queryResult } = useTable({
+  const table = useTable({
     // ✅ 用视图直接 join 邀请人，避免 PostgREST 自关联 embed（PGRST200）
     resource: 'admin_profiles_list',
     syncWithLocation: true,
@@ -96,6 +96,10 @@ export const UserList = () => {
       return filters
     }
   })
+
+  const { tableProps, searchFormProps } = table
+  // 🎯 兼容性处理：Refine 的 query 结果对象名在不同次版本中极其不稳定
+  const queryResult = (table as any).tableQueryResult || (table as any).queryResult
 
   // 切换自动审核状态
   const handleToggleAutoApprove = (record: any) => {
