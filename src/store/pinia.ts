@@ -25,6 +25,7 @@ type SupabaseProfile = {
   show_collect?: boolean | null
   show_like?: boolean | null
   show_tg_username?: boolean | null
+  balance_coins?: number | null
 }
 
 function normalizeLang(lang?: string | null) {
@@ -79,6 +80,7 @@ function mapProfileToUserinfo(profile: SupabaseProfile, current: any) {
     aweme_count: profile.video_count ?? current.aweme_count ?? 0,
     following_count: profile.following_count ?? current.following_count ?? 0,
     follower_count: profile.follower_count ?? current.follower_count ?? 0,
+    balance_coins: profile.balance_coins ?? current.balance_coins ?? 0,
     // 🎯 数字ID
     numeric_id: profile.numeric_id ?? current.numeric_id ?? null,
     // 🎯 隐私设置
@@ -129,6 +131,7 @@ export const useBaseStore = defineStore('base', {
         aweme_count: 0,
         following_count: 0,
         follower_count: 0,
+        balance_coins: 0,
         is_private: false,
         numeric_id: null,
         show_collect: true,

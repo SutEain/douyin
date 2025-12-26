@@ -282,6 +282,19 @@ export async function getAdultQuota() {
   }
 }
 
+export async function sendReward(payload: {
+  receiver_id: string
+  gift_amount: number
+  room_or_video_id: string
+  gift_type: 'live' | 'video'
+  gift_name: string
+}) {
+  return callAppServer('/reward/send', {
+    method: 'POST',
+    body: payload
+  })
+}
+
 async function requestSupabaseVideoList(
   endpoint: string,
   params?: Record<string, any>,

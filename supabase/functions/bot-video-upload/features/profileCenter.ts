@@ -42,7 +42,7 @@ export async function handleUserProfile(
     const { data: profile } = await supabase
       .from('profiles')
       .select(
-        'numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock, live_status'
+        'numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock, live_status, balance_coins'
       )
       .eq('tg_user_id', chatId)
       .single()
@@ -65,6 +65,7 @@ export async function handleUserProfile(
     const text =
       `👤 <b>个人中心</b>\n\n` +
       `🆔 <b>用户ID：</b> <code>${profile.numeric_id}</code>\n` +
+      `💰 <b>抖币余额：</b> <code>${Math.floor(profile.balance_coins || 0)}</code>\n` +
       `🔞 <b>成人权限：</b> ${statusText}\n` +
       `👥 <b>累计邀请：</b> ${profile.invite_success_count || 0} 人\n\n` +
       `<i>请选择下方操作：</i>`
@@ -81,7 +82,10 @@ export async function handleUserProfile(
 
     const keyboard = {
       inline_keyboard: [
-        [{ text: '🔞 获取邀请链接', callback_data: 'profile_invite_unlock' }],
+        [
+          { text: '💰 我的钱包', callback_data: 'profile_wallet' },
+          { text: '🔞 获取邀请链接', callback_data: 'profile_invite_unlock' }
+        ],
         [liveButton],
         [{ text: '📖 使用说明', callback_data: 'profile_help' }],
         [
@@ -374,5 +378,127 @@ export async function handlePrivacySettingsEdit(chatId: number, messageId: numbe
   } catch (error) {
     console.error('获取隐私设置错误:', error)
     await editMessage(chatId, messageId, '❌ 获取隐私设置失败')
+  }
+}
+
+// 🎯 处理"我的钱包"
+export async function handleWallet(chatId: number, messageId?: number) {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('balance_coins')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    const balance = Math.floor(profile?.balance_coins || 0)
+    const text =
+      `💰 <b>我的钱包</b>\n\n` +
+      `当前余额：<code>${balance}</code> 抖币\n\n` +
+      `💡 抖币可用于直播间送礼、短视频打赏。\n` +
+      `💡 收到礼物的收益可按比例提现（即将上线）。`
+
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: '💳 立即充值', callback_data: 'profile_recharge' }],
+        [{ text: '📜 账单记录', callback_data: 'profile_transactions' }],
+        [{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]
+      ]
+    }
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: keyboard })
+    }
+  } catch (error) {
+    console.error('handleWallet error:', error)
+    await sendMessage(chatId, '❌ 获取钱包信息失败')
+  }
+}
+
+// 🎯 处理"充值"
+export async function handleRecharge(chatId: number, messageId?: number) {
+  const text =
+    `💳 <b>抖币充值</b>\n\n` +
+    `请选择充值金额：\n\n` +
+    `• 100 抖币 = 1.00 USDT\n` +
+    `• 500 抖币 = 5.00 USDT\n` +
+    `• 1000 抖币 = 10.00 USDT\n\n` +
+    `💡 目前仅支持联系客服手动充值，请点击下方按钮联系客服。`
+
+  const keyboard = {
+    inline_keyboard: [
+      [{ text: '🙋 联系客服充值', url: 'https://t.me/laidouyin' }],
+      [{ text: '⬅️ 返回钱包', callback_data: 'profile_wallet' }]
+    ]
+  }
+
+  if (messageId) {
+    await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+  } else {
+    await sendMessage(chatId, text, { reply_markup: keyboard })
+  }
+}
+
+// 🎯 处理"账单记录"
+export async function handleTransactions(chatId: number, messageId?: number) {
+  try {
+    // 1. 先获取用户 ID
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile) throw new Error('User not found')
+
+    // 2. 获取最近 10 条流水
+    const { data: txs, error } = await supabase
+      .from('coin_transactions')
+      .select('*')
+      .eq('user_id', profile.id)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    if (error) throw error
+
+    let text = `📜 <b>最近 10 条账单记录</b>\n\n`
+    if (!txs || txs.length === 0) {
+      text += `<i>暂无记录</i>`
+    } else {
+      const typeMap: any = {
+        recharge: '💳 充值',
+        reward: '🎁 奖励',
+        gift_out: '📤 送礼',
+        gift_in: '📥 收到',
+        withdraw: '💰 提现'
+      }
+
+      txs.forEach((t: any) => {
+        const time = new Date(t.created_at).toLocaleString('zh-CN', {
+          month: 'numeric',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: 'numeric'
+        })
+        const amount = t.amount > 0 ? `+${t.amount}` : `${t.amount}`
+        text += `• [${time}] ${typeMap[t.type] || t.type}\n  金额：<code>${amount}</code> | 余额：<code>${t.balance_after}</code>\n`
+        if (t.description) text += `  备注：${t.description}\n`
+        text += `\n`
+      })
+    }
+
+    const keyboard = {
+      inline_keyboard: [[{ text: '⬅️ 返回钱包', callback_data: 'profile_wallet' }]]
+    }
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: keyboard })
+    }
+  } catch (error) {
+    console.error('handleTransactions error:', error)
+    await sendMessage(chatId, '❌ 获取账单失败')
   }
 }

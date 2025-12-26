@@ -437,6 +437,7 @@ export async function handleGetUserProfile(req: Request): Promise<Response> {
 
     // 统计数据
     total_favorited: profile.total_likes || 0,
+    balance_coins: profile.balance_coins || 0,
     following_count: profile.following_count || 0,
     followers_count: profile.follower_count || 0,
     follower_count: profile.follower_count || 0,

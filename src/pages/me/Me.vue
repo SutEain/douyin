@@ -96,7 +96,7 @@
             </div>
           </div>
 
-          <!-- ✅ 第3个：获赞/关注/粉丝 -->
+          <!-- ✅ 第3个：获赞/关注/粉丝/抖币 -->
           <div class="head">
             <div class="heat">
               <div class="text">
@@ -110,6 +110,12 @@
               <div class="text" @click="$nav('/people/follow-and-fans', { type: 1 })">
                 <span class="num">{{ _formatNumber(userinfo.follower_count || 0) }}</span>
                 <span>粉丝</span>
+              </div>
+              <div class="text">
+                <span class="num" style="color: #face15">{{
+                  _formatNumber(userinfo.balance_coins || 0)
+                }}</span>
+                <span>抖币</span>
               </div>
             </div>
           </div>

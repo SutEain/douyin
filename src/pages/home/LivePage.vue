@@ -150,6 +150,14 @@
                 v-model.number="selectedQty"
                 placeholder="数量"
                 class="qty-input"
+                min="1"
+                max="9999"
+                @input="
+                  () => {
+                    if (selectedQty > 9999) selectedQty = 9999
+                    if (selectedQty < 1) selectedQty = 1
+                  }
+                "
               />
             </div>
             <div
@@ -170,8 +178,8 @@
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { supabase } from '@/utils/supabase'
-import { _checkImgUrl } from '@/utils'
-import { toggleFollowUser } from '@/api/videos'
+import { _checkImgUrl, _notice, _no } from '@/utils'
+import { toggleFollowUser, sendReward } from '@/api/videos'
 import DPPlayer from '@/components/live/DPPlayer.vue'
 import Dom from '@/utils/dom'
 
@@ -266,36 +274,58 @@ async function handleSendGift() {
     data: { user }
   } = await supabase.auth.getUser()
   if (!user) {
-    alert('请先登录后再送礼物')
+    _notice('请先登录后再送礼物')
+    return
+  }
+
+  // 检查数量限制
+  if (selectedQty.value > 9999) {
+    _notice('单次发送礼物数量不能超过 9999')
+    selectedQty.value = 9999
+    return
+  }
+
+  // 检查余额（前端初步检查，后端 RPC 会做最终校验）
+  const totalCost = gift.cost * selectedQty.value
+  if (userCoins.value < totalCost) {
+    _notice('抖币余额不足，请先充值')
     return
   }
 
   try {
-    await sendGiftMessage(user.id, gift, selectedQty.value)
+    // 1. 调用后端接口处理真实扣款、分成、代发消息和通知
+    const res = await sendReward({
+      sender_id: user.id,
+      receiver_id: roomInfo.value.anchor_id || roomInfo.value.anchor?.id,
+      gift_amount: totalCost,
+      room_or_video_id: roomId.value,
+      gift_type: 'live',
+      gift_name: gift.name,
+      // 传递详细信息，让后端代发实时消息
+      gift_id: gift.id,
+      gift_icon: gift.icon,
+      gift_qty: selectedQty.value
+    })
+
+    // 2. 更新本地余额显示
+    if (res && typeof res.sender_balance === 'number') {
+      userCoins.value = Math.floor(res.sender_balance)
+    }
+
+    // 后端已经通过 supabaseAdmin 代发了消息，前端不需要再 insert
+    // 只需要关闭面板即可，实时监听会自动收到消息并触发特效
     showGiftPanel.value = false
     selectedQty.value = 1
     selectedGiftId.value = null
   } catch (e: any) {
     console.error('[Gift] Send error:', e)
-    alert('发送礼物失败: ' + e.message)
-  }
-}
-
-async function sendGiftMessage(userId: string, gift: any, qty: number) {
-  const { error } = await supabase.from('live_broadcast_messages').insert({
-    room_id: roomId.value,
-    user_id: userId,
-    content: gift.name,
-    msg_type: 'gift',
-    payload: {
-      gift_id: gift.id,
-      gift_name: gift.name,
-      gift_icon: gift.icon,
-      amount: qty,
-      combo: qty // 统一使用 combo 字段表示数量
+    const msg = e.message || ''
+    if (msg.includes('余额不足')) {
+      _notice('抖币余额不足，请先充值')
+    } else {
+      _notice('发送礼物失败: ' + (msg || '网络繁忙'))
     }
-  })
-  if (error) throw error
+  }
 }
 
 // --- 房间切换核心逻辑 ---
@@ -348,7 +378,7 @@ watch(showInput, (val) => {
 function showViewerList() {
   if (viewers.value.length === 0) return
   const names = viewers.value.map((v) => v.nickname).join('、')
-  alert(`当前在线观众：\n${names}${viewerCount.value > 5 ? ` 等共 ${viewerCount.value} 人` : ''}`)
+  _notice(`在线观众：${names}${viewerCount.value > 5 ? ` 等共 ${viewerCount.value} 人` : ''}`)
 }
 
 // --- 动画通知模板 ---
@@ -530,14 +560,14 @@ async function fetchRoomInfo() {
             .maybeSingle()
           isFollowed.value = !!follow
 
-          // 顺便获取个人抖币余额（暂时使用 balance_usdt 字段展示）
+          // 顺便获取个人抖币余额
           const { data: profile } = await supabase
             .from('profiles')
-            .select('balance_usdt')
+            .select('balance_coins')
             .eq('id', session.user.id)
             .single()
           if (profile) {
-            userCoins.value = Math.floor(Number(profile.balance_usdt || 0))
+            userCoins.value = Math.floor(Number(profile.balance_coins || 0))
           }
         }
       }
@@ -635,7 +665,10 @@ async function handleSendComment() {
   const {
     data: { user }
   } = await supabase.auth.getUser()
-  if (!user) return alert('请先登录')
+  if (!user) {
+    _notice('请先登录')
+    return
+  }
 
   const { error } = await supabase.from('live_broadcast_messages').insert({
     room_id: roomId.value,
@@ -682,7 +715,7 @@ async function attention() {
   } catch (e: any) {
     console.error('关注操作失败:', e)
     // 如果是 500 错误，可能是后端问题
-    alert('关注失败: ' + (e.message || '未知错误'))
+    _notice('关注失败: ' + (e.message || '未知错误'))
   }
 }
 

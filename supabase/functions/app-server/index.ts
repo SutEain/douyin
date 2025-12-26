@@ -47,6 +47,7 @@ import {
 import { handlePostRecommended } from './routes/post.ts'
 import { handleLiveRooms, handleLiveRoomsProbe, handleLiveRoomDetail } from './routes/live.ts'
 import { handleAdminDouyinParse, handleAdminDouyinPublish } from './routes/douyin.ts'
+import { handleSendReward } from './routes/reward.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -146,6 +147,10 @@ serve(async (req) => {
     // 🎯 自动初始化用户
     if (route === '/user/auto-init' && method === 'POST') {
       return handleAutoInit(req)
+    }
+    // 💰 打赏/奖励
+    if (route === '/reward/send' && method === 'POST') {
+      return handleSendReward(req)
     }
 
     // 🔍 搜索相关路由

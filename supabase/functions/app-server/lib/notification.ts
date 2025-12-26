@@ -8,6 +8,7 @@ export type NotificationType =
   | 'new_post'
   | 'request_update'
   | 'visit'
+  | 'gift'
 
 export async function checkAndSendNotification(
   targetUserId: string,

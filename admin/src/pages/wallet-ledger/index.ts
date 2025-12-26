@@ -1,1 +1,0 @@
-export { WalletLedgerList } from './list'

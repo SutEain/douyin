@@ -205,14 +205,14 @@ export const UserList = () => {
           }}
         />
         <Table.Column
-          dataIndex="balance_usdt"
-          title="余额(USDT)"
+          dataIndex="balance_coins"
+          title="余额(抖币)"
           width={120}
           render={(v) => <span style={{ fontFamily: 'monospace' }}>{v ?? '0'}</span>}
         />
         <Table.Column
-          dataIndex="frozen_usdt"
-          title="冻结(USDT)"
+          dataIndex="frozen_coins"
+          title="冻结(抖币)"
           width={120}
           render={(v) => <span style={{ fontFamily: 'monospace' }}>{v ?? '0'}</span>}
         />

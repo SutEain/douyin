@@ -17,7 +17,7 @@ import {
   UserIncentiveProgressList,
   UserVideoIncentiveProgressList
 } from './pages/incentive-progress/index'
-import { WalletLedgerList } from './pages/wallet-ledger/index'
+import { CoinTransactionList } from './pages/coin-transactions'
 import { SystemSettings } from './pages/system-settings'
 import { LiveRoomCreate, LiveRoomEdit, LiveRoomList } from './pages/live-rooms'
 import { Login } from './pages/login'
@@ -145,8 +145,8 @@ function App() {
                 meta: { label: '任务进度（用户）' }
               },
               {
-                name: 'wallet_ledger',
-                list: '/wallet-ledger',
+                name: 'coin_transactions',
+                list: '/coin-transactions',
                 meta: { label: '资金流水' }
               },
               {
@@ -196,7 +196,7 @@ function App() {
                   <Route path="video" element={<UserVideoIncentiveProgressList />} />
                   <Route path="user" element={<UserIncentiveProgressList />} />
                 </Route>
-                <Route path="/wallet-ledger" element={<WalletLedgerList />} />
+                <Route path="/coin-transactions" element={<CoinTransactionList />} />
                 <Route path="/system-settings" element={<SystemSettings />} />
                 <Route path="/live-rooms">
                   <Route index element={<LiveRoomList />} />

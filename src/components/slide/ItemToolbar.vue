@@ -4,9 +4,10 @@ import bus, { EVENT_KEY } from '@/utils/bus'
 import { useClick } from '@/utils/hooks/useClick'
 import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
-import { toggleVideoLike, toggleVideoCollect, toggleFollowUser } from '@/api/videos'
+import { toggleVideoLike, toggleVideoCollect, toggleFollowUser, sendReward } from '@/api/videos'
 import { useVideoStore } from '@/stores/video'
 import { useBaseStore } from '@/store/pinia'
+import { supabase } from '@/utils/supabase'
 
 const props = defineProps({
   isMy: {
@@ -242,6 +243,58 @@ function shareToTelegram() {
   _notice('已复制链接，返回Telegram，分享吧～')
 }
 
+// 🎯 视频打赏
+const showRewardPanel = ref(false)
+const rewardAmount = ref('')
+const rewardPresets = [10, 50, 100, 500]
+const isRewarding = ref(false)
+
+async function handleReward() {
+  if (isRewarding.value) return
+  const amount = Number(rewardAmount.value)
+  if (!amount || amount <= 0) {
+    _notice('请输入有效的金额')
+    return
+  }
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
+  if (!user) {
+    _notice('请先登录')
+    return
+  }
+
+  isRewarding.value = true
+  try {
+    const res = await sendReward({
+      receiver_id: props.item.author?.user_id || props.item.author?.uid,
+      gift_amount: amount,
+      room_or_video_id: props.item.aweme_id,
+      gift_type: 'video',
+      gift_name: '视频打赏'
+    })
+
+    _notice(`成功打赏 ${amount} 抖币！`)
+    showRewardPanel.value = false
+    rewardAmount.value = ''
+  } catch (e: any) {
+    console.error('[Reward] error:', e)
+    const msg = e.message || ''
+    if (msg.includes('余额不足')) {
+      _notice('抖币余额不足，请先充值')
+    } else {
+      _notice('打赏失败: ' + (msg || '网络繁忙'))
+    }
+  } finally {
+    isRewarding.value = false
+  }
+}
+
+function selectPreset(amount: number) {
+  rewardAmount.value = amount.toString()
+}
+
 const vClick = useClick()
 </script>
 
@@ -289,6 +342,44 @@ const vClick = useClick()
       <Icon v-else icon="ic:round-star" class="icon" style="color: white" />
       <span>{{ _formatNumber(item.statistics.collect_count) }}</span>
     </div>
+    <!-- 🎯 视频打赏按钮 -->
+    <div
+      v-if="!props.isMy"
+      class="message mb2r"
+      v-click="() => (showRewardPanel = !showRewardPanel)"
+    >
+      <Icon icon="basil:award-solid" class="icon" style="color: #face15" />
+      <span>打赏</span>
+
+      <transition name="fade">
+        <div v-if="showRewardPanel" class="reward-panel" @click.stop>
+          <div class="reward-title">打赏作者</div>
+          <div class="reward-presets">
+            <div
+              v-for="p in rewardPresets"
+              :key="p"
+              class="preset-item"
+              v-click="() => selectPreset(p)"
+            >
+              {{ p }}
+            </div>
+          </div>
+          <div class="reward-input-wrap">
+            <input
+              type="number"
+              v-model="rewardAmount"
+              placeholder="自定义打赏金额"
+              class="reward-input"
+              @click.stop
+            />
+            <div class="reward-send" :class="{ loading: isRewarding }" v-click="handleReward">
+              {{ isRewarding ? '发送中...' : '确认打赏' }}
+            </div>
+          </div>
+        </div>
+      </transition>
+    </div>
+
     <!-- 🎯 分享按钮 - 调起 Telegram 联系人选择器 -->
     <div v-if="!props.isMy" class="share mb2r" v-click="shareToTelegram">
       <img src="../../assets/img/icon/share-white-full.png" alt="" class="share-image" />
@@ -300,18 +391,18 @@ const vClick = useClick()
     </div>
 
     <!-- 倍速开关 -->
-    <div class="speed-toggle mb2r" @click.stop="toggleSpeedPanel">
+    <div class="speed-toggle mb2r" v-click="toggleSpeedPanel">
       <Icon icon="mdi:speedometer" class="icon" style="color: white" />
       <div class="speed-text">{{ playbackRateText }}</div>
 
       <transition name="fade">
-        <div v-if="showSpeedPanel" class="speed-panel" @click.stop>
+        <div v-if="showSpeedPanel" class="speed-panel" v-click.stop="() => {}">
           <div
             v-for="r in speedOptions"
             :key="r"
             class="speed-item"
             :class="{ active: (injectedPlaybackRate?.value ?? 1) === r }"
-            @click="choosePlaybackRate(r)"
+            v-click="() => choosePlaybackRate(r)"
           >
             {{ r }}x
           </div>
@@ -511,6 +602,104 @@ const vClick = useClick()
       border-top: 6px solid transparent;
       border-bottom: 6px solid transparent;
       border-left: 6px solid rgba(0, 0, 0, 0.8);
+    }
+  }
+
+  // 🎯 打赏面板
+  .reward-panel {
+    position: absolute;
+    right: 50rem;
+    bottom: 40rem; /* 向上移动，避开进度条 */
+    background: rgba(0, 0, 0, 0.95);
+    backdrop-filter: blur(15px);
+    border-radius: 16rem;
+    padding: 16rem;
+    width: 180rem;
+    z-index: 200;
+    box-shadow: 0 8rem 24rem rgba(0, 0, 0, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+
+    .reward-title {
+      font-size: 14rem;
+      margin-bottom: 12rem;
+      color: #face15;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .reward-presets {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10rem;
+      margin-bottom: 16rem;
+
+      .preset-item {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8rem;
+        padding: 8rem 0;
+        text-align: center;
+        font-size: 13rem;
+        color: white;
+        transition: all 0.2s;
+
+        &:active {
+          background: #face15;
+          color: black;
+          transform: scale(0.95);
+        }
+      }
+    }
+
+    .reward-input-wrap {
+      display: flex;
+      flex-direction: column; /* 改为纵向，更清晰 */
+      gap: 10rem;
+
+      .reward-input {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8rem;
+        padding: 10rem;
+        color: #face15;
+        font-size: 16rem;
+        font-weight: bold;
+        text-align: center;
+        outline: none;
+
+        &::placeholder {
+          color: rgba(255, 255, 255, 0.3);
+          font-weight: normal;
+          font-size: 13rem;
+        }
+
+        &:focus {
+          border-color: #face15;
+          background: rgba(250, 206, 21, 0.05);
+        }
+      }
+
+      .reward-send {
+        background: #face15;
+        color: black;
+        border-radius: 8rem;
+        padding: 10rem 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14rem;
+        font-weight: bold;
+        transition: opacity 0.2s;
+
+        &:active {
+          opacity: 0.8;
+        }
+
+        &.loading {
+          opacity: 0.5;
+          pointer-events: none;
+        }
+      }
     }
   }
 }

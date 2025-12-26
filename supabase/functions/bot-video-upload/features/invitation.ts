@@ -9,7 +9,7 @@ export async function handleInvitation(inviteeId: string, inviterNumericId: numb
     // 1. 查找邀请人
     const { data: inviter } = await supabase
       .from('profiles')
-      .select('id, invite_success_count, adult_permanent_unlock, adult_unlock_until')
+      .select('id, invite_success_count, adult_permanent_unlock, adult_unlock_until, balance_coins')
       .eq('numeric_id', inviterNumericId)
       .single()
 
@@ -52,7 +52,36 @@ export async function handleInvitation(inviteeId: string, inviterNumericId: numb
 
     // 4. 更新邀请人统计和解锁状态
     const newCount = (inviter.invite_success_count || 0) + 1
+
+    // 从 system_settings 获取奖励金额
+    const { data: setting } = await supabase
+      .from('system_settings')
+      .select('value_int')
+      .eq('id', 'invitation_reward_coins')
+      .maybeSingle()
+
+    const rewardCoins = setting?.value_int ?? 10 // 默认 10 抖币
+
+    const { data: updatedInviter } = await supabase
+      .from('profiles')
+      .update({
+        balance_coins: (inviter.balance_coins || 0) + rewardCoins
+      })
+      .eq('id', inviter.id)
+      .select('balance_coins')
+      .single()
+
     const updates: any = { invite_success_count: newCount }
+
+    // 记录流水
+    await supabase.from('coin_transactions').insert({
+      user_id: inviter.id,
+      amount: rewardCoins,
+      balance_after: updatedInviter?.balance_coins || 0,
+      type: 'reward',
+      description: `成功邀请新用户奖励`,
+      related_id: inviteeId
+    })
 
     if (newCount >= 3) {
       updates.adult_permanent_unlock = true
@@ -90,7 +119,8 @@ export async function handleInvitation(inviteeId: string, inviterNumericId: numb
         inviterProfile.tg_user_id,
         `🎉 <b>邀请成功！</b>\n\n` +
           `您已成功邀请 ${newCount} 人\n` +
-          `🎁 ${rewardText}\n\n` +
+          `🎁 ${rewardText}\n` +
+          `💰 获得 10 抖币奖励！\n\n` +
           `继续邀请可获得更多奖励！`
       )
     }

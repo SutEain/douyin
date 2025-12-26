@@ -12,8 +12,8 @@ type Profile = {
   bio?: string
   avatar_url?: string
   cover_url?: string
-  balance_usdt?: string | number
-  frozen_usdt?: string | number
+  balance_coins?: string | number
+  frozen_coins?: string | number
   gender?: number
   birthday?: string | null
   country?: string
@@ -67,8 +67,8 @@ export const UserEdit = () => {
         bio: record.bio,
         avatar_url: record.avatar_url,
         cover_url: record.cover_url,
-        balance_usdt: record.balance_usdt ?? 0,
-        frozen_usdt: record.frozen_usdt ?? 0,
+        balance_coins: record.balance_coins ?? 0,
+        frozen_coins: record.frozen_coins ?? 0,
         gender: record.gender,
         birthday: record.birthday ? dayjs(record.birthday) : null,
         country: record.country,
@@ -193,12 +193,12 @@ export const UserEdit = () => {
         <Divider orientation="left">统计数据（只读）</Divider>
         <Row gutter={16}>
           <Col span={6}>
-            <Form.Item label="余额(USDT)" name="balance_usdt">
+            <Form.Item label="余额(抖币)" name="balance_coins">
               <Input disabled style={{ backgroundColor: '#f5f5f5', fontFamily: 'monospace' }} />
             </Form.Item>
           </Col>
           <Col span={6}>
-            <Form.Item label="冻结(USDT)" name="frozen_usdt">
+            <Form.Item label="冻结(抖币)" name="frozen_coins">
               <Input disabled style={{ backgroundColor: '#f5f5f5', fontFamily: 'monospace' }} />
             </Form.Item>
           </Col>

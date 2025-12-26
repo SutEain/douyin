@@ -1,0 +1,103 @@
+import { successResponse, errorResponse } from '../../_shared/response.ts'
+import { supabaseAdmin } from '../lib/env.ts'
+import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
+import { checkAndSendNotification } from '../lib/notification.ts'
+
+export async function handleSendReward(req: Request): Promise<Response> {
+  try {
+    const { user, profile } = await requireAuth(req, { withProfile: true })
+    const body = await parseJsonBody<{
+      receiver_id: string
+      gift_amount: number
+      room_or_video_id: string
+      gift_type: 'live' | 'video'
+      gift_name: string
+      gift_id?: number
+      gift_icon?: string
+      gift_qty?: number
+    }>(req)
+
+    const {
+      receiver_id,
+      gift_amount,
+      room_or_video_id,
+      gift_type,
+      gift_name,
+      gift_id,
+      gift_icon,
+      gift_qty
+    } = body
+
+    if (!receiver_id || !gift_amount || !room_or_video_id || !gift_type || !gift_name) {
+      throw new HttpError('Missing required parameters', 400)
+    }
+
+    if (receiver_id === user.id) {
+      throw new HttpError('不能打赏自己', 400)
+    }
+
+    // 1. 调用 RPC 处理打赏扣款和分账
+    const { data: res, error: rpcError } = await supabaseAdmin.rpc('process_gift_reward', {
+      sender_id: user.id,
+      receiver_id: receiver_id,
+      gift_amount: gift_amount,
+      room_or_video_id: room_or_video_id,
+      gift_type: gift_type,
+      gift_name: gift_name
+    })
+
+    if (rpcError) {
+      console.error('[Reward] RPC Error:', rpcError)
+      return errorResponse('打赏处理失败: ' + rpcError.message, 1, 500)
+    }
+
+    if (!res.success) {
+      return errorResponse(res.message || '打赏失败', 1, 400)
+    }
+
+    // 2. 如果是直播间，插入实时消息记录（后端代发，前端不可绕过）
+    if (gift_type === 'live') {
+      const { error: msgError } = await supabaseAdmin.from('live_broadcast_messages').insert({
+        room_id: room_or_video_id,
+        user_id: user.id,
+        content: gift_name,
+        msg_type: 'gift',
+        payload: {
+          gift_id: gift_id,
+          gift_name: gift_name,
+          gift_icon: gift_icon,
+          amount: gift_qty || 1,
+          combo: gift_qty || 1
+        }
+      })
+
+      if (msgError) {
+        console.error('[Reward] Insert gift message failed:', msgError)
+        // 即使插入消息失败，也不退款了，因为钱已经扣了，记录日志即可
+      }
+    }
+
+    // 3. 发送通知给作者/主播
+    const senderName = profile.nickname || profile.username || '神秘用户'
+    const targetType = gift_type === 'live' ? '直播间' : '作品'
+    const notificationMsg = `💰 <b>${senderName}</b> 给你的${targetType}打赏了 <b>${gift_amount}</b> 抖币！`
+
+    // 如果是视频，带上跳转链接
+    const startParam = gift_type === 'video' ? `video_${room_or_video_id}` : undefined
+
+    // 异步发送通知
+    checkAndSendNotification(receiver_id, 'gift', notificationMsg, startParam)
+
+    return successResponse({
+      success: true,
+      sender_balance: res.sender_balance,
+      receiver_balance: res.receiver_balance
+    })
+  } catch (e: any) {
+    console.error('[Reward] unexpected error:', e)
+    if (e instanceof HttpError) {
+      return errorResponse(e.message, 1, e.status)
+    }
+    return errorResponse(e.message || 'Internal server error', 1, 500)
+  }
+}

@@ -16,7 +16,10 @@ import {
   handlePrivacySettings,
   handlePrivacySettingsEdit,
   handleUserProfile,
-  handleApplyLive
+  handleApplyLive,
+  handleWallet,
+  handleRecharge,
+  handleTransactions
 } from '../features/profileCenter.ts'
 import { getEditKeyboard, getEditMenuText, parseVideoAction } from '../features/editor.ts'
 import {
@@ -147,6 +150,24 @@ export async function handleCallback(
     if (data === 'profile_apply_live') {
       await answerCallbackQuery(callbackQueryId)
       await handleApplyLive(chatId, messageId)
+      return
+    }
+
+    if (data === 'profile_wallet') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleWallet(chatId, messageId)
+      return
+    }
+
+    if (data === 'profile_recharge') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleRecharge(chatId, messageId)
+      return
+    }
+
+    if (data === 'profile_transactions') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleTransactions(chatId, messageId)
       return
     }
 
