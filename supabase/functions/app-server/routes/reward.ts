@@ -57,7 +57,7 @@ export async function handleSendReward(req: Request): Promise<Response> {
       throw new HttpError('Missing required parameters (receiver_id not found)', 400)
     }
 
-    if (finalReceiverId === user.id) {
+    if (finalReceiverId === user.id && receiver_id) {
       throw new HttpError('不能打赏自己', 400)
     }
 
@@ -81,7 +81,8 @@ export async function handleSendReward(req: Request): Promise<Response> {
     }
 
     // 2. 如果是直播间，插入实时消息记录（后端代发，前端不可绕过）
-    if (gift_type === 'live') {
+    // 🎯 优化：如果 receiver_id 为空（转播/外部直播间），根据用户要求，不传播特效和消息
+    if (gift_type === 'live' && receiver_id) {
       const { error: msgError } = await supabaseAdmin.from('live_broadcast_messages').insert({
         room_id: room_or_video_id,
         user_id: user.id,
@@ -98,20 +99,22 @@ export async function handleSendReward(req: Request): Promise<Response> {
 
       if (msgError) {
         console.error('[Reward] Insert gift message failed:', msgError)
-        // 即使插入消息失败，也不退款了，因为钱已经扣了，记录日志即可
       }
     }
 
     // 3. 发送通知给作者/主播
-    const senderName = profile.nickname || profile.username || '神秘用户'
-    const targetType = gift_type === 'live' ? '直播间' : '作品'
-    const notificationMsg = `💰 <b>${senderName}</b> 给你的${targetType}打赏了 <b>${gift_amount}</b> 抖币！`
+    // 🎯 优化：只有真实主播才发送通知，如果是转播间（管理员代收）则不发通知
+    if (receiver_id) {
+      const senderName = profile.nickname || profile.username || '神秘用户'
+      const targetType = gift_type === 'live' ? '直播间' : '作品'
+      const notificationMsg = `💰 <b>${senderName}</b> 给你的${targetType}打赏了 <b>${gift_amount}</b> 抖币！`
 
-    // 如果是视频，带上跳转链接
-    const startParam = gift_type === 'video' ? `video_${room_or_video_id}` : undefined
+      // 如果是视频，带上跳转链接
+      const startParam = gift_type === 'video' ? `video_${room_or_video_id}` : undefined
 
-    // 异步发送通知
-    checkAndSendNotification(finalReceiverId, 'gift', notificationMsg, startParam)
+      // 异步发送通知
+      checkAndSendNotification(finalReceiverId, 'gift', notificationMsg, startParam)
+    }
 
     return successResponse({
       success: true,
