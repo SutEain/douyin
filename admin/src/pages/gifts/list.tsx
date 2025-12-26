@@ -1,14 +1,13 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Avatar, Button, Tag, message, Switch, InputNumber } from 'antd'
+import { Table, Space, Avatar, Button, Tag, Switch, InputNumber, Select } from 'antd'
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useUpdate, useDelete } from '@refinedev/core'
-import { useState } from 'react'
 
 export const GiftList = () => {
   const { mutate: updateGift } = useUpdate()
   const { mutate: deleteGift } = useDelete()
 
-  const { tableProps, tableQueryResult } = useTable({
+  const { tableProps } = useTable({
     resource: 'gifts',
     sorters: {
       initial: [{ field: 'sort_order', order: 'asc' }]
@@ -49,6 +48,17 @@ export const GiftList = () => {
       resource: 'gifts',
       id: record.id,
       values: { price: value },
+      mutationMode: 'undoable'
+    })
+  }
+
+  // 快速修改比例
+  const handleUpdateRatio = (record: any, value: number | null) => {
+    if (value === null) return
+    updateGift({
+      resource: 'gifts',
+      id: record.id,
+      values: { video_ratio: value },
       mutationMode: 'undoable'
     })
   }
@@ -94,6 +104,22 @@ export const GiftList = () => {
               value={value}
               onChange={(v) => handleUpdateSort(record, v)}
               style={{ width: 80 }}
+            />
+          )}
+        />
+        <Table.Column
+          dataIndex="video_ratio"
+          title="VAP比例"
+          width={120}
+          render={(value, record: any) => (
+            <Select
+              value={value}
+              style={{ width: 100 }}
+              onChange={(v) => handleUpdateRatio(record, v)}
+              options={[
+                { label: '1/2 宽', value: 0.5 },
+                { label: '2/3 窄', value: 0.6666 }
+              ]}
             />
           )}
         />

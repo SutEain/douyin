@@ -32,7 +32,7 @@ export const UserList = () => {
   const [adjustForm] = Form.useForm()
   const [isAdjusting, setIsAdjusting] = useState(false)
 
-  const { tableProps, searchFormProps, tableQueryResult } = useTable({
+  const { tableProps, searchFormProps, queryResult } = useTable({
     // ✅ 用视图直接 join 邀请人，避免 PostgREST 自关联 embed（PGRST200）
     resource: 'admin_profiles_list',
     syncWithLocation: true,
@@ -157,7 +157,7 @@ export const UserList = () => {
       const values = await adjustForm.validateFields()
       setIsAdjusting(true)
 
-      const { data, error } = await supabaseClient.rpc('admin_adjust_balance', {
+      const { error } = await supabaseClient.rpc('admin_adjust_balance', {
         target_user_id: adjustingUser.id,
         amount_change: values.amount,
         description_text: values.description
@@ -168,7 +168,7 @@ export const UserList = () => {
       message.success('调整成功')
       setAdjustModalVisible(false)
       adjustForm.resetFields()
-      tableQueryResult?.refetch()
+      queryResult?.refetch()
     } catch (err: any) {
       console.error('Adjust error:', err)
       message.error(err.message || '操作失败')

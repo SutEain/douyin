@@ -21,6 +21,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   src: String,
+  videoRatio: { type: Number, default: 0.5 }, // 🎯 外部传入比例：0.5 或 0.6666
   outputWidth: { type: Number, default: 360 },
   outputHeight: { type: Number, default: 720 }
 })
@@ -143,16 +144,8 @@ const render = () => {
   gl.clearColor(0, 0, 0, 0)
   gl.clear(gl.COLOR_BUFFER_BIT)
 
-  // 🎯 自动判断比例
-  // 如果宽/高 > 1.0 (很宽)，说明是 1/2 平分版；否则是 2/3 窄版
-  const ratio = video.videoWidth / video.videoHeight > 1.0 ? 0.5 : 0.6666
-
-  // 仅在开始播放时输出一次日志，避免刷屏
-  if (video.currentTime > 0 && video.currentTime < 0.1) {
-    console.log(
-      `[VapPlayer] Rendering: ${video.videoWidth}x${video.videoHeight}, Detected Ratio: ${ratio}`
-    )
-  }
+  // 🎯 使用外部传入的比例，不再自动计算
+  const ratio = props.videoRatio
 
   const u_ratio = gl.getUniformLocation(program, 'u_ratio')
   gl.uniform1f(u_ratio, ratio)

@@ -183,7 +183,7 @@
     </Transition>
 
     <!-- 透明视频礼物特效组件 -->
-    <VapPlayer ref="vapPlayerRef" :src="vapSrc" />
+    <VapPlayer ref="vapPlayerRef" :src="vapSrc" :videoRatio="state.currentVideoRatio" />
   </div>
 </template>
 
@@ -203,7 +203,8 @@ const roomId = computed(() => route.query.id as string)
 const page = ref<HTMLElement | null>(null)
 
 const state = reactive({
-  muted: false
+  muted: false,
+  currentVideoRatio: 0.5 // 🎯 存储当前正在播放的特效比例
 })
 
 const roomInfo = ref<any>({})
@@ -253,7 +254,8 @@ async function fetchGifts() {
     giftList.value = (data || []).map((g) => ({
       ...g,
       cost: g.price, // 统一字段名为 cost 兼容现有逻辑
-      // 🎯 适配 R2 路径结构：图标在 gifts_icon，特效在 gifts
+      videoRatio: g.video_ratio || 0.5, // 🎯 这里的 video_ratio 来自数据库
+      // 适配 R2 路径结构：图标在 gifts_icon，特效在 gifts
       icon: getResourceUrl(`/gifts_icon/${g.icon_filename}`),
       effectUrl: g.effect_filename
         ? getResourceUrl(`/gifts/${encodeURIComponent(g.effect_filename)}`)
@@ -309,7 +311,8 @@ async function handleSendGift() {
       gift_id: gift.id,
       gift_icon: gift.icon,
       gift_qty: selectedQty.value,
-      effect_url: gift.effectUrl
+      effect_url: gift.effectUrl,
+      video_ratio: gift.videoRatio // 🎯 发送礼物时带上比例
     })
 
     // 2. 更新本地余额显示
@@ -499,13 +502,15 @@ function triggerLargeGiftEffect(
   nickname: string,
   duration: number = 3,
   titleIcon?: string,
-  effectUrl?: string
+  effectUrl?: string,
+  videoRatio: number = 0.5 // 🎯 新增比例参数
 ) {
   if (effectUrl) {
     // 处理相对路径
     const finalUrl = effectUrl.startsWith('http') ? effectUrl : effectUrl
     vapSrc.value = finalUrl
-    console.log('[LivePage] Playing VAP effect:', finalUrl)
+    state.currentVideoRatio = videoRatio // 🎯 记录当前视频的比例
+    console.log('[LivePage] Playing VAP effect:', finalUrl, 'Ratio:', videoRatio)
 
     // 给一点时间让 src 切换生效
     nextTick(() => {
@@ -825,8 +830,8 @@ function setupSubscription() {
               nickname,
               animDuration,
               isSvg ? giftIcon : undefined,
-              // 🎯 恢复：移除缓存粉碎参数，保持路径简洁
-              giftPayload.effect_url ? getResourceUrl(giftPayload.effect_url) : undefined
+              giftPayload.effect_url ? getResourceUrl(giftPayload.effect_url) : undefined,
+              giftPayload.video_ratio || 0.5 // 🎯 从实时消息载荷中获取比例
             )
           }
         }
