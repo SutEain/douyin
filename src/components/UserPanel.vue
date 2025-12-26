@@ -756,7 +756,11 @@ async function loadAuthorInfo() {
         // 头像（如果有新的）
         avatar_168x168: profile.avatar_url
           ? { url_list: [profile.avatar_url] }
-          : props.currentItem.author.avatar_168x168
+          : props.currentItem.author.avatar_168x168,
+        // 背景图（如果有新的）
+        cover_url: profile.cover_url
+          ? [{ url_list: [profile.cover_url] }]
+          : props.currentItem.author.cover_url
       }
 
       console.log('[UserPanel] 📝 更新 author 数据')

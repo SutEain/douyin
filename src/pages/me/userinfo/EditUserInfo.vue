@@ -9,17 +9,43 @@
     <!-- ✅ 双层滚动结构：防止下拉时关闭 miniApp -->
     <div class="scroll-container" @scroll="handleScroll" ref="scrollContainer">
       <div class="main" ref="mainContent">
+        <!-- 🎯 隐藏的图片上传 input -->
+        <input
+          type="file"
+          ref="fileInput"
+          style="display: none"
+          accept="image/*"
+          @change="handleFileChange"
+        />
+
         <div class="userinfo">
           <div class="change-avatar">
-            <div class="avatar-ctn" @click="viewAvatarOnly">
+            <div class="avatar-ctn" @click="handleAvatarClick">
               <img
                 class="avatar"
                 :src="_checkImgUrl(store.userinfo.avatar_300x300.url_list[0])"
                 alt=""
               />
+              <div class="edit-mask">
+                <Icon icon="ri:camera-line" />
+              </div>
             </div>
             <span>{{ $t('profile.avatar') }}</span>
           </div>
+
+          <div class="row" @click="handleCoverClick">
+            <div class="left">{{ $t('profile.backgroundImage') }}</div>
+            <div class="right">
+              <img
+                v-if="store.userinfo.cover_url?.[0]?.url_list?.[0]"
+                class="cover-preview"
+                :src="_checkImgUrl(store.userinfo.cover_url[0].url_list[0])"
+              />
+              <span v-else>{{ $t('profile.clickToSet') }}</span>
+              <dy-back scale=".8" direction="right"></dy-back>
+            </div>
+          </div>
+
           <div class="row" @click="nav('/me/edit-userinfo-item', { type: 1 })">
             <div class="left">{{ $t('profile.name') }}</div>
             <div class="right">
@@ -87,10 +113,20 @@
 <script setup lang="ts">
 import MobileSelect from '../../../components/mobile-select/mobile-select'
 import { useBaseStore } from '@/store/pinia'
-import { _checkImgUrl, _hideLoading, _no, _showLoading, _showSelectDialog } from '@/utils'
+import {
+  _checkImgUrl,
+  _hideLoading,
+  _no,
+  _showLoading,
+  _showSelectDialog,
+  _showConfirmDialog,
+  _notice
+} from '@/utils'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useNav } from '@/utils/hooks/useNav'
 import { useI18n } from 'vue-i18n'
+import { Icon } from '@iconify/vue'
+import { uploadImage } from '@/utils/upload'
 
 defineOptions({
   name: 'EditUserInfo'
@@ -99,8 +135,76 @@ const store = useBaseStore()
 const nav = useNav()
 const { t } = useI18n()
 const data = reactive({
-  previewImg: ''
+  previewImg: '',
+  uploadType: '' as 'avatar' | 'cover'
 })
+
+const fileInput = ref<HTMLInputElement | null>(null)
+
+function handleAvatarClick() {
+  _showSelectDialog(
+    [
+      { id: 'view', name: t('profile.viewImage') },
+      { id: 'upload', name: t('profile.changeAvatar') }
+    ],
+    (e) => {
+      if (e.id === 'view') {
+        data.previewImg = _checkImgUrl(store.userinfo.avatar_300x300.url_list[0])
+      } else {
+        data.uploadType = 'avatar'
+        fileInput.value?.click()
+      }
+    }
+  )
+}
+
+function handleCoverClick() {
+  _showSelectDialog(
+    [
+      { id: 'view', name: t('profile.viewImage') },
+      { id: 'upload', name: t('profile.changeCover') }
+    ],
+    (e) => {
+      if (e.id === 'view') {
+        const coverUrl = store.userinfo.cover_url?.[0]?.url_list?.[0]
+        data.previewImg = coverUrl ? _checkImgUrl(coverUrl) : '/images/profile/default_bg.png'
+      } else {
+        data.uploadType = 'cover'
+        fileInput.value?.click()
+      }
+    }
+  )
+}
+
+async function handleFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+
+  try {
+    _showLoading()
+    const folder = data.uploadType === 'avatar' ? 'avatars' : 'covers'
+    const publicUrl = await uploadImage(file, 'user-content', folder)
+
+    if (data.uploadType === 'avatar') {
+      await store.updateProfileFields({
+        avatar_300x300: { url_list: [publicUrl] }
+      })
+      _notice('头像更新成功')
+    } else {
+      await store.updateProfileFields({
+        cover_url: [{ url_list: [publicUrl] }]
+      })
+      _notice('背景更新成功')
+    }
+  } catch (err: any) {
+    console.error('上传失败:', err)
+    _notice('上传失败: ' + (err.message || '未知错误'))
+  } finally {
+    _hideLoading()
+    // 清空 input 方便下次选择同一张图
+    if (fileInput.value) fileInput.value.value = ''
+  }
+}
 
 // ✅ 双层滚动结构的 refs
 const scrollContainer = ref<HTMLElement | null>(null)
@@ -188,11 +292,6 @@ function showSexDialog() {
     await store.updateProfileFields({ gender: e.id })
     _hideLoading()
   })
-}
-
-function viewAvatarOnly() {
-  // 只查看头像，不能更换（使用 TG 头像）
-  data.previewImg = _checkImgUrl(store.userinfo.avatar_300x300.url_list[0])
 }
 
 function showBirthdayDialog() {
@@ -319,6 +418,55 @@ function handleLocationClick(e: Event) {
         height: @avatar-width;
         border-radius: 50%;
         object-fit: cover;
+      }
+
+      .edit-mask {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 24rem;
+        height: 24rem;
+        background: #fe2c55;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        border: 2px solid #000;
+        font-size: 14rem;
+      }
+    }
+  }
+
+  .row {
+    height: 54rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 15rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+
+    &:active {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .left {
+      font-size: 15rem;
+      color: white;
+    }
+
+    .right {
+      display: flex;
+      align-items: center;
+      gap: 5rem;
+      color: #999;
+      font-size: 14rem;
+
+      .cover-preview {
+        width: 40rem;
+        height: 30rem;
+        object-fit: cover;
+        border-radius: 4rem;
       }
     }
   }
