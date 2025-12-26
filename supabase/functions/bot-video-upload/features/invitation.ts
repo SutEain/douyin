@@ -60,7 +60,7 @@ export async function handleInvitation(inviteeId: string, inviterNumericId: numb
       .eq('id', 'invitation_reward_coins')
       .maybeSingle()
 
-    const rewardCoins = setting?.value_int ?? 10 // 默认 10 抖币
+    const rewardCoins = setting?.value_int ?? 20 // 默认 20 抖币
 
     const { data: updatedInviter } = await supabase
       .from('profiles')
@@ -120,7 +120,7 @@ export async function handleInvitation(inviteeId: string, inviterNumericId: numb
         `🎉 <b>邀请成功！</b>\n\n` +
           `您已成功邀请 ${newCount} 人\n` +
           `🎁 ${rewardText}\n` +
-          `💰 获得 10 抖币奖励！\n\n` +
+          `💰 获得 ${rewardCoins} 抖币奖励！\n\n` +
           `继续邀请可获得更多奖励！`
       )
     }

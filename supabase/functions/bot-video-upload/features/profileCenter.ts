@@ -15,7 +15,7 @@ export async function handleHelp(chatId: number, messageId?: number) {
     `• 也可以在视频详情页点击分享按钮\n\n` +
     `<b>3. 邀请赚钱</b>\n` +
     `• 点击「个人中心」-「邀请赚钱」\n` +
-    `• 邀请好友可获得 10 抖币/人，并解锁成人专区权限`
+    `• 邀请好友使用机器人可获得 10 抖币/人奖励`
 
   const keyboard = {
     inline_keyboard: [[{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]]
@@ -82,10 +82,7 @@ export async function handleUserProfile(
 
     const keyboard = {
       inline_keyboard: [
-        [
-          { text: '💰 我的钱包', callback_data: 'profile_wallet' },
-          { text: '💸 邀请赚钱', callback_data: 'profile_invite_unlock' }
-        ],
+        [{ text: '💰 我的钱包', callback_data: 'profile_wallet' }],
         [liveButton],
         [{ text: '📖 使用说明', callback_data: 'profile_help' }],
         [
@@ -120,54 +117,52 @@ export async function handleUserProfile(
   }
 }
 
-// 处理"邀请解锁"
+// 处理"邀请赚钱" (原邀请解锁)
 export async function handleInviteUnlock(chatId: number, messageId?: number) {
   try {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock')
+      .select('numeric_id, invite_success_count, balance_coins')
       .eq('tg_user_id', chatId)
       .single()
 
     const inviteLink = `https://t.me/tg_douyin_bot?start=${profile?.numeric_id || ''}`
     const count = profile?.invite_success_count || 0
-
-    let statusText = '🔒 未解锁'
-    if (profile?.adult_permanent_unlock) {
-      statusText = '♾️ 永久解锁'
-    } else if (profile?.adult_unlock_until && new Date(profile.adult_unlock_until) > new Date()) {
-      const until = new Date(profile.adult_unlock_until)
-      const now = new Date()
-      const diffHours = Math.ceil((until.getTime() - now.getTime()) / (1000 * 3600))
-      statusText = `🔓 已解锁 (剩余 ${diffHours} 小时)`
-    }
+    const balance = Math.floor(profile?.balance_coins || 0)
 
     const text =
-      `💸 <b>邀请好友赚钱</b>\n\n` +
-      `每邀请 1 位新好友，您将获得：\n` +
-      `💰 <b>10 抖币</b> (直接入账)\n` +
-      `🔞 <b>成人专区解锁奖励：</b>\n` +
-      `• 邀请 1 人：解锁 24 小时\n` +
-      `• 邀请 2 人：解锁 3 天\n` +
-      `• 邀请 3 人：<b>永久解锁</b>\n\n` +
-      `--- 当前进度 ---\n` +
-      `当前状态：${statusText}\n` +
-      `已邀请人数：${count} 人\n\n` +
-      `<b>您的专属邀请链接：</b>\n` +
-      `${inviteLink}\n\n` +
-      `<i>💡 好友通过您的链接启动机器人即算邀请成功。</i>`
+      `💰 <b>【TG抖音-暴富邀请令】轻松赚 USDT！</b>\n\n` +
+      `💌 <b>已邀请人数：</b> ${count} 人 👥\n` +
+      `💵 <b>奖励余额：</b> ${balance} 抖币 💰\n\n` +
+      `🔗 <b>专属邀请链接：</b>\n` +
+      `👉 <code>${inviteLink}</code>\n` +
+      `（点击一键复制，立刻分享赚钱）\n\n` +
+      `🎁 <b>每邀请 1 人，奖励 20 抖币！</b>\n` +
+      `（抖币可用于直播间打赏，作品赞赏，兑换 USDT）\n\n` +
+      `💡 <b>温馨提示：</b>\n` +
+      `✨ 邀请成功自动发放至抖音账户 🎯\n` +
+      `✨ 满 10U 即可提现 ✅\n\n` +
+      `⚠️ <b>风控提示：</b>\n` +
+      `❌ 严禁刷量/虚假用户，系统自动永久封禁！\n\n` +
+      `🔥 <b>速速邀请好友，一起躺赚 USDT 吧！ 🎉</b>`
 
     const keyboard = {
       inline_keyboard: [
-        [{ text: '📤 分享给好友', switch_inline_query: '' }],
+        [{ text: '📤 立即分享赚钱', switch_inline_query: '' }],
         [{ text: '⬅️ 返回首页', callback_data: 'back_home' }]
       ]
     }
 
+    const options = {
+      reply_markup: keyboard,
+      disable_web_page_preview: true,
+      parse_mode: 'HTML'
+    }
+
     if (messageId) {
-      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+      await editMessage(chatId, messageId, text, options)
     } else {
-      await sendMessage(chatId, text, { reply_markup: keyboard })
+      await sendMessage(chatId, text, options)
     }
   } catch (error) {
     console.error('handleInviteUnlock error:', error)
@@ -400,11 +395,12 @@ export async function handleWallet(chatId: number, messageId?: number) {
       `💰 <b>我的钱包</b>\n\n` +
       `当前余额：<code>${balance}</code> 抖币\n\n` +
       `💡 抖币可用于直播间送礼、短视频打赏。\n` +
-      `💡 收到礼物的收益可按比例提现（即将上线）。`
+      `💡 收到礼物/打赏/邀请奖励的收益可按比例提现。`
 
     const keyboard = {
       inline_keyboard: [
         [{ text: '💳 立即充值', callback_data: 'profile_recharge' }],
+        [{ text: '💰 抖币提现', callback_data: 'profile_recharge' }],
         [{ text: '📜 账单记录', callback_data: 'profile_transactions' }],
         [{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]
       ]

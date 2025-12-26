@@ -168,7 +168,7 @@ export const UserList = () => {
       message.success('调整成功')
       setAdjustModalVisible(false)
       adjustForm.resetFields()
-      tableQueryResult.refetch()
+      tableQueryResult?.refetch()
     } catch (err: any) {
       console.error('Adjust error:', err)
       message.error(err.message || '操作失败')

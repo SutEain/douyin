@@ -20,6 +20,7 @@ import {
 import { CoinTransactionList } from './pages/coin-transactions'
 import { SystemSettings } from './pages/system-settings'
 import { LiveRoomCreate, LiveRoomEdit, LiveRoomList } from './pages/live-rooms'
+import { GiftList } from './pages/gifts'
 import { Login } from './pages/login'
 import { authProvider } from './authProvider'
 import { Dashboard } from './pages/dashboard'
@@ -160,6 +161,11 @@ function App() {
                 create: '/live-rooms/create',
                 edit: '/live-rooms/edit/:id',
                 meta: { label: '直播间管理' }
+              },
+              {
+                name: 'gifts',
+                list: '/gifts',
+                meta: { label: '礼物管理' }
               }
             ]}
             options={{
@@ -202,6 +208,9 @@ function App() {
                   <Route index element={<LiveRoomList />} />
                   <Route path="create" element={<LiveRoomCreate />} />
                   <Route path="edit/:id" element={<LiveRoomEdit />} />
+                </Route>
+                <Route path="/gifts">
+                  <Route index element={<GiftList />} />
                 </Route>
               </Route>
               <Route path="*" element={<ErrorComponent />} />

@@ -139,7 +139,7 @@
               :class="{ selected: selectedGiftId === gift.id }"
               @click="selectedGiftId = gift.id"
             >
-              <img :src="gift.icon" alt="" />
+              <img :src="gift.icon" alt="" loading="lazy" />
               <div class="name">{{ gift.name }}</div>
               <div class="cost">{{ gift.cost }} 抖币</div>
             </div>
@@ -181,6 +181,9 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 透明视频礼物特效组件 -->
+    <VapPlayer ref="vapPlayerRef" :src="vapSrc" />
   </div>
 </template>
 
@@ -192,6 +195,7 @@ import { supabase } from '@/utils/supabase'
 import { _checkImgUrl, _notice, _no } from '@/utils'
 import { toggleFollowUser, sendReward } from '@/api/videos'
 import DPPlayer from '@/components/live/DPPlayer.vue'
+import VapPlayer from '@/components/live/VapPlayer.vue'
 import Dom from '@/utils/dom'
 
 const route = useRoute()
@@ -209,68 +213,56 @@ const showInput = ref(false)
 const inputText = ref('')
 const comments = ref<HTMLElement | null>(null)
 const commentInput = ref<HTMLInputElement | null>(null) // 新增 Ref
+const vapPlayerRef = ref<any>(null)
+const vapSrc = ref('') // 初始值为空
 const viewerCount = ref(0)
 const viewers = ref<any[]>([]) // 存储前几名观众
 const fallbackAvatar = new URL('../../assets/img/icon/avatar/0.png', import.meta.url).href
 
 // --- 礼物相关 ---
 const showGiftPanel = ref(false)
+const giftList = ref<any[]>([])
 const selectedGiftId = ref<number | null>(null)
 const selectedQty = ref(1)
 const userCoins = ref(0) // 抖币余额
 
 const qtyOptions = [1, 99, 520, 1314]
 
-const giftList = [
-  {
-    id: 1,
-    name: '小心心',
-    cost: 1,
-    icon: new URL('../../assets/img/icon/xiaoxinxin.svg', import.meta.url).href
-  },
-  {
-    id: 2,
-    name: '电棍',
-    cost: 2,
-    icon: new URL('../../assets/img/icon/diangun.svg', import.meta.url).href
-  },
-  {
-    id: 3,
-    name: '棒棒糖',
-    cost: 5,
-    icon: new URL('../../assets/img/icon/miao.svg', import.meta.url).href
-  },
-  {
-    id: 4,
-    name: '玫瑰花',
-    cost: 10,
-    icon: new URL('../../assets/img/icon/meigui.svg', import.meta.url).href
-  },
-  {
-    id: 5,
-    name: '我舔',
-    cost: 20,
-    icon: new URL('../../assets/img/icon/tian.svg', import.meta.url).href
-  },
-  {
-    id: 6,
-    name: '跳蛋',
-    cost: 100,
-    icon: new URL('../../assets/img/icon/tiaodan.svg', import.meta.url).href
-  },
-  {
-    id: 7,
-    name: '火箭',
-    cost: 500,
-    icon: new URL('../../assets/img/icon/huojian.svg', import.meta.url).href
-  },
-  {
-    id: 8,
-    name: '别墅',
-    cost: 1000,
-    icon: new URL('../../assets/img/icon/bieshu.svg', import.meta.url).href
+// 资源路径处理
+function getResourceUrl(path: string) {
+  // 如果 VITE_RESOURCE_URL 存在，则拼接到路径前缀；否则使用本地相对路径
+  const base = (import.meta.env.VITE_RESOURCE_URL || '').replace(/\/$/, '')
+  if (!path) return ''
+  if (path.startsWith('http')) return path
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${base}${normalizedPath}`
+}
+
+// 从数据库加载礼物列表
+async function fetchGifts() {
+  try {
+    const { data, error } = await supabase
+      .from('gifts')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+
+    if (error) throw error
+
+    // 处理数据库中的礼物，映射字段名并应用资源路径
+    giftList.value = (data || []).map((g) => ({
+      ...g,
+      cost: g.price, // 统一字段名为 cost 兼容现有逻辑
+      // 🎯 适配 R2 路径结构：图标在 gifts_icon，特效在 gifts
+      icon: getResourceUrl(`/gifts_icon/${g.icon_filename}`),
+      effectUrl: g.effect_filename
+        ? getResourceUrl(`/gifts/${encodeURIComponent(g.effect_filename)}`)
+        : null
+    }))
+  } catch (e) {
+    console.error('[LivePage] fetchGifts error:', e)
   }
-]
+}
 
 function sendGift() {
   showGiftPanel.value = true
@@ -278,7 +270,7 @@ function sendGift() {
 
 async function handleSendGift() {
   if (!selectedGiftId.value || !selectedQty.value) return
-  const gift = giftList.find((g) => g.id === selectedGiftId.value)
+  const gift = giftList.value.find((g) => g.id === selectedGiftId.value)
   if (!gift) return
 
   const {
@@ -305,16 +297,19 @@ async function handleSendGift() {
 
   try {
     // 1. 调用后端接口处理真实扣款、分成、代发消息和通知
+    const receiverId = roomInfo.value.anchor_id || roomInfo.value.anchor_info?.id
+    console.log('[Gift] Sending gift to receiver:', receiverId)
+
     const res = await sendReward({
-      receiver_id: roomInfo.value.anchor_id || roomInfo.value.anchor_info?.id,
+      receiver_id: receiverId,
       gift_amount: totalCost,
       room_or_video_id: roomId.value,
       gift_type: 'live',
       gift_name: gift.name,
-      // 传递详细信息，让后端代发实时消息
       gift_id: gift.id,
       gift_icon: gift.icon,
-      gift_qty: selectedQty.value
+      gift_qty: selectedQty.value,
+      effect_url: gift.effectUrl
     })
 
     // 2. 更新本地余额显示
@@ -324,9 +319,9 @@ async function handleSendGift() {
 
     // 后端已经通过 supabaseAdmin 代发了消息，前端不需要再 insert
     // 只需要关闭面板即可，实时监听会自动收到消息并触发特效
-    showGiftPanel.value = false
+    // showGiftPanel.value = false
     selectedQty.value = 1
-    selectedGiftId.value = null
+    // selectedGiftId.value = null
   } catch (e: any) {
     console.error('[Gift] Send error:', e)
     const msg = e.message || ''
@@ -503,8 +498,23 @@ function triggerLargeGiftEffect(
   giftIcon: string,
   nickname: string,
   duration: number = 3,
-  titleIcon?: string
+  titleIcon?: string,
+  effectUrl?: string
 ) {
+  if (effectUrl) {
+    // 处理相对路径
+    const finalUrl = effectUrl.startsWith('http') ? effectUrl : effectUrl
+    vapSrc.value = finalUrl
+    console.log('[LivePage] Playing VAP effect:', finalUrl)
+
+    // 给一点时间让 src 切换生效
+    nextTick(() => {
+      if (vapPlayerRef.value) {
+        vapPlayerRef.value.play()
+      }
+    })
+    return
+  }
   if (!page.value) return
   const domPage = new Dom(page.value)
 
@@ -772,9 +782,10 @@ function setupSubscription() {
         const avatar = profile?.avatar_url || ''
 
         if (isGift) {
+          console.log('[LivePage] Received gift message:', giftPayload)
           // 根据单次送礼的总价值计算停留时间
           const giftId = Number(giftPayload.gift_id)
-          const gift = giftList.find((g) => g.id === giftId)
+          const gift = giftList.value.find((g) => g.id === giftId)
           const unitPrice = gift ? gift.cost : 0
           const totalValue = unitPrice * (giftPayload.amount || 1)
 
@@ -795,10 +806,17 @@ function setupSubscription() {
             animDuration
           )
 
-          // 2. 触发大礼物全屏特效 (如果是高价值礼物)
-          if (totalValue >= 100 || [6, 7, 8].includes(giftId)) {
+          // 2. 触发大礼物全屏特效
+          // 如果礼物自带 effect_url (数据库配置的 MP4)，则直接播放 MP4 特效
+          // 否则根据价值触发基础的全屏图标动画
+          if (giftPayload.effect_url || totalValue >= 100) {
+            console.log('[LivePage] Triggering full screen effect:', {
+              name: giftPayload.gift_name,
+              effectUrl: giftPayload.effect_url,
+              totalValue
+            })
+
             const giftIcon = giftPayload.gift_icon || ''
-            // 如果图标是 SVG，我们将其作为标题图展示（替换文字）
             const isSvg = giftIcon.toLowerCase().endsWith('.svg')
 
             triggerLargeGiftEffect(
@@ -806,7 +824,9 @@ function setupSubscription() {
               giftIcon,
               nickname,
               animDuration,
-              isSvg ? giftIcon : undefined
+              isSvg ? giftIcon : undefined,
+              // 🎯 恢复：移除缓存粉碎参数，保持路径简洁
+              giftPayload.effect_url ? getResourceUrl(giftPayload.effect_url) : undefined
             )
           }
         }
@@ -903,6 +923,7 @@ function setupSubscription() {
 }
 
 onMounted(async () => {
+  await fetchGifts()
   await initRoom()
 })
 

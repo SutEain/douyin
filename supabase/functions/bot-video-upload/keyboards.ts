@@ -27,7 +27,7 @@ export function getWelcomeKeyboard() {
       ],
       [
         { text: '👤 个人中心', callback_data: 'user_profile' },
-        { text: '💰 我的钱包', callback_data: 'profile_wallet' }
+        { text: '💸 邀请赚钱', callback_data: 'profile_invite_unlock' }
       ],
       [{ text: '📢 TG抖音官方群', url: 'https://t.me/niub' }]
     ]

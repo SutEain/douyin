@@ -15,6 +15,7 @@ export async function handleSendReward(req: Request): Promise<Response> {
       gift_id?: number
       gift_icon?: string
       gift_qty?: number
+      effect_url?: string
     }>(req)
 
     const {
@@ -25,7 +26,8 @@ export async function handleSendReward(req: Request): Promise<Response> {
       gift_name,
       gift_id,
       gift_icon,
-      gift_qty
+      gift_qty,
+      effect_url
     } = body
 
     let finalReceiverId = receiver_id
@@ -93,7 +95,8 @@ export async function handleSendReward(req: Request): Promise<Response> {
         gift_name: gift_name,
         gift_icon: gift_icon,
         amount: gift_qty || 1,
-        combo: gift_qty || 1
+        combo: gift_qty || 1,
+        effect_url: effect_url
       }
     })
 
