@@ -2,6 +2,81 @@ import { supabaseAdmin } from '../lib/env.ts'
 import { successResponse, errorResponse } from '../../_shared/response.ts'
 import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
 
+export async function handleLiveRoomDetail(req: Request): Promise<Response> {
+  console.log('[live_detail] Request received:', req.url)
+  try {
+    const url = new URL(req.url)
+    const id = url.searchParams.get('id')
+    console.log('[live_detail] Searching for room ID:', id)
+    if (!id) throw new HttpError('Missing id', 400)
+
+    // 1. 先尝试从自建直播表找
+    const { data: selfRoom, error: selfError } = await supabaseAdmin
+      .from('live_broadcast_rooms')
+      .select(
+        `
+        id, title, status, viewer_count, stream_key, anchor_id,
+        node:live_broadcast_nodes(domain_name),
+        anchor:profiles(nickname, avatar_url)
+      `
+      )
+      .eq('id', id)
+      .maybeSingle()
+
+    if (selfError) {
+      console.error('[live_detail] selfRoom query error:', selfError)
+    }
+
+    if (selfRoom) {
+      console.log('[live_detail] Found in self-hosted:', selfRoom.id)
+      return successResponse({
+        room: {
+          id: selfRoom.id,
+          title: selfRoom.title,
+          status: selfRoom.status,
+          viewer_count: selfRoom.viewer_count,
+          stream_url: `https://${selfRoom.node?.domain_name}/LiveApp/streams/${selfRoom.stream_key}.m3u8`,
+          cover_url: selfRoom.anchor?.avatar_url,
+          is_self_hosted: true,
+          anchor_info: selfRoom.anchor
+        }
+      })
+    }
+
+    // 2. 如果没找到，尝试从转播间表找
+    const { data: externalRoom, error: externalError } = await supabaseAdmin
+      .from('live_rooms')
+      .select('id, title, description, stream_url, cover_url')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (externalError) {
+      console.error('[live_detail] externalRoom query error:', externalError)
+    }
+
+    if (externalRoom) {
+      console.log('[live_detail] Found in external:', externalRoom.id)
+      return successResponse({
+        room: {
+          id: externalRoom.id,
+          title: externalRoom.title,
+          description: externalRoom.description,
+          stream_url: externalRoom.stream_url,
+          cover_url: externalRoom.cover_url,
+          is_self_hosted: false,
+          anchor_info: null
+        }
+      })
+    }
+
+    console.warn('[live_detail] Room not found in either table:', id)
+    return errorResponse('Room not found', 1, 404)
+  } catch (e: any) {
+    console.error('[live_detail] unexpected error:', e)
+    return errorResponse(e.message || 'Internal server error', 1, 500)
+  }
+}
+
 export async function handleLiveRooms(req: Request): Promise<Response> {
   try {
     // 1. 获取后台维护的转播直播间 (live_rooms)

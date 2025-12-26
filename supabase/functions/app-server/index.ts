@@ -45,7 +45,7 @@ import {
   handleDeleteSearchHistory
 } from './routes/search.ts'
 import { handlePostRecommended } from './routes/post.ts'
-import { handleLiveRooms, handleLiveRoomsProbe } from './routes/live.ts'
+import { handleLiveRooms, handleLiveRoomsProbe, handleLiveRoomDetail } from './routes/live.ts'
 import { handleAdminDouyinParse, handleAdminDouyinPublish } from './routes/douyin.ts'
 
 serve(async (req) => {
@@ -176,6 +176,9 @@ serve(async (req) => {
     // 📺 直播间列表（后台维护）
     if (route === '/live/rooms' && method === 'GET') {
       return handleLiveRooms(req)
+    }
+    if (route === '/live/detail' && method === 'GET') {
+      return handleLiveRoomDetail(req)
     }
     // 🧪 探测直播间在线状态（仅 admin）
     if (route === '/live/rooms/probe' && method === 'POST') {

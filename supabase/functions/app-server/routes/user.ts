@@ -261,75 +261,91 @@ export async function handleRequestUpdate(req: Request): Promise<Response> {
 }
 
 export async function handleFollowUser(req: Request): Promise<Response> {
-  const { user, profile } = await requireAuth(req, { withProfile: true })
-  const body = await parseJsonBody<{ target_id?: string; follow?: boolean }>(req)
-  if (!body.target_id || typeof body.follow !== 'boolean') {
-    throw new HttpError('Missing target_id or follow flag', 400)
-  }
-  if (body.target_id === user.id) {
-    throw new HttpError('不能关注自己', 400)
-  }
+  try {
+    const { user, profile } = await requireAuth(req, { withProfile: true })
+    const body = await parseJsonBody<{ target_id?: string; follow?: boolean }>(req)
 
-  if (body.follow) {
-    // 关注用户
-    const { error } = await supabaseAdmin
-      .from('follows')
-      .upsert(
+    console.log('[handleFollowUser] start:', {
+      userId: user.id,
+      targetId: body.target_id,
+      follow: body.follow
+    })
+
+    if (!body.target_id || typeof body.follow !== 'boolean') {
+      throw new HttpError('Missing target_id or follow flag', 400)
+    }
+    if (body.target_id === user.id) {
+      throw new HttpError('不能关注自己', 400)
+    }
+
+    if (body.follow) {
+      // 关注用户
+      const { error } = await supabaseAdmin.from('follows').upsert(
         { follower_id: user.id, followee_id: body.target_id },
-        { onConflict: 'follower_id,followee_id' }
+        {
+          onConflict: 'follower_id,followee_id',
+          ignoreDuplicates: false // 确保如果已经存在，也会被触发（虽然数据没变）
+        }
       )
-    if (error) {
-      console.error('[app-server] Follow user failed:', error)
-      return errorResponse('Failed to follow user', 1, 500)
+      if (error) {
+        console.error('[app-server] Follow user failed:', error)
+        return errorResponse('Failed to follow user: ' + error.message, 1, 500)
+      }
+
+      // 发送通知
+      const nickname = profile.nickname || profile.username || '用户'
+      checkAndSendNotification(
+        body.target_id,
+        'follow',
+        `➕ 用户 <b>${nickname}</b> 关注了你`,
+        undefined // 不带 startParam 或者 user_${user.id} 如果前端支持
+      )
+    } else {
+      // 取消关注
+      const { error } = await supabaseAdmin
+        .from('follows')
+        .delete()
+        .eq('follower_id', user.id)
+        .eq('followee_id', body.target_id)
+      if (error) {
+        console.error('[app-server] Unfollow user failed:', error)
+        return errorResponse('Failed to unfollow user: ' + error.message, 1, 500)
+      }
     }
 
-    // 发送通知
-    const nickname = profile.nickname || profile.username || '用户'
-    checkAndSendNotification(
-      body.target_id,
-      'follow',
-      `➕ 用户 <b>${nickname}</b> 关注了你`,
-      undefined // 不带 startParam 或者 user_${user.id} 如果前端支持
-    )
-  } else {
-    // 取消关注
-    const { error } = await supabaseAdmin
-      .from('follows')
-      .delete()
-      .eq('follower_id', user.id)
-      .eq('followee_id', body.target_id)
-    if (error) {
-      console.error('[app-server] Unfollow user failed:', error)
-      return errorResponse('Failed to unfollow user', 1, 500)
+    // ✅ 查询关注状态（检查对方是否也关注了我）
+    let followStatus = 0 // 0=未关注
+
+    if (body.follow) {
+      // 如果我刚关注了对方，检查对方是否也关注了我
+      const { data: isFollowedBy } = await supabaseAdmin
+        .from('follows')
+        .select('id')
+        .eq('follower_id', body.target_id)
+        .eq('followee_id', user.id)
+        .maybeSingle()
+
+      followStatus = isFollowedBy ? 2 : 1 // 2=互相关注, 1=已关注
     }
-  }
 
-  // ✅ 查询关注状态（检查对方是否也关注了我）
-  let followStatus = 0 // 0=未关注
-
-  if (body.follow) {
-    // 如果我刚关注了对方，检查对方是否也关注了我
-    const { data: isFollowedBy } = await supabaseAdmin
-      .from('follows')
-      .select('id')
-      .eq('follower_id', body.target_id)
-      .eq('followee_id', user.id)
+    const { data: targetProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('follower_count')
+      .eq('id', body.target_id)
       .maybeSingle()
 
-    followStatus = isFollowedBy ? 2 : 1 // 2=互相关注, 1=已关注
+    return successResponse({
+      follow: body.follow,
+      follower_count: targetProfile?.follower_count ?? null,
+      follow_status: followStatus // ✅ 返回关注状态
+    })
+  } catch (error: any) {
+    console.error('[handleFollowUser] Unexpected error:', error)
+    if (error instanceof HttpError) {
+      return errorResponse(error.message, 1, error.status)
+    }
+    return errorResponse(error.message || 'Internal server error', 1, 500)
   }
-
-  const { data: targetProfile } = await supabaseAdmin
-    .from('profiles')
-    .select('follower_count')
-    .eq('id', body.target_id)
-    .maybeSingle()
-
-  return successResponse({
-    follow: body.follow,
-    follower_count: targetProfile?.follower_count ?? null,
-    follow_status: followStatus // ✅ 返回关注状态
-  })
 }
 
 // ✅ 获取用户详细信息（包括统计数据和关注状态）

@@ -107,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { supabase } from '@/utils/supabase'
 import { _checkImgUrl } from '@/utils'
@@ -136,15 +136,18 @@ const fallbackAvatar = new URL('../../assets/img/icon/avatar/0.png', import.meta
 
 // --- 房间切换核心逻辑 ---
 async function initRoom() {
-  console.log('[LivePage] initRoom', roomId)
+  const currentId = route.query.id as string
+  console.log('[LivePage] initRoom start', currentId)
+  if (!currentId) return
+
   // 1. 先清理旧的订阅
   if (channel) {
     await supabase.removeChannel(channel)
     channel = null
   }
 
-  // 2. 重置基础状态，防止残影
-  roomInfo.value = {}
+  // 2. 重置基础状态，强制销毁旧播放器
+  roomInfo.value = { stream_url: null }
   messages.value = []
   viewerCount.value = 0
   viewers.value = []
@@ -254,65 +257,59 @@ function triggerGiftAnim(nickname: string, avatar: string, giftName: string, amo
 // 获取直播间信息
 async function fetchRoomInfo() {
   const currentRoomId = roomId.value
-  const isExternal = route.query.type === 'external'
+  console.log('[LivePage] fetchRoomInfo v2 start:', currentRoomId)
 
-  if (isExternal) {
-    const { data, error } = await supabase
-      .from('live_rooms')
-      .select('id, title, stream_url, cover_url')
-      .eq('id', currentRoomId)
-      .single()
-
-    if (data) {
-      roomInfo.value = {
-        ...data,
-        stream_url: buildPlayUrl(data.stream_url),
-        anchor_info: null
-      }
-      viewerCount.value = Math.floor(Math.random() * 500) + 100 // 转播间随机人数
-    }
-    return
-  }
-
-  const { data, error } = await supabase
-    .from('live_broadcast_rooms')
-    .select(
-      `
-      id, title, viewer_count, stream_key,
-      anchor:profiles(id, nickname, avatar_url),
-      node:live_broadcast_nodes(domain_name)
-    `
-    )
-    .eq('id', currentRoomId)
-    .single()
-
-  if (data) {
-    const anchor = (Array.isArray(data.anchor) ? data.anchor[0] : data.anchor) as any
-    const node = (Array.isArray(data.node) ? data.node[0] : data.node) as any
-
-    roomInfo.value = {
-      ...data,
-      anchor_info: anchor,
-      stream_url: `https://${node?.domain_name}/LiveApp/streams/${data.stream_key}.m3u8`,
-      cover_url: anchor?.avatar_url
-    }
-    viewerCount.value = data.viewer_count || 0
-
-    // 检查关注状态
+  try {
     const {
-      data: { user }
-    } = await supabase.auth.getUser()
-    if (user && anchor?.id) {
-      const { data: follow } = await supabase
-        .from('follows')
-        .select('id')
-        .eq('follower_id', user.id)
-        .eq('followee_id', anchor.id)
-        .maybeSingle()
-
-      isFollowed.value = !!follow
+      data: { session }
+    } = await supabase.auth.getSession()
+    const headers: Record<string, string> = {
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
     }
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`
+    }
+
+    const resp = await fetch(`${getAppServerBase()}/live/detail?id=${currentRoomId}`, { headers })
+    const payload = await resp.json()
+
+    if (resp.ok && payload.code === 0) {
+      const room = payload.data.room
+      console.log('[LivePage] Room detail loaded:', room.title)
+      roomInfo.value = {
+        ...room,
+        stream_url: buildPlayUrl(room.stream_url)
+      }
+      viewerCount.value = room.viewer_count || 0
+
+      // 如果是自建直播，检查关注状态
+      if (room.is_self_hosted && room.anchor_info?.id) {
+        if (session?.user?.id) {
+          const { data: follow } = await supabase
+            .from('follows')
+            .select('id')
+            .eq('follower_id', session.user.id)
+            .eq('followee_id', room.anchor_info.id)
+            .maybeSingle()
+          isFollowed.value = !!follow
+        }
+      }
+    } else {
+      console.error('[LivePage] fetchRoomInfo failed:', payload.msg || resp.status)
+    }
+  } catch (e) {
+    console.error('[LivePage] fetchRoomInfo error:', e)
   }
+}
+
+function getAppServerBase() {
+  const explicit = import.meta.env.VITE_APP_SERVER_URL
+  if (explicit) return explicit.replace(/\/$/, '')
+  if (import.meta.env.DEV) return '/api/app-server'
+  if (import.meta.env.VITE_SUPABASE_URL) {
+    return `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/app-server`
+  }
+  return ''
 }
 
 function buildPlayUrl(url: string) {
@@ -320,7 +317,12 @@ function buildPlayUrl(url: string) {
   if (!raw) return ''
   try {
     const u = new URL(raw)
-    if (u.pathname.includes('/douyin/') && u.searchParams.get('stream') !== 'hls') {
+    // 只有抖音源且没有指定 stream 类型时，才默认加上 stream=hls
+    if (
+      u.pathname.includes('/douyin/') &&
+      !u.searchParams.has('stream') &&
+      !u.searchParams.has('media')
+    ) {
       u.searchParams.set('stream', 'hls')
       return u.toString()
     }
