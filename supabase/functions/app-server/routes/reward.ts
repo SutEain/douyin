@@ -28,18 +28,43 @@ export async function handleSendReward(req: Request): Promise<Response> {
       gift_qty
     } = body
 
-    if (!receiver_id || !gift_amount || !room_or_video_id || !gift_type || !gift_name) {
-      throw new HttpError('Missing required parameters', 400)
+    let finalReceiverId = receiver_id
+
+    // 🎯 优化：如果没传接收者 ID (通常是外部转播直播间)，尝试打赏给管理员
+    if (!finalReceiverId && gift_type === 'live') {
+      console.log('[Reward] receiver_id 为空，尝试查找系统管理员...')
+      const { data: adminProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('numeric_id', 10000) // 默认管理员 ID
+        .maybeSingle()
+
+      if (adminProfile) {
+        finalReceiverId = adminProfile.id
+        console.log('[Reward] 已自动分配接收者为管理员:', finalReceiverId)
+      } else {
+        // 如果没找到 10000，找第一个具有管理员角色的
+        const { data: anyAdmin } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .limit(1)
+          .single() // 随便给一个接收者，总比报错好
+        finalReceiverId = anyAdmin?.id
+      }
     }
 
-    if (receiver_id === user.id) {
+    if (!finalReceiverId || !gift_amount || !room_or_video_id || !gift_type || !gift_name) {
+      throw new HttpError('Missing required parameters (receiver_id not found)', 400)
+    }
+
+    if (finalReceiverId === user.id) {
       throw new HttpError('不能打赏自己', 400)
     }
 
     // 1. 调用 RPC 处理打赏扣款和分账
     const { data: res, error: rpcError } = await supabaseAdmin.rpc('process_gift_reward', {
       sender_id: user.id,
-      receiver_id: receiver_id,
+      receiver_id: finalReceiverId,
       gift_amount: gift_amount,
       room_or_video_id: room_or_video_id,
       gift_type: gift_type,
@@ -86,7 +111,7 @@ export async function handleSendReward(req: Request): Promise<Response> {
     const startParam = gift_type === 'video' ? `video_${room_or_video_id}` : undefined
 
     // 异步发送通知
-    checkAndSendNotification(receiver_id, 'gift', notificationMsg, startParam)
+    checkAndSendNotification(finalReceiverId, 'gift', notificationMsg, startParam)
 
     return successResponse({
       success: true,

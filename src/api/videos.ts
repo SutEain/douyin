@@ -288,6 +288,9 @@ export async function sendReward(payload: {
   room_or_video_id: string
   gift_type: 'live' | 'video'
   gift_name: string
+  gift_id?: number
+  gift_icon?: string
+  gift_qty?: number
 }) {
   return callAppServer('/reward/send', {
     method: 'POST',

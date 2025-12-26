@@ -548,10 +548,19 @@ async function fetchRoomInfo() {
       }
       viewerCount.value = room.viewer_count || 0
 
-      // 如果是自建直播，检查关注状态
-      if (room.is_self_hosted && room.anchor_info?.id) {
-        if (session?.user?.id) {
-          // 检查关注
+      // 获取个人抖币余额 (无论是否自建直播)
+      if (session?.user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('balance_coins')
+          .eq('id', session.user.id)
+          .maybeSingle()
+        if (profile) {
+          userCoins.value = Math.floor(Number(profile.balance_coins || 0))
+        }
+
+        // 如果是自建直播，检查关注状态
+        if (room.is_self_hosted && room.anchor_info?.id) {
           const { data: follow } = await supabase
             .from('follows')
             .select('id')
@@ -559,16 +568,6 @@ async function fetchRoomInfo() {
             .eq('followee_id', room.anchor_info.id)
             .maybeSingle()
           isFollowed.value = !!follow
-
-          // 顺便获取个人抖币余额
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('balance_coins')
-            .eq('id', session.user.id)
-            .single()
-          if (profile) {
-            userCoins.value = Math.floor(Number(profile.balance_coins || 0))
-          }
         }
       }
     } else {
