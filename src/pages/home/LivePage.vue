@@ -207,7 +207,7 @@ const giftList = [
     id: 1,
     name: '小心心',
     cost: 1,
-    icon: new URL('../../assets/img/icon/home/love.webp', import.meta.url).href
+    icon: new URL('../../assets/img/icon/xiaoxinxin.svg', import.meta.url).href
   },
   {
     id: 2,
@@ -247,9 +247,9 @@ const giftList = [
   },
   {
     id: 8,
-    name: '嘉年华',
+    name: '别墅',
     cost: 1000,
-    icon: new URL('../../assets/img/icon/home/pk.webp', import.meta.url).href
+    icon: new URL('../../assets/img/icon/bieshu.svg', import.meta.url).href
   }
 ]
 
@@ -458,15 +458,30 @@ function triggerGiftAnim(
   domPage.append(gift)
 }
 
-function triggerLargeGiftEffect(giftName: string, nickname: string, duration: number = 3) {
+function triggerLargeGiftEffect(
+  giftName: string,
+  giftIcon: string,
+  nickname: string,
+  duration: number = 3,
+  titleIcon?: string
+) {
   if (!page.value) return
   const domPage = new Dom(page.value)
+
+  // ✅ 如果是 SVG 模式，只显示超大图形，隐藏文字和普通图标
+  const contentHtml = titleIcon
+    ? `<img src="${titleIcon}" class="large-gift-svg" alt="${giftName}">`
+    : `
+      <img src="${giftIcon}" class="large-gift-icon" alt="">
+      <div class="gift-title">送出 ${giftName}</div>
+      <div class="user-name">${nickname}</div>
+    `
+
   const template = `
     <div class="large-gift-effect" style="animation-duration: ${duration}s">
       <div class="effect-content" style="animation-duration: ${duration}s">
         <div class="glow"></div>
-        <div class="gift-title">送出 ${giftName}</div>
-        <div class="user-name">${nickname}</div>
+        ${contentHtml}
       </div>
     </div>
   `
@@ -673,6 +688,8 @@ async function attention() {
 
 let channel: any = null
 
+const profileCache = new Map<string, { nickname: string; avatar_url: string }>()
+
 function setupSubscription() {
   const currentRoomId = route.query.id as string
   if (!currentRoomId) return
@@ -692,12 +709,22 @@ function setupSubscription() {
         const isGift = payload.new.msg_type === 'gift'
         const giftPayload = payload.new.payload || {}
 
-        // 无论是否是礼物，都先拉取用户信息
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('nickname, avatar_url')
-          .eq('id', payload.new.user_id)
-          .single()
+        // 无论是否是礼物，都先拉取用户信息（增加缓存防止卡顿）
+        let profile = profileCache.get(payload.new.user_id)
+        if (!profile) {
+          const { data } = await supabase
+            .from('profiles')
+            .select('nickname, avatar_url')
+            .eq('id', payload.new.user_id)
+            .single()
+          if (data) {
+            profile = {
+              nickname: data.nickname || '路人',
+              avatar_url: data.avatar_url || ''
+            }
+            profileCache.set(payload.new.user_id, profile)
+          }
+        }
 
         const nickname = profile?.nickname || '路人'
         const avatar = profile?.avatar_url || ''
@@ -728,7 +755,17 @@ function setupSubscription() {
 
           // 2. 触发大礼物全屏特效 (如果是高价值礼物)
           if (totalValue >= 100 || [6, 7, 8].includes(giftId)) {
-            triggerLargeGiftEffect(giftPayload.gift_name, nickname, animDuration)
+            const giftIcon = giftPayload.gift_icon || ''
+            // 如果图标是 SVG，我们将其作为标题图展示（替换文字）
+            const isSvg = giftIcon.toLowerCase().endsWith('.svg')
+
+            triggerLargeGiftEffect(
+              giftPayload.gift_name,
+              giftIcon,
+              nickname,
+              animDuration,
+              isSvg ? giftIcon : undefined
+            )
           }
         }
 
@@ -956,10 +993,61 @@ onBeforeUnmount(() => {
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 300rem;
-      height: 300rem;
+      width: 500rem;
+      height: 500rem;
       background: radial-gradient(circle, rgba(254, 44, 85, 0.6) 0%, transparent 70%);
       animation: glow-rotate 3s linear infinite;
+    }
+
+    .large-gift-svg {
+      width: 280rem; /* 放大 放大 */
+      height: 280rem;
+      object-fit: contain;
+      margin-bottom: 20rem;
+      position: relative;
+      z-index: 1;
+      filter: drop-shadow(0 0 20rem rgba(250, 206, 21, 0.8));
+    }
+
+    .large-gift-svg {
+      width: 200rem; /* 缩小一倍，回到适中尺寸 */
+      height: 200rem;
+      object-fit: contain;
+      position: relative;
+      z-index: 1;
+      filter: drop-shadow(0 0 20rem rgba(250, 206, 21, 0.8));
+      animation: pulse-zoom 2s infinite ease-in-out;
+    }
+
+    @keyframes pulse-zoom {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.1);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    .large-gift-icon {
+      width: 120rem;
+      height: 120rem;
+      object-fit: contain;
+      margin-bottom: 20rem;
+      position: relative;
+      z-index: 1;
+      filter: drop-shadow(0 0 15rem rgba(255, 255, 255, 0.5));
+    }
+
+    .gift-title-img {
+      height: 80rem;
+      object-fit: contain;
+      margin-bottom: 15rem;
+      filter: drop-shadow(0 0 15rem rgba(250, 206, 21, 0.6));
+      position: relative;
+      z-index: 1;
     }
 
     .gift-title {
