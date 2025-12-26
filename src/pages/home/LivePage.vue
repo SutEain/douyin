@@ -20,20 +20,26 @@
         <div class="left">
           <div class="liver">
             <img class="avatar" :src="_checkImgUrl(roomInfo.anchor_info?.avatar_url)" alt="" />
-            <div class="desc">
-              <div class="desc-wrapper">
-                <div class="name">{{ roomInfo.anchor_info?.nickname || '主播' }}</div>
-                <div class="count">{{ viewerCount }} 人正在看</div>
-              </div>
-              <div class="follow-btn" @click="attention" :class="{ isFollowed }">
-                {{ isFollowed ? '已关注' : '关注' }}
-              </div>
+            <div class="desc-wrapper">
+              <div class="name">{{ roomInfo.anchor_info?.nickname || '主播' }}</div>
+              <div class="count">{{ viewerCount }} 人正在看</div>
+            </div>
+            <div class="follow-btn" @click="attention" :class="{ isFollowed }">
+              {{ isFollowed ? '已关注' : '关注' }}
             </div>
           </div>
         </div>
         <div class="right">
           <div class="follower">
-            <div class="round count">{{ viewerCount }}</div>
+            <div class="viewer-avatars" v-if="viewers.length">
+              <img
+                v-for="v in viewers"
+                :key="v.id"
+                :src="_checkImgUrl(v.avatar)"
+                class="v-avatar"
+              />
+            </div>
+            <div class="round count" @click="showViewerList">{{ viewerCount }}</div>
             <dy-back class="round close" img="close" mode="light" @click="$router.back()" />
           </div>
         </div>
@@ -70,22 +76,27 @@
     </div>
 
     <!-- 弹出的输入框 -->
-    <div v-if="showInput" class="input-overlay" @click.self="showInput = false">
-      <div class="input-container">
-        <input
-          v-model="inputText"
-          ref="commentInput"
-          placeholder="说点什么..."
-          @keyup.enter="handleSendComment"
-        />
-        <button @click="handleSendComment">发送</button>
+    <Transition name="fade">
+      <div v-if="showInput" class="input-overlay" @click.self="showInput = false">
+        <div class="input-container">
+          <input
+            v-model="inputText"
+            ref="commentInput"
+            placeholder="说点什么..."
+            @keyup.enter="handleSendComment"
+            @blur="showInput = false"
+          />
+          <div class="send-btn" @click="handleSendComment" :class="{ active: inputText.trim() }">
+            发送
+          </div>
+        </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { supabase } from '@/utils/supabase'
 import { _checkImgUrl } from '@/utils'
@@ -107,12 +118,34 @@ const isFollowed = ref(false)
 const showInput = ref(false)
 const inputText = ref('')
 const comments = ref<HTMLElement | null>(null)
+const commentInput = ref<HTMLInputElement | null>(null) // 新增 Ref
 const viewerCount = ref(0)
+const viewers = ref<any[]>([]) // 存储前几名观众
+
+// 监听输入框显示，自动聚焦
+watch(showInput, (val) => {
+  if (val) {
+    nextTick(() => {
+      commentInput.value?.focus()
+    })
+  }
+})
+
+// 展示观众列表
+function showViewerList() {
+  if (viewers.value.length === 0) return
+  const names = viewers.value.map((v) => v.nickname).join('、')
+  alert(`当前在线观众：\n${names}${viewerCount.value > 5 ? ` 等共 ${viewerCount.value} 人` : ''}`)
+}
 
 // --- 动画通知模板 ---
 const userJoinedTemplate = (nickname: string) => {
   return `
     <div class="user-joined">
+      <div class="rank-badge">
+        <img src="/images/icon/home/level.webp" alt="">
+        <span>${Math.floor(Math.random() * 30) + 1}</span>
+      </div>
       <span class="name">${nickname}</span>
       <span class="text">加入了直播间</span>
     </div>
@@ -332,8 +365,15 @@ onMounted(async () => {
     )
     .on('presence', { event: 'sync' }, () => {
       const state = channel.presenceState()
-      const count = Object.keys(state).length
-      viewerCount.value = Math.max(count, 1) // 至少显示1个人
+      const presences = Object.values(state).flat() as any[]
+      viewerCount.value = Math.max(presences.length, 1)
+      viewers.value = presences
+        .map((p: any) => ({
+          id: p.user_id,
+          nickname: p.nickname || '路人',
+          avatar: p.avatar || '/images/icon/avatar/0.png'
+        }))
+        .slice(0, 5)
     })
     .on('broadcast', { event: 'user_joined' }, (payload) => {
       const nickname = payload.payload.nickname || '路人'
@@ -356,15 +396,17 @@ onMounted(async () => {
         if (user) {
           const { data: me } = await supabase
             .from('profiles')
-            .select('nickname')
+            .select('nickname, avatar_url')
             .eq('id', user.id)
             .single()
           const nickname = me?.nickname || '路人'
+          const avatar = me?.avatar_url || ''
 
           // 追踪 Presence
           channel.track({
             user_id: user.id,
-            nickname: nickname
+            nickname: nickname,
+            avatar: avatar
           })
 
           // 广播进入
@@ -373,6 +415,9 @@ onMounted(async () => {
             event: 'user_joined',
             payload: { nickname }
           })
+
+          // 自己也显示进场动画
+          triggerUserJoinedAnim(nickname)
         }
       }
     })
@@ -467,14 +512,16 @@ onBeforeUnmount(() => {
 .user-joined {
   font-size: 12rem;
   position: absolute;
-  top: 70vh;
+  top: 62vh; /* 调高位置，使其悬浮在评论区上方 */
   left: 15rem;
-  padding: 5rem 12rem;
+  padding: 4rem 12rem;
   border-radius: 20rem;
   background: linear-gradient(to right, rgba(115, 114, 181, 0.9), transparent);
   color: #a2e9ff;
-  z-index: 9;
+  z-index: 100; /* 确保在最上层 */
   pointer-events: none;
+  display: flex;
+  align-items: center;
   animation: user-joined-anim 3s ease-in-out forwards;
 
   @keyframes user-joined-anim {
@@ -496,22 +543,25 @@ onBeforeUnmount(() => {
     }
   }
 
-  .level {
-    display: inline-block;
-    .wrapper {
-      display: flex;
-      align-items: center;
-      background: #8285b9;
-      border-radius: 10rem;
-      padding: 0 5rem;
-      margin-right: 5rem;
+  .rank-badge {
+    display: flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 1rem 6rem;
+    border-radius: 8rem;
+    margin-right: 6rem;
+    img {
+      width: 12rem;
+      height: 12rem;
+      margin-right: 2rem;
+    }
+    span {
       font-size: 10rem;
-      img {
-        width: 12rem;
-        margin-right: 2rem;
-      }
+      font-weight: bold;
+      color: #ffd700;
     }
   }
+
   .name {
     font-weight: bold;
     margin-right: 5rem;
@@ -527,7 +577,9 @@ onBeforeUnmount(() => {
   height: 100vh;
   background: #000;
   color: white;
-  position: relative;
+  position: fixed; /* 改为 fixed，防止键盘弹出时顶部被推走 */
+  top: 0;
+  left: 0;
   overflow: hidden;
 
   .live-wrapper {
@@ -562,37 +614,58 @@ onBeforeUnmount(() => {
 
       .liver {
         background: rgba(0, 0, 0, 0.4);
-        padding: 4rem 12rem 4rem 4rem;
+        padding: 3rem 4rem;
         border-radius: 30rem;
         display: flex;
         align-items: center;
-        gap: 8rem;
+        gap: 6rem;
+        min-width: 140rem;
 
         .avatar {
           width: 32rem;
           height: 32rem;
           border-radius: 50%;
           border: 1px solid rgba(255, 255, 255, 0.2);
+          flex-shrink: 0;
         }
 
         .desc-wrapper {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+
           .name {
-            font-size: 13rem;
+            font-size: 12rem;
             font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
           }
           .count {
-            font-size: 10rem;
-            opacity: 0.7;
+            font-size: 9rem;
+            opacity: 0.8;
+            line-height: 1.2;
           }
         }
 
         .follow-btn {
           background: var(--primary-btn-color);
-          padding: 4rem 12rem;
-          border-radius: 20rem;
+          color: white;
+          padding: 4rem 10rem;
+          margin-right: 2rem;
+          border-radius: 18rem;
           font-size: 12rem;
+          font-weight: 600;
+          flex-shrink: 0;
+          transition: all 0.2s;
+
           &.isFollowed {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.15);
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: normal;
           }
         }
       }
@@ -600,12 +673,33 @@ onBeforeUnmount(() => {
       .right .follower {
         display: flex;
         align-items: center;
-        gap: 10rem;
+        gap: 8rem;
+
+        .viewer-avatars {
+          display: flex;
+          align-items: center;
+          margin-right: 4rem;
+
+          .v-avatar {
+            width: 24rem;
+            height: 24rem;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            margin-left: -8rem; /* 头像重叠效果 */
+            &:first-child {
+              margin-left: 0;
+            }
+          }
+        }
+
         .count {
           background: rgba(0, 0, 0, 0.4);
           padding: 4rem 10rem;
           border-radius: 20rem;
           font-size: 12rem;
+          font-weight: 600;
+          min-width: 20rem;
+          text-align: center;
         }
         .close {
           width: 24rem;
@@ -683,39 +777,75 @@ onBeforeUnmount(() => {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 100;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.2);
+    z-index: 1000;
     display: flex;
     align-items: flex-end;
+    pointer-events: auto;
 
     .input-container {
       width: 100%;
       background: #1e1e1e;
-      padding: 15rem;
+      padding: 10rem 15rem;
       display: flex;
-      gap: 10rem;
-      border-radius: 15rem 15rem 0 0;
+      align-items: center;
+      gap: 12rem;
+      border-radius: 12rem 12rem 0 0;
+      /* 关键：使用 transform 辅助定位，减少对视口高度的依赖 */
+      transform: translateY(0);
+      padding-bottom: calc(10rem + env(safe-area-inset-bottom));
 
       input {
         flex: 1;
         background: #333;
         border: none;
-        padding: 10rem 15rem;
-        border-radius: 20rem;
+        height: 36rem;
+        padding: 0 15rem;
+        border-radius: 18rem;
         color: white;
+        font-size: 14rem;
         outline: none;
+
+        &::placeholder {
+          color: #999;
+        }
       }
 
-      button {
-        background: var(--primary-btn-color);
-        border: none;
-        padding: 0 20rem;
-        border-radius: 20rem;
-        color: white;
+      .send-btn {
+        background: #333;
+        color: #666;
+        padding: 0 18rem;
+        height: 32rem;
+        border-radius: 16rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14rem;
         font-weight: 600;
+        transition: all 0.2s;
+
+        &.active {
+          background: var(--primary-btn-color);
+          color: white;
+        }
       }
+    }
+  }
+
+  /* 适配 Transition 动画 */
+  .fade-enter-active,
+  .fade-leave-active {
+    transition:
+      opacity 0.2s,
+      transform 0.2s;
+  }
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
+    .input-container {
+      transform: translateY(100%);
     }
   }
 }
