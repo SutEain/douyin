@@ -1,14 +1,38 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Avatar, Button, Tag, message, Modal, Form, Input, Select } from 'antd'
-import { EyeOutlined, EditOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons'
+import {
+  Table,
+  Space,
+  Avatar,
+  Button,
+  Tag,
+  message,
+  Modal,
+  Form,
+  Input,
+  Select,
+  InputNumber
+} from 'antd'
+import {
+  EyeOutlined,
+  EditOutlined,
+  CheckCircleOutlined,
+  StopOutlined,
+  DollarOutlined
+} from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useUpdate } from '@refinedev/core'
+import { useState } from 'react'
+import { supabaseClient } from '../../supabaseClient'
 
 export const UserList = () => {
   const navigate = useNavigate()
   const { mutate: updateProfile } = useUpdate()
+  const [adjustModalVisible, setAdjustModalVisible] = useState(false)
+  const [adjustingUser, setAdjustingUser] = useState<any>(null)
+  const [adjustForm] = Form.useForm()
+  const [isAdjusting, setIsAdjusting] = useState(false)
 
-  const { tableProps, searchFormProps } = useTable({
+  const { tableProps, searchFormProps, tableQueryResult } = useTable({
     // ✅ 用视图直接 join 邀请人，避免 PostgREST 自关联 embed（PGRST200）
     resource: 'admin_profiles_list',
     syncWithLocation: true,
@@ -125,6 +149,32 @@ export const UserList = () => {
         )
       }
     })
+  }
+
+  // 处理余额调整
+  const handleAdjustBalance = async () => {
+    try {
+      const values = await adjustForm.validateFields()
+      setIsAdjusting(true)
+
+      const { data, error } = await supabaseClient.rpc('admin_adjust_balance', {
+        target_user_id: adjustingUser.id,
+        amount_change: values.amount,
+        description_text: values.description
+      })
+
+      if (error) throw error
+
+      message.success('调整成功')
+      setAdjustModalVisible(false)
+      adjustForm.resetFields()
+      tableQueryResult.refetch()
+    } catch (err: any) {
+      console.error('Adjust error:', err)
+      message.error(err.message || '操作失败')
+    } finally {
+      setIsAdjusting(false)
+    }
   }
 
   return (
@@ -252,6 +302,16 @@ export const UserList = () => {
                 icon={<EditOutlined />}
                 onClick={() => navigate(`/users/edit/${record.id}`)}
               />
+              <Button
+                type="text"
+                size="small"
+                icon={<DollarOutlined />}
+                style={{ color: '#faad14' }}
+                onClick={() => {
+                  setAdjustingUser(record)
+                  setAdjustModalVisible(true)
+                }}
+              />
               {record.live_status === 1 && (
                 <>
                   <Button
@@ -284,6 +344,40 @@ export const UserList = () => {
           )}
         />
       </Table>
+
+      <Modal
+        title={`调整余额 - ${adjustingUser?.nickname || adjustingUser?.username || ''}`}
+        open={adjustModalVisible}
+        onOk={handleAdjustBalance}
+        confirmLoading={isAdjusting}
+        onCancel={() => {
+          setAdjustModalVisible(false)
+          adjustForm.resetFields()
+        }}
+        destroyOnClose
+      >
+        <Form form={adjustForm} layout="vertical">
+          <Form.Item
+            label="调整金额 (正数为增加，负数为减少)"
+            name="amount"
+            rules={[{ required: true, message: '请输入调整金额' }]}
+          >
+            <InputNumber
+              style={{ width: '100%' }}
+              placeholder="例如: 100 或 -50"
+              precision={2}
+              step={1}
+            />
+          </Form.Item>
+          <Form.Item
+            label="备注信息"
+            name="description"
+            rules={[{ required: true, message: '请输入调整理由' }]}
+          >
+            <Input.TextArea placeholder="请输入调整原因，将展示在用户流水中" rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </List>
   )
 }

@@ -30,26 +30,26 @@ export async function handleSendReward(req: Request): Promise<Response> {
 
     let finalReceiverId = receiver_id
 
-    // 🎯 优化：如果没传接收者 ID (通常是外部转播直播间)，尝试打赏给管理员
+    // 🎯 优化：如果没传接收者 ID (通常是外部转播直播间)，尝试打赏给 ID 为 88888 的用户
     if (!finalReceiverId && gift_type === 'live') {
-      console.log('[Reward] receiver_id 为空，尝试查找系统管理员...')
-      const { data: adminProfile } = await supabaseAdmin
+      console.log('[Reward] receiver_id 为空，查找官方账号 88888...')
+      const { data: globalAnchor } = await supabaseAdmin
         .from('profiles')
         .select('id')
-        .eq('numeric_id', 10000) // 默认管理员 ID
+        .eq('numeric_id', 88888)
         .maybeSingle()
 
-      if (adminProfile) {
-        finalReceiverId = adminProfile.id
-        console.log('[Reward] 已自动分配接收者为管理员:', finalReceiverId)
+      if (globalAnchor) {
+        finalReceiverId = globalAnchor.id
+        console.log('[Reward] 已分配接收者为官方账号:', finalReceiverId)
       } else {
-        // 如果没找到 10000，找第一个具有管理员角色的
-        const { data: anyAdmin } = await supabaseAdmin
+        // 兜底查找管理员
+        const { data: adminProfile } = await supabaseAdmin
           .from('profiles')
           .select('id')
-          .limit(1)
-          .single() // 随便给一个接收者，总比报错好
-        finalReceiverId = anyAdmin?.id
+          .eq('numeric_id', 10000)
+          .maybeSingle()
+        finalReceiverId = adminProfile?.id
       }
     }
 

@@ -87,6 +87,13 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
           .eq('id', externalRoom.id)
       }
 
+      // 🎯 统一关联 ID 为 88888 的用户 (UUID: 11c77e88-545b-4aa3-bbb1-db87e7d637f0)
+      const { data: globalAnchor } = await supabaseAdmin
+        .from('profiles')
+        .select('id, nickname, avatar_url')
+        .eq('numeric_id', 88888)
+        .maybeSingle()
+
       return successResponse({
         room: {
           id: externalRoom.id,
@@ -96,7 +103,11 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
           cover_url: externalRoom.cover_url,
           status: currentStatus, // 🎯 返回最新探测的状态
           is_self_hosted: false,
-          anchor_info: null
+          anchor_info: globalAnchor || {
+            id: '11c77e88-545b-4aa3-bbb1-db87e7d637f0',
+            nickname: '抖音精选',
+            avatar_url: ''
+          }
         }
       })
     }

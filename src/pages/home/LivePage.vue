@@ -34,7 +34,7 @@
     <div class="float">
       <div class="top">
         <div class="left">
-          <div class="liver" v-if="route.query.type !== 'external'">
+          <div class="liver">
             <img
               class="avatar"
               :src="_checkImgUrl(roomInfo.anchor_info?.avatar_url) || fallbackAvatar"
@@ -46,12 +46,6 @@
             </div>
             <div class="follow-btn" @click="attention" :class="{ isFollowed }">
               {{ isFollowed ? '已关注' : '关注' }}
-            </div>
-          </div>
-          <div class="liver external-label" v-else>
-            <div class="desc-wrapper">
-              <div class="name">正在转播中</div>
-              <div class="count">{{ viewerCount }} 人正在看</div>
             </div>
           </div>
         </div>
@@ -312,8 +306,7 @@ async function handleSendGift() {
   try {
     // 1. 调用后端接口处理真实扣款、分成、代发消息和通知
     const res = await sendReward({
-      sender_id: user.id,
-      receiver_id: roomInfo.value.anchor_id || roomInfo.value.anchor?.id,
+      receiver_id: roomInfo.value.anchor_id || roomInfo.value.anchor_info?.id,
       gift_amount: totalCost,
       room_or_video_id: roomId.value,
       gift_type: 'live',
@@ -640,7 +633,7 @@ async function fetchHistoryMessages() {
   if (error) {
     console.error('[LivePage] fetchHistoryMessages error:', error)
     // 如果还是报错，尝试不带 join 的查询作为兜底
-    if (error.code === 'PGRST201' || error.status === 409) {
+    if (error.code === 'PGRST201') {
       const { data: fallbackData } = await supabase
         .from('live_broadcast_messages')
         .select('id, content, user_id, msg_type, payload')
