@@ -1,8 +1,24 @@
 <template>
   <div class="LivePage" ref="page">
     <div class="live-wrapper" id="live-wrapper" v-love="'live-wrapper'">
+      <!-- 🎯 已下播状态展示 -->
+      <div
+        v-if="roomInfo.status === 'offline' || roomInfo.status === 'ended'"
+        class="offline-placeholder"
+      >
+        <div class="offline-content">
+          <img :src="roomInfo.cover_url || fallbackAvatar" class="blur-bg" />
+          <div class="tip-box">
+            <Icon icon="solar:videocamera-record-off-bold" class="off-icon" />
+            <span class="tip-text">直播已结束</span>
+            <span class="sub-text">主播正在休息，去看看其他直播吧</span>
+            <div class="back-btn" @click="$router.back()">返回首页</div>
+          </div>
+        </div>
+      </div>
+
       <DPPlayer
-        v-if="roomInfo.stream_url"
+        v-else-if="roomInfo.stream_url"
         :src="roomInfo.stream_url"
         :poster="roomInfo.cover_url"
         :muted="false"
@@ -177,6 +193,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { Icon } from '@iconify/vue'
 import { supabase } from '@/utils/supabase'
 import { _checkImgUrl, _notice, _no } from '@/utils'
 import { toggleFollowUser, sendReward } from '@/api/videos'
@@ -1215,11 +1232,91 @@ onBeforeUnmount(() => {
   overflow: hidden;
 
   .live-wrapper {
+    position: relative;
     width: 100%;
     height: 100%;
+    background: #000;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
+
+    .offline-placeholder {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 100;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+
+      .offline-content {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+        .blur-bg {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          filter: blur(20px) brightness(0.4);
+          transform: scale(1.1);
+        }
+
+        .tip-box {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          padding: 20rem;
+
+          .off-icon {
+            font-size: 64rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 20rem;
+          }
+
+          .tip-text {
+            color: white;
+            font-size: 20rem;
+            font-weight: bold;
+            margin-bottom: 10rem;
+          }
+
+          .sub-text {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 14rem;
+            margin-bottom: 30rem;
+          }
+
+          .back-btn {
+            background: #fe2c55;
+            color: white;
+            padding: 10rem 40rem;
+            border-radius: 25rem;
+            font-size: 16rem;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(254, 44, 85, 0.3);
+            cursor: pointer;
+            pointer-events: auto;
+
+            &:active {
+              transform: scale(0.95);
+            }
+          }
+        }
+      }
+    }
   }
 
   .loading-placeholder {

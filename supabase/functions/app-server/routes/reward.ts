@@ -80,30 +80,29 @@ export async function handleSendReward(req: Request): Promise<Response> {
       return errorResponse(res.message || '打赏失败', 1, 400)
     }
 
-    // 2. 如果是直播间，插入实时消息记录（后端代发，前端不可绕过）
-    // 🎯 优化：如果 receiver_id 为空（转播/外部直播间），根据用户要求，不传播特效和消息
-    if (gift_type === 'live' && receiver_id) {
-      const { error: msgError } = await supabaseAdmin.from('live_broadcast_messages').insert({
-        room_id: room_or_video_id,
-        user_id: user.id,
-        content: gift_name,
-        msg_type: 'gift',
-        payload: {
-          gift_id: gift_id,
-          gift_name: gift_name,
-          gift_icon: gift_icon,
-          amount: gift_qty || 1,
-          combo: gift_qty || 1
-        }
-      })
-
-      if (msgError) {
-        console.error('[Reward] Insert gift message failed:', msgError)
+    // 2. 插入实时消息记录（后端代发，前端不可绕过）
+    // 🎯 核心加固：所有的礼物特效（msg_type='gift'）必须由后端在这里统一代发
+    // 配合数据库 RLS 策略，普通用户将无法直接从前端插入 'gift' 类型的消息，从而杜绝绕过余额打赏
+    const { error: msgError } = await supabaseAdmin.from('live_broadcast_messages').insert({
+      room_id: room_or_video_id,
+      user_id: user.id,
+      content: gift_name,
+      msg_type: 'gift',
+      payload: {
+        gift_id: gift_id,
+        gift_name: gift_name,
+        gift_icon: gift_icon,
+        amount: gift_qty || 1,
+        combo: gift_qty || 1
       }
+    })
+
+    if (msgError) {
+      console.error('[Reward] Insert gift message failed:', msgError)
     }
 
     // 3. 发送通知给作者/主播
-    // 🎯 优化：只有真实主播才发送通知，如果是转播间（管理员代收）则不发通知
+    // 只有真实主播才发送通知，如果是转播间（管理员代收）则不发机器人通知
     if (receiver_id) {
       const senderName = profile.nickname || profile.username || '神秘用户'
       const targetType = gift_type === 'live' ? '直播间' : '作品'

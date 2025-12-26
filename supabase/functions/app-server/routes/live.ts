@@ -46,7 +46,7 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
     // 2. 如果没找到，尝试从转播间表找
     const { data: externalRoom, error: externalError } = await supabaseAdmin
       .from('live_rooms')
-      .select('id, title, description, stream_url, cover_url')
+      .select('id, title, description, stream_url, cover_url, status, last_checked_at')
       .eq('id', id)
       .maybeSingle()
 
@@ -55,7 +55,38 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
     }
 
     if (externalRoom) {
-      console.log('[live_detail] Found in external:', externalRoom.id)
+      console.log(
+        '[live_detail] Found in external:',
+        externalRoom.id,
+        'status:',
+        externalRoom.status
+      )
+
+      // 🎯 核心优化：针对外部转播源进行实时“去广告/去占位”检测
+      // 如果状态不是 online，或者距离上次检查超过 1 分钟，则进行快速探测
+      let currentStatus = externalRoom.status || 'unknown'
+      const lastChecked = (externalRoom as any).last_checked_at
+        ? new Date((externalRoom as any).last_checked_at).getTime()
+        : 0
+      const now = Date.now()
+
+      if (currentStatus !== 'online' || now - lastChecked > 60000) {
+        console.log('[live_detail] Status outdated or not online, probing now...')
+        const probed = await probeUrl(externalRoom.stream_url)
+        currentStatus = probed.ok ? 'online' : 'offline'
+
+        // 异步更新数据库状态，不阻塞当前请求（或者同步更新也行，取决于延迟容忍度）
+        // 这里选择同步更新一次，确保下次请求能直接拿到
+        await supabaseAdmin
+          .from('live_rooms')
+          .update({
+            status: currentStatus,
+            last_checked_at: new Date().toISOString(),
+            last_error: probed.ok ? null : probed.msg
+          })
+          .eq('id', externalRoom.id)
+      }
+
       return successResponse({
         room: {
           id: externalRoom.id,
@@ -63,6 +94,7 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
           description: externalRoom.description,
           stream_url: externalRoom.stream_url,
           cover_url: externalRoom.cover_url,
+          status: currentStatus, // 🎯 返回最新探测的状态
           is_self_hosted: false,
           anchor_info: null
         }
