@@ -106,6 +106,11 @@ function App() {
                 }
               },
               {
+                name: 'gifts',
+                list: '/gifts',
+                meta: { label: '礼物管理' }
+              },
+              {
                 name: 'videos',
                 list: '/videos',
                 edit: '/videos/edit/:id',
@@ -161,11 +166,6 @@ function App() {
                 create: '/live-rooms/create',
                 edit: '/live-rooms/edit/:id',
                 meta: { label: '直播间管理' }
-              },
-              {
-                name: 'gifts',
-                list: '/gifts',
-                meta: { label: '礼物管理' }
               }
             ]}
             options={{
