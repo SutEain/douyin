@@ -15,7 +15,8 @@ import {
   handleInviteUnlock,
   handlePrivacySettings,
   handlePrivacySettingsEdit,
-  handleUserProfile
+  handleUserProfile,
+  handleApplyLive
 } from '../features/profileCenter.ts'
 import { getEditKeyboard, getEditMenuText, parseVideoAction } from '../features/editor.ts'
 import {
@@ -92,6 +93,60 @@ export async function handleCallback(
     if (data === 'profile_invite_unlock') {
       await answerCallbackQuery(callbackQueryId)
       await handleInviteUnlock(chatId, messageId)
+      return
+    }
+
+    if (data === 'profile_start_live') {
+      // ✅ 防止连续点击：增加 5 秒冷却锁
+      const userState = await getUserState(chatId)
+      const now = Date.now()
+      const ctx = (userState as any)?.context || {}
+      const uiLocks = ctx.ui_locks || {}
+      const until = Number(uiLocks.start_live_until || 0)
+      if (until && until > now) {
+        await answerCallbackQuery(callbackQueryId, '⏳ 正在处理中，请稍等…')
+        return
+      }
+
+      await updateUserState(chatId, {
+        context: { ...ctx, ui_locks: { ...uiLocks, start_live_until: now + 5000 } }
+      })
+
+      await answerCallbackQuery(callbackQueryId, '🚀 正在为您准备直播间...')
+      const { handleStartLive } = await import('../features/profileCenter.ts')
+      await handleStartLive(chatId, messageId)
+      return
+    }
+
+    if (data === 'profile_refresh_live_key') {
+      await answerCallbackQuery(callbackQueryId, '🔄 正在重置推流密钥...')
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('tg_user_id', chatId)
+        .single()
+
+      if (!profile) return
+
+      const functionUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/live-handler`
+      await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        },
+        body: JSON.stringify({ action: 'refresh', userId: profile.id })
+      })
+
+      const { handleStartLive } = await import('../features/profileCenter.ts')
+      await handleStartLive(chatId, messageId)
+      return
+    }
+
+    if (data === 'profile_apply_live') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleApplyLive(chatId, messageId)
       return
     }
 

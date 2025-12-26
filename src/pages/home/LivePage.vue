@@ -1,809 +1,720 @@
 <template>
   <div class="LivePage" ref="page">
-    <div class="live-wrapper">
-      <video
-        ref="videoEl"
-        src="https://www.douyin.com/aweme/v1/play/?video_id=v0d00fg10000cj1lq4jc77u0ng6s1gt0&amp;line=0&amp;file_id=bed51c00899b458cbc5d8280147c22a1&amp;sign=7749aec7bd62a3760065f60e40fc1867&amp;is_play_url=1&amp;source=PackSourceEnum_PUBLISH"
-        poster="/images/jwWCPZVTIA4IKM-8WipLF.png"
-        preload=""
-        loop=""
-        muted
-        x5-video-player-type="h5-page"
-        x5-video-player-fullscreen="false"
-        webkit-playsinline="true"
-        x5-playsinline="true"
-        playsinline="true"
-        fullscreen="false"
-        autoplay=""
-      >
-        <p>您的浏览器不支持 video 标签。</p>
-      </video>
+    <div class="live-wrapper" id="live-wrapper" v-love="'live-wrapper'">
+      <DPPlayer
+        v-if="roomInfo.stream_url"
+        :src="roomInfo.stream_url"
+        :poster="roomInfo.cover_url"
+        :muted="false"
+        :controls="false"
+        @error="onPlayerError"
+        @contextmenu.prevent
+      />
+      <div v-else class="loading-placeholder">
+        <span>正在进入直播间...</span>
+      </div>
     </div>
+
     <div class="float">
       <div class="top">
         <div class="left">
           <div class="liver">
-            <img class="avatar" :src="_checkImgUrl(userinfo.avatar_168x168.url_list[0])" alt="" />
+            <img class="avatar" :src="_checkImgUrl(roomInfo.anchor_info?.avatar_url)" alt="" />
             <div class="desc">
               <div class="desc-wrapper">
-                <div class="name">{{ userinfo.nickname }}</div>
-                <div class="count">2万本场点赞</div>
+                <div class="name">{{ roomInfo.anchor_info?.nickname || '主播' }}</div>
+                <div class="count">{{ viewerCount }} 人正在看</div>
               </div>
-              <div class="follow-btn">关注</div>
-            </div>
-          </div>
-          <div class="left-bottom">
-            <div class="tag">
-              <img src="../../assets/img/icon/home/jin.webp" alt="" />
-              <span>唱歌</span>
-            </div>
-            <div class="tag rank">
-              <img src="../../assets/img/icon/home/rank-yellow.png" alt="" />
-              <span>江苏第15名</span>
+              <div class="follow-btn" @click="attention" :class="{ isFollowed }">
+                {{ isFollowed ? '已关注' : '关注' }}
+              </div>
             </div>
           </div>
         </div>
         <div class="right">
           <div class="follower">
-            <img src="../../assets/img/icon/avatar/1.png" alt="" class="round" />
-            <img src="../../assets/img/icon/avatar/2.png" alt="" class="round" />
-            <img src="../../assets/img/icon/avatar/3.png" alt="" class="round" />
-            <div class="round count">107</div>
+            <div class="round count">{{ viewerCount }}</div>
             <dy-back class="round close" img="close" mode="light" @click="$router.back()" />
-          </div>
-          <div class="more">
-            <div class="wrapper">
-              <!--              缺个icon-->
-              <span>更多同城</span>
-              <dy-back scale=".5" direction="right" class="back" img="back" mode="light" />
-            </div>
           </div>
         </div>
       </div>
+
       <div class="bottom">
         <div class="left">
           <div class="comments" ref="comments">
             <div class="comments-wrapper" ref="comments-wrapper">
               <div class="comment notice">
-                <span class="text"
-                  >欢迎来到直播间！抖音严禁未成年人直播或打赏，直接间内严禁出现违法违规、低俗色情、吸烟酗酒等内容。如主播在直播过程中以不当方式诱导打赏、私下交易，请谨慎判断，以防人身财产损失。请大家注意财产安全，谨防网络诈骗。</span
-                >
+                <span class="text">
+                  欢迎来到直播间！TG抖音严禁出现未成年儿童色情、血腥暴力内容,一经发现,永久封禁。
+                </span>
               </div>
-              <div class="comment" :key="j" v-for="(i, j) in list">
-                <div class="level">
-                  <div class="wrapper">
-                    <img src="../../assets/img/icon/home/level.webp" alt="" />
-                    <span>30</span>
-                  </div>
-                </div>
-                <span class="name">{{ i.name }}</span>
-                <span class="text">{{ i.text }}</span>
+              <div class="comment" :key="msg.id" v-for="msg in messages" :class="msg.type">
+                <template v-if="msg.type === 'system'">
+                  <span class="system-text">{{ msg.user_nickname }} {{ msg.content }}</span>
+                </template>
+                <template v-else>
+                  <span class="name">{{ msg.user_nickname }}:</span>
+                  <span class="text">{{ msg.content }}</span>
+                </template>
               </div>
             </div>
           </div>
           <div class="options">
-            <div class="input">
-              <span>说点什么</span>
-              <img src="../../assets/img/icon/home/voice.png" alt="" />
+            <div class="input" @click="showInput = true">
+              <span>说点什么...</span>
             </div>
-            <img src="../../assets/img/icon/home/more.png" alt="" class="more" />
-            <img src="../../assets/img/icon/home/love.webp" alt="" class="more" />
-            <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" />
-          </div>
-        </div>
-        <div class="right">
-          <div class="avatar-wrapper" :class="{ followed: isFollowed }">
-            <img src="../../assets/img/icon/avatar/2.png" alt="" class="avatar" />
-            <div v-if="!isFollowed" @click.stop="attention" class="options" ref="attention-option">
-              <img class="no" src="../../assets/img/icon/add-light.png" alt="" />
-              <img class="yes" src="../../assets/img/icon/ok-white.png" alt="" />
-            </div>
-            <img
-              v-if="isFollowed"
-              src="../../assets/img/icon/home/followed.webp"
-              alt=""
-              class="follow"
-            />
+            <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
           </div>
         </div>
       </div>
     </div>
-    <base-button @click="sendComment">点击</base-button>
+
+    <!-- 弹出的输入框 -->
+    <div v-if="showInput" class="input-overlay" @click.self="showInput = false">
+      <div class="input-container">
+        <input
+          v-model="inputText"
+          ref="commentInput"
+          placeholder="说点什么..."
+          @keyup.enter="handleSendComment"
+        />
+        <button @click="handleSendComment">发送</button>
+      </div>
+    </div>
   </div>
 </template>
-<script>
-import BaseButton from '../../components/BaseButton'
-import Dom from '../../utils/dom'
-import { nextTick } from 'vue'
-import { mapState } from 'pinia'
-import { useBaseStore } from '@/store/pinia'
-import { _checkImgUrl, _sleep, random } from '@/utils'
-import Mock from 'mockjs'
 
-export default {
-  name: 'LivePage',
-  components: { BaseButton },
-  props: {},
-  data() {
-    return {
-      timer1: -1,
-      timer2: -1,
-      timer3: -1,
-      isFollowed: false,
-      list: [],
-      barrage: [],
-      barrageTemplate: () => {
-        let name = Mock.mock('@cname')
-        let a = Mock.mock('@csentence')
-        return `
-        <div class="barrage">
-          <div class="type">${name}</div>
-          <div class="text">${a}</div>
-        </div>
-        `
-      },
-      userJoinedTemplate: () => {
-        let src = '/images/icon/love.webp'
-        let name = Mock.mock('@cname')
-        return `
-        <div class="user-joined">
-          <div class="level">
-            <div class="wrapper">
-              <img src="${src}" alt="">
-              <span>30</span>
-            </div>
-          </div>
-          <span class="name">${name}</span>
-          <span class="text">加入了直播间</span>
-        </div>
-        `
-      },
-      sendGiftTemplate: () => {
-        let avatarList = [
-          '/images/EPsQ7u4sNnrHC-ix-a9yQ.png',
-          '/images/Xex2IhY-Zm338cNlcGuNW.png',
-          '/images/gddHyRZrdk0Em3RRgVa9g.png',
-          '/images/LJ-8p2jF3HydBD5j28PgQ.png',
-          '/images/KwJ9N7yFjYylfwYeThWjx.png',
-          '/images/EKkC06GI4yXC2mNHMrm46.png',
-          '/images/rlkpmpGPdhYZRJl3J4Xl7.png',
-          '/images/Ge4mMWQoICdpyTyixk3Sf.png'
-        ]
-        let avatar = avatarList[random(0, avatarList.length - 1)]
-        let gift = '/images/icon/love.webp'
-        let name = Mock.mock('@cname')
-        let name2 = Mock.mock('@cname')
-        let num = Mock.mock('@integer(60,400)')
-        return `
-        <div class="send-gift">
-          <div class="left">
-            <img src="${avatar}" alt="" class="avatar">
-            <div class="desc">
-              <div class="name">${name}</div>
-              <div class="sendto">
-                <span class="send">送</span>
-                <span class="to">${name2}</span>
-              </div>
-            </div>
-            <div class="gift-wrapper">
-              <img src="${gift}" alt="" class="gift-icon">
-            </div>
-          </div>
-          <div class="right">
-            x${num}
+<script setup lang="ts">
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { supabase } from '@/utils/supabase'
+import { _checkImgUrl } from '@/utils'
+import { toggleFollowUser } from '@/api/videos'
+import DPPlayer from '@/components/live/DPPlayer.vue'
+import Dom from '@/utils/dom'
+
+const route = useRoute()
+const roomId = route.query.id as string
+const page = ref<HTMLElement | null>(null)
+
+const state = reactive({
+  muted: false
+})
+
+const roomInfo = ref<any>({})
+const messages = ref<any[]>([])
+const isFollowed = ref(false)
+const showInput = ref(false)
+const inputText = ref('')
+const comments = ref<HTMLElement | null>(null)
+const viewerCount = ref(0)
+
+// --- 动画通知模板 ---
+const userJoinedTemplate = (nickname: string) => {
+  return `
+    <div class="user-joined">
+      <span class="name">${nickname}</span>
+      <span class="text">加入了直播间</span>
+    </div>
+  `
+}
+
+const sendGiftTemplate = (nickname: string, avatar: string, giftName: string, amount: number) => {
+  const avatarUrl = avatar || '/images/icon/avatar/1.png'
+  const giftIcon = '/images/icon/love.webp'
+  return `
+    <div class="send-gift">
+      <div class="left">
+        <img src="${avatarUrl}" alt="" class="avatar">
+        <div class="desc">
+          <div class="name">${nickname}</div>
+          <div class="sendto">
+            <span class="send">送出</span>
+            <span class="to">${giftName}</span>
           </div>
         </div>
-        `
-      },
-      page: null
+        <div class="gift-wrapper">
+          <img src="${giftIcon}" alt="" class="gift-icon">
+        </div>
+      </div>
+      <div class="right">
+        x${amount}
+      </div>
+    </div>
+  `
+}
+
+// --- 触发动画通知 ---
+function triggerUserJoinedAnim(nickname: string) {
+  if (!page.value) return
+  const domPage = new Dom(page.value)
+  const user = new Dom().create(userJoinedTemplate(nickname))
+  user.on('animationend', () => user.remove())
+  domPage.append(user)
+}
+
+function triggerGiftAnim(nickname: string, avatar: string, giftName: string, amount: number) {
+  if (!page.value) return
+  const domPage = new Dom(page.value)
+  const gift = new Dom().create(sendGiftTemplate(nickname, avatar, giftName, amount))
+  gift.on('animationend', () => gift.remove())
+
+  // 简单计算位置，防止重叠
+  const oldGifts = new Dom('.send-gift')
+  let top = document.body.clientHeight * 0.6
+  if (oldGifts.els.length !== 0) {
+    top = gift.removePx(oldGifts.css('top')) - 70
+  }
+  if (top < 100) top = document.body.clientHeight * 0.6
+
+  gift.css('top', top)
+  domPage.append(gift)
+}
+
+// 获取直播间信息
+async function fetchRoomInfo() {
+  const { data, error } = await supabase
+    .from('live_broadcast_rooms')
+    .select(
+      `
+      id, title, viewer_count, stream_key,
+      anchor:profiles(id, nickname, avatar_url),
+      node:live_broadcast_nodes(domain_name)
+    `
+    )
+    .eq('id', roomId)
+    .single()
+
+  if (data) {
+    roomInfo.value = {
+      ...data,
+      anchor_info: data.anchor,
+      stream_url: `https://${data.node?.domain_name}/LiveApp/streams/${data.stream_key}.m3u8`,
+      cover_url: data.anchor?.avatar_url
     }
-  },
-  computed: {
-    ...mapState(useBaseStore, ['friends', 'userinfo'])
-  },
-  activated() {
-    this.page = this.$refs.page
-    this.timer1 = setInterval(async () => {
-      this.sendGift()
-      await _sleep(300)
-      this.sendGift()
-      this.joinUser()
-    }, 1000)
-    this.timer2 = setInterval(async () => {
-      this.sendBarrage()
-    }, 1500)
-    this.timer3 = setInterval(async () => {
-      this.sendComment()
-    }, 700)
-    this.$refs.videoEl.play()
-  },
-  deactivated() {
-    clearInterval(this.timer1)
-    clearInterval(this.timer2)
-    clearInterval(this.timer3)
-  },
-  methods: {
-    _checkImgUrl,
-    sendGift() {
-      let page = new Dom(this.page)
-      let sendGift = new Dom().create(this.sendGiftTemplate())
-      sendGift.on('animationend', () => {
-        sendGift.remove()
-      })
-      let oldSendGift = new Dom('.send-gift')
-      let top = document.body.clientHeight * 0.6
-      if (oldSendGift.els.length !== 0) {
-        top = sendGift.removePx(oldSendGift.css('top')) - 70
-      }
-      if (top < 100) {
-        top = document.body.clientHeight * 0.6
-      }
-      console.log('top', top)
-      sendGift.css('top', top)
-      page.append(sendGift)
-    },
-    joinUser() {
-      let page = new Dom(this.page)
-      let user = new Dom().create(this.userJoinedTemplate())
-      user.on('animationend', () => {
-        user.remove()
-      })
-      page.append(user)
-    },
-    sendBarrage() {
-      let page = new Dom(this.page)
-      let barrage = new Dom().create(this.barrageTemplate())
-      barrage.on('animationend', () => {
-        barrage.remove()
-      })
-      let oldBarrages = new Dom('.barrage')
-      let top = document.body.clientHeight * 0.35
-      if (oldBarrages.els.length !== 0) {
-        top = barrage.removePx(oldBarrages.css('top')) + 20
-      }
-      if (top > document.body.clientHeight * 0.5) {
-        top = document.body.clientHeight * 0.35
-      }
-      barrage.css('top', top)
-      page.append(barrage)
-    },
-    sendComment() {
-      this.list.push({
-        name: Mock.mock('@cname'),
-        text: Mock.mock('@csentence')
-      })
-      nextTick(() => {
-        let comments = this.$refs['comments']
-        comments.scrollTo({
-          top: comments.scrollHeight - comments.clientHeight,
-          behavior: 'smooth'
-        })
-        // comments.scrollTop = comments.scrollHeight - comments.clientHeight
-      })
-    },
-    attention() {
-      let option = this.$refs['attention-option']
-      option.classList.toggle('attention')
-      setTimeout(() => {
-        this.isFollowed = true
-      }, 1000)
+    viewerCount.value = data.viewer_count || 0
+
+    // 检查关注状态
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
+    if (user && data.anchor?.id) {
+      const { data: follow } = await supabase
+        .from('follows')
+        .select('id')
+        .eq('follower_id', user.id)
+        .eq('followee_id', data.anchor.id)
+        .maybeSingle()
+
+      isFollowed.value = !!follow
     }
   }
 }
+
+// 获取历史评论
+async function fetchHistoryMessages() {
+  const { data } = await supabase
+    .from('live_broadcast_messages')
+    .select('id, content, user_id, msg_type, profiles(nickname)')
+    .eq('room_id', roomId)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  if (data) {
+    messages.value = data.reverse().map((m: any) => ({
+      id: m.id,
+      content: m.content,
+      user_nickname: m.profiles?.nickname,
+      type: m.msg_type || 'chat'
+    }))
+    scrollToBottom()
+  }
+}
+
+// 发送评论
+async function handleSendComment() {
+  if (!inputText.value.trim()) return
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
+  if (!user) return alert('请先登录')
+
+  const { error } = await supabase.from('live_broadcast_messages').insert({
+    room_id: roomId,
+    user_id: user.id,
+    content: inputText.value.trim()
+  })
+
+  if (!error) {
+    inputText.value = ''
+    showInput.value = false
+  }
+}
+
+function sendGift() {
+  alert('礼物系统正在升级中...')
+  // 测试动画
+  // triggerGiftAnim('测试用户', '', '爱心', 1)
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (comments.value) {
+      comments.value.scrollTop = comments.value.scrollHeight
+    }
+  })
+}
+
+function onPlayerError(err: any) {
+  console.error('播放器错误:', err)
+}
+
+async function attention() {
+  if (!roomInfo.value.anchor?.id) return
+
+  const targetId = roomInfo.value.anchor.id
+  const nextStatus = !isFollowed.value
+
+  try {
+    const res = await toggleFollowUser(targetId, nextStatus)
+    if (res.success) {
+      isFollowed.value = nextStatus
+    }
+  } catch (e) {
+    console.error('关注操作失败:', e)
+  }
+}
+
+let channel: any = null
+
+onMounted(async () => {
+  await fetchRoomInfo()
+  await fetchHistoryMessages()
+
+  // 订阅实时消息
+  channel = supabase
+    .channel(`live_room_${roomId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'live_broadcast_messages',
+        filter: `room_id=eq.${roomId}`
+      },
+      async (payload) => {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('nickname, avatar_url')
+          .eq('id', payload.new.user_id)
+          .single()
+
+        const nickname = profile?.nickname || '路人'
+        const avatar = profile?.avatar_url || ''
+
+        const newMessage = {
+          id: payload.new.id,
+          content: payload.new.content,
+          user_nickname: nickname,
+          type: payload.new.msg_type || 'chat'
+        }
+
+        messages.value.push(newMessage)
+        if (messages.value.length > 100) messages.value.shift()
+        scrollToBottom()
+
+        // 如果是礼物消息，触发大动画
+        if (payload.new.msg_type === 'gift') {
+          triggerGiftAnim(nickname, avatar, payload.new.content, 1)
+        }
+      }
+    )
+    .on('presence', { event: 'sync' }, () => {
+      const state = channel.presenceState()
+      const count = Object.keys(state).length
+      viewerCount.value = Math.max(count, 1) // 至少显示1个人
+    })
+    .on('broadcast', { event: 'user_joined' }, (payload) => {
+      const nickname = payload.payload.nickname || '路人'
+      // 1. 添加到列表
+      messages.value.push({
+        id: Date.now(),
+        user_nickname: nickname,
+        content: '加入了直播间',
+        type: 'system'
+      })
+      scrollToBottom()
+      // 2. 触发抖音进场动画
+      triggerUserJoinedAnim(nickname)
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        const {
+          data: { user }
+        } = await supabase.auth.getUser()
+        if (user) {
+          const { data: me } = await supabase
+            .from('profiles')
+            .select('nickname')
+            .eq('id', user.id)
+            .single()
+          const nickname = me?.nickname || '路人'
+
+          // 追踪 Presence
+          channel.track({
+            user_id: user.id,
+            nickname: nickname
+          })
+
+          // 广播进入
+          channel.send({
+            type: 'broadcast',
+            event: 'user_joined',
+            payload: { nickname }
+          })
+        }
+      }
+    })
+})
+
+onBeforeUnmount(() => {
+  if (channel) supabase.removeChannel(channel)
+})
 </script>
 
 <style lang="less">
 @import '../../assets/less/index';
 
+/* 全局动画样式（不能加 scoped，因为是动态创建的 DOM） */
 .send-gift {
   position: fixed;
   top: 63vh;
   left: 15rem;
   display: flex;
   align-items: flex-end;
-  animation: send-gift-anim 2s linear;
+  z-index: 10;
+  pointer-events: none;
+  animation: send-gift-anim 2.5s ease-out forwards;
 
   @keyframes send-gift-anim {
-    from {
+    0% {
       opacity: 0;
       transform: translateX(-100%);
     }
-    10% {
+    15% {
       opacity: 1;
       transform: translateX(0);
     }
-    80% {
+    85% {
       opacity: 1;
       transform: translateX(0);
     }
-    to {
+    100% {
       opacity: 0;
-      transform: translateX(0);
+      transform: translateY(-50rem);
     }
   }
 
   .left {
-    background: linear-gradient(to right, var(--primary-btn-color), rgba(252, 47, 86, 0.2));
-    padding: 5rem;
+    background: linear-gradient(to right, #fe2c55, rgba(254, 44, 85, 0.4));
+    padding: 4rem 15rem 4rem 4rem;
     border-radius: 50rem;
     display: flex;
     align-items: center;
 
     .avatar {
-      margin-right: 5rem;
-      width: 40rem;
-      height: 40rem;
+      margin-right: 8rem;
+      width: 36rem;
+      height: 36rem;
       object-fit: cover;
       border-radius: 50%;
+      border: 1px solid white;
     }
 
     .desc {
-      width: 20vw;
-
-      .name,
-      .sendto {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
       .name {
-        font-size: 14rem;
+        font-size: 13rem;
+        font-weight: bold;
+        color: white;
       }
-
       .sendto {
-        font-size: 12rem;
-        color: yellow;
-      }
-
-      .to {
-        color: yellow;
+        font-size: 11rem;
+        color: #fff;
+        opacity: 0.9;
       }
     }
 
-    .gift-icon {
-      width: 40rem;
+    .gift-wrapper {
+      margin-left: 10rem;
+      .gift-icon {
+        width: 45rem;
+        height: 45rem;
+      }
     }
   }
 
   .right {
-    font-size: 23rem;
-    font-weight: bold;
-    font-style: oblique;
-  }
-}
-
-.barrage {
-  position: fixed;
-  top: 50%;
-  transform: translateX(100%);
-  display: flex;
-  align-items: center;
-  font-size: 12rem;
-  animation: anim 5s linear;
-
-  @keyframes anim {
-    from {
-      transform: translateX(100%);
-    }
-    to {
-      transform: translateX(-100%);
-    }
-  }
-
-  .type {
-    padding: 1rem 6rem;
-    border: 1px solid white;
-    border-radius: 20rem;
-    margin-right: 5rem;
+    margin-left: 8rem;
+    font-size: 28rem;
+    color: #ffda00;
+    font-weight: 900;
+    font-style: italic;
+    text-shadow: 2px 2px 0 #000;
   }
 }
 
 .user-joined {
-  @tag-bg: rgba(58, 58, 70, 0.3);
   font-size: 12rem;
   position: absolute;
   top: 70vh;
   left: 15rem;
-  padding: 4rem 8rem;
+  padding: 5rem 12rem;
   border-radius: 20rem;
-  background: rgba(115, 114, 181, 0.7);
-  margin-bottom: 5rem;
-  animation: user-joined-anim 3s linear;
+  background: linear-gradient(to right, rgba(115, 114, 181, 0.9), transparent);
+  color: #a2e9ff;
+  z-index: 9;
+  pointer-events: none;
+  animation: user-joined-anim 3s ease-in-out forwards;
 
   @keyframes user-joined-anim {
-    from {
+    0% {
       opacity: 0;
-      transform: translateX(100%);
+      transform: translateX(-50rem);
     }
     10% {
       opacity: 1;
-      transform: translateX(30rem);
+      transform: translateX(0);
     }
     90% {
       opacity: 1;
       transform: translateX(0);
     }
-    to {
-      opacity: 1;
-      transform: translateX(-100%);
+    100% {
+      opacity: 0;
+      transform: translateX(-20rem);
     }
   }
-
-  @text-color: rgb(164, 234, 253);
 
   .level {
     display: inline-block;
-
     .wrapper {
       display: flex;
-      @color: rgb(130, 133, 185);
       align-items: center;
-      font-size: 10rem;
+      background: #8285b9;
       border-radius: 10rem;
+      padding: 0 5rem;
       margin-right: 5rem;
-      padding: 0 6rem;
-      background: @color;
-
+      font-size: 10rem;
       img {
-        margin-right: 3rem;
         width: 12rem;
+        margin-right: 2rem;
       }
     }
   }
-
   .name {
+    font-weight: bold;
     margin-right: 5rem;
-    font-size: 13rem;
-    color: @text-color;
-  }
-
-  .text {
-    word-break: break-all;
   }
 }
 </style>
+
 <style scoped lang="less">
 @import '../../assets/less/index';
 
 .LivePage {
   width: 100%;
-  height: calc(var(--vh, 1vh) * 100);
+  height: 100vh;
+  background: #000;
   color: white;
-  font-size: 14rem;
   position: relative;
+  overflow: hidden;
 
   .live-wrapper {
     width: 100%;
-    height: calc(var(--vh, 1vh) * 100);
-    background: black;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
 
-    video {
-      width: 100%;
-      object-fit: cover;
-    }
-
-    img {
-      width: 100%;
-      height: calc(var(--vh, 1vh) * 100);
-      color: rgb(229, 229, 229);
-    }
+  .loading-placeholder {
+    font-size: 16rem;
+    color: #666;
   }
 
   .float {
     position: absolute;
     top: 0;
+    left: 0;
     width: 100%;
-    height: calc(var(--vh, 1vh) * 100);
-
-    @tag-bg: rgba(58, 58, 70, 0.3);
+    height: 100%;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    padding: calc(10rem + env(safe-area-inset-top)) 15rem 20rem;
+    box-sizing: border-box;
 
     .top {
       display: flex;
       justify-content: space-between;
-      margin-top: 10rem;
+      pointer-events: auto;
 
-      .left {
-        margin-left: var(--page-padding);
+      .liver {
+        background: rgba(0, 0, 0, 0.4);
+        padding: 4rem 12rem 4rem 4rem;
+        border-radius: 30rem;
+        display: flex;
+        align-items: center;
+        gap: 8rem;
 
-        .liver {
-          box-sizing: border-box;
-          background: var(--second-btn-color-tran);
-          display: flex;
-          padding: 3rem 4rem 3rem 2rem;
-          align-items: center;
-          border-radius: 20rem;
+        .avatar {
+          width: 32rem;
+          height: 32rem;
+          border-radius: 50%;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+        }
 
-          .avatar {
-            border-radius: 50%;
-            width: 30rem;
-            height: 30rem;
-            margin-right: 4rem;
+        .desc-wrapper {
+          .name {
+            font-size: 13rem;
+            font-weight: 600;
           }
-
-          .desc {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-
-            .desc-wrapper {
-              width: 80rem;
-
-              .name {
-                font-size: 12rem;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-              }
-
-              .count {
-                color: gainsboro;
-                font-size: 10rem;
-              }
-            }
-
-            .follow-btn {
-              height: 30rem;
-              width: 45rem;
-              background: var(--primary-btn-color);
-              border-radius: 30rem;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 12rem;
-            }
+          .count {
+            font-size: 10rem;
+            opacity: 0.7;
           }
         }
 
-        .left-bottom {
-          margin-top: calc(var(--page-padding) / 2);
-          display: flex;
+        .follow-btn {
+          background: var(--primary-btn-color);
+          padding: 4rem 12rem;
+          border-radius: 20rem;
           font-size: 12rem;
-
-          .tag {
-            display: flex;
-            align-items: center;
-            padding: 4rem 10rem;
-            background: @tag-bg;
-            border-radius: 20rem;
-            margin-right: 10rem;
-
-            img {
-              margin-right: 5rem;
-              width: 10rem;
-              height: 10rem;
-            }
+          &.isFollowed {
+            background: rgba(255, 255, 255, 0.2);
           }
         }
       }
 
-      .right {
-        margin-top: 3rem;
+      .right .follower {
         display: flex;
-        flex-direction: column;
-
-        .follower {
-          @width: 30rem;
-          display: flex;
-
-          .round {
-            width: @width;
-            height: @width;
-            border-radius: 50%;
-            margin-right: 3rem;
-          }
-
-          .count {
-            font-size: 12rem;
-            background: var(--second-btn-color-tran);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-
-          .close {
-            margin-right: 10rem;
-            margin-left: 5rem;
-            padding: 6rem;
-            width: calc(@width - 12rem);
-            height: calc(@width - 12rem);
-          }
+        align-items: center;
+        gap: 10rem;
+        .count {
+          background: rgba(0, 0, 0, 0.4);
+          padding: 4rem 10rem;
+          border-radius: 20rem;
+          font-size: 12rem;
         }
-
-        .more {
-          display: flex;
-          justify-content: flex-end;
-
-          .wrapper {
-            border-radius: 13rem 0 0 13rem;
-            padding: 2rem 0 2rem 10rem;
-            margin-top: 15rem;
-            background: @tag-bg;
-            display: flex;
-            align-items: center;
-            font-size: 10rem;
-          }
+        .close {
+          width: 24rem;
+          height: 24rem;
+          opacity: 0.8;
         }
       }
     }
 
     .bottom {
-      position: absolute;
-      bottom: 0;
-      width: 100%;
-      box-sizing: border-box;
-      padding: var(--page-padding);
-      padding-bottom: 10rem;
-      display: flex;
+      margin-top: auto;
+      pointer-events: auto;
 
-      .left {
-        width: 87%;
+      .comments {
+        max-height: 30vh;
+        overflow-y: auto;
+        padding-bottom: 10rem;
+        mask-image: linear-gradient(to bottom, transparent, black 20%);
 
-        .comments {
-          margin-bottom: 10rem;
-          overflow: auto;
-          height: 20vh;
+        .comment {
+          background: rgba(0, 0, 0, 0.3);
+          padding: 4rem 10rem;
+          border-radius: 10rem;
+          margin-bottom: 6rem;
+          font-size: 13rem;
+          display: table; /* 改为 table，确保每条消息占一行且宽度自适应内容 */
+          max-width: 90%;
+          word-break: break-all;
 
-          .comments-wrapper {
-            min-height: 20vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
+          .name {
+            color: #ffda00;
+            margin-right: 6rem;
           }
 
-          .comment {
-            padding: 4rem 5rem;
-            border-radius: 10rem;
-            background: @tag-bg;
-            margin-bottom: 5rem;
-
-            @text-color: rgb(164, 234, 253);
-
-            &.notice {
-              .text {
-                color: @text-color;
-              }
-            }
-
-            .level {
-              display: inline-block;
-
-              .wrapper {
-                display: flex;
-                @color: rgb(130, 133, 185);
-                align-items: center;
-                font-size: 10rem;
-                border-radius: 10rem;
-                margin-right: 5rem;
-                padding: 0 6rem;
-                background: @color;
-
-                img {
-                  margin-right: 3rem;
-                  width: 12rem;
-                }
-              }
-            }
-
-            .name {
-              margin-right: 5rem;
-              font-size: 13rem;
-              color: @text-color;
-            }
-
-            .text {
-              word-break: break-all;
+          &.system {
+            background: rgba(255, 255, 255, 0.1);
+            .system-text {
+              color: #a2e9ff;
+              font-style: italic;
             }
           }
-        }
 
-        .options {
-          display: flex;
-          align-items: center;
-
-          .input {
-            flex: 1;
-            color: #a2a2a2;
+          &.notice {
+            background: rgba(255, 218, 0, 0.1);
+            color: #ffda00;
             font-size: 12rem;
-            border-radius: 15rem;
-            padding: 4rem 10rem;
-            background: @tag-bg;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-
-            img {
-              width: 20rem;
-            }
-          }
-
-          .more {
-            margin-left: 10rem;
-            width: 20rem;
-            height: 20rem;
-            padding: 5rem;
-            background: @tag-bg;
-            border-radius: 50%;
-          }
-
-          .gift {
-            margin-left: 10rem;
-            width: 31rem;
           }
         }
       }
 
-      .right {
-        flex: 1;
+      .options {
         display: flex;
-        justify-content: flex-end;
-        align-items: flex-end;
+        align-items: center;
+        gap: 15rem;
+        margin-top: 10rem;
 
-        @width: 35rem;
-
-        .avatar-wrapper {
-          background: linear-gradient(to bottom, #000000, var(--primary-btn-color));
-          border-radius: 20rem;
-          width: calc(@width + 2rem);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-
-          &.followed {
-            background: linear-gradient(to bottom, rgba(240, 183, 31, 0.2), rgb(240, 183, 31));
-          }
-
-          .avatar {
-            width: @width;
-            border-radius: 50%;
-            background: white;
-            padding: 1.5rem;
-          }
-
-          .follow {
-            width: 32rem;
-            margin-top: 5rem;
-            margin-bottom: 5rem;
-          }
-
-          .options {
-            margin-top: 8rem;
-            margin-bottom: 5rem;
-            display: flex;
-            width: 20rem;
-            height: 20rem;
-            justify-content: center;
-            align-items: center;
-
-            img {
-              position: absolute;
-              width: 18rem;
-              transition: all 0.8s;
-            }
-
-            .yes {
-              opacity: 0;
-              transform: rotate(-180deg);
-            }
-
-            &.attention {
-              .no {
-                opacity: 0;
-                transform: rotate(180deg);
-              }
-
-              .yes {
-                opacity: 1;
-                transform: rotate(0deg);
-              }
-            }
-          }
+        .input {
+          flex: 1;
+          background: rgba(255, 255, 255, 0.2);
+          padding: 8rem 15rem;
+          border-radius: 25rem;
+          font-size: 14rem;
+          color: rgba(255, 255, 255, 0.6);
         }
+
+        .gift {
+          width: 36rem;
+          height: 36rem;
+        }
+      }
+    }
+  }
+
+  .input-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 100;
+    display: flex;
+    align-items: flex-end;
+
+    .input-container {
+      width: 100%;
+      background: #1e1e1e;
+      padding: 15rem;
+      display: flex;
+      gap: 10rem;
+      border-radius: 15rem 15rem 0 0;
+
+      input {
+        flex: 1;
+        background: #333;
+        border: none;
+        padding: 10rem 15rem;
+        border-radius: 20rem;
+        color: white;
+        outline: none;
+      }
+
+      button {
+        background: var(--primary-btn-color);
+        border: none;
+        padding: 0 20rem;
+        border-radius: 20rem;
+        color: white;
+        font-weight: 600;
       }
     }
   }

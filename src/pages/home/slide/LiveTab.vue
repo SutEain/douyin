@@ -40,6 +40,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, watchEffect } from 'vue'
+import { useRouter } from 'vue-router'
 import { fetchLiveRooms, type LiveRoom } from '@/api/live'
 import LivePlayerOverlay from './live/LivePlayerOverlay.vue'
 
@@ -48,6 +49,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const router = useRouter()
 
 const state = reactive({
   rooms: [] as LiveRoom[],
@@ -97,6 +99,14 @@ function buildPlayUrl(room: LiveRoom) {
 }
 
 function playRoom(room: LiveRoom) {
+  if (room.is_self_hosted) {
+    // 自建直播跳转到 TikTok 风格详情页
+    router.push({
+      path: '/home/live',
+      query: { id: room.id }
+    })
+    return
+  }
   state.currentRoom = room
   state.playUrl = buildPlayUrl(room)
   state.playing = true

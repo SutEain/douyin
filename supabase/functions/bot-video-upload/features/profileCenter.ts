@@ -41,7 +41,9 @@ export async function handleUserProfile(
   try {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock')
+      .select(
+        'numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock, live_status'
+      )
       .eq('tg_user_id', chatId)
       .single()
 
@@ -67,9 +69,20 @@ export async function handleUserProfile(
       `👥 <b>累计邀请：</b> ${profile.invite_success_count || 0} 人\n\n` +
       `<i>请选择下方操作：</i>`
 
+    // 根据直播状态显示不同按钮
+    let liveButton = { text: '🎥 申请开播', callback_data: 'profile_apply_live' }
+    if (profile.live_status === 1) {
+      liveButton = { text: '⏳ 直播审核中', callback_data: 'noop' }
+    } else if (profile.live_status === 2) {
+      liveButton = { text: '🎥 我要开播', callback_data: 'profile_start_live' }
+    } else if (profile.live_status === 3) {
+      liveButton = { text: '❌ 申请被拒(重申)', callback_data: 'profile_apply_live' }
+    }
+
     const keyboard = {
       inline_keyboard: [
         [{ text: '🔞 获取邀请链接', callback_data: 'profile_invite_unlock' }],
+        [liveButton],
         [{ text: '📖 使用说明', callback_data: 'profile_help' }],
         [
           { text: '🔔 通知设置', callback_data: 'profile_settings_notify' },
@@ -150,6 +163,97 @@ export async function handleInviteUnlock(chatId: number, messageId?: number) {
   } catch (error) {
     console.error('handleInviteUnlock error:', error)
     await sendMessage(chatId, '❌ 获取邀请信息失败，请稍后重试')
+  }
+}
+
+// 🎯 处理"我要开播"
+export async function handleStartLive(chatId: number, messageId?: number) {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, numeric_id, nickname, username')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile) {
+      await sendMessage(chatId, '❌ 获取用户信息失败')
+      return
+    }
+
+    // 调用 live-handler Edge Function 获取推流码
+    const functionUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/live-handler`
+    const resp = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+      },
+      body: JSON.stringify({
+        action: 'start',
+        userId: profile.id,
+        title: `${profile.nickname || profile.username || profile.numeric_id} 的直播间`
+      })
+    })
+
+    const data = await resp.json()
+    if (data.error) throw new Error(data.error)
+    if (!data.rtmp_url || !data.stream_key) {
+      throw new Error('服务器分配失败，请联系管理员检查直播节点配置')
+    }
+
+    const text =
+      `🎥 <b>直播准备就绪！</b>\n\n` +
+      `请将以下参数填入您的推流软件（如 OBS 或 Larix）：\n\n` +
+      `📍 <b>服务器地址 (URL)：</b>\n<code>${data.rtmp_url}</code>\n\n` +
+      `🔑 <b>推流密钥 (Stream Key)：</b>\n<code>${data.stream_key}</code>\n\n` +
+      `⛔ <b>安全警告：</b>\n请勿将您的<b>服务器地址</b>和<b>推流密钥</b>泄露给任何人！\n一旦泄露，他人即可冒充您进行直播，造成账号风险。\n\n` +
+      `<i>💡 建议使用 Larix Broadcaster 手机开播，体验更佳。</i>`
+
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: '🔄 重置/刷新推流密钥', callback_data: 'profile_refresh_live_key' }],
+        [{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]
+      ]
+    }
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: keyboard })
+    }
+  } catch (error) {
+    console.error('handleStartLive error:', error)
+    await sendMessage(chatId, `❌ 开启直播失败: ${error.message}`)
+  }
+}
+
+// 🎯 处理"申请开播"
+export async function handleApplyLive(chatId: number, messageId?: number) {
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ live_status: 1 }) // 设为申请中
+      .eq('tg_user_id', chatId)
+
+    if (error) throw error
+
+    const text =
+      `✅ <b>申请提交成功！</b>\n\n` +
+      `您的直播申请已进入审核队列，管理员将在 24 小时内完成审核。\n\n` +
+      `💡 审核通过后，您将在「个人中心」看到「我要开播」按钮。`
+
+    const keyboard = {
+      inline_keyboard: [[{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]]
+    }
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: keyboard })
+    }
+  } catch (error) {
+    console.error('handleApplyLive error:', error)
+    await sendMessage(chatId, '❌ 申请提交失败，请稍后重试')
   }
 }
 

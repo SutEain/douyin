@@ -24,6 +24,7 @@ export const UserList = () => {
       const tgUserId = String(params.tg_user_id || '').trim()
       const uuid = String(params.id || '').trim()
       const hasVideos = params.has_videos
+      const liveStatus = params.live_status
 
       if (q) {
         // 昵称 / 用户名 模糊搜索（任意命中）
@@ -64,6 +65,10 @@ export const UserList = () => {
         filters.push({ field: 'video_count', operator: 'eq', value: 0 })
       }
 
+      if (liveStatus !== undefined && liveStatus !== '') {
+        filters.push({ field: 'live_status', operator: 'eq', value: Number(liveStatus) })
+      }
+
       return filters
     }
   })
@@ -96,6 +101,32 @@ export const UserList = () => {
     })
   }
 
+  // 更新直播权限状态
+  const handleUpdateLiveStatus = (record: any, status: number) => {
+    const statusText = status === 2 ? '通过申请' : '拒绝申请'
+    Modal.confirm({
+      title: `${statusText}`,
+      content: `确定要为「${record.nickname || record.username}」${statusText}吗？`,
+      onOk: () => {
+        updateProfile(
+          {
+            resource: 'profiles',
+            id: record.id,
+            values: { live_status: status }
+          },
+          {
+            onSuccess: () => {
+              message.success(`已${statusText}`)
+            },
+            onError: () => {
+              message.error('操作失败')
+            }
+          }
+        )
+      }
+    })
+  }
+
   return (
     <List>
       <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
@@ -118,6 +149,14 @@ export const UserList = () => {
           <Select allowClear placeholder="全部" style={{ width: 100 }}>
             <Select.Option value="true">是</Select.Option>
             <Select.Option value="false">否</Select.Option>
+          </Select>
+        </Form.Item>
+        <Form.Item name="live_status" label="直播权限">
+          <Select allowClear placeholder="全部" style={{ width: 100 }}>
+            <Select.Option value="0">未申请</Select.Option>
+            <Select.Option value="1">申请中</Select.Option>
+            <Select.Option value="2">已通过</Select.Option>
+            <Select.Option value="3">已拒绝</Select.Option>
           </Select>
         </Form.Item>
         <Form.Item>
@@ -186,8 +225,18 @@ export const UserList = () => {
           )}
         />
         <Table.Column
+          dataIndex="live_status"
+          title="直播权限"
+          width={120}
+          render={(value) => {
+            const colors = ['default', 'blue', 'green', 'red']
+            const texts = ['未申请', '申请中', '已通过', '已拒绝']
+            return <Tag color={colors[value] || 'default'}>{texts[value] || '未知'}</Tag>
+          }}
+        />
+        <Table.Column
           title="操作"
-          width={200}
+          width={280}
           fixed="right"
           render={(_, record: any) => (
             <Space size="small">
@@ -203,6 +252,26 @@ export const UserList = () => {
                 icon={<EditOutlined />}
                 onClick={() => navigate(`/users/edit/${record.id}`)}
               />
+              {record.live_status === 1 && (
+                <>
+                  <Button
+                    type="primary"
+                    size="small"
+                    style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                    onClick={() => handleUpdateLiveStatus(record, 2)}
+                  >
+                    通过直播
+                  </Button>
+                  <Button
+                    type="primary"
+                    danger
+                    size="small"
+                    onClick={() => handleUpdateLiveStatus(record, 3)}
+                  >
+                    拒绝
+                  </Button>
+                </>
+              )}
               <Button
                 type={record.auto_approve ? 'default' : 'primary'}
                 size="small"

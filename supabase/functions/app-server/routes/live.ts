@@ -4,20 +4,62 @@ import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
 
 export async function handleLiveRooms(req: Request): Promise<Response> {
   try {
-    // 仅返回启用的直播间，用于前端展示（不要求登录）
-    const { data, error } = await supabaseAdmin
+    // 1. 获取后台维护的转播直播间 (live_rooms)
+    const { data: externalRooms, error: externalError } = await supabaseAdmin
       .from('live_rooms')
       .select('id, title, description, stream_url, cover_url, sort_order, is_active, updated_at')
       .eq('is_active', true)
       .order('sort_order', { ascending: false })
       .order('updated_at', { ascending: false })
 
-    if (error) {
-      console.error('[live_rooms] query error:', error)
-      return errorResponse('加载直播间失败', 1, 500)
+    if (externalError) {
+      console.error('[live_rooms] external query error:', externalError)
     }
 
-    return successResponse({ list: data ?? [] })
+    // 2. 获取自建用户直播间 (live_broadcast_rooms)
+    const { data: selfHostedRooms, error: selfHostedError } = await supabaseAdmin
+      .from('live_broadcast_rooms')
+      .select(
+        `
+        id,
+        title,
+        status,
+        viewer_count,
+        stream_key,
+        anchor_id,
+        node:live_broadcast_nodes(domain_name),
+        anchor:profiles(nickname, avatar_url)
+      `
+      )
+      .eq('status', 'live')
+      .order('created_at', { ascending: false })
+
+    if (selfHostedError) {
+      console.error('[live_rooms] self-hosted query error:', selfHostedError)
+    }
+
+    // 3. 转换自建直播间格式以匹配前端需求
+    const formattedSelfHosted = (selfHostedRooms || []).map((r: any) => ({
+      id: r.id,
+      title: r.title,
+      description: `正在直播 - ${r.anchor?.nickname || '主播'}`,
+      stream_url: `https://${r.node?.domain_name}/LiveApp/streams/${r.stream_key}.m3u8`,
+      cover_url: r.anchor?.avatar_url || '',
+      is_active: true,
+      updated_at: null,
+      sort_order: 100, // 自建直播默认排序靠前
+      is_self_hosted: true,
+      anchor_id: r.anchor_id,
+      anchor_info: {
+        nickname: r.anchor?.nickname || '匿名',
+        avatar_url: r.anchor?.avatar_url || ''
+      }
+    }))
+
+    // 4. 合并列表并按照 sort_order 排序
+    const combinedList = [...formattedSelfHosted, ...(externalRooms || [])]
+
+    return successResponse({ list: combinedList })
   } catch (e) {
     console.error('[live_rooms] unexpected error:', e)
     return errorResponse('Internal server error', 1, 500)

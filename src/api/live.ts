@@ -9,6 +9,12 @@ export interface LiveRoom {
   sort_order: number | null
   is_active: boolean
   updated_at: string | null
+  is_self_hosted?: boolean
+  anchor_id?: string
+  anchor_info?: {
+    nickname: string
+    avatar_url: string
+  }
 }
 
 function getAppServerBase() {
@@ -36,8 +42,7 @@ async function resolveAccessToken() {
 }
 
 /**
- * 获取直播间列表（后台维护）
- * GET /live/rooms
+ * 获取混合直播列表（包括自建和后台转播）
  */
 export async function fetchLiveRooms(): Promise<LiveRoom[]> {
   const headers: Record<string, string> = {}

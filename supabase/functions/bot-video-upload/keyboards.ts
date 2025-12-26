@@ -23,7 +23,7 @@ export function getWelcomeKeyboard() {
       ],
       [
         { text: '📹 我的作品', callback_data: 'my_videos' },
-        { text: '📤 上传作品', callback_data: 'upload_video' }
+        { text: '📤 发布作品', callback_data: 'upload_video' }
       ],
       [
         { text: '👤 个人中心', callback_data: 'user_profile' },
