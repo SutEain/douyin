@@ -69,6 +69,11 @@
                 <template v-if="msg.type === 'system'">
                   <span class="system-text">{{ msg.user_nickname }} {{ msg.content }}</span>
                 </template>
+                <template v-else-if="msg.type === 'gift'">
+                  <span class="name">{{ msg.user_nickname }}</span>
+                  <span class="gift-text">送出了 {{ msg.content }}</span>
+                  <span class="combo-num" v-if="msg.combo > 1">x{{ msg.combo }}</span>
+                </template>
                 <template v-else>
                   <span class="name">{{ msg.user_nickname }}:</span>
                   <span class="text">{{ msg.content }}</span>
@@ -103,6 +108,61 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 礼物面板 -->
+    <Transition name="slide-up">
+      <div v-if="showGiftPanel" class="gift-panel-overlay" @click.self="showGiftPanel = false">
+        <div class="gift-panel">
+          <div class="panel-header">
+            <span>赠送礼物</span>
+            <div class="coin-info">
+              <img src="../../assets/img/icon/home/redpack.png" alt="" />
+              <span>{{ userCoins }} 抖币</span>
+              <div class="recharge">充值</div>
+            </div>
+          </div>
+          <div class="gift-grid">
+            <div
+              v-for="gift in giftList"
+              :key="gift.id"
+              class="gift-item"
+              :class="{ selected: selectedGiftId === gift.id }"
+              @click="selectedGiftId = gift.id"
+            >
+              <img :src="gift.icon" alt="" />
+              <div class="name">{{ gift.name }}</div>
+              <div class="cost">{{ gift.cost }} 抖币</div>
+            </div>
+          </div>
+          <div class="panel-footer">
+            <div class="qty-selector">
+              <div
+                v-for="q in qtyOptions"
+                :key="q"
+                class="qty-item"
+                :class="{ active: selectedQty === q }"
+                @click="selectedQty = q"
+              >
+                {{ q }}
+              </div>
+              <input
+                type="number"
+                v-model.number="selectedQty"
+                placeholder="数量"
+                class="qty-input"
+              />
+            </div>
+            <div
+              class="send-btn"
+              :class="{ disabled: !selectedGiftId || !selectedQty }"
+              @click="handleSendGift"
+            >
+              发送
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -133,6 +193,110 @@ const commentInput = ref<HTMLInputElement | null>(null) // 新增 Ref
 const viewerCount = ref(0)
 const viewers = ref<any[]>([]) // 存储前几名观众
 const fallbackAvatar = new URL('../../assets/img/icon/avatar/0.png', import.meta.url).href
+
+// --- 礼物相关 ---
+const showGiftPanel = ref(false)
+const selectedGiftId = ref<number | null>(null)
+const selectedQty = ref(1)
+const userCoins = ref(0) // 抖币余额
+
+const qtyOptions = [1, 99, 520, 1314]
+
+const giftList = [
+  {
+    id: 1,
+    name: '小心心',
+    cost: 1,
+    icon: new URL('../../assets/img/icon/home/love.webp', import.meta.url).href
+  },
+  {
+    id: 2,
+    name: '电棍',
+    cost: 2,
+    icon: new URL('../../assets/img/icon/diangun.svg', import.meta.url).href
+  },
+  {
+    id: 3,
+    name: '棒棒糖',
+    cost: 5,
+    icon: new URL('../../assets/img/icon/miao.svg', import.meta.url).href
+  },
+  {
+    id: 4,
+    name: '玫瑰花',
+    cost: 10,
+    icon: new URL('../../assets/img/icon/meigui.svg', import.meta.url).href
+  },
+  {
+    id: 5,
+    name: '我舔',
+    cost: 20,
+    icon: new URL('../../assets/img/icon/tian.svg', import.meta.url).href
+  },
+  {
+    id: 6,
+    name: '跳蛋',
+    cost: 100,
+    icon: new URL('../../assets/img/icon/tiaodan.svg', import.meta.url).href
+  },
+  {
+    id: 7,
+    name: '火箭',
+    cost: 500,
+    icon: new URL('../../assets/img/icon/huojian.svg', import.meta.url).href
+  },
+  {
+    id: 8,
+    name: '嘉年华',
+    cost: 1000,
+    icon: new URL('../../assets/img/icon/home/pk.webp', import.meta.url).href
+  }
+]
+
+function sendGift() {
+  showGiftPanel.value = true
+}
+
+async function handleSendGift() {
+  if (!selectedGiftId.value || !selectedQty.value) return
+  const gift = giftList.find((g) => g.id === selectedGiftId.value)
+  if (!gift) return
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
+  if (!user) {
+    alert('请先登录后再送礼物')
+    return
+  }
+
+  try {
+    await sendGiftMessage(user.id, gift, selectedQty.value)
+    showGiftPanel.value = false
+    selectedQty.value = 1
+    selectedGiftId.value = null
+  } catch (e: any) {
+    console.error('[Gift] Send error:', e)
+    alert('发送礼物失败: ' + e.message)
+  }
+}
+
+async function sendGiftMessage(userId: string, gift: any, qty: number) {
+  const { error } = await supabase.from('live_broadcast_messages').insert({
+    room_id: roomId.value,
+    user_id: userId,
+    content: gift.name,
+    msg_type: 'gift',
+    payload: {
+      gift_id: gift.id,
+      gift_name: gift.name,
+      gift_icon: gift.icon,
+      amount: qty,
+      combo: qty // 统一使用 combo 字段表示数量
+    }
+  })
+  if (error) throw error
+}
 
 // --- 房间切换核心逻辑 ---
 async function initRoom() {
@@ -202,11 +366,17 @@ const userJoinedTemplate = (nickname: string, rank?: number) => {
   `
 }
 
-const sendGiftTemplate = (nickname: string, avatar: string, giftName: string, amount: number) => {
+const sendGiftTemplate = (
+  nickname: string,
+  avatar: string,
+  giftName: string,
+  giftIcon: string,
+  amount: number,
+  bannerId: string
+) => {
   const avatarUrl = _checkImgUrl(avatar) || fallbackAvatar
-  const giftIcon = new URL('../../assets/img/icon/home/love.webp', import.meta.url).href
   return `
-    <div class="send-gift">
+    <div class="send-gift" id="${bannerId}">
       <div class="left">
         <img src="${avatarUrl}" alt="" class="avatar">
         <div class="desc">
@@ -220,7 +390,7 @@ const sendGiftTemplate = (nickname: string, avatar: string, giftName: string, am
           <img src="${giftIcon}" alt="" class="gift-icon">
         </div>
       </div>
-      <div class="right">
+      <div class="right-count">
         x${amount}
       </div>
     </div>
@@ -236,22 +406,73 @@ function triggerUserJoinedAnim(nickname: string, rank?: number) {
   domPage.append(user)
 }
 
-function triggerGiftAnim(nickname: string, avatar: string, giftName: string, amount: number) {
+function triggerGiftAnim(
+  nickname: string,
+  avatar: string,
+  giftName: string,
+  giftIcon: string,
+  amount: number,
+  duration: number = 3
+) {
+  if (!page.value) return
+  // 为每一个送礼动作生成一个完全唯一的 ID，强制触发进入动画
+  const bannerId = `gift-banner-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+  const domPage = new Dom(page.value)
+  const gift = new Dom().create(
+    sendGiftTemplate(nickname, avatar, giftName, giftIcon, amount, bannerId)
+  )
+
+  // 设置动态显示时长
+  gift.css('animation-duration', duration + 's')
+
+  // 标记为活跃横幅
+  gift.els[0].setAttribute('data-active', 'true')
+
+  gift.on('animationend', () => {
+    gift.els[0].removeAttribute('data-active')
+    gift.remove()
+  })
+
+  // 计算位置，防止重叠
+  // 起始位置调高（0.4vh），避开评论区
+  const activeBanners = document.querySelectorAll('.send-gift[data-active="true"]')
+  let top = document.body.clientHeight * 0.4
+
+  if (activeBanners.length > 0) {
+    // 找到最高的一个（top 值最小的）
+    let minTop = top
+    activeBanners.forEach((el: any) => {
+      const t = parseInt(el.style.top) || el.offsetTop
+      if (t > 0 && t < minTop) minTop = t
+    })
+    top = minTop - 75
+  }
+
+  // 防止堆叠太高，重置回初始位置
+  if (top < document.body.clientHeight * 0.1) {
+    top = document.body.clientHeight * 0.4
+  }
+
+  gift.css('top', top + 'px')
+  domPage.append(gift)
+}
+
+function triggerLargeGiftEffect(giftName: string, nickname: string, duration: number = 3) {
   if (!page.value) return
   const domPage = new Dom(page.value)
-  const gift = new Dom().create(sendGiftTemplate(nickname, avatar, giftName, amount))
-  gift.on('animationend', () => gift.remove())
-
-  // 简单计算位置，防止重叠
-  const oldGifts = new Dom('.send-gift')
-  let top = document.body.clientHeight * 0.6
-  if (oldGifts.els.length !== 0) {
-    top = gift.removePx(oldGifts.css('top')) - 70
-  }
-  if (top < 100) top = document.body.clientHeight * 0.6
-
-  gift.css('top', top)
-  domPage.append(gift)
+  const template = `
+    <div class="large-gift-effect" style="animation-duration: ${duration}s">
+      <div class="effect-content" style="animation-duration: ${duration}s">
+        <div class="glow"></div>
+        <div class="gift-title">送出 ${giftName}</div>
+        <div class="user-name">${nickname}</div>
+      </div>
+    </div>
+  `
+  const effect = new Dom().create(template)
+  effect.on('animationend', () => effect.remove())
+  domPage.append(effect)
 }
 
 // 获取直播间信息
@@ -285,6 +506,7 @@ async function fetchRoomInfo() {
       // 如果是自建直播，检查关注状态
       if (room.is_self_hosted && room.anchor_info?.id) {
         if (session?.user?.id) {
+          // 检查关注
           const { data: follow } = await supabase
             .from('follows')
             .select('id')
@@ -292,6 +514,16 @@ async function fetchRoomInfo() {
             .eq('followee_id', room.anchor_info.id)
             .maybeSingle()
           isFollowed.value = !!follow
+
+          // 顺便获取个人抖币余额（暂时使用 balance_usdt 字段展示）
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('balance_usdt')
+            .eq('id', session.user.id)
+            .single()
+          if (profile) {
+            userCoins.value = Math.floor(Number(profile.balance_usdt || 0))
+          }
         }
       }
     } else {
@@ -335,19 +567,47 @@ function buildPlayUrl(url: string) {
 // 获取历史评论
 async function fetchHistoryMessages() {
   const currentRoomId = roomId.value
-  const { data } = await supabase
+  console.log('[LivePage] fetchHistoryMessages for room:', currentRoomId)
+
+  const { data, error } = await supabase
     .from('live_broadcast_messages')
-    .select('id, content, user_id, msg_type, profiles(nickname)')
+    .select('id, content, user_id, msg_type, payload, profiles!user_id(nickname)')
     .eq('room_id', currentRoomId)
     .order('created_at', { ascending: false })
     .limit(20)
+
+  if (error) {
+    console.error('[LivePage] fetchHistoryMessages error:', error)
+    // 如果还是报错，尝试不带 join 的查询作为兜底
+    if (error.code === 'PGRST201' || error.status === 409) {
+      const { data: fallbackData } = await supabase
+        .from('live_broadcast_messages')
+        .select('id, content, user_id, msg_type, payload')
+        .eq('room_id', currentRoomId)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (fallbackData) {
+        messages.value = fallbackData.reverse().map((m: any) => ({
+          id: m.id,
+          content: m.content,
+          user_nickname: '用户',
+          type: m.msg_type || 'chat',
+          combo: m.payload?.combo || 1
+        }))
+        scrollToBottom()
+      }
+    }
+    return
+  }
 
   if (data) {
     messages.value = data.reverse().map((m: any) => ({
       id: m.id,
       content: m.content,
-      user_nickname: m.profiles?.nickname,
-      type: m.msg_type || 'chat'
+      user_nickname: m.profiles?.nickname || '路人',
+      type: m.msg_type || 'chat',
+      combo: m.payload?.combo || 1
     }))
     scrollToBottom()
   }
@@ -372,12 +632,6 @@ async function handleSendComment() {
     inputText.value = ''
     showInput.value = false
   }
-}
-
-function sendGift() {
-  alert('礼物系统正在升级中...')
-  // 测试动画
-  // triggerGiftAnim('测试用户', '', '爱心', 1)
 }
 
 function scrollToBottom() {
@@ -435,6 +689,10 @@ function setupSubscription() {
         filter: `room_id=eq.${currentRoomId}`
       },
       async (payload) => {
+        const isGift = payload.new.msg_type === 'gift'
+        const giftPayload = payload.new.payload || {}
+
+        // 无论是否是礼物，都先拉取用户信息
         const { data: profile } = await supabase
           .from('profiles')
           .select('nickname, avatar_url')
@@ -444,21 +702,49 @@ function setupSubscription() {
         const nickname = profile?.nickname || '路人'
         const avatar = profile?.avatar_url || ''
 
+        if (isGift) {
+          // 根据单次送礼的总价值计算停留时间
+          const giftId = Number(giftPayload.gift_id)
+          const gift = giftList.find((g) => g.id === giftId)
+          const unitPrice = gift ? gift.cost : 0
+          const totalValue = unitPrice * (giftPayload.amount || 1)
+
+          let animDuration = 3 // 基础 3 秒
+          if (totalValue >= 50) animDuration = 4
+          if (totalValue >= 100) animDuration = 6
+          if (totalValue >= 500) animDuration = 8
+          if (totalValue >= 1000) animDuration = 12
+          if (totalValue >= 3000) animDuration = 18 // 高价值大礼物停留更久
+
+          // 1. 触发基础横幅动画
+          triggerGiftAnim(
+            nickname,
+            avatar,
+            giftPayload.gift_name || payload.new.content,
+            giftPayload.gift_icon || '',
+            giftPayload.combo || giftPayload.amount || 1,
+            animDuration
+          )
+
+          // 2. 触发大礼物全屏特效 (如果是高价值礼物)
+          if (totalValue >= 100 || [6, 7, 8].includes(giftId)) {
+            triggerLargeGiftEffect(giftPayload.gift_name, nickname, animDuration)
+          }
+        }
+
+        // 普通消息或新礼物消息添加
         const newMessage = {
           id: payload.new.id,
           content: payload.new.content,
+          user_id: payload.new.user_id,
           user_nickname: nickname,
-          type: payload.new.msg_type || 'chat'
+          type: payload.new.msg_type || 'chat',
+          combo: giftPayload.combo || 1
         }
 
         messages.value.push(newMessage)
         if (messages.value.length > 100) messages.value.shift()
         scrollToBottom()
-
-        // 如果是礼物消息，触发大动画
-        if (payload.new.msg_type === 'gift') {
-          triggerGiftAnim(nickname, avatar, payload.new.content, 1)
-        }
       }
     )
     .on('presence', { event: 'sync' }, () => {
@@ -552,30 +838,30 @@ onBeforeUnmount(() => {
 /* 全局动画样式（不能加 scoped，因为是动态创建的 DOM） */
 .send-gift {
   position: fixed;
-  top: 63vh;
   left: 15rem;
   display: flex;
-  align-items: flex-end;
-  z-index: 10;
+  align-items: center;
+  z-index: 10000; /* 提高层级 */
   pointer-events: none;
-  animation: send-gift-anim 2.5s ease-out forwards;
+  animation: send-gift-anim ease-out forwards;
+  /* animation-duration 由 JS 动态控制 */
 
   @keyframes send-gift-anim {
     0% {
       opacity: 0;
-      transform: translateX(-100%);
+      transform: translateX(-50rem);
     }
-    15% {
+    3% {
       opacity: 1;
       transform: translateX(0);
     }
-    85% {
+    97% {
       opacity: 1;
       transform: translateX(0);
     }
     100% {
       opacity: 0;
-      transform: translateY(-50rem);
+      transform: translateY(-30rem);
     }
   }
 
@@ -617,20 +903,128 @@ onBeforeUnmount(() => {
     }
   }
 
-  .right {
+  .right-count {
     margin-left: 8rem;
     font-size: 28rem;
     color: #ffda00;
     font-weight: 900;
     font-style: italic;
     text-shadow: 2px 2px 0 #000;
+
+    &.jump {
+      animation: count-jump 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+  }
+
+  @keyframes count-jump {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.4);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+}
+
+.large-gift-effect {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20000;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation-name: gift-bg-fade;
+  animation-fill-mode: forwards;
+  /* animation-duration 由 JS 动态控制 */
+
+  .effect-content {
+    text-align: center;
+    animation-name: gift-content-zoom;
+    animation-timing-function: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    animation-fill-mode: forwards;
+    /* animation-duration 由 JS 动态控制 */
+
+    .glow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 300rem;
+      height: 300rem;
+      background: radial-gradient(circle, rgba(254, 44, 85, 0.6) 0%, transparent 70%);
+      animation: glow-rotate 3s linear infinite;
+    }
+
+    .gift-title {
+      font-size: 40rem;
+      font-weight: 900;
+      color: #face15;
+      text-shadow: 0 0 20rem rgba(250, 206, 21, 0.8);
+      margin-bottom: 10rem;
+    }
+
+    .user-name {
+      font-size: 20rem;
+      color: white;
+      font-weight: bold;
+    }
+  }
+}
+
+@keyframes gift-bg-fade {
+  0% {
+    background: transparent;
+  }
+  3% {
+    background: rgba(0, 0, 0, 0.4);
+  }
+  97% {
+    background: rgba(0, 0, 0, 0.4);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@keyframes gift-content-zoom {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  3% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  97% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes glow-rotate {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
   }
 }
 
 .user-joined {
   font-size: 12rem;
   position: absolute;
-  top: 62vh; /* 调高位置，使其悬浮在评论区上方 */
+  top: 55vh; /* 继续调高，避开礼物区域 */
   left: 15rem;
   padding: 4rem 12rem;
   border-radius: 20rem;
@@ -886,6 +1280,28 @@ onBeforeUnmount(() => {
             color: #ffda00;
             font-size: 12rem;
           }
+
+          &.gift {
+            background: rgba(254, 44, 85, 0.15); // 透明红背景
+            border: 1px solid rgba(254, 44, 85, 0.2);
+            .name {
+              color: #a2e9ff;
+            }
+            .gift-text {
+              color: #fe2c55;
+              font-weight: bold;
+              margin-left: 5rem;
+            }
+            .combo-num {
+              color: #face15;
+              font-size: 16rem;
+              font-weight: 900;
+              font-style: italic;
+              margin-left: 8rem;
+              text-shadow: 0 0 5rem rgba(250, 206, 21, 0.5);
+              animation: combo-pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            }
+          }
         }
       }
 
@@ -973,6 +1389,169 @@ onBeforeUnmount(() => {
     }
   }
 
+  // 礼物面板样式
+  .gift-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1001;
+    background: rgba(0, 0, 0, 0.4);
+
+    .gift-panel {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(22, 24, 35, 0.95);
+      backdrop-filter: blur(10px);
+      border-top-left-radius: 12rem;
+      border-top-right-radius: 12rem;
+      padding-bottom: env(safe-area-inset-bottom);
+
+      .panel-header {
+        padding: 15rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: white;
+        font-size: 14rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+
+        .coin-info {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          background: rgba(255, 255, 255, 0.1);
+          padding: 4rem 10rem;
+          border-radius: 15rem;
+
+          img {
+            width: 16rem;
+            height: 16rem;
+          }
+
+          .recharge {
+            color: #face15;
+            margin-left: 5px;
+            font-weight: bold;
+          }
+        }
+      }
+
+      .gift-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        padding: 10rem;
+        gap: 10rem;
+        max-height: 260rem;
+        overflow-y: auto;
+
+        .gift-item {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 10rem 5rem;
+          border-radius: 8rem;
+          transition: all 0.2s;
+          border: 1px solid transparent;
+
+          &.selected {
+            background: rgba(254, 44, 85, 0.1);
+            border-color: rgba(254, 44, 85, 0.5);
+          }
+
+          img {
+            width: 45rem;
+            height: 45rem;
+            object-fit: contain;
+            margin-bottom: 5px;
+          }
+
+          .name {
+            color: white;
+            font-size: 12rem;
+            margin-bottom: 2px;
+          }
+
+          .cost {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 10rem;
+          }
+        }
+      }
+
+      .panel-footer {
+        padding: 10rem 15rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10rem;
+
+        .qty-selector {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          gap: 6rem;
+          overflow-x: auto;
+          padding-bottom: 5rem;
+
+          &::-webkit-scrollbar {
+            display: none;
+          }
+
+          .qty-item {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+            padding: 4rem 10rem;
+            border-radius: 12rem;
+            font-size: 12rem;
+            white-space: nowrap;
+            border: 1px solid transparent;
+
+            &.active {
+              background: rgba(254, 44, 85, 0.2);
+              color: #fe2c55;
+              border-color: #fe2c55;
+            }
+          }
+
+          .qty-input {
+            width: 50rem;
+            height: 24rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 12rem;
+            color: white;
+            padding: 0 8rem;
+            font-size: 12rem;
+            outline: none;
+
+            &::placeholder {
+              color: rgba(255, 255, 255, 0.3);
+            }
+          }
+        }
+
+        .send-btn {
+          background: var(--primary-btn-color);
+          color: white;
+          padding: 8rem 25rem;
+          border-radius: 20rem;
+          font-size: 14rem;
+          font-weight: bold;
+          flex-shrink: 0;
+
+          &.disabled {
+            opacity: 0.5;
+            background: #666;
+          }
+        }
+      }
+    }
+  }
+
   /* 适配 Transition 动画 */
   .fade-enter-active,
   .fade-leave-active {
@@ -986,6 +1565,41 @@ onBeforeUnmount(() => {
     .input-container {
       transform: translateY(100%);
     }
+  }
+
+  .slide-up-enter-active,
+  .slide-up-leave-active {
+    transition: all 0.3s ease;
+  }
+  .slide-up-enter-from,
+  .slide-up-leave-to {
+    opacity: 0;
+    .gift-panel {
+      transform: translateY(100%);
+    }
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes combo-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 </style>

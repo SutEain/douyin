@@ -469,7 +469,14 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
 
   // 🎯 步骤5: 更新用户信息（仅对已存在的用户）
   if (!isNewUser) {
-    const avatarUrl = user.photo_url || existingProfile!.avatar_url
+    // ✅ 优化头像更新逻辑：如果用户已经在系统中设置了自定义头像（存储在我们的 S3/Supabase 桶中），则不使用 Telegram 的 photo_url 覆盖它
+    let avatarUrl = existingProfile!.avatar_url
+    const isCustomAvatar =
+      avatarUrl && (avatarUrl.includes('supabase.co') || avatarUrl.includes('user-content'))
+
+    if (!isCustomAvatar && user.photo_url) {
+      avatarUrl = user.photo_url
+    }
 
     // ✅ 重要：nickname 永远不要在“已存在用户登录”时被 initData 覆盖
     // ✅ 仅在创建用户时使用 initData 写 nickname/username
