@@ -18,7 +18,7 @@
     <div class="float">
       <div class="top">
         <div class="left">
-          <div class="liver">
+          <div class="liver" v-if="route.query.type !== 'external'">
             <img
               class="avatar"
               :src="_checkImgUrl(roomInfo.anchor_info?.avatar_url) || fallbackAvatar"
@@ -30,6 +30,12 @@
             </div>
             <div class="follow-btn" @click="attention" :class="{ isFollowed }">
               {{ isFollowed ? '已关注' : '关注' }}
+            </div>
+          </div>
+          <div class="liver external-label" v-else>
+            <div class="desc-wrapper">
+              <div class="name">正在转播中</div>
+              <div class="count">{{ viewerCount }} 人正在看</div>
             </div>
           </div>
         </div>
@@ -213,6 +219,26 @@ function triggerGiftAnim(nickname: string, avatar: string, giftName: string, amo
 
 // 获取直播间信息
 async function fetchRoomInfo() {
+  const isExternal = route.query.type === 'external'
+
+  if (isExternal) {
+    const { data, error } = await supabase
+      .from('live_rooms')
+      .select('id, title, stream_url, cover_url')
+      .eq('id', roomId)
+      .single()
+
+    if (data) {
+      roomInfo.value = {
+        ...data,
+        stream_url: buildPlayUrl(data.stream_url),
+        anchor_info: null
+      }
+      viewerCount.value = Math.floor(Math.random() * 500) + 100 // 转播间随机人数
+    }
+    return
+  }
+
   const { data, error } = await supabase
     .from('live_broadcast_rooms')
     .select(
@@ -226,11 +252,14 @@ async function fetchRoomInfo() {
     .single()
 
   if (data) {
+    const anchor = (Array.isArray(data.anchor) ? data.anchor[0] : data.anchor) as any
+    const node = (Array.isArray(data.node) ? data.node[0] : data.node) as any
+
     roomInfo.value = {
       ...data,
-      anchor_info: data.anchor,
-      stream_url: `https://${data.node?.domain_name}/LiveApp/streams/${data.stream_key}.m3u8`,
-      cover_url: data.anchor?.avatar_url
+      anchor_info: anchor,
+      stream_url: `https://${node?.domain_name}/LiveApp/streams/${data.stream_key}.m3u8`,
+      cover_url: anchor?.avatar_url
     }
     viewerCount.value = data.viewer_count || 0
 
@@ -238,17 +267,32 @@ async function fetchRoomInfo() {
     const {
       data: { user }
     } = await supabase.auth.getUser()
-    if (user && data.anchor?.id) {
+    if (user && anchor?.id) {
       const { data: follow } = await supabase
         .from('follows')
         .select('id')
         .eq('follower_id', user.id)
-        .eq('followee_id', data.anchor.id)
+        .eq('followee_id', anchor.id)
         .maybeSingle()
 
       isFollowed.value = !!follow
     }
   }
+}
+
+function buildPlayUrl(url: string) {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  try {
+    const u = new URL(raw)
+    if (u.pathname.includes('/douyin/') && u.searchParams.get('stream') !== 'hls') {
+      u.searchParams.set('stream', 'hls')
+      return u.toString()
+    }
+  } catch {
+    // ignore
+  }
+  return raw
 }
 
 // 获取历史评论
@@ -316,13 +360,22 @@ async function attention() {
   const targetId = roomInfo.value.anchor.id
   const nextStatus = !isFollowed.value
 
+  console.log('[LivePage] toggleFollow', { targetId, nextStatus })
+
   try {
     const res = await toggleFollowUser(targetId, nextStatus)
-    if (res.success) {
+    console.log('[LivePage] toggleFollow success:', res)
+    // res 是后端返回的 data: { follow: boolean, ... }
+    if (res && typeof res.follow === 'boolean') {
+      isFollowed.value = res.follow
+    } else {
+      // 兼容某些返回
       isFollowed.value = nextStatus
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('关注操作失败:', e)
+    // 如果是 500 错误，可能是后端问题
+    alert('关注失败: ' + (e.message || '未知错误'))
   }
 }
 
@@ -643,6 +696,20 @@ onBeforeUnmount(() => {
         align-items: center;
         gap: 6rem;
         max-width: 180rem; /* 限制最大宽度 */
+
+        &.external-label {
+          padding: 6rem 15rem;
+          min-width: 100rem;
+          background: linear-gradient(to right, #fe2c55, #ff2c55);
+
+          .name {
+            font-size: 13rem;
+            letter-spacing: 1px;
+          }
+          .count {
+            opacity: 0.9;
+          }
+        }
 
         .avatar {
           width: 32rem;

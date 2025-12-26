@@ -1,15 +1,6 @@
 <template>
   <div class="live-tab">
     <div class="content">
-      <LivePlayerOverlay
-        v-if="state.playing && state.currentRoom"
-        :src="state.playUrl"
-        :title="state.currentRoom.title || ''"
-        :description="state.currentRoom.description || ''"
-        :poster="state.currentRoom.cover_url || ''"
-        @close="stopPlaying"
-      />
-
       <div class="rooms">
         <div v-if="state.loading" class="rooms-state">加载中...</div>
         <div v-else-if="state.error" class="rooms-state error">{{ state.error }}</div>
@@ -42,7 +33,6 @@
 import { onMounted, reactive, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchLiveRooms, type LiveRoom } from '@/api/live'
-import LivePlayerOverlay from './live/LivePlayerOverlay.vue'
 
 interface Props {
   active?: boolean
@@ -54,10 +44,7 @@ const router = useRouter()
 const state = reactive({
   rooms: [] as LiveRoom[],
   loading: false,
-  error: '',
-  playing: false,
-  currentRoom: null as LiveRoom | null,
-  playUrl: ''
+  error: ''
 })
 
 // 外层 tab 被切走/切回时，按需求默认保持“看电视”
@@ -80,43 +67,15 @@ async function loadRooms() {
   }
 }
 
-function buildPlayUrl(room: LiveRoom) {
-  const raw = String(room.stream_url || '').trim()
-  if (!raw) return ''
-
-  // allinone：抖音默认 flv，需要显式切到 hls，否则 HTML5 video 无法稳定播放
-  // 文档：/douyin/rid/xxx (?stream=hls)
-  try {
-    const u = new URL(raw)
-    if (u.pathname.includes('/douyin/') && u.searchParams.get('stream') !== 'hls') {
-      u.searchParams.set('stream', 'hls')
-      return u.toString()
-    }
-  } catch {
-    // raw 不是标准 URL 就不处理
-  }
-  return raw
-}
-
 function playRoom(room: LiveRoom) {
-  if (room.is_self_hosted) {
-    // 自建直播跳转到 TikTok 风格详情页
-    router.push({
-      path: '/home/live',
-      query: { id: room.id }
-    })
-    return
-  }
-  state.currentRoom = room
-  state.playUrl = buildPlayUrl(room)
-  state.playing = true
-  console.log('[LiveTab] playRoom', { id: room.id, title: room.title, url: state.playUrl })
-}
-
-function stopPlaying() {
-  state.playing = false
-  state.currentRoom = null
-  state.playUrl = ''
+  // 无论是自建还是转播，统一使用 TikTok 风格详情页
+  router.push({
+    path: '/home/live',
+    query: {
+      id: room.id,
+      type: room.is_self_hosted ? 'self' : 'external'
+    }
+  })
 }
 
 onMounted(() => {
