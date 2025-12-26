@@ -13,9 +13,9 @@ export async function handleHelp(chatId: number, messageId?: number) {
     `<b>2. 分享视频</b>\n` +
     `• 在任何聊天窗口输入 <code>@tg_douyin_bot video_</code> 即可搜索并分享您的视频\n` +
     `• 也可以在视频详情页点击分享按钮\n\n` +
-    `<b>3. 邀请奖励</b>\n` +
-    `• 点击「个人中心」-「获取邀请链接」\n` +
-    `• 邀请好友使用机器人可获得成人内容解锁时长`
+    `<b>3. 邀请赚钱</b>\n` +
+    `• 点击「个人中心」-「邀请赚钱」\n` +
+    `• 邀请好友可获得 10 抖币/人，并解锁成人专区权限`
 
   const keyboard = {
     inline_keyboard: [[{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]]
@@ -84,7 +84,7 @@ export async function handleUserProfile(
       inline_keyboard: [
         [
           { text: '💰 我的钱包', callback_data: 'profile_wallet' },
-          { text: '🔞 获取邀请链接', callback_data: 'profile_invite_unlock' }
+          { text: '💸 邀请赚钱', callback_data: 'profile_invite_unlock' }
         ],
         [liveButton],
         [{ text: '📖 使用说明', callback_data: 'profile_help' }],
@@ -143,14 +143,19 @@ export async function handleInviteUnlock(chatId: number, messageId?: number) {
     }
 
     const text =
-      `🔞 <b>解锁无限刷</b>\n\n` +
+      `💸 <b>邀请好友赚钱</b>\n\n` +
+      `每邀请 1 位新好友，您将获得：\n` +
+      `💰 <b>10 抖币</b> (直接入账)\n` +
+      `🔞 <b>成人专区解锁奖励：</b>\n` +
+      `• 邀请 1 人：解锁 24 小时\n` +
+      `• 邀请 2 人：解锁 3 天\n` +
+      `• 邀请 3 人：<b>永久解锁</b>\n\n` +
+      `--- 当前进度 ---\n` +
       `当前状态：${statusText}\n` +
       `已邀请人数：${count} 人\n\n` +
-      `<b>专属邀请链接：</b>\n` +
-      `${inviteLink}\n` +
-      `(点击上方链接复制)\n\n` +
-      `<b>邀请好友折现金即将上线</b>\n\n` +
-      `<i>💡 好友通过您的链接启动机器人即算邀请成功</i>\n\n`
+      `<b>您的专属邀请链接：</b>\n` +
+      `${inviteLink}\n\n` +
+      `<i>💡 好友通过您的链接启动机器人即算邀请成功。</i>`
 
     const keyboard = {
       inline_keyboard: [
