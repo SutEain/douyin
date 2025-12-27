@@ -494,8 +494,10 @@ function copyInviteLink() {
 // 🎯 分享邀请链接
 function shareInvite() {
   if (!inviteLink.value) return
-  _copy(inviteLink.value)
-  _notice('邀请链接已复制，快去分享给好友吧～')
+  const botUsername = 'tg_douyin_bot'
+  const shareText = `@${botUsername}`
+  _copy(shareText)
+  _notice('分享指令已复制，去聊天框粘贴即可生成卡片～')
 }
 
 // 🎯 当前内容类型

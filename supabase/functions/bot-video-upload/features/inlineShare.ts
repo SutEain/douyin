@@ -148,15 +148,15 @@ export async function handleInlineQuery(inlineQuery: any) {
         title: `📺 正在直播: ${room.title || '精彩内容'}`,
         description: selfRoom
           ? `主播: ${selfRoom.anchor?.nickname || '匿名'}`
-          : '点击进入直播间互动',
+          : '点击发送直播间卡片',
         thumb_url: coverUrl,
         input_message_content: {
-          message_text: `<b>📺 正在直播: ${room.title || '精彩内容'}</b>\n\n快进入直播间一起互动吧！🚀`,
+          message_text: `<b>📺 正在直播: ${room.title || '精彩内容'}</b>\n\n主播：${selfRoom?.anchor?.nickname || '抖音精选'}\n\n快进入直播间一起互动吧！🚀`,
           parse_mode: 'HTML',
           disable_web_page_preview: false
         },
         reply_markup: {
-          inline_keyboard: [[{ text: '🚀 立即进入直播间', url: deepLink }]]
+          inline_keyboard: [[{ text: '👉 立即进入直播间', url: deepLink }]]
         }
       }
 

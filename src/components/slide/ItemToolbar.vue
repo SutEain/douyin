@@ -240,12 +240,11 @@ function shareToTelegram() {
   const startParam = `video_${props.item.aweme_id}${inviteSuffix}`
 
   const botUsername = 'tg_douyin_bot'
-  const appName = 'tgdouyin'
-  const shareLink = `https://t.me/${botUsername}/${appName}?startapp=${startParam}`
+  const shareText = `@${botUsername} ${startParam}`
 
-  // 🎯 直接复制链接，不再调起 TG 选择器
-  _copy(shareLink)
-  _notice('分享链接已复制，去分享给好友吧～')
+  // 🎯 直接复制指令
+  _copy(shareText)
+  _notice('分享指令已复制，去聊天框粘贴即可生成卡片～')
 }
 
 // 🎯 视频打赏

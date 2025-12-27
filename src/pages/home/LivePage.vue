@@ -394,20 +394,18 @@ function shareRoom() {
   const roomId = route.query.id as string
   if (!roomId) return
 
-  // 🎯 生成深链接格式：live_<roomId>[_i<inviterId>]
-  // 考虑新用户，加上邀请码
+  // 🎯 生成参数格式：live_<roomId>[_i<inviterId>]
   let startParam = `live_${roomId}`
   if (baseStore.userinfo.numeric_id) {
     startParam += `_i${baseStore.userinfo.numeric_id}`
   }
 
+  // 🎯 按照用户要求，生成 @bot 参数 格式，触发卡片搜索
   const botUsername = 'tg_douyin_bot'
-  const appName = 'tgdouyin'
-  const shareLink = `https://t.me/${botUsername}/${appName}?startapp=${startParam}`
+  const shareText = `@${botUsername} ${startParam}`
 
-  // 🎯 不再调起 TG 选择器，直接复制链接
-  _copy(shareLink)
-  _notice('分享链接已复制，去分享给好友吧～')
+  _copy(shareText)
+  _notice('分享指令已复制，去聊天框粘贴即可生成卡片～')
 }
 
 // --- 动画通知模板 ---

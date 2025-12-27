@@ -214,8 +214,7 @@ function handleGoUserInfo() {
 // 🎯 深链接已完全由后端处理（通过 Telegram initData）
 // 前端不需要任何解析逻辑，只需要在 HTTP 请求中传递 initData
 function checkDeepLink() {
-  console.log('[DeepLink][Home] 深链接已由后端自动处理（通过 Telegram initData）')
-  console.log('[DeepLink][Home] 前端无需手动解析，100% 可靠')
+  console.log('[DeepLink][Home] 检查深链接状态...')
 
   // 🎯 直播深链接处理
   if (baseStore.startLiveId) {
@@ -226,8 +225,21 @@ function checkDeepLink() {
       path: '/home/live',
       query: { id: roomId }
     })
+    return true
   }
+  return false
 }
+
+// 🎯 增加监听器，防止 race condition
+watch(
+  () => baseStore.startLiveId,
+  (newId) => {
+    if (newId) {
+      console.log('[DeepLink][Home] Watcher 检测到 startLiveId 变化:', newId)
+      checkDeepLink()
+    }
+  }
+)
 
 // ========== 生命周期 ==========
 onMounted(() => {

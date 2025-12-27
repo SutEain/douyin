@@ -180,7 +180,12 @@ export const useBaseStore = defineStore('base', {
       // 🎯 解析 Telegram 启动参数（深链接）
       console.log('[Store] 准备调用 parseStartParam()')
       this.parseStartParam()
-      console.log('[Store] parseStartParam() 调用完成，startVideoId:', this.startVideoId)
+      console.log(
+        '[Store] parseStartParam() 调用完成，startVideoId:',
+        this.startVideoId,
+        'startLiveId:',
+        this.startLiveId
+      )
 
       // 优先从 Supabase 获取用户数据
       try {
