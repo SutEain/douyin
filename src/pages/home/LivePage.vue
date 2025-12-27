@@ -245,8 +245,6 @@ async function fetchGifts() {
       .from('gifts')
       .select('*')
       .eq('is_active', true)
-      // 🎯 缓存粉碎：增加一个永远不成立但随机的过滤条件，强制绕过所有 CDN 和代理缓存
-      .neq('name', `cache_buster_${Date.now()}`)
       .order('sort_order', { ascending: true })
 
     if (error) throw error
@@ -258,7 +256,7 @@ async function fetchGifts() {
       // 适配 R2 路径结构：图标在 gifts_icon，特效在 gifts
       icon: getResourceUrl(`/gifts_icon/${g.icon_filename}`),
       effectUrl: g.effect_filename
-        ? getResourceUrl(`/gifts/${encodeURIComponent(g.effect_filename)}`)
+        ? getResourceUrl(`/gifts/${encodeURIComponent(g.effect_filename)}?v=1`)
         : null
     }))
   } catch (e) {
