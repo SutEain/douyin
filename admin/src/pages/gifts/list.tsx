@@ -52,17 +52,6 @@ export const GiftList = () => {
     })
   }
 
-  // 快速修改比例
-  const handleUpdateRatio = (record: any, value: number | null) => {
-    if (value === null) return
-    updateGift({
-      resource: 'gifts',
-      id: record.id,
-      values: { video_ratio: value },
-      mutationMode: 'undoable'
-    })
-  }
-
   return (
     <List>
       <Table {...tableProps} rowKey="id">
@@ -104,22 +93,6 @@ export const GiftList = () => {
               value={value}
               onChange={(v) => handleUpdateSort(record, v)}
               style={{ width: 80 }}
-            />
-          )}
-        />
-        <Table.Column
-          dataIndex="video_ratio"
-          title="VAP比例"
-          width={120}
-          render={(value, record: any) => (
-            <Select
-              value={value}
-              style={{ width: 100 }}
-              onChange={(v) => handleUpdateRatio(record, v)}
-              options={[
-                { label: '1/2 宽', value: 0.5 },
-                { label: '2/3 窄', value: 0.6666 }
-              ]}
             />
           )}
         />

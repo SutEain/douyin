@@ -21,7 +21,6 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   src: String,
-  videoRatio: { type: Number, default: 0.5 }, // 🎯 外部传入比例：0.5 或 0.6666
   outputWidth: { type: Number, default: 360 },
   outputHeight: { type: Number, default: 720 }
 })
@@ -48,19 +47,25 @@ const vs = `
   }
 `
 
-// 片段着色器：核心透明度合成逻辑
+// 片段着色器：升级为全自动映射逻辑
 const fs = `
   precision mediump float;
   uniform sampler2D u_image;
-  uniform float u_ratio; // 🎯 动态比例：0.5 或 0.666
+  uniform float u_hRatio;  // 水平彩色区域比例
+  uniform float u_vRatio;  // 垂直遮罩缩放 (对应模式1的 0.5)
+  uniform float u_vOffset; // 垂直遮罩偏移 (对应模式1的 0.5)
   varying vec2 v_texCoord;
   void main() {
-    // 1. 映射彩色区域坐标
-    vec2 rgbCoord = vec2(v_texCoord.x * u_ratio, v_texCoord.y);
+    // 1. 映射彩色区域坐标 (左侧)
+    vec2 rgbCoord = vec2(v_texCoord.x * u_hRatio, v_texCoord.y);
     
-    // 2. 映射遮罩区域坐标
-    // 起始点偏移 u_ratio，宽度缩放比例为 (1.0 - u_ratio)
-    vec2 alphaCoord = vec2(u_ratio + v_texCoord.x * (1.0 - u_ratio), v_texCoord.y);
+    // 2. 映射遮罩区域坐标 (右侧)
+    // 水平方向：从 u_hRatio 开始映射到 1.0 之间的区域
+    // 垂直方向：根据模式自动映射到对应的遮罩块
+    vec2 alphaCoord = vec2(
+      u_hRatio + v_texCoord.x * (1.0 - u_hRatio), 
+      u_vOffset + v_texCoord.y * u_vRatio
+    );
     
     vec4 color = texture2D(u_image, rgbCoord);
     vec4 mask = texture2D(u_image, alphaCoord);
@@ -72,7 +77,6 @@ const fs = `
 
 const initGL = () => {
   const canvas = canvasRef.value!
-  // 提高清晰度
   canvas.width = canvas.clientWidth * window.devicePixelRatio || 720
   canvas.height = canvas.clientHeight * window.devicePixelRatio || 1280
 
@@ -107,7 +111,6 @@ const initGL = () => {
     gl.STATIC_DRAW
   )
 
-  // 设置视口，确保渲染区域正确
   gl.viewport(0, 0, canvas.width, canvas.height)
 
   const stride = 4 * 4
@@ -132,8 +135,6 @@ const render = () => {
 
   const video = videoRef.value
 
-  // 🎯 核心修复：检查视频就绪状态
-  // 如果视频还没准备好当前帧数据，或者由于 CORS 失败导致无数据，则跳过本次渲染，防止 WebGL INVALID_VALUE 报错
   if (video.readyState < 2 || video.videoWidth === 0 || video.paused || video.ended) {
     if (playing.value) {
       rafId = requestAnimationFrame(render)
@@ -144,11 +145,40 @@ const render = () => {
   gl.clearColor(0, 0, 0, 0)
   gl.clear(gl.COLOR_BUFFER_BIT)
 
-  // 🎯 使用外部传入的比例，不再自动计算
-  const ratio = props.videoRatio
+  // 🎯 核心逻辑：全自动布局识别
+  const aspect = video.videoWidth / video.videoHeight
+  let hRatio = 0.5
+  let vRatio = 1.0
+  let vOffset = 0.0
 
-  const u_ratio = gl.getUniformLocation(program, 'u_ratio')
-  gl.uniform1f(u_ratio, ratio)
+  if (aspect < 0.9) {
+    // 模式 1: 1088*1440 (窄版)
+    // 左 2/3 彩色，右 1/3 的上半截是遮罩
+    hRatio = 0.6666
+    vRatio = 0.5
+    vOffset = 0.5 // 对应视频的上半部分 (0.5 到 1.0)
+  } else {
+    // 模式 2: 1456*1440 (宽版)
+    // 左右 1/2 对半分
+    hRatio = 0.5
+    vRatio = 1.0
+    vOffset = 0.0
+  }
+
+  if (video.currentTime > 0 && video.currentTime < 0.1) {
+    console.log(
+      `[VapPlayer] Auto Mode Detected - Res: ${video.videoWidth}x${video.videoHeight}, Aspect: ${aspect.toFixed(2)}, hRatio: ${hRatio}, vRatio: ${vRatio}, vOffset: ${vOffset}`
+    )
+  }
+
+  const u_hRatio = gl.getUniformLocation(program, 'u_hRatio')
+  gl.uniform1f(u_hRatio, hRatio)
+
+  const u_vRatio = gl.getUniformLocation(program, 'u_vRatio')
+  gl.uniform1f(u_vRatio, vRatio)
+
+  const u_vOffset = gl.getUniformLocation(program, 'u_vOffset')
+  gl.uniform1f(u_vOffset, vOffset)
 
   gl.bindTexture(gl.TEXTURE_2D, texture)
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video)
@@ -189,7 +219,7 @@ const play = () => {
   if (video) {
     console.log('[VapPlayer] Request play:', props.src)
     video.currentTime = 0
-    video.load() // 🎯 强制重新加载资源
+    video.load()
     startPlaying()
   }
 }

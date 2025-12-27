@@ -291,6 +291,7 @@ export async function sendReward(payload: {
   gift_id?: number
   gift_icon?: string
   gift_qty?: number
+  effect_url?: string
 }) {
   return callAppServer('/reward/send', {
     method: 'POST',

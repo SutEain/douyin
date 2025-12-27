@@ -183,7 +183,7 @@
     </Transition>
 
     <!-- 透明视频礼物特效组件 -->
-    <VapPlayer ref="vapPlayerRef" :src="vapSrc" :videoRatio="state.currentVideoRatio" />
+    <VapPlayer ref="vapPlayerRef" :src="vapSrc" />
   </div>
 </template>
 
@@ -203,8 +203,7 @@ const roomId = computed(() => route.query.id as string)
 const page = ref<HTMLElement | null>(null)
 
 const state = reactive({
-  muted: false,
-  currentVideoRatio: 0.5 // 🎯 存储当前正在播放的特效比例
+  muted: false
 })
 
 const roomInfo = ref<any>({})
@@ -246,6 +245,8 @@ async function fetchGifts() {
       .from('gifts')
       .select('*')
       .eq('is_active', true)
+      // 🎯 缓存粉碎：增加一个永远不成立但随机的过滤条件，强制绕过所有 CDN 和代理缓存
+      .neq('name', `cache_buster_${Date.now()}`)
       .order('sort_order', { ascending: true })
 
     if (error) throw error
@@ -254,7 +255,6 @@ async function fetchGifts() {
     giftList.value = (data || []).map((g) => ({
       ...g,
       cost: g.price, // 统一字段名为 cost 兼容现有逻辑
-      videoRatio: g.video_ratio || 0.5, // 🎯 这里的 video_ratio 来自数据库
       // 适配 R2 路径结构：图标在 gifts_icon，特效在 gifts
       icon: getResourceUrl(`/gifts_icon/${g.icon_filename}`),
       effectUrl: g.effect_filename
@@ -272,6 +272,7 @@ function sendGift() {
 
 async function handleSendGift() {
   if (!selectedGiftId.value || !selectedQty.value) return
+
   const gift = giftList.value.find((g) => g.id === selectedGiftId.value)
   if (!gift) return
 
@@ -311,8 +312,7 @@ async function handleSendGift() {
       gift_id: gift.id,
       gift_icon: gift.icon,
       gift_qty: selectedQty.value,
-      effect_url: gift.effectUrl,
-      video_ratio: gift.videoRatio // 🎯 发送礼物时带上比例
+      effect_url: gift.effectUrl
     })
 
     // 2. 更新本地余额显示
@@ -502,15 +502,13 @@ function triggerLargeGiftEffect(
   nickname: string,
   duration: number = 3,
   titleIcon?: string,
-  effectUrl?: string,
-  videoRatio: number = 0.5 // 🎯 新增比例参数
+  effectUrl?: string
 ) {
   if (effectUrl) {
     // 处理相对路径
     const finalUrl = effectUrl.startsWith('http') ? effectUrl : effectUrl
     vapSrc.value = finalUrl
-    state.currentVideoRatio = videoRatio // 🎯 记录当前视频的比例
-    console.log('[LivePage] Playing VAP effect:', finalUrl, 'Ratio:', videoRatio)
+    console.log('[LivePage] Playing VAP effect:', finalUrl)
 
     // 给一点时间让 src 切换生效
     nextTick(() => {
@@ -830,8 +828,7 @@ function setupSubscription() {
               nickname,
               animDuration,
               isSvg ? giftIcon : undefined,
-              giftPayload.effect_url ? getResourceUrl(giftPayload.effect_url) : undefined,
-              giftPayload.video_ratio || 0.5 // 🎯 从实时消息载荷中获取比例
+              giftPayload.effect_url ? getResourceUrl(giftPayload.effect_url) : undefined
             )
           }
         }
