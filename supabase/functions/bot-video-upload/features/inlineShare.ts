@@ -1,4 +1,4 @@
-import { BOT_TOKEN, TG_API_BASE, TG_MINIAPP_URL } from '../env.ts'
+import { BOT_TOKEN, TG_API_BASE, TG_MINIAPP_URL, TG_MINIAPP_TME_URL } from '../env.ts'
 import { supabase } from '../supabaseClient.ts'
 
 // 🎯 处理 inline query（分享功能）
