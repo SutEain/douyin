@@ -1,5 +1,5 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Avatar, Button, Tag, Switch, InputNumber, Select } from 'antd'
+import { Table, Space, Avatar, Button, Tag, Switch, InputNumber } from 'antd'
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useUpdate, useDelete } from '@refinedev/core'
 
