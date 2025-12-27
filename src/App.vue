@@ -17,14 +17,48 @@ import routes from './router/routes'
 import Call from './components/Call.vue'
 import { useBaseStore } from '@/store/pinia.js'
 import { onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import BaseMask from '@/components/BaseMask.vue'
 import { BASE_URL } from '@/config'
 
 const store = useBaseStore()
+const router = useRouter()
 const route = useRoute()
 const transitionName = ref('go')
+
+// 🎯 全局深链接处理
+async function handleDeepLink() {
+  if (store.startLiveId) {
+    const roomId = store.startLiveId
+    console.log('[DeepLink][App] 检测到直播深链接，准备跳转:', roomId)
+    store.clearStartLiveId()
+    await router.isReady()
+    router.push({ path: '/home/live', query: { id: roomId } })
+  } else if (store.startVideoId) {
+    const videoId = store.startVideoId
+    console.log('[DeepLink][App] 检测到视频深链接，准备跳转:', videoId)
+    store.clearStartVideoId()
+    await router.isReady()
+    router.push({ path: '/video-detail', query: { id: videoId } })
+  }
+}
+
+// 🎯 监听 Store 中的深链接参数
+watch(
+  () => store.startLiveId,
+  (newId) => {
+    if (newId) handleDeepLink()
+  },
+  { immediate: true }
+)
+watch(
+  () => store.startVideoId,
+  (newId) => {
+    if (newId) handleDeepLink()
+  },
+  { immediate: true }
+)
 
 // watch $route 决定使用哪种过渡
 watch(

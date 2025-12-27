@@ -211,35 +211,13 @@ function handleGoUserInfo() {
   }
 }
 
-// 🎯 深链接已完全由后端处理（通过 Telegram initData）
-// 前端不需要任何解析逻辑，只需要在 HTTP 请求中传递 initData
+// 🎯 深链接逻辑已移至 App.vue 全局处理，此处仅保留日志供调试
 function checkDeepLink() {
-  console.log('[DeepLink][Home] 检查深链接状态...')
-
-  // 🎯 直播深链接处理
-  if (baseStore.startLiveId) {
-    console.log('[DeepLink][Home] 检测到直播深链接:', baseStore.startLiveId)
-    const roomId = baseStore.startLiveId
-    baseStore.clearStartLiveId() // 立即清除，防止重复跳转
-    router.push({
-      path: '/home/live',
-      query: { id: roomId }
-    })
-    return true
-  }
-  return false
+  console.log('[DeepLink][Home] 状态确认:', {
+    startLiveId: baseStore.startLiveId,
+    startVideoId: baseStore.startVideoId
+  })
 }
-
-// 🎯 增加监听器，防止 race condition
-watch(
-  () => baseStore.startLiveId,
-  (newId) => {
-    if (newId) {
-      console.log('[DeepLink][Home] Watcher 检测到 startLiveId 变化:', newId)
-      checkDeepLink()
-    }
-  }
-)
 
 // ========== 生命周期 ==========
 onMounted(() => {
@@ -249,7 +227,7 @@ onMounted(() => {
   bus.on(EVENT_KEY.GO_USERINFO, handleGoUserInfo)
   console.log('[Home] ✅ 已注册 GO_USERINFO 监听器', EVENT_KEY.GO_USERINFO)
 
-  // 🎯 检查深链接参数
+  // 🎯 检查深链接参数（仅用于调试日志）
   checkDeepLink()
 })
 
