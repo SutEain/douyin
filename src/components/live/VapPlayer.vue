@@ -47,7 +47,7 @@ const vs = `
   }
 `
 
-// 片段着色器：升级为全自动映射逻辑
+// 片段着色器：核心透明度合成逻辑
 const fs = `
   precision mediump float;
   uniform sampler2D u_image;
@@ -56,12 +56,12 @@ const fs = `
   uniform float u_vOffset; // 垂直遮罩偏移 (对应模式1的 0.5)
   varying vec2 v_texCoord;
   void main() {
-    // 1. 映射彩色区域坐标 (左侧)
+    // 1. 映射彩色区域坐标 (左侧 0 ~ hRatio)
     vec2 rgbCoord = vec2(v_texCoord.x * u_hRatio, v_texCoord.y);
     
-    // 2. 映射遮罩区域坐标 (右侧)
-    // 水平方向：从 u_hRatio 开始映射到 1.0 之间的区域
-    // 垂直方向：根据模式自动映射到对应的遮罩块
+    // 2. 映射遮罩区域坐标 (右侧 hRatio ~ 1.0)
+    // 水平：把 [0, 1] 映射到 [hRatio, 1]
+    // 垂直：把 [0, 1] 映射到 [vOffset, vOffset + vRatio]
     vec2 alphaCoord = vec2(
       u_hRatio + v_texCoord.x * (1.0 - u_hRatio), 
       u_vOffset + v_texCoord.y * u_vRatio
@@ -87,6 +87,9 @@ const initGL = () => {
   })
   if (!gl) return
 
+  // 🎯 关键修复：开启 Y 轴翻转，使 WebGL 坐标系 (0 在底部) 与视频纹理坐标系同步
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
+
   const createShader = (gl: WebGLRenderingContext, type: number, source: string) => {
     const shader = gl.createShader(type)!
     gl.shaderSource(shader, source)
@@ -105,9 +108,28 @@ const initGL = () => {
 
   const positionBuffer = gl.createBuffer()
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
+  // 🎯 修正顶点坐标和纹理坐标的对应关系
+  // 标准顺序：左下、右下、左上、右上
   gl.bufferData(
     gl.ARRAY_BUFFER,
-    new Float32Array([-1, -1, 0, 1, 1, -1, 1, 1, -1, 1, 0, 0, 1, 1, 1, 0]),
+    new Float32Array([
+      -1,
+      -1,
+      0,
+      0, // 左下
+      1,
+      -1,
+      1,
+      0, // 右下
+      -1,
+      1,
+      0,
+      1, // 左上
+      1,
+      1,
+      1,
+      1 // 右上
+    ]),
     gl.STATIC_DRAW
   )
 
@@ -153,21 +175,23 @@ const render = () => {
 
   if (aspect < 0.9) {
     // 模式 1: 1088*1440 (窄版)
-    // 左 2/3 彩色，右 1/3 的上半截是遮罩
+    // 左 2/3 彩色，右 1/3 的视觉上半截是遮罩
     hRatio = 0.6666
     vRatio = 0.5
-    vOffset = 0.5 // 对应视频的上半部分 (0.5 到 1.0)
+    // 关键：在开启 FLIP_Y 后，视觉上的上半截对应坐标的 [0.5, 1.0]
+    vOffset = 0.5
   } else {
     // 模式 2: 1456*1440 (宽版)
-    // 左右 1/2 对半分
+    // 左右 1/2 对半分，全高遮罩
     hRatio = 0.5
     vRatio = 1.0
     vOffset = 0.0
   }
 
+  // 调试日志输出
   if (video.currentTime > 0 && video.currentTime < 0.1) {
     console.log(
-      `[VapPlayer] Auto Mode Detected - Res: ${video.videoWidth}x${video.videoHeight}, Aspect: ${aspect.toFixed(2)}, hRatio: ${hRatio}, vRatio: ${vRatio}, vOffset: ${vOffset}`
+      `[VapPlayer] Auto Detected - Res: ${video.videoWidth}x${video.videoHeight}, hRatio: ${hRatio}, vRatio: ${vRatio}, vOffset: ${vOffset}`
     )
   }
 
