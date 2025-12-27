@@ -139,7 +139,8 @@ export async function handleInlineQuery(inlineQuery: any) {
         .eq('tg_user_id', userId)
         .single()
       const inviteSuffix = sharer?.numeric_id ? `_i${sharer.numeric_id}` : ''
-      const deepLink = `${TG_MINIAPP_URL}?startapp=live_${roomId}${inviteSuffix}`
+      const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/tg_douyin_bot/tgdouyin'
+      const deepLink = `${tmeUrl}?startapp=live_${roomId}${inviteSuffix}`
 
       const result = {
         type: 'article',
@@ -186,7 +187,8 @@ export async function handleInlineQuery(inlineQuery: any) {
         .eq('tg_user_id', userId)
         .single()
       const inviteSuffix = sharer?.numeric_id ? `_i${sharer.numeric_id}` : ''
-      const deepLink = `${TG_MINIAPP_URL}?startapp=video_${videoId}${inviteSuffix}`
+      const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/tg_douyin_bot/tgdouyin'
+      const deepLink = `${tmeUrl}?startapp=video_${videoId}${inviteSuffix}`
 
       const result = {
         type: 'article',
@@ -231,21 +233,24 @@ export async function handleInlineQuery(inlineQuery: any) {
 
   const { data: videos, error } = await supabase
     .from('videos')
-    .select('id, description, status, published_at, cover_url')
+    .select('id, description, status, published_at, cover_url, is_adult')
     .eq('status', 'published')
-    .order('published_at', { ascending: false })
-    .limit(5)
+    .eq('is_adult', false) // 🎯 默认搜索仅展示非成人内容
     .or(filter)
+    .order('published_at', { ascending: false })
+    .limit(10)
 
   if (error || !videos || videos.length === 0) {
-    console.log('[InlineQuery] ⚠️ 无搜索结果')
+    console.log('[InlineQuery] ⚠️ 无搜索结果', error)
     await answerInlineQuery(queryId, [])
     return
   }
 
+  const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/tg_douyin_bot/tgdouyin'
+
   const results = videos.map((v: any, idx: number) => {
     const videoId = v.id
-    const deepLink = `${TG_MINIAPP_URL}?startapp=video_${videoId}${inviteSuffix}`
+    const deepLink = `${tmeUrl}?startapp=video_${videoId}${inviteSuffix}`
     const fullDesc = v.description || ''
     const title = fullDesc ? fullDesc.substring(0, 24) : `🎬 视频 ${idx + 1}`
     const desc = fullDesc ? fullDesc.substring(0, 80) : '点击打开观看'

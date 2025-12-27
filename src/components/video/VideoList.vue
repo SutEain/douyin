@@ -491,17 +491,11 @@ function copyInviteLink() {
   }
 }
 
-// 🎯 分享邀请链接（调用 TG switchInlineQuery 选择联系人）
+// 🎯 分享邀请链接
 function shareInvite() {
   if (!inviteLink.value) return
-  const tg = (window as any)?.Telegram?.WebApp
-  // 🎯 使用 switchInlineQuery 调起聊天选择器
-  if (tg?.switchInlineQuery) {
-    // 发送邀请链接作为 inline query，用户选择聊天后会发送
-    tg.switchInlineQuery(inviteLink.value, ['users', 'groups', 'channels'])
-    return
-  }
-  _notice('请在 Telegram 客户端中重试分享')
+  _copy(inviteLink.value)
+  _notice('邀请链接已复制，快去分享给好友吧～')
 }
 
 // 🎯 当前内容类型

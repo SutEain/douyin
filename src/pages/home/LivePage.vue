@@ -195,7 +195,7 @@ import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch, computed } 
 import { useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { supabase } from '@/utils/supabase'
-import { _checkImgUrl, _notice } from '@/utils'
+import { _checkImgUrl, _notice, _copy } from '@/utils'
 import { toggleFollowUser, sendReward } from '@/api/videos'
 import DPPlayer from '@/components/live/DPPlayer.vue'
 import VapPlayer from '@/components/live/VapPlayer.vue'
@@ -405,21 +405,9 @@ function shareRoom() {
   const appName = 'tgdouyin'
   const shareLink = `https://t.me/${botUsername}/${appName}?startapp=${startParam}`
 
-  // @ts-ignore
-  const tg = window.Telegram?.WebApp
-  if (tg?.switchInlineQuery) {
-    // 调起 TG 联系人选择器
-    tg.switchInlineQuery(startParam, ['users', 'groups', 'channels'])
-  } else {
-    // 兜底：复制链接
-    const input = document.createElement('input')
-    input.value = shareLink
-    document.body.appendChild(input)
-    input.select()
-    document.execCommand('copy')
-    document.body.removeChild(input)
-    _notice('分享链接已复制到剪贴板')
-  }
+  // 🎯 不再调起 TG 选择器，直接复制链接
+  _copy(shareLink)
+  _notice('分享链接已复制，去分享给好友吧～')
 }
 
 // --- 动画通知模板 ---

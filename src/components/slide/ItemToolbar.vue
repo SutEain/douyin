@@ -239,19 +239,13 @@ function shareToTelegram() {
   const inviteSuffix = numericId ? `_i${numericId}` : ''
   const startParam = `video_${props.item.aweme_id}${inviteSuffix}`
 
-  // @ts-ignore
-  const tg = window.Telegram?.WebApp
-  if (tg?.switchInlineQuery) {
-    // 🎯 调起 TG 联系人选择器，并传入 startapp 参数
-    tg.switchInlineQuery(startParam, ['users', 'groups', 'channels'])
-  } else {
-    // 兜底：复制链接
-    const botUsername = 'tg_douyin_bot'
-    const appName = 'tgdouyin'
-    const shareLink = `https://t.me/${botUsername}/${appName}?startapp=${startParam}`
-    _copy(shareLink)
-    _notice('分享链接已复制，去分享给好友吧～')
-  }
+  const botUsername = 'tg_douyin_bot'
+  const appName = 'tgdouyin'
+  const shareLink = `https://t.me/${botUsername}/${appName}?startapp=${startParam}`
+
+  // 🎯 直接复制链接，不再调起 TG 选择器
+  _copy(shareLink)
+  _notice('分享链接已复制，去分享给好友吧～')
 }
 
 // 🎯 视频打赏
