@@ -228,7 +228,7 @@ function showComments() {
   bus.emit(EVENT_KEY.OPEN_COMMENTS, props.item.aweme_id)
 }
 
-// 🎯 分享到 Telegram（复制链接）
+// 🎯 分享到 Telegram
 function shareToTelegram() {
   if (!props.item?.aweme_id) {
     _notice('视频ID缺失，无法分享')
@@ -237,10 +237,21 @@ function shareToTelegram() {
 
   const numericId = baseStore.userinfo?.numeric_id
   const inviteSuffix = numericId ? `_i${numericId}` : ''
-  const shareText = `@tg_douyin_bot video_${props.item.aweme_id}${inviteSuffix}`
+  const startParam = `video_${props.item.aweme_id}${inviteSuffix}`
 
-  _copy(shareText)
-  _notice('已复制链接，返回Telegram，分享吧～')
+  // @ts-ignore
+  const tg = window.Telegram?.WebApp
+  if (tg?.switchInlineQuery) {
+    // 🎯 调起 TG 联系人选择器，并传入 startapp 参数
+    tg.switchInlineQuery(startParam, ['users', 'groups', 'channels'])
+  } else {
+    // 兜底：复制链接
+    const botUsername = 'tg_douyin_bot'
+    const appName = 'tgdouyin'
+    const shareLink = `https://t.me/${botUsername}/${appName}?startapp=${startParam}`
+    _copy(shareLink)
+    _notice('分享链接已复制，去分享给好友吧～')
+  }
 }
 
 // 🎯 视频打赏
@@ -267,7 +278,7 @@ async function handleReward() {
 
   isRewarding.value = true
   try {
-    const res = await sendReward({
+    await sendReward({
       receiver_id: props.item.author?.user_id || props.item.author?.uid,
       gift_amount: amount,
       room_or_video_id: props.item.aweme_id,

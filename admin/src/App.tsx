@@ -21,6 +21,8 @@ import { CoinTransactionList } from './pages/coin-transactions'
 import { SystemSettings } from './pages/system-settings'
 import { LiveRoomCreate, LiveRoomEdit, LiveRoomList } from './pages/live-rooms'
 import { GiftList } from './pages/gifts'
+import { RechargeOrderList } from './pages/recharge-orders'
+import { WithdrawOrderList } from './pages/withdraw-orders'
 import { Login } from './pages/login'
 import { authProvider } from './authProvider'
 import { Dashboard } from './pages/dashboard'
@@ -166,6 +168,16 @@ function App() {
                 create: '/live-rooms/create',
                 edit: '/live-rooms/edit/:id',
                 meta: { label: '直播间管理' }
+              },
+              {
+                name: 'recharge_orders',
+                list: '/recharge-orders',
+                meta: { label: '充值订单' }
+              },
+              {
+                name: 'withdraw_orders',
+                list: '/withdraw-orders',
+                meta: { label: '提现申请' }
               }
             ]}
             options={{
@@ -209,6 +221,8 @@ function App() {
                   <Route path="create" element={<LiveRoomCreate />} />
                   <Route path="edit/:id" element={<LiveRoomEdit />} />
                 </Route>
+                <Route path="/recharge-orders" element={<RechargeOrderList />} />
+                <Route path="/withdraw-orders" element={<WithdrawOrderList />} />
                 <Route path="/gifts">
                   <Route index element={<GiftList />} />
                 </Route>

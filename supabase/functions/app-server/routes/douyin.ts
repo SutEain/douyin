@@ -461,7 +461,7 @@ export async function handleAdminDouyinPublish(req: Request): Promise<Response> 
       review_status: 'approved',
       is_private: false,
       is_adult: false,
-      is_shortdrama: false,
+      is_sea: false,
       published_at: now
     }
 

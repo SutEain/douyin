@@ -1,4 +1,4 @@
-import { List, useTable } from '@refinedev/antd'
+import { List, useTable, DateField } from '@refinedev/antd'
 import {
   Table,
   Space,
@@ -245,9 +245,9 @@ export const UserList = () => {
           width={150}
           render={(value) => <span style={{ color: '#999' }}>@{value || '-'}</span>}
         />
-        <Table.Column dataIndex="video_count" title="视频数" width={80} />
-        <Table.Column dataIndex="follower_count" title="粉丝数" width={80} />
-        <Table.Column dataIndex="total_likes" title="获赞数" width={80} />
+        <Table.Column dataIndex="video_count" title="视频数" width={80} sorter />
+        <Table.Column dataIndex="follower_count" title="粉丝数" width={80} sorter />
+        <Table.Column dataIndex="total_likes" title="获赞数" width={80} sorter />
         <Table.Column
           title="邀请人"
           width={160}
@@ -262,6 +262,7 @@ export const UserList = () => {
           dataIndex="balance_coins"
           title="余额(抖币)"
           width={120}
+          sorter
           render={(v) => <span style={{ fontFamily: 'monospace' }}>{v ?? '0'}</span>}
         />
         <Table.Column
@@ -287,6 +288,13 @@ export const UserList = () => {
             const texts = ['未申请', '申请中', '已通过', '已拒绝']
             return <Tag color={colors[value] || 'default'}>{texts[value] || '未知'}</Tag>
           }}
+        />
+        <Table.Column
+          dataIndex="created_at"
+          title="注册时间"
+          width={120}
+          sorter
+          render={(value) => <DateField value={value} format="MM-DD HH:mm" />}
         />
         <Table.Column
           title="操作"

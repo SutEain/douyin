@@ -21,9 +21,9 @@
             <span>直播</span>
           </div>
 
-          <!-- 短剧 Tab -->
+          <!-- 东南亚 Tab -->
           <div class="tab" :class="{ active: index === 3 }" @click.stop="change(3)">
-            <span>短剧</span>
+            <span>东南亚</span>
           </div>
 
           <!-- 成人内容 Tab -->

@@ -27,6 +27,7 @@
       <!-- 空状态提示 -->
       <div v-else class="empty-state">
         <p>暂无更多视频</p>
+        <div class="retry-btn" @click="loadMore">点击重试</div>
       </div>
     </div>
   </SlideItem>
@@ -69,6 +70,12 @@ async function loadMore() {
     console.log('[Slide4] 正在加载中，跳过')
     return
   }
+
+  // ✅ 如果列表为空且手动重试，强制重置 hasMore
+  if (state.list.length === 0) {
+    state.hasMore = true
+  }
+
   if (!state.hasMore) {
     console.log('[Slide4] 没有更多数据，跳过')
     return
@@ -189,6 +196,21 @@ onMounted(() => {
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin-bottom: 15px;
+  }
+
+  .retry-btn {
+    margin-top: 20px;
+    padding: 8px 24px;
+    background: #fe2c55;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+
+    &:active {
+      opacity: 0.8;
+    }
   }
 
   @keyframes spin {

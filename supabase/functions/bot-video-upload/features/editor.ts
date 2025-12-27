@@ -31,6 +31,10 @@ export function getEditKeyboard(video: any) {
     {
       text: video.is_adult ? '🔞 成人内容：是' : '🔞 成人内容：否',
       callback_data: `toggle_adult:${vid}`
+    },
+    {
+      text: video.is_sea ? '🌏 东南亚板块：是' : '🌏 东南亚板块：否',
+      callback_data: `toggle_sea:${vid}`
     }
   ])
 
@@ -71,6 +75,7 @@ export function parseVideoAction(data: string): { action: string; videoId: strin
     'edit_location',
     'toggle_privacy',
     'toggle_adult',
+    'toggle_sea',
     'toggle_pin',
     'publish',
     'save_draft',
@@ -113,19 +118,21 @@ export function getEditMenuText(video: any): string {
 
   const privacyText = video.is_private ? '🔒 私密' : '🌍 公开'
   const adultText = video.is_adult ? '是' : '否'
+  const seaText = video.is_sea ? '是' : '否'
 
   const lines = [
     titleText,
     '',
-    '⚠️ <b>如果你上传的是成人向内容，请务必在下方勾选「成人内容：是」。</b>',
+    '⚠️ <b>如果你上传的是成人向内容，请务必勾选「成人内容：是」。</b>',
+    '⚠️ <b>如果你上传的是东南亚风情内容，请勾选「东南亚板块：是」。</b>',
     '⛔ 严禁任何涉及儿童 / 未成年人的色情或暗示内容，一经发现将立刻封禁账号。',
-    '📌 未正确标记成人内容的账号，后续将不再享受免审核，严重将限制上传。',
     '',
     `📝 描述：${descText}`,
     `🏷️ 标签：${tagsText}`,
     `📍 位置：${locationText}`,
     `🔐 隐私：${privacyText}`,
-    `🔞 成人内容：${adultText}`,
+    `🔞 成人：${adultText}`,
+    `🌏 东南亚：${seaText}`,
     `📌 置顶：${video.is_top ? '已置顶' : '未置顶'}`
   ]
 

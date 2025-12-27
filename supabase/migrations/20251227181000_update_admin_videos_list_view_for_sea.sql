@@ -1,11 +1,3 @@
--- Restrict admin_videos_list view to admin users only
--- 说明：
--- - Postgres 的 RLS 不直接作用于 VIEW
--- - 为了让后台列表（admin_videos_list）不被普通用户读取，这里在 VIEW 内增加基于 JWT claim 的过滤：
---   auth.jwt()->'app_metadata'->>'role' = 'admin'
--- - 非 admin 将查询不到任何行（返回空列表）
--- - ⚠️ 使用“显式列名列表”以避免 CREATE OR REPLACE VIEW 因列顺序/列名不一致触发 42P16
-
 CREATE OR REPLACE VIEW public.admin_videos_list (
   id,
   author_id,
@@ -144,5 +136,4 @@ SELECT
 FROM public.videos v
 LEFT JOIN public.profiles p ON p.id = v.author_id
 WHERE (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin';
-
 

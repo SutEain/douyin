@@ -244,7 +244,7 @@ interface SlotState {
 
 interface Props {
   items: VideoItem[]
-  page: 'home' | 'detail' | 'me'
+  page: 'home' | 'detail' | 'me' | 'long-video'
   initialIndex?: number
   autoplay?: boolean
   hasMore?: boolean // 🎯 是否还有更多数据
@@ -1562,12 +1562,12 @@ function handleProgressStart(e: PointerEvent) {
   }
   video.pause()
 
-  updateProgressFromPointer(e, track, video)
+  updateProgressFromPointer(e, track)
 
   const onMove = (ev: PointerEvent) => {
     if (!isDragging) return
     ev.preventDefault()
-    updateProgressFromPointer(ev, track, video)
+    updateProgressFromPointer(ev, track)
   }
 
   const onEnd = () => {
@@ -1591,7 +1591,7 @@ function handleProgressStart(e: PointerEvent) {
   window.addEventListener('pointercancel', onEnd)
 }
 
-function updateProgressFromPointer(e: PointerEvent, track: HTMLElement, video: HTMLVideoElement) {
+function updateProgressFromPointer(e: PointerEvent, track: HTMLElement) {
   const rect = track.getBoundingClientRect()
   const x = e.clientX - rect.left
   const percent = Math.max(0, Math.min(1, x / rect.width))

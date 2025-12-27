@@ -20,7 +20,7 @@
         />
         <!-- 2=直播 -->
         <LiveTab v-else-if="state.navIndex === 2" :active="state.active && state.navIndex === 2" />
-        <!-- 3=短剧（grid：短剧视频，按 published_at 倒序） -->
+        <!-- 3=东南亚（grid：东南亚视频，按 published_at 倒序） -->
         <LongVideo
           v-else-if="state.navIndex === 3"
           :active="state.active && state.navIndex === 3"
@@ -138,7 +138,7 @@ const router = useRouter()
 const share = ref()
 
 const state = reactive({
-  navIndex: 6, // 默认显示"推荐" tab (0=视频, 1=图文, 2=直播, 3=短剧, 4=成人, 5=关注, 6=推荐)
+  navIndex: 6, // 默认显示"推荐" tab (0=视频, 1=图文, 2=直播, 3=东南亚, 4=成人, 5=关注, 6=推荐)
   test: '',
   isSharing: false,
   shareType: -1,
@@ -216,6 +216,17 @@ function handleGoUserInfo() {
 function checkDeepLink() {
   console.log('[DeepLink][Home] 深链接已由后端自动处理（通过 Telegram initData）')
   console.log('[DeepLink][Home] 前端无需手动解析，100% 可靠')
+
+  // 🎯 直播深链接处理
+  if (baseStore.startLiveId) {
+    console.log('[DeepLink][Home] 检测到直播深链接:', baseStore.startLiveId)
+    const roomId = baseStore.startLiveId
+    baseStore.clearStartLiveId() // 立即清除，防止重复跳转
+    router.push({
+      path: '/home/live',
+      query: { id: roomId }
+    })
+  }
 }
 
 // ========== 生命周期 ==========

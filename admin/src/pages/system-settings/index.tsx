@@ -1,4 +1,4 @@
-import { Card, Form, InputNumber, Button, message, Typography } from 'antd'
+import { Card, Form, InputNumber, Button, message, Typography, Input } from 'antd'
 import { useEffect, useState } from 'react'
 import { supabaseClient } from '../../supabaseClient'
 
@@ -20,13 +20,17 @@ export const SystemSettings = () => {
 
       const settings: any = {}
       data?.forEach((item) => {
-        settings[item.id] = item.value_int
+        settings[item.id] = {
+          int: item.value_int,
+          text: item.value_text
+        }
       })
 
       form.setFieldsValue({
-        bot_max_video_size_mb: settings.bot_max_video_size_mb || 500,
-        invitation_reward_coins: settings.invitation_reward_coins || 10,
-        gift_split_percentage: settings.gift_split_percentage || 50
+        bot_max_video_size_mb: settings.bot_max_video_size_mb?.int || 500,
+        invitation_reward_coins: settings.invitation_reward_coins?.int || 10,
+        gift_split_percentage: settings.gift_split_percentage?.int || 50,
+        recharge_trc20_address: settings.recharge_trc20_address?.text || ''
       })
     } finally {
       setLoading(false)
@@ -52,6 +56,11 @@ export const SystemSettings = () => {
           id: 'gift_split_percentage',
           value_int: Number(values.gift_split_percentage),
           value_text: '打赏分账比例（百分比，如50代表主播得50%）'
+        },
+        {
+          id: 'recharge_trc20_address',
+          value_int: null,
+          value_text: values.recharge_trc20_address
         }
       ]
 
@@ -120,6 +129,15 @@ export const SystemSettings = () => {
           help="设置主播实际获得的比例。例如设为 50，则主播获得打赏金额的 50%，剩下 50% 归平台。"
         >
           <InputNumber min={0} max={100} precision={0} style={{ width: 260 }} addonAfter="%" />
+        </Form.Item>
+
+        <Form.Item
+          label="TRC20 充值收款地址"
+          name="recharge_trc20_address"
+          rules={[{ required: true, message: '请输入收款地址' }]}
+          help="用户在 Bot 中点击充值下单时显示的 TRC20 收款地址。"
+        >
+          <Input placeholder="请输入 TRC20 地址" style={{ width: 400 }} />
         </Form.Item>
 
         <Button type="primary" onClick={save} loading={saving}>

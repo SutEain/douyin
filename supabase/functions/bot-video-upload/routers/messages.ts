@@ -7,7 +7,7 @@ import { handleMyPublished, setPublishedCtx } from '../features/myVideos.ts'
 import { getLocationFromCoords } from '../utils/geo.ts'
 import { sendSelfDestructMessage } from '../utils/telegramExtras.ts'
 
-// 处理文本消息（编辑流程 + 已发布搜索）
+// 处理文本消息（编辑流程 + 已发布搜索 + 提现流程）
 export async function handleText(chatId: number, text: string, userMessageId: number) {
   const userState = await getUserState(chatId)
 
@@ -31,6 +31,91 @@ export async function handleText(chatId: number, text: string, userMessageId: nu
     })
     await updateUserState(chatId, { state: 'idle' })
     await handleMyPublished(chatId, userState.current_message_id)
+    return
+  }
+
+  // ✅ 提现流程：输入金额
+  if (userState.state === 'waiting_withdraw_amount') {
+    await deleteTelegramMessage(chatId, userMessageId)
+    if (!userState.current_message_id) return
+
+    if (text.trim() === '/cancel') {
+      await updateUserState(chatId, { state: 'idle' })
+      const { handleWallet } = await import('../features/profileCenter.ts')
+      await handleWallet(chatId, userState.current_message_id)
+      return
+    }
+
+    const amount = parseInt(text.trim())
+    if (isNaN(amount) || amount < 1000) {
+      await sendSelfDestructMessage(chatId, '❌ 请输入有效的提现金额 (最少 1000 抖币)')
+      return
+    }
+
+    // 检查余额
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('balance_coins')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile || (profile.balance_coins || 0) < amount) {
+      await sendSelfDestructMessage(chatId, '❌ 余额不足')
+      return
+    }
+
+    // 保存金额到上下文，进入下一步：输入地址
+    const ctx = (userState as any).context || {}
+    await updateUserState(chatId, {
+      state: 'waiting_withdraw_address',
+      context: { ...ctx, withdraw_amount: amount }
+    })
+
+    await editMessage(
+      chatId,
+      userState.current_message_id,
+      `💰 <b>提现金额：</b> <code>${amount}</code> 抖币\n\n` +
+        `请发送您的 <b>USDT-TRC20</b> 收款地址：\n\n` +
+        `💡 发送 /cancel 可取消操作。`,
+      {
+        reply_markup: {
+          inline_keyboard: [[{ text: '⬅️ 取消', callback_data: 'profile_withdraw' }]]
+        }
+      }
+    )
+    return
+  }
+
+  // ✅ 提现流程：输入地址
+  if (userState.state === 'waiting_withdraw_address') {
+    await deleteTelegramMessage(chatId, userMessageId)
+    if (!userState.current_message_id) return
+
+    const address = text.trim()
+    if (address === '/cancel') {
+      await updateUserState(chatId, { state: 'idle' })
+      const { handleWallet } = await import('../features/profileCenter.ts')
+      await handleWallet(chatId, userState.current_message_id)
+      return
+    }
+
+    // 简单的 TRC20 地址验证 (T开头，34位)
+    if (!/^T[a-zA-Z0-9]{33}$/.test(address)) {
+      await sendSelfDestructMessage(chatId, '❌ 请输入有效的 USDT-TRC20 地址 (T开头，34位)')
+      return
+    }
+
+    // 保存地址到上下文，显示确认页面
+    const ctx = (userState as any).context || {}
+    const amount = Number(ctx.withdraw_amount)
+
+    await updateUserState(chatId, {
+      state: 'idle', // 输入完成，进入确认状态（由按钮触发最终提交）
+      context: { ...ctx, withdraw_address: address }
+    })
+
+    const { handleWithdrawConfirmPage } = await import('../features/profileCenter.ts')
+    await handleWithdrawConfirmPage(chatId, userState.current_message_id, amount, address)
     return
   }
 

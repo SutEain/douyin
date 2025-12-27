@@ -1,18 +1,9 @@
 import { BOT_TOKEN } from './env.ts'
 import { supabase } from './supabaseClient.ts'
-import { updateUserState, type UserState } from './state.ts'
+import { updateUserState } from './state.ts'
 import { handleSettings } from './features/settings.ts'
 import { handleInlineQuery } from './features/inlineShare.ts'
-import {
-  getPublishedCtx,
-  handleMyDrafts,
-  handleMyProcessing,
-  handleMyPublished,
-  handleMyVideos,
-  handleMyVideosEdit,
-  handleViewProcessing,
-  setPublishedCtx
-} from './features/myVideos.ts'
+import { handleMyVideosEdit, handleViewProcessing } from './features/myVideos.ts'
 import { getPersistentKeyboard, getWelcomeKeyboard } from './keyboards.ts'
 import { handleUserProfile } from './features/profileCenter.ts'
 import { handleInvitation } from './features/invitation.ts'
@@ -133,7 +124,7 @@ export async function handleRequest(req: Request): Promise<Response> {
               'Telegram 最大的视频&amp;直播分享平台!\n\n' +
               '<b>🔥 这里有你想要的精彩内容 🔥</b>\n\n' +
               '📰 全球资讯 •  🍉 热门八卦 •  💥 网络热点\n' +
-              '🔞 成人专区 •  🎤 娱乐直播 •  🎬 热门短剧\n' +
+              '🔞 成人专区 •  🎤 娱乐直播 •  🌏 东南亚板块\n' +
               '🌟 更多内容等你来探索！\n\n' +
               '<b>🚀 诚邀您成为我们的“内容共建官”！</b>\n' +
               '📱 发现有趣视频？随手分享给我们\n' +
@@ -185,7 +176,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             'Telegram 最大的视频&amp;直播分享平台!\n\n' +
             '<b>🔥 这里有你想要的精彩内容 🔥</b>\n\n' +
             '📰 全球资讯 •  🍉 热门八卦 •  💥 网络热点\n' +
-            '🔞 成人专区 •  🎤 娱乐直播 •  🎬 热门短剧\n' +
+            '🔞 成人专区 •  🎤 娱乐直播 •  🌏 东南亚精选\n' +
             '🌟 更多内容等你来探索！\n\n' +
             '<b>🚀 诚邀您成为我们的“内容共建官”！</b>\n' +
             '📱 发现有趣视频？随手分享给我们\n' +

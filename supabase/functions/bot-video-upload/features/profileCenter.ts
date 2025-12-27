@@ -400,7 +400,7 @@ export async function handleWallet(chatId: number, messageId?: number) {
     const keyboard = {
       inline_keyboard: [
         [{ text: '💳 立即充值', callback_data: 'profile_recharge' }],
-        [{ text: '💰 抖币提现', callback_data: 'profile_recharge' }],
+        [{ text: '💰 抖币提现', callback_data: 'profile_withdraw' }],
         [{ text: '📜 账单记录', callback_data: 'profile_transactions' }],
         [{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]
       ]
@@ -419,26 +419,400 @@ export async function handleWallet(chatId: number, messageId?: number) {
 
 // 🎯 处理"充值"
 export async function handleRecharge(chatId: number, messageId?: number) {
+  try {
+    // 1. 先检查该用户是否有待支付的订单
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (profile) {
+      const { data: pendingOrder } = await supabase
+        .from('recharge_orders')
+        .select('*')
+        .eq('user_id', profile.id)
+        .eq('status', 'pending')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (pendingOrder) {
+        // 如果有待支付订单，直接显示该订单信息
+        const expiresAt = new Date(pendingOrder.expires_at)
+        // 转换为北京时间显示 (UTC+8)
+        const beijingTime = new Date(expiresAt.getTime() + 8 * 60 * 60 * 1000)
+        const timeStr = `${beijingTime.getUTCHours().toString().padStart(2, '0')}:${beijingTime.getUTCMinutes().toString().padStart(2, '0')}`
+
+        const coins = (pendingOrder.base_amount || 0) * 100
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${pendingOrder.trc20_address}`
+
+        const text =
+          `<a href="${qrUrl}">&#8205;</a>` +
+          `⏳ <b>您有一个待支付的充值订单</b>\n\n` +
+          `🔢 <b>订单编号：</b> <code>${pendingOrder.order_no || '-'}</code>\n` +
+          `💰 <b>支付金额：</b> <code>${Number(pendingOrder.total_amount).toFixed(2)}</code> USDT\n` +
+          `💎 <b>预计到账：</b> <code>${coins.toLocaleString()}</code> 抖币\n` +
+          `📊 <b>充值比例：</b> 1 USDT = 100 抖币\n\n` +
+          `📍 <b>收款地址 (TRC20)：</b>\n<code>${pendingOrder.trc20_address}</code>\n\n` +
+          `⏰ <b>有效期：</b> 30 分钟 (请在北京时间 ${timeStr} 前完成支付)\n\n` +
+          `⚠️ <b>请务必支付精确金额 (含尾数)，否则无法自动到账！</b>\n\n` +
+          `<i>💡 支付完成后，请等待管理员确认。您可以在「资金流水」中查看进度。</i>`
+
+        const keyboard = {
+          inline_keyboard: [
+            [{ text: '✅ 我已完成支付', callback_data: 'profile_wallet' }],
+            [{ text: '❌ 取消订单', callback_data: `recharge_cancel:${pendingOrder.id}` }],
+            [{ text: '⬅️ 返回钱包', callback_data: 'profile_wallet' }]
+          ]
+        }
+
+        const options = { reply_markup: keyboard, disable_web_page_preview: false }
+        if (messageId) {
+          await editMessage(chatId, messageId, text, options)
+        } else {
+          await sendMessage(chatId, text, options)
+        }
+        return
+      }
+    }
+
+    const text =
+      `💳 <b>抖币充值</b>\n\n` +
+      `请选择充值金额 (USDT-TRC20)：\n` +
+      `<i>💡 汇率：1 USDT = 100 抖币</i>\n\n` +
+      `• 10U  (1,000 抖币)\n` +
+      `• 20U  (2,000 抖币)\n` +
+      `• 50U  (5,000 抖币)\n` +
+      `• 100U (10,000 抖币)\n\n` +
+      `请点击下方按钮下单：`
+
+    const amounts = [10, 20, 50, 100, 200, 500, 1000, 2000]
+    const inline_keyboard: any[][] = []
+
+    for (let i = 0; i < amounts.length; i += 2) {
+      const row = [{ text: `${amounts[i]} USDT`, callback_data: `recharge_order:${amounts[i]}` }]
+      if (i + 1 < amounts.length) {
+        row.push({
+          text: `${amounts[i + 1]} USDT`,
+          callback_data: `recharge_order:${amounts[i + 1]}`
+        })
+      }
+      inline_keyboard.push(row)
+    }
+
+    inline_keyboard.push([{ text: '⬅️ 返回钱包', callback_data: 'profile_wallet' }])
+
+    const keyboard = { inline_keyboard }
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: keyboard })
+    }
+  } catch (error) {
+    console.error('handleRecharge error:', error)
+    await sendMessage(chatId, '❌ 获取充值信息失败')
+  }
+}
+
+// 🎯 处理创建充值订单
+export async function handleCreateRechargeOrder(chatId: number, messageId: number, amount: number) {
+  try {
+    // 1. 获取用户信息
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile) throw new Error('User not found')
+
+    // 2. 获取收款地址
+    const { data: setting } = await supabase
+      .from('system_settings')
+      .select('value_text')
+      .eq('id', 'recharge_trc20_address')
+      .single()
+
+    const trcAddress = setting?.value_text
+    if (!trcAddress) {
+      throw new Error('未配置充值收款地址，请联系客服')
+    }
+
+    // 3. 计算浮动金额 (调用 SQL 函数)
+    const { data: totalAmount, error: funcError } = await supabase.rpc('get_next_recharge_amount', {
+      p_base_amount: amount
+    })
+
+    if (funcError) throw funcError
+
+    const floatAmount = Number(totalAmount) - amount
+
+    // 🎯 生成订单号：日期 + 6位随机数字
+    const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '')
+    const randomSuffix = Math.floor(Math.random() * 900000 + 100000)
+    const orderNo = `${dateStr}${randomSuffix}`
+
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + 30 * 60 * 1000) // 30 分钟过期
+    const lockedUntil = new Date(now.getTime() + 60 * 60 * 1000) // 1 小时占用
+
+    // 转换为北京时间显示 (UTC+8)
+    const beijingTime = new Date(expiresAt.getTime() + 8 * 60 * 60 * 1000)
+    const timeStr = `${beijingTime.getUTCHours().toString().padStart(2, '0')}:${beijingTime.getUTCMinutes().toString().padStart(2, '0')}`
+
+    const { data: order, error: insertError } = await supabase
+      .from('recharge_orders')
+      .insert({
+        user_id: profile.id,
+        order_no: orderNo,
+        base_amount: amount,
+        float_amount: floatAmount,
+        total_amount: totalAmount,
+        trc20_address: trcAddress,
+        status: 'pending',
+        expires_at: expiresAt.toISOString(),
+        locked_until: lockedUntil.toISOString()
+      })
+      .select()
+      .single()
+
+    if (insertError) throw insertError
+
+    // 🎯 计算到账抖币
+    const coins = amount * 100
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${trcAddress}`
+
+    // 5. 显示订单信息
+    const text =
+      `<a href="${qrUrl}">&#8205;</a>` + // 🎯 隐藏链接用于显示二维码预览
+      `📝 <b>充值订单已创建</b>\n\n` +
+      `🔢 <b>订单编号：</b> <code>${orderNo}</code>\n` +
+      `💰 <b>支付金额：</b> <code>${Number(totalAmount).toFixed(2)}</code> USDT\n` +
+      `💎 <b>预计到账：</b> <code>${coins.toLocaleString()}</code> 抖币\n` +
+      `📊 <b>充值比例：</b> 1 USDT = 100 抖币\n\n` +
+      `📍 <b>收款地址 (TRC20)：</b>\n<code>${trcAddress}</code>\n\n` +
+      `⏰ <b>有效期：</b> 30 分钟 (请在北京时间 ${timeStr} 前完成支付)\n\n` +
+      `⚠️ <b>请务必支付精确金额 (含尾数)，否则无法自动到账！</b>\n\n` +
+      `<i>💡 支付完成后，请等待管理员确认。您可以在「资金流水」中查看进度。</i>`
+
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: '✅ 我已完成支付', callback_data: 'profile_wallet' }],
+        [{ text: '❌ 取消订单', callback_data: `recharge_cancel:${order.id}` }],
+        [{ text: '⬅️ 返回充值', callback_data: 'profile_recharge' }]
+      ]
+    }
+
+    await editMessage(chatId, messageId, text, {
+      reply_markup: keyboard,
+      disable_web_page_preview: false
+    })
+  } catch (error: any) {
+    console.error('handleCreateRechargeOrder error:', error)
+    await editMessage(chatId, messageId, `❌ 创建订单失败: ${error.message}`, {
+      reply_markup: {
+        inline_keyboard: [[{ text: '⬅️ 返回重试', callback_data: 'profile_recharge' }]]
+      }
+    })
+  }
+}
+
+// 🎯 处理取消充值订单
+export async function handleCancelRechargeOrder(
+  chatId: number,
+  messageId: number,
+  orderId: string
+) {
+  try {
+    const { error } = await supabase
+      .from('recharge_orders')
+      .update({ status: 'cancelled' })
+      .eq('id', orderId)
+      .eq('status', 'pending')
+
+    if (error) throw error
+
+    await editMessage(chatId, messageId, '✅ 订单已取消。', {
+      reply_markup: {
+        inline_keyboard: [[{ text: '⬅️ 返回充值', callback_data: 'profile_recharge' }]]
+      }
+    })
+  } catch (error: any) {
+    console.error('handleCancelRechargeOrder error:', error)
+    await editMessage(chatId, messageId, `❌ 取消失败: ${error.message}`, {
+      reply_markup: {
+        inline_keyboard: [[{ text: '⬅️ 返回充值', callback_data: 'profile_recharge' }]]
+      }
+    })
+  }
+}
+
+// 🎯 处理"提现"开始
+export async function handleWithdrawStart(chatId: number, messageId?: number) {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('balance_coins')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    const balance = Math.floor(profile?.balance_coins || 0)
+    const minWithdraw = 1000 // 10U = 1000 抖币
+
+    if (balance < minWithdraw) {
+      const errorText =
+        `❌ <b>提现金额不足</b>\n\n` +
+        `当前余额：<code>${balance}</code> 抖币\n` +
+        `最低提现额度为 <code>${minWithdraw}</code> 抖币 (10 USDT)。\n\n` +
+        `💡 您可以通过邀请好友或作品打赏获取更多抖币。`
+
+      const keyboard = {
+        inline_keyboard: [[{ text: '⬅️ 返回钱包', callback_data: 'profile_wallet' }]]
+      }
+
+      if (messageId) {
+        await editMessage(chatId, messageId, errorText, { reply_markup: keyboard })
+      } else {
+        await sendMessage(chatId, errorText, { reply_markup: keyboard })
+      }
+      return
+    }
+
+    // 更新用户状态，进入等待输入提现金额状态
+    const { updateUserState } = await import('../state.ts')
+    await updateUserState(chatId, {
+      state: 'waiting_withdraw_amount',
+      current_message_id: messageId
+    })
+
+    const text =
+      `💰 <b>抖币提现</b>\n\n` +
+      `当前可提现余额：<code>${balance}</code> 抖币\n\n` +
+      `请输入您要提现的金额 (仅输入数字)：\n` +
+      `<i>💡 最低提现额度为 1000 抖币</i>\n\n` +
+      `发送 /cancel 可取消操作。`
+
+    const keyboard = {
+      inline_keyboard: [[{ text: '⬅️ 取消', callback_data: 'profile_wallet' }]]
+    }
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: keyboard })
+    }
+  } catch (error) {
+    console.error('handleWithdrawStart error:', error)
+    await sendMessage(chatId, '❌ 获取提现信息失败')
+  }
+}
+
+// 🎯 处理提现确认页面
+export async function handleWithdrawConfirmPage(
+  chatId: number,
+  messageId: number,
+  amount: number,
+  address: string
+) {
+  const usdt = (amount / 100).toFixed(2)
   const text =
-    `💳 <b>抖币充值</b>\n\n` +
-    `请选择充值金额：\n\n` +
-    `• 100 抖币 = 1.00 USDT\n` +
-    `• 500 抖币 = 5.00 USDT\n` +
-    `• 1000 抖币 = 10.00 USDT\n\n` +
-    `💡 目前仅支持联系客服手动充值，请点击下方按钮联系客服。`
+    `⚠️ <b>请确认提现信息</b>\n\n` +
+    `💰 <b>提现金额：</b> <code>${amount}</code> 抖币\n` +
+    `💵 <b>折合金额：</b> <code>${usdt}</code> USDT\n` +
+    `📍 <b>提现地址 (TRC20)：</b>\n<code>${address}</code>\n\n` +
+    `<b>注意：</b>\n` +
+    `1. 提交后金额将立即进入冻结状态。\n` +
+    `2. 管理员审核通过后将按地址汇款。\n` +
+    `3. 请务必核对地址，填写错误将导致资金丢失且无法找回！`
 
   const keyboard = {
     inline_keyboard: [
-      [{ text: '🙋 联系客服充值', url: 'https://t.me/laidouyin' }],
-      [{ text: '⬅️ 返回钱包', callback_data: 'profile_wallet' }]
+      [{ text: '✅ 确认提交申请', callback_data: 'withdraw_submit' }],
+      [{ text: '❌ 取消并返回', callback_data: 'profile_wallet' }]
     ]
   }
 
-  if (messageId) {
-    await editMessage(chatId, messageId, text, { reply_markup: keyboard })
-  } else {
-    await sendMessage(chatId, text, { reply_markup: keyboard })
+  await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+}
+
+// 🎯 处理正式提交提现
+export async function handleWithdrawSubmit(chatId: number, messageId: number) {
+  try {
+    const { getUserState, updateUserState } = await import('../state.ts')
+    const userState = await getUserState(chatId)
+    const ctx = (userState as any)?.context || {}
+    const amount = Number(ctx.withdraw_amount)
+    const address = ctx.withdraw_address
+
+    if (!amount || !address) {
+      await answerWithdrawError(chatId, messageId, '提现信息不完整，请重新开始。')
+      return
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile) throw new Error('User not found')
+
+    // 生成订单号
+    const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '')
+    const randomSuffix = Math.floor(Math.random() * 900000 + 100000)
+    const orderNo = `WD${dateStr}${randomSuffix}`
+
+    // 调用 RPC 处理提现
+    const { data: res, error: rpcError } = await supabase.rpc('process_withdraw_request', {
+      p_user_id: profile.id,
+      p_amount: amount,
+      p_address: address,
+      p_order_no: orderNo
+    })
+
+    if (rpcError) throw rpcError
+    if (!res.success) {
+      await answerWithdrawError(chatId, messageId, res.message || '提交失败')
+      return
+    }
+
+    // 成功后清空状态
+    await updateUserState(chatId, {
+      state: 'idle',
+      context: { ...ctx, withdraw_amount: null, withdraw_address: null }
+    })
+
+    const successText =
+      `✅ <b>提现申请已提交！</b>\n\n` +
+      `🔢 <b>订单编号：</b> <code>${orderNo}</code>\n` +
+      `💰 <b>提现金额：</b> <code>${amount}</code> 抖币\n` +
+      `📍 <b>提现地址：</b> <code>${address}</code>\n\n` +
+      `管理员将1小时内完成审核并处理汇款，请耐心等待。您可以在「账单记录」中查看进度。`
+
+    const keyboard = {
+      inline_keyboard: [[{ text: '⬅️ 返回钱包', callback_data: 'profile_wallet' }]]
+    }
+
+    await editMessage(chatId, messageId, successText, { reply_markup: keyboard })
+  } catch (error: any) {
+    console.error('handleWithdrawSubmit error:', error)
+    await editMessage(chatId, messageId, `❌ 提交失败: ${error.message}`, {
+      reply_markup: {
+        inline_keyboard: [[{ text: '⬅️ 返回重试', callback_data: 'profile_withdraw' }]]
+      }
+    })
   }
+}
+
+async function answerWithdrawError(chatId: number, messageId: number, msg: string) {
+  await editMessage(chatId, messageId, `❌ ${msg}`, {
+    reply_markup: {
+      inline_keyboard: [[{ text: '⬅️ 返回重试', callback_data: 'profile_withdraw' }]]
+    }
+  })
 }
 
 // 🎯 处理"账单记录"

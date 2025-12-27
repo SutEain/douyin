@@ -130,13 +130,13 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
         .select('*')
         .eq('status', 'published')
         .eq('is_adult', false)
-        .eq('is_shortdrama', false)
+        .eq('is_sea', false)
         .order('created_at', { ascending: false })
         .limit(pageSize)
       rows = fallbackData || []
     } else {
-      // 🎯 强制过滤：成人 & 短剧 都不进入推荐 feed
-      rows = (data || []).filter((r: any) => !r.is_adult && !r.is_shortdrama)
+      // 🎯 强制过滤：成人 & 东南亚 都不进入推荐 feed
+      rows = (data || []).filter((r: any) => !r.is_adult && !r.is_sea)
     }
   } else {
     // 未登录用户：按时间倒序
@@ -145,7 +145,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
       .select('*')
       .eq('status', 'published')
       .eq('is_adult', false)
-      .eq('is_shortdrama', false)
+      .eq('is_sea', false)
       .order('created_at', { ascending: false })
       .limit(pageSize)
     rows = data || []
@@ -187,7 +187,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     .select('*', { count: 'exact', head: true })
     .eq('status', 'published')
     .eq('is_adult', false)
-    .eq('is_shortdrama', false)
+    .eq('is_sea', false)
 
   return successResponse({
     list,
@@ -199,12 +199,8 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
 }
 
 /**
- * 长视频/短剧流：只返回 content_type = 'video' 且 is_adult = false 的已发布作品，按发布时间倒序
+ * 东南亚板块流：返回已发布、非成人且 is_sea=true 的作品（包括视频和图文），按发布时间倒序
  * GET /video/long-feed?pageNo=&pageSize=
- *
- * 说明：
- * - 🎯 “过滤图文/相册”在接口层完成，前端不再 filter
- * - 允许未登录访问；如已登录则附加 like/collect/follow 等标记
  */
 export async function handleVideoLongFeed(req: Request): Promise<Response> {
   const url = new URL(req.url)
@@ -216,8 +212,7 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
     .select('*', { count: 'exact' })
     .eq('status', 'published')
     .eq('is_adult', false)
-    .eq('content_type', 'video')
-    .eq('is_shortdrama', true)
+    .eq('is_sea', true)
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
     .range(from, to)
@@ -250,7 +245,7 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
 }
 
 /**
- * 普通视频 Tab：只返回 content_type = 'video' 且 is_shortdrama = false 且 is_adult = false 的已发布作品，按发布时间倒序
+ * 普通视频 Tab：只返回 content_type = 'video' 且 is_sea = false 且 is_adult = false 的已发布作品，按发布时间倒序
  * GET /video/video-tab-feed?pageNo=&pageSize=
  *
  * 说明：
@@ -268,7 +263,7 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
     .eq('status', 'published')
     .eq('is_adult', false)
     .eq('content_type', 'video')
-    .eq('is_shortdrama', false)
+    .eq('is_sea', false)
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
     .range(from, to)
@@ -301,7 +296,7 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
 }
 
 /**
- * 图文 Tab：只返回 content_type in ('image','album') 且 is_shortdrama = false 且 is_adult = false 的已发布作品，按发布时间倒序
+ * 图文 Tab：只返回 content_type in ('image','album') 且 is_sea = false 且 is_adult = false 的已发布作品，按发布时间倒序
  * GET /video/graphic-feed?pageNo=&pageSize=
  *
  * 说明：
@@ -436,12 +431,9 @@ export async function getAdultQuota(userId: string) {
 
   // 默认每日上限 10 条
   const dailyLimit = profile?.adult_daily_limit ?? 10
-  const permanent = profile?.adult_permanent_unlock === true
   const unlockUntil = profile?.adult_unlock_until ? new Date(profile.adult_unlock_until) : null
 
-  const now = new Date()
-
-  // 🎯 A方案修复：强制返回无限配额，修正变量引用错误
+  // 🎯 A方案修复：强制返回无限配额
   return {
     unlimited: true,
     limit: dailyLimit,

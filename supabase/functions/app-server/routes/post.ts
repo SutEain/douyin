@@ -9,13 +9,13 @@ export async function handlePostRecommended(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  // 仅取图片/相册，过滤成人与短剧（短剧本身是 video，但这里也显式排除）
+  // 仅取图片/相册，过滤成人与东南亚板块（东南亚板块本身是 video，但这里也显式排除）
   const { data, error, count } = await supabaseAdmin
     .from('videos')
     .select('*', { count: 'exact' })
     .eq('status', 'published')
     .eq('is_adult', false)
-    .eq('is_shortdrama', false)
+    .eq('is_sea', false)
     .in('content_type', ['image', 'album'])
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })

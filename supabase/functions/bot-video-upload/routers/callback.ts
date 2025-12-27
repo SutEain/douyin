@@ -19,7 +19,11 @@ import {
   handleApplyLive,
   handleWallet,
   handleRecharge,
-  handleTransactions
+  handleTransactions,
+  handleCreateRechargeOrder,
+  handleCancelRechargeOrder,
+  handleWithdrawStart,
+  handleWithdrawSubmit
 } from '../features/profileCenter.ts'
 import { getEditKeyboard, getEditMenuText, parseVideoAction } from '../features/editor.ts'
 import {
@@ -71,7 +75,7 @@ export async function handleCallback(
         'Telegram 最大的视频&amp;直播分享平台!\n\n' +
         '<b>🔥 这里有你想要的精彩内容 🔥</b>\n\n' +
         '📰 全球资讯 •  🍉 热门八卦 •  💥 网络热点\n' +
-        '🔞 成人专区 •  🎤 娱乐直播 •  🎬 热门短剧\n' +
+        '🔞 成人专区 •  🎤 娱乐直播 •  🌏 东南亚板块\n' +
         '🌟 更多内容等你来探索！\n\n' +
         '<b>🚀 诚邀您成为我们的“内容共建官”！</b>\n' +
         '📱 发现有趣视频？随手分享给我们\n' +
@@ -165,9 +169,37 @@ export async function handleCallback(
       return
     }
 
+    if (data === 'profile_withdraw') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleWithdrawStart(chatId, messageId)
+      return
+    }
+
+    if (data === 'withdraw_submit') {
+      await answerCallbackQuery(callbackQueryId, '🚀 正在提交申请...')
+      await handleWithdrawSubmit(chatId, messageId)
+      return
+    }
+
     if (data === 'profile_transactions') {
       await answerCallbackQuery(callbackQueryId)
       await handleTransactions(chatId, messageId)
+      return
+    }
+
+    // 🎯 充值下单
+    if (data.startsWith('recharge_order:')) {
+      const amount = parseInt(data.split(':')[1])
+      await answerCallbackQuery(callbackQueryId, '🚀 正在为您准备订单...')
+      await handleCreateRechargeOrder(chatId, messageId, amount)
+      return
+    }
+
+    // 🎯 取消订单
+    if (data.startsWith('recharge_cancel:')) {
+      const orderId = data.split(':')[1]
+      await answerCallbackQuery(callbackQueryId, '🔄 正在取消订单...')
+      await handleCancelRechargeOrder(chatId, messageId, orderId)
       return
     }
 
@@ -368,7 +400,7 @@ export async function handleCallback(
       await editMessage(
         chatId,
         messageId,
-        '🏷️ 请发送标签\n\n格式：多个标签用空格分隔\n例如：吃瓜 短剧 新闻\n\n💡 发送 /cancel 可取消编辑',
+        '🏷️ 请发送标签\n\n格式：多个标签用空格分隔\n例如：吃瓜 东南亚 新闻\n\n💡 发送 /cancel 可取消编辑',
         {
           reply_markup: {
             inline_keyboard: [[{ text: '← 返回', callback_data: `view_video_${videoId}` }]]
@@ -790,6 +822,22 @@ export async function handleCallback(
           })
           return
         }
+        case 'toggle_sea': {
+          await supabase.from('videos').update({ is_sea: !video.is_sea }).eq('id', video.id)
+          await answerCallbackQuery(
+            callbackQueryId,
+            !video.is_sea ? '已标记为东南亚板块' : '已取消东南亚板块标记'
+          )
+          const { data: updatedVideo } = await supabase
+            .from('videos')
+            .select('*')
+            .eq('id', video.id)
+            .single()
+          await editMessage(chatId, messageId, getEditMenuText(updatedVideo), {
+            reply_markup: getEditKeyboard(updatedVideo)
+          })
+          return
+        }
         case 'toggle_pin': {
           await answerCallbackQuery(callbackQueryId)
           const updated = await toggleVideoPin(video)
@@ -876,7 +924,7 @@ export async function handleCallback(
           messageId,
           '🏷️ <b>编辑标签</b>\n\n' +
             '请输入标签，用空格分隔（3-5个）\n' +
-            '例如: 突发新闻 吃瓜 短剧',
+            '例如: 突发新闻 吃瓜 东南亚',
           {
             reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'cancel_edit' }]] }
           }

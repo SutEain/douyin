@@ -114,6 +114,8 @@ export const useBaseStore = defineStore('base', {
       users: [],
       // 🎯 深链接：从 Telegram 启动参数传来的 video_id
       startVideoId: null as string | null,
+      // 🎯 深链接：从 Telegram 启动参数传来的 live_room_id
+      startLiveId: null as string | null,
       // 🎯 深链接：预加载的视频数据
       startVideoData: null as any,
       userinfo: {
@@ -182,8 +184,21 @@ export const useBaseStore = defineStore('base', {
 
       // 优先从 Supabase 获取用户数据
       try {
-        const { getCurrentProfile } = await import('@/api/auth')
-        const profile = await getCurrentProfile()
+        const { getCurrentProfile, loginWithTelegram } = await import('@/api/auth')
+        let profile = await getCurrentProfile()
+
+        // 🎯 自动登录：如果在 TG 环境且没登录，尝试自动登录
+        // @ts-ignore
+        const tg = window.Telegram?.WebApp
+        if (!profile && tg?.initData) {
+          console.log('[Store] 检测到 TG 环境且未登录，尝试自动登录...')
+          try {
+            await loginWithTelegram(tg.initData)
+            profile = await getCurrentProfile()
+          } catch (e) {
+            console.error('[Store] 自动登录失败:', e)
+          }
+        }
 
         if (profile) {
           this.userinfo = mapProfileToUserinfo(profile, this.userinfo)
@@ -193,7 +208,7 @@ export const useBaseStore = defineStore('base', {
           return
         }
       } catch (error) {
-        console.warn('从 Supabase 获取用户数据失败，使用 mock 数据:', error)
+        console.warn('获取用户数据或登录失败:', error)
       }
 
       // 如果没有用户数据，尝试使用 Telegram 语言设置
@@ -283,8 +298,20 @@ export const useBaseStore = defineStore('base', {
             this.startVideoId = videoId
             console.log('[DeepLink] ✅ 方式1成功 - 从 start_param 解析到 video_id:', videoId)
             return
+          } else if (startParam.startsWith('live_')) {
+            let roomId = startParam.replace('live_', '')
+            // 🎯 去除邀请码后缀
+            if (roomId.includes('_i')) {
+              roomId = roomId.split('_i')[0]
+            }
+            this.startLiveId = roomId
+            console.log('[DeepLink] ✅ 方式1成功 - 从 start_param 解析到 live_id:', roomId)
+            return
           } else {
-            console.log('[DeepLink] ⚠️ start_param 格式不匹配，期望 video_xxxxx，实际:', startParam)
+            console.log(
+              '[DeepLink] ⚠️ start_param 格式不匹配，期望 video_xxxxx 或 live_xxxxx，实际:',
+              startParam
+            )
           }
         }
 
@@ -329,6 +356,10 @@ export const useBaseStore = defineStore('base', {
       console.log('[Store] 清空深链接参数')
       this.startVideoId = null
       this.startVideoData = null
+    },
+    clearStartLiveId() {
+      console.log('[Store] 清空直播深链接参数')
+      this.startLiveId = null
     },
     setUserinfo(val) {
       this.userinfo = { ...this.userinfo, ...val }

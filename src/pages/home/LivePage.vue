@@ -95,6 +95,9 @@
             <div class="input" @click="showInput = true">
               <span>说点什么...</span>
             </div>
+            <div class="option-item share" @click="shareRoom">
+              <Icon icon="solar:share-bold" />
+            </div>
             <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
           </div>
         </div>
@@ -192,19 +195,18 @@ import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch, computed } 
 import { useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { supabase } from '@/utils/supabase'
-import { _checkImgUrl, _notice, _no } from '@/utils'
+import { _checkImgUrl, _notice } from '@/utils'
 import { toggleFollowUser, sendReward } from '@/api/videos'
 import DPPlayer from '@/components/live/DPPlayer.vue'
 import VapPlayer from '@/components/live/VapPlayer.vue'
 import Dom from '@/utils/dom'
 
+import { useBaseStore } from '@/store/pinia'
+
 const route = useRoute()
+const baseStore = useBaseStore()
 const roomId = computed(() => route.query.id as string)
 const page = ref<HTMLElement | null>(null)
-
-const state = reactive({
-  muted: false
-})
 
 const roomInfo = ref<any>({})
 const messages = ref<any[]>([])
@@ -385,6 +387,39 @@ function showViewerList() {
   if (viewers.value.length === 0) return
   const names = viewers.value.map((v) => v.nickname).join('、')
   _notice(`在线观众：${names}${viewerCount.value > 5 ? ` 等共 ${viewerCount.value} 人` : ''}`)
+}
+
+// 分享直播间
+function shareRoom() {
+  const roomId = route.query.id as string
+  if (!roomId) return
+
+  // 🎯 生成深链接格式：live_<roomId>[_i<inviterId>]
+  // 考虑新用户，加上邀请码
+  let startParam = `live_${roomId}`
+  if (baseStore.userinfo.numeric_id) {
+    startParam += `_i${baseStore.userinfo.numeric_id}`
+  }
+
+  const botUsername = 'tg_douyin_bot'
+  const appName = 'tgdouyin'
+  const shareLink = `https://t.me/${botUsername}/${appName}?startapp=${startParam}`
+
+  // @ts-ignore
+  const tg = window.Telegram?.WebApp
+  if (tg?.switchInlineQuery) {
+    // 调起 TG 联系人选择器
+    tg.switchInlineQuery(startParam, ['users', 'groups', 'channels'])
+  } else {
+    // 兜底：复制链接
+    const input = document.createElement('input')
+    input.value = shareLink
+    document.body.appendChild(input)
+    input.select()
+    document.execCommand('copy')
+    document.body.removeChild(input)
+    _notice('分享链接已复制到剪贴板')
+  }
 }
 
 // --- 动画通知模板 ---
@@ -1551,9 +1586,27 @@ onBeforeUnmount(() => {
           color: rgba(255, 255, 255, 0.6);
         }
 
+        .option-item {
+          width: 36rem;
+          height: 36rem;
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 20rem;
+          color: white;
+          flex-shrink: 0;
+
+          &:active {
+            opacity: 0.7;
+          }
+        }
+
         .gift {
           width: 36rem;
           height: 36rem;
+          flex-shrink: 0;
         }
       }
     }

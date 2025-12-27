@@ -165,12 +165,12 @@ export const VideoList = () => {
         })
       }
 
-      // 筛选短剧
-      if (params.is_shortdrama) {
+      // 筛选东南亚板块
+      if (params.is_sea) {
         filters.push({
-          field: 'is_shortdrama',
+          field: 'is_sea',
           operator: 'eq',
-          value: params.is_shortdrama === 'true'
+          value: params.is_sea === 'true'
         })
       }
 
@@ -503,27 +503,27 @@ export const VideoList = () => {
     })
   }
 
-  // 🎯 切换短剧标记
-  const handleToggleShortDrama = (record: any) => {
-    const newValue = !record.is_shortdrama
+  // 🎯 切换东南亚板块标记
+  const handleToggleSea = (record: any) => {
+    const newValue = !record.is_sea
     Modal.confirm({
-      title: newValue ? '确认标记短剧' : '确认取消短剧',
-      content: newValue ? '确定将该作品标记为短剧吗？' : '确定要取消该作品的短剧标记吗？',
+      title: newValue ? '确认标记东南亚' : '确认取消东南亚',
+      content: newValue ? '确定将该作品标记为东南亚板块吗？' : '确定要取消该作品的东南亚标记吗？',
       onOk: () => {
         updateVideo(
           {
             resource: 'videos',
             id: record.id,
             values: {
-              is_shortdrama: newValue
+              is_sea: newValue
             }
           },
           {
             onSuccess: () => {
-              message.success(newValue ? '已标记为短剧' : '已取消短剧')
-              console.log('[VideoList] toggle shortdrama done, refetch admin_videos_list:', {
+              message.success(newValue ? '已标记为东南亚' : '已取消东南亚')
+              console.log('[VideoList] toggle sea done, refetch admin_videos_list:', {
                 id: record.id,
-                is_shortdrama: newValue
+                is_sea: newValue
               })
               invalidate({ resource: 'admin_videos_list', invalidates: ['list'] })
             },
@@ -655,10 +655,10 @@ export const VideoList = () => {
               <Select.Option value="false">普通</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="is_shortdrama" label="短剧">
-            <Select placeholder="是否短剧" allowClear style={{ width: 110 }}>
-              <Select.Option value="true">短剧</Select.Option>
-              <Select.Option value="false">非短剧</Select.Option>
+          <Form.Item name="is_sea" label="东南亚">
+            <Select placeholder="是否东南亚" allowClear style={{ width: 110 }}>
+              <Select.Option value="true">东南亚</Select.Option>
+              <Select.Option value="false">普通</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item>
@@ -983,21 +983,19 @@ export const VideoList = () => {
                   成人
                 </Button>
 
-                {/* 短剧标记按钮：仅视频类型显示 */}
-                {record.content_type === 'video' && (
-                  <Button
-                    type={record.is_shortdrama ? 'primary' : 'default'}
-                    size="small"
-                    onClick={() => handleToggleShortDrama(record)}
-                    style={
-                      record.is_shortdrama
-                        ? { background: '#722ed1', borderColor: '#722ed1', color: '#fff' }
-                        : { borderColor: '#722ed1', color: '#722ed1' }
-                    }
-                  >
-                    短剧
-                  </Button>
-                )}
+                {/* 东南亚板块标记按钮 */}
+                <Button
+                  type={record.is_sea ? 'primary' : 'default'}
+                  size="small"
+                  onClick={() => handleToggleSea(record)}
+                  style={
+                    record.is_sea
+                      ? { background: '#722ed1', borderColor: '#722ed1', color: '#fff' }
+                      : { borderColor: '#722ed1', color: '#722ed1' }
+                  }
+                >
+                  东南亚
+                </Button>
 
                 <Button
                   type="default"

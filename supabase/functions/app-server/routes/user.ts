@@ -528,6 +528,28 @@ export async function handleAutoInit(req: Request): Promise<Response> {
 
     console.log('[AutoInit] ✅ 用户创建成功:', newProfile.id)
 
+    // 🎯 步骤3: 新用户默认关注官方账号 88888 (抖音精选)
+    try {
+      const { data: officialUser } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('numeric_id', 88888)
+        .maybeSingle()
+
+      if (officialUser && officialUser.id !== newProfile.id) {
+        console.log('[AutoInit] 新用户自动关注官方账号:', officialUser.id)
+        await supabaseAdmin.from('follows').upsert(
+          {
+            follower_id: newProfile.id,
+            followee_id: officialUser.id
+          },
+          { onConflict: 'follower_id,followee_id' }
+        )
+      }
+    } catch (followErr) {
+      console.error('[AutoInit] 自动关注官方账号失败:', followErr)
+    }
+
     return successResponse({
       id: newProfile.id,
       tg_user_id: newProfile.tg_user_id,

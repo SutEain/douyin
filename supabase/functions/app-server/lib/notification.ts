@@ -9,6 +9,8 @@ export type NotificationType =
   | 'request_update'
   | 'visit'
   | 'gift'
+  | 'recharge'
+  | 'withdraw'
 
 export async function checkAndSendNotification(
   targetUserId: string,
@@ -85,7 +87,7 @@ export async function checkAndSendNotification(
 
     // Fire and forget (don't await response to avoid blocking main thread too long,
     // but in Edge Functions we should ideally await or use waitUntil)
-    const p = fetch(url, {
+    fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

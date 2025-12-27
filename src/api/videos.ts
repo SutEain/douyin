@@ -35,7 +35,7 @@ export function recommendedLongVideo(params?: any) {
   )
 }
 
-// 普通视频 Tab：只返回 content_type='video' 且 is_shortdrama=false 的已发布内容，按 published_at 倒序
+// 普通视频 Tab：只返回 content_type='video' 且 is_sea=false 的已发布内容，按 published_at 倒序
 export function recommendedVideoTab(params?: any) {
   const pageNo = params?.pageNo ?? 0
   const pageSize = params?.pageSize ?? 10

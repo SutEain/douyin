@@ -48,6 +48,8 @@ import { handlePostRecommended } from './routes/post.ts'
 import { handleLiveRooms, handleLiveRoomsProbe, handleLiveRoomDetail } from './routes/live.ts'
 import { handleAdminDouyinParse, handleAdminDouyinPublish } from './routes/douyin.ts'
 import { handleSendReward } from './routes/reward.ts'
+import { handleAdminConfirmRecharge } from './routes/recharge.ts'
+import { handleAdminProcessWithdraw } from './routes/withdraw.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -151,6 +153,16 @@ serve(async (req) => {
     // 💰 打赏/奖励
     if (route === '/reward/send' && method === 'POST') {
       return handleSendReward(req)
+    }
+
+    // 💰 充值确认 (仅 admin)
+    if (route === '/recharge/confirm' && method === 'POST') {
+      return handleAdminConfirmRecharge(req)
+    }
+
+    // 💰 提现处理 (仅 admin)
+    if (route === '/withdraw/process' && method === 'POST') {
+      return handleAdminProcessWithdraw(req)
     }
 
     // 🔍 搜索相关路由
@@ -332,6 +344,28 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
     console.log('[app-server] ✅ 成功创建 profile:', profile.id)
     userId = profile.id
     isNewUser = true
+
+    // 🎯 步骤4: 新用户默认关注官方账号 88888 (抖音精选)
+    try {
+      const { data: officialUser } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('numeric_id', 88888)
+        .maybeSingle()
+
+      if (officialUser && officialUser.id !== userId) {
+        console.log('[app-server] 新用户自动关注官方账号:', officialUser.id)
+        await supabaseAdmin.from('follows').upsert(
+          {
+            follower_id: userId,
+            followee_id: officialUser.id
+          },
+          { onConflict: 'follower_id,followee_id' }
+        )
+      }
+    } catch (followErr) {
+      console.error('[app-server] 自动关注官方账号失败:', followErr)
+    }
   } else {
     // ✅ 用户已存在
     console.log('[app-server] 用户已存在:', existingProfile.id)
@@ -360,6 +394,12 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
         }
       } else if (start_param.startsWith('video_') && start_param.includes('_i')) {
         // 新格式：video_xxx_i12345
+        const parts = start_param.split('_i')
+        if (parts.length > 1) {
+          inviterCode = parts[1]
+        }
+      } else if (start_param.startsWith('live_') && start_param.includes('_i')) {
+        // 🎯 直播链接也支持带邀请码：live_xxx_i12345
         const parts = start_param.split('_i')
         if (parts.length > 1) {
           inviterCode = parts[1]

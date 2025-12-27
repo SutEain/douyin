@@ -10,10 +10,11 @@ interface DashboardStats {
   usersWithVideos: number
   newUsersToday: number
   activeUsersToday: number
+  newFirstPublishersToday: number // 🎯 新增
   totalVideos: number
   totalNormalVideos: number
   totalAdultVideos: number
-  totalShortDramaVideos: number
+  totalSeaVideos: number
   newVideosToday: number
   newNormalVideosToday: number
   newAdultVideosToday: number
@@ -25,6 +26,7 @@ type ActiveUserRow = {
   username: string | null
   numeric_id: number | null
   last_active_at: string | null
+  first_published_at?: string | null // 🎯 新增
 }
 
 type NewUserRow = {
@@ -49,7 +51,12 @@ type VideoWithAuthorRow = VideoRow & {
   author_numeric_id: number | null
 }
 
-type DrawerMode = 'activeUsersToday' | 'newUsersToday' | 'newVideosToday' | 'newAdultVideosToday'
+type DrawerMode =
+  | 'activeUsersToday'
+  | 'newUsersToday'
+  | 'newVideosToday'
+  | 'newAdultVideosToday'
+  | 'newFirstPublishersToday' // 🎯 新增
 
 function getStartOfTodayShanghaiISO(now = new Date()): string {
   const fmt = new Intl.DateTimeFormat('zh-CN', {
@@ -113,10 +120,11 @@ export const Dashboard = () => {
           totalVideosRes,
           totalNormalVideosRes,
           totalAdultVideosRes,
-          totalShortDramaVideosRes,
+          totalSeaVideosRes,
           newVideosRes,
           newNormalVideosRes,
-          newAdultVideosRes
+          newAdultVideosRes,
+          newFirstPublishersRes // 🎯 新增
         ] = await Promise.all([
           supabaseClient.from('profiles').select('*', { count: 'exact', head: true }),
           supabaseClient
@@ -150,7 +158,7 @@ export const Dashboard = () => {
             .select('*', { count: 'exact', head: true })
             .eq('status', 'published')
             .eq('is_adult', false)
-            .eq('is_shortdrama', true),
+            .eq('is_sea', true),
           supabaseClient
             .from('videos')
             .select('*', { count: 'exact', head: true })
@@ -167,7 +175,9 @@ export const Dashboard = () => {
             .select('*', { count: 'exact', head: true })
             .eq('status', 'published')
             .gte('created_at', startISO)
-            .eq('is_adult', true)
+            .eq('is_adult', true),
+          // 🎯 调用 RPC 获取今日首次发作品用户数
+          supabaseClient.rpc('get_today_first_publishers_count', { p_start_iso: startISO })
         ])
 
         setStats({
@@ -175,10 +185,11 @@ export const Dashboard = () => {
           usersWithVideos: usersWithVideosRes.count ?? 0,
           newUsersToday: newUsersRes.count ?? 0,
           activeUsersToday: activeUsersRes.count ?? 0,
+          newFirstPublishersToday: Number(newFirstPublishersRes.data) || 0, // 🎯 新增
           totalVideos: totalVideosRes.count ?? 0,
           totalNormalVideos: totalNormalVideosRes.count ?? 0,
           totalAdultVideos: totalAdultVideosRes.count ?? 0,
-          totalShortDramaVideos: totalShortDramaVideosRes.count ?? 0,
+          totalSeaVideos: totalSeaVideosRes.count ?? 0,
           newVideosToday: newVideosRes.count ?? 0,
           newNormalVideosToday: newNormalVideosRes.count ?? 0,
           newAdultVideosToday: newAdultVideosRes.count ?? 0
@@ -210,6 +221,28 @@ export const Dashboard = () => {
         if (res.error) throw res.error
         setActiveUsers((res.data ?? []) as ActiveUserRow[])
         setActiveTotal(res.count ?? 0)
+        return
+      }
+
+      if (mode === 'newFirstPublishersToday') {
+        // 🎯 调用 RPC 获取今日首次发作品用户列表
+        const res = await supabaseClient.rpc(
+          'get_today_first_publishers_list',
+          {
+            p_start_iso: startISO,
+            p_limit: pageSize,
+            p_offset: from
+          },
+          { count: 'exact' }
+        )
+
+        if (res.error) throw res.error
+        setActiveUsers((res.data ?? []) as any[])
+        // RPC count 可能不准确，使用 count: 'exact' 或单独获取
+        const countRes = await supabaseClient.rpc('get_today_first_publishers_count', {
+          p_start_iso: startISO
+        })
+        setActiveTotal(Number(countRes.data) || 0)
         return
       }
 
@@ -299,6 +332,7 @@ export const Dashboard = () => {
   const drawerTitle = useMemo(() => {
     if (drawerMode === 'activeUsersToday') return '今日活跃用户（北京时间）'
     if (drawerMode === 'newUsersToday') return '今日新增用户（北京时间）'
+    if (drawerMode === 'newFirstPublishersToday') return '今日首次发作品用户（北京时间）'
     if (drawerMode === 'newAdultVideosToday') return '今日新增成人视频（北京时间）'
     return '今日新增作品（北京时间）'
   }, [drawerMode])
@@ -317,6 +351,25 @@ export const Dashboard = () => {
         {
           title: '最后活跃时间(北京)',
           dataIndex: 'last_active_at',
+          width: 200,
+          render: (v: any) => formatShanghaiTime(v)
+        }
+      ]
+    }
+
+    if (drawerMode === 'newFirstPublishersToday') {
+      return [
+        { title: '昵称', dataIndex: 'nickname', render: (v: any) => v || '-' },
+        { title: '用户名', dataIndex: 'username', render: (v: any) => v || '-' },
+        {
+          title: '数字ID',
+          dataIndex: 'numeric_id',
+          width: 110,
+          render: (v: any) => (v == null ? '-' : String(v))
+        },
+        {
+          title: '首发作品时间(北京)',
+          dataIndex: 'first_published_at',
           width: 200,
           render: (v: any) => formatShanghaiTime(v)
         }
@@ -390,10 +443,25 @@ export const Dashboard = () => {
             </Card>
           </Col>
           <Col xs={24} sm={12} md={6}>
+            <Card
+              style={{ cursor: 'pointer', border: '1px solid #722ed1' }}
+              onClick={() => openDrawer('newFirstPublishersToday')}
+            >
+              <Statistic
+                title="今日首次发作品用户"
+                value={stats?.newFirstPublishersToday ?? 0}
+                valueStyle={{ color: '#722ed1' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
             <Card style={{ cursor: 'pointer' }} onClick={() => openDrawer('newVideosToday')}>
               <Statistic title="今日新增作品（总）" value={stats?.newVideosToday ?? 0} />
             </Card>
           </Col>
+        </Row>
+
+        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24} sm={12} md={6}>
             <Card style={{ cursor: 'pointer' }} onClick={() => openDrawer('newAdultVideosToday')}>
               <Statistic
@@ -456,7 +524,7 @@ export const Dashboard = () => {
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24} sm={12} md={6}>
             <Card>
-              <Statistic title="短剧总数（非成人）" value={stats?.totalShortDramaVideos ?? 0} />
+              <Statistic title="东南亚作品总数" value={stats?.totalSeaVideos ?? 0} />
             </Card>
           </Col>
         </Row>
@@ -477,6 +545,12 @@ export const Dashboard = () => {
             )}
             {drawerMode === 'newUsersToday' && (
               <>统计口径：profiles.created_at ≥ {formatShanghaiTime(startISO)}（Asia/Shanghai）</>
+            )}
+            {drawerMode === 'newFirstPublishersToday' && (
+              <>
+                统计口径：用户的第一篇状态为已发布的作品（videos.status='published'）发布时间 ≥{' '}
+                {formatShanghaiTime(startISO)}（Asia/Shanghai）
+              </>
             )}
             {(drawerMode === 'newVideosToday' || drawerMode === 'newAdultVideosToday') && (
               <>
