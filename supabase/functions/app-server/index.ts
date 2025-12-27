@@ -64,11 +64,6 @@ serve(async (req) => {
       return handleTelegramLogin(req)
     }
 
-    // 🛠️ 开发登录（仅用于本地开发）
-    if (route === '/dev-login' && method === 'GET') {
-      return handleDevLogin(req)
-    }
-
     if (route === '/video/my' && method === 'GET') {
       return handleVideoMy(req)
     }
@@ -585,76 +580,4 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
     user: profile,
     need_bind_email: !existingProfile
   })
-}
-
-// ========================================
-// 🛠️ 开发登录（仅用于本地开发）
-// ========================================
-async function handleDevLogin(req: Request): Promise<Response> {
-  try {
-    // 获取 user_id 参数
-    const url = new URL(req.url)
-    const userId = url.searchParams.get('user_id')
-
-    if (!userId) {
-      return errorResponse('缺少 user_id 参数', 1, 400)
-    }
-
-    console.log('[dev-login] 开发登录请求，user_id:', userId)
-
-    // 查询用户数据
-    const { data: profile, error } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-
-    if (error || !profile) {
-      console.error('[dev-login] 用户不存在:', error)
-      return errorResponse('用户不存在', 1, 404)
-    }
-
-    console.log('[dev-login] ✅ 获取用户数据成功:', profile.nickname)
-
-    // 🔑 生成 session token（与 Telegram 登录逻辑一致）
-    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId)
-    const userEmail = authUser?.user?.email || undefined
-
-    const magicLinkEmail = userEmail || `dev_${userId}@dev.local`
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: magicLinkEmail
-    })
-
-    if (linkError || !linkData?.properties?.hashed_token) {
-      console.error('[dev-login] generateLink failed:', linkError)
-      return errorResponse('生成 session 失败', 1, 500)
-    }
-
-    const { data: verifyData, error: verifyError } = await supabaseAdmin.auth.verifyOtp({
-      type: 'magiclink',
-      token_hash: linkData.properties.hashed_token
-    })
-
-    if (verifyError || !verifyData?.session) {
-      console.error('[dev-login] verifyOtp failed:', verifyError)
-      return errorResponse('验证 session 失败', 1, 500)
-    }
-
-    const session = verifyData.session
-
-    console.log('[dev-login] ✅ Session 生成成功')
-
-    // 返回与 Telegram 登录相同的数据结构
-    return successResponse({
-      user_id: session.user.id,
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-      expires_in: session.expires_in,
-      user: profile
-    })
-  } catch (error) {
-    console.error('[dev-login] ❌ 错误:', error)
-    return errorResponse(error.message || '服务器错误', 1, 500)
-  }
 }
