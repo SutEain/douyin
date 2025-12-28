@@ -230,17 +230,23 @@ function showComments() {
 
 // 🎯 分享到 Telegram
 function shareToTelegram() {
-  if (!props.item?.aweme_id) {
-    _notice('视频ID缺失，无法分享')
-    return
+  const desc = props.item?.description || ''
+  const title = props.item?.title || ''
+
+  // 🎯 优先使用描述前 15 个字，如果没有描述则使用标题
+  let searchText = desc.substring(0, 15).trim()
+  if (!searchText) {
+    searchText = title.substring(0, 15).trim()
   }
 
-  const numericId = baseStore.userinfo?.numeric_id
-  const inviteSuffix = numericId ? `_i${numericId}` : ''
-  const startParam = `video_${props.item.aweme_id}${inviteSuffix}`
+  // 如果还是空，就用默认词
+  if (!searchText) {
+    searchText = '精彩视频'
+  }
 
   const botUsername = 'tg_douyin_bot'
-  const shareText = `@${botUsername} ${startParam}`
+  // 🎯 用户要求的格式：@bot 搜索词
+  const shareText = `@${botUsername} ${searchText}`
 
   // 🎯 直接复制指令
   _copy(shareText)

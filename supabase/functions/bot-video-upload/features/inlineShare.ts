@@ -165,20 +165,24 @@ export async function handleInlineQuery(inlineQuery: any) {
     }
   }
 
-  // ✅ 3. 视频分享：检查查询格式 video_{videoId}
-  if (trimmed.startsWith('video_')) {
-    let videoId = trimmed.replace('video_', '')
-    if (videoId.includes('_i')) {
-      videoId = videoId.split('_i')[0]
-    }
+  // ✅ 3. 视频直接分享或搜索：检查查询格式 video_{videoId} 或直接是 UUID
+  const isVideoDirect = trimmed.startsWith('video_')
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  let potentialVideoId = isVideoDirect ? trimmed.replace('video_', '') : trimmed
 
-    console.log('[InlineQuery] ✅ 提取视频ID:', videoId)
+  if (potentialVideoId.includes('_i')) {
+    potentialVideoId = potentialVideoId.split('_i')[0]
+  }
+
+  // 如果是 video_ 开头或者是标准的 UUID 格式，尝试直接查找该视频
+  if (isVideoDirect || uuidRegex.test(potentialVideoId)) {
+    console.log('[InlineQuery] 🎯 尝试直接查找视频 ID:', potentialVideoId)
 
     const { data: video } = await supabase
       .from('videos')
-      .select('id, description, status, cover_url')
-      .eq('id', videoId)
-      .single()
+      .select('id, description, title, status, cover_url')
+      .eq('id', potentialVideoId)
+      .maybeSingle()
 
     if (video && video.status === 'published') {
       const { data: sharer } = await supabase
@@ -188,16 +192,16 @@ export async function handleInlineQuery(inlineQuery: any) {
         .single()
       const inviteSuffix = sharer?.numeric_id ? `_i${sharer.numeric_id}` : ''
       const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/tg_douyin_bot/tgdouyin'
-      const deepLink = `${tmeUrl}?startapp=video_${videoId}${inviteSuffix}`
+      const deepLink = `${tmeUrl}?startapp=video_${video.id}${inviteSuffix}`
 
       const result = {
         type: 'article',
-        id: `video_${videoId}`,
-        title: '🎬 精彩视频分享',
+        id: `video_${video.id}`,
+        title: video.title || '🎬 精彩视频分享',
         description: video.description || '点击打开观看',
         thumb_url: video.cover_url || '',
         input_message_content: {
-          message_text: `<b>🎬 视频分享</b>\n\n${video.description || '这段视频太精彩了，不容错过！'}\n\n👇 点击下方按钮立即观看`,
+          message_text: `<b>🎬 ${video.title || '视频分享'}</b>\n\n${video.description || '这段视频太精彩了，不容错过！'}\n\n👇 点击下方按钮立即观看`,
           parse_mode: 'HTML',
           disable_web_page_preview: false
         },
@@ -211,9 +215,9 @@ export async function handleInlineQuery(inlineQuery: any) {
     }
   }
 
-  // ✅ 4. 关键词搜索：描述 + 标签（全站已发布，最多5条，按发布时间倒序）
+  // ✅ 4. 关键词搜索：描述 + 标题 + 标签（全站已发布，按发布时间倒序）
   const keyword = trimmed
-  console.log('[InlineQuery] ✅ 关键词搜索', { userId, keyword })
+  console.log('[InlineQuery] 🔍 关键词搜索:', { userId, keyword })
 
   const { data: sharer } = await supabase
     .from('profiles')
@@ -222,26 +226,27 @@ export async function handleInlineQuery(inlineQuery: any) {
     .single()
   const inviteSuffix = sharer?.numeric_id ? `_i${sharer.numeric_id}` : ''
 
-  const safe = keyword.replace(/[(),]/g, ' ').trim()
+  // 这里的搜索逻辑需要更强大，同时搜索描述、标题和标签
+  const safe = keyword.replace(/[()'"%,]/g, ' ').trim()
   const like = `%${safe}%`
   const tag = safe.startsWith('#') ? safe.slice(1).trim() : safe
   const safeTag = tag.replace(/[{},]/g, ' ').trim()
 
+  // 构建更宽泛的 OR 过滤条件
   const filter = safeTag
-    ? `description.ilike.${like},tags.cs.{${safeTag}}`
-    : `description.ilike.${like}`
+    ? `description.ilike.${like},title.ilike.${like},tags.cs.{${safeTag}}`
+    : `description.ilike.${like},title.ilike.${like}`
 
   const { data: videos, error } = await supabase
     .from('videos')
-    .select('id, description, status, published_at, cover_url, is_adult')
+    .select('id, title, description, status, published_at, cover_url, is_adult')
     .eq('status', 'published')
-    .eq('is_adult', false) // 🎯 默认搜索仅展示非成人内容
     .or(filter)
     .order('published_at', { ascending: false })
-    .limit(10)
+    .limit(20) // 增加到 20 条，方便用户滚动查找
 
   if (error || !videos || videos.length === 0) {
-    console.log('[InlineQuery] ⚠️ 无搜索结果', error)
+    console.log('[InlineQuery] ⚠️ 无搜索结果或发生错误:', error)
     await answerInlineQuery(queryId, [])
     return
   }
@@ -252,17 +257,17 @@ export async function handleInlineQuery(inlineQuery: any) {
     const videoId = v.id
     const deepLink = `${tmeUrl}?startapp=video_${videoId}${inviteSuffix}`
     const fullDesc = v.description || ''
-    const title = fullDesc ? fullDesc.substring(0, 24) : `🎬 视频 ${idx + 1}`
+    const videoTitle = v.title || (fullDesc ? fullDesc.substring(0, 24) : `🎬 视频 ${idx + 1}`)
     const desc = fullDesc ? fullDesc.substring(0, 80) : '点击打开观看'
 
     return {
       type: 'article',
       id: `search_${videoId}`,
-      title,
+      title: videoTitle,
       description: desc,
       thumb_url: v.cover_url || '',
       input_message_content: {
-        message_text: `<b>🎬 搜到精彩视频</b>\n\n${fullDesc}\n\n👇 点击下方按钮立即观看`,
+        message_text: `<b>🎬 ${videoTitle}</b>\n\n${fullDesc || '这段视频太精彩了，不容错过！'}\n\n👇 点击下方按钮立即观看`,
         parse_mode: 'HTML',
         disable_web_page_preview: false
       },
