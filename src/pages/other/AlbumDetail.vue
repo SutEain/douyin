@@ -623,15 +623,21 @@ async function toggleCollect() {
 }
 
 function shareToTelegram() {
-  const id = String(currentId.value || '')
-  if (!id) {
-    _notice('作品ID缺失，无法分享')
-    return
+  const desc = props.detail?.note_card?.display_title || ''
+
+  // 🎯 只要描述前 10 个字
+  let searchText = desc.substring(0, 10).trim()
+
+  // 如果还是空，就用默认词
+  if (!searchText) {
+    searchText = '精彩内容'
   }
-  const numericId = baseStore.userinfo?.numeric_id
-  const inviteSuffix = numericId ? `_i${numericId}` : ''
-  const shareText = `@tg_douyin_bot video_${id}${inviteSuffix}`
+
+  const botUsername = 'tg_douyin_bot'
+  const shareText = `@${botUsername} ${searchText}`
+
   _copy(shareText)
+  _notice('分享指令已复制，去聊天框粘贴即可生成卡片～')
 }
 
 function close() {

@@ -1,6 +1,27 @@
 import { BOT_TOKEN, TG_API_BASE, TG_MINIAPP_URL, TG_MINIAPP_TME_URL } from '../env.ts'
 import { supabase } from '../supabaseClient.ts'
 
+// 🎯 辅助函数：转义 HTML 特殊字符，防止 Telegram 解析报错
+function escapeHTML(str: string): string {
+  if (!str) return ''
+  return str.replace(/[&<>"']/g, (m) => {
+    switch (m) {
+      case '&':
+        return '&amp;'
+      case '<':
+        return '&lt;'
+      case '>':
+        return '&gt;'
+      case '"':
+        return '&quot;'
+      case "'":
+        return '&#39;'
+      default:
+        return m
+    }
+  })
+}
+
 // 🎯 处理 inline query（分享功能）
 async function answerInlineQuery(inlineQueryId: string, results: any[]) {
   const url = `${TG_API_BASE}/bot${BOT_TOKEN}/answerInlineQuery`
@@ -150,7 +171,7 @@ export async function handleInlineQuery(inlineQuery: any) {
           ? `主播: ${selfRoom.anchor?.nickname || '匿名'}`
           : '点击发送直播间卡片',
         input_message_content: {
-          message_text: `<b>📺 正在直播: ${room.title || '精彩内容'}</b>\n\n主播：${selfRoom?.anchor?.nickname || '抖音精选'}\n\n快进入直播间一起互动吧！🚀`,
+          message_text: `<b>📺 正在直播: ${escapeHTML(room.title || '精彩内容')}</b>\n\n主播：${escapeHTML(selfRoom?.anchor?.nickname || '抖音精选')}\n\n快进入直播间一起互动吧！🚀`,
           parse_mode: 'HTML',
           disable_web_page_preview: false
         },
@@ -159,7 +180,7 @@ export async function handleInlineQuery(inlineQuery: any) {
         }
       }
 
-      if (coverUrl) {
+      if (coverUrl && (coverUrl.startsWith('http://') || coverUrl.startsWith('https://'))) {
         result.thumb_url = coverUrl
       }
 
@@ -203,7 +224,7 @@ export async function handleInlineQuery(inlineQuery: any) {
         title: video.title || '🎬 精彩视频分享',
         description: video.description || '点击打开观看',
         input_message_content: {
-          message_text: `<b>🎬 ${video.title || '视频分享'}</b>\n\n${video.description || '这段视频太精彩了，不容错过！'}\n\n👇 点击下方按钮立即观看`,
+          message_text: `<b>🎬 ${escapeHTML(video.title || '视频分享')}</b>\n\n${escapeHTML(video.description || '这段视频太精彩了，不容错过！')}\n\n👇 点击下方按钮立即观看`,
           parse_mode: 'HTML',
           disable_web_page_preview: false
         },
@@ -212,7 +233,10 @@ export async function handleInlineQuery(inlineQuery: any) {
         }
       }
 
-      if (video.cover_url) {
+      if (
+        video.cover_url &&
+        (video.cover_url.startsWith('http://') || video.cover_url.startsWith('https://'))
+      ) {
         result.thumb_url = video.cover_url
       }
 
@@ -266,13 +290,16 @@ export async function handleInlineQuery(inlineQuery: any) {
     const videoTitle = v.title || (fullDesc ? fullDesc.substring(0, 24) : `🎬 视频 ${idx + 1}`)
     const desc = fullDesc ? fullDesc.substring(0, 80) : '点击打开观看'
 
+    const escapedTitle = escapeHTML(videoTitle)
+    const escapedDesc = escapeHTML(fullDesc)
+
     const item: any = {
       type: 'article',
       id: `search_${videoId}`,
       title: videoTitle,
       description: desc,
       input_message_content: {
-        message_text: `<b>🎬 ${videoTitle}</b>\n\n${fullDesc || '这段视频太精彩了，不容错过！'}\n\n👇 点击下方按钮立即观看`,
+        message_text: `<b>🎬 ${escapedTitle}</b>\n\n${escapedDesc || '这段视频太精彩了，不容错过！'}\n\n👇 点击下方按钮立即观看`,
         parse_mode: 'HTML',
         disable_web_page_preview: false
       },
@@ -281,7 +308,7 @@ export async function handleInlineQuery(inlineQuery: any) {
       }
     }
 
-    if (v.cover_url) {
+    if (v.cover_url && (v.cover_url.startsWith('http://') || v.cover_url.startsWith('https://'))) {
       item.thumb_url = v.cover_url
     }
 

@@ -230,14 +230,11 @@ function showComments() {
 
 // 🎯 分享到 Telegram
 function shareToTelegram() {
-  const desc = props.item?.description || ''
-  const title = props.item?.title || ''
+  // 🎯 前端使用的字段名是 desc 而不是 description
+  const desc = props.item?.desc || ''
 
-  // 🎯 优先使用描述前 15 个字，如果没有描述则使用标题
-  let searchText = desc.substring(0, 15).trim()
-  if (!searchText) {
-    searchText = title.substring(0, 15).trim()
-  }
+  // 🎯 用户要求：只要描述前 10 个字
+  let searchText = desc.substring(0, 10).trim()
 
   // 如果还是空，就用默认词
   if (!searchText) {
