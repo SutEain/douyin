@@ -142,14 +142,13 @@ export async function handleInlineQuery(inlineQuery: any) {
       const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/tg_douyin_bot/tgdouyin'
       const deepLink = `${tmeUrl}?startapp=live_${roomId}${inviteSuffix}`
 
-      const result = {
+      const result: any = {
         type: 'article',
         id: `live_${roomId}`,
         title: `📺 正在直播: ${room.title || '精彩内容'}`,
         description: selfRoom
           ? `主播: ${selfRoom.anchor?.nickname || '匿名'}`
           : '点击发送直播间卡片',
-        thumb_url: coverUrl,
         input_message_content: {
           message_text: `<b>📺 正在直播: ${room.title || '精彩内容'}</b>\n\n主播：${selfRoom?.anchor?.nickname || '抖音精选'}\n\n快进入直播间一起互动吧！🚀`,
           parse_mode: 'HTML',
@@ -158,6 +157,10 @@ export async function handleInlineQuery(inlineQuery: any) {
         reply_markup: {
           inline_keyboard: [[{ text: '👉 立即进入直播间', url: deepLink }]]
         }
+      }
+
+      if (coverUrl) {
+        result.thumb_url = coverUrl
       }
 
       await answerInlineQuery(queryId, [result])
@@ -194,12 +197,11 @@ export async function handleInlineQuery(inlineQuery: any) {
       const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/tg_douyin_bot/tgdouyin'
       const deepLink = `${tmeUrl}?startapp=video_${video.id}${inviteSuffix}`
 
-      const result = {
+      const result: any = {
         type: 'article',
         id: `video_${video.id}`,
         title: video.title || '🎬 精彩视频分享',
         description: video.description || '点击打开观看',
-        thumb_url: video.cover_url || '',
         input_message_content: {
           message_text: `<b>🎬 ${video.title || '视频分享'}</b>\n\n${video.description || '这段视频太精彩了，不容错过！'}\n\n👇 点击下方按钮立即观看`,
           parse_mode: 'HTML',
@@ -208,6 +210,10 @@ export async function handleInlineQuery(inlineQuery: any) {
         reply_markup: {
           inline_keyboard: [[{ text: '👉 立即播放', url: deepLink }]]
         }
+      }
+
+      if (video.cover_url) {
+        result.thumb_url = video.cover_url
       }
 
       await answerInlineQuery(queryId, [result])
@@ -260,12 +266,11 @@ export async function handleInlineQuery(inlineQuery: any) {
     const videoTitle = v.title || (fullDesc ? fullDesc.substring(0, 24) : `🎬 视频 ${idx + 1}`)
     const desc = fullDesc ? fullDesc.substring(0, 80) : '点击打开观看'
 
-    return {
+    const item: any = {
       type: 'article',
       id: `search_${videoId}`,
       title: videoTitle,
       description: desc,
-      thumb_url: v.cover_url || '',
       input_message_content: {
         message_text: `<b>🎬 ${videoTitle}</b>\n\n${fullDesc || '这段视频太精彩了，不容错过！'}\n\n👇 点击下方按钮立即观看`,
         parse_mode: 'HTML',
@@ -275,6 +280,12 @@ export async function handleInlineQuery(inlineQuery: any) {
         inline_keyboard: [[{ text: '👉 立即查看', url: deepLink }]]
       }
     }
+
+    if (v.cover_url) {
+      item.thumb_url = v.cover_url
+    }
+
+    return item
   })
 
   await answerInlineQuery(queryId, results)
