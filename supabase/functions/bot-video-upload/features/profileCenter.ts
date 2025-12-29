@@ -171,7 +171,7 @@ export async function handleInviteUnlock(chatId: number, messageId?: number) {
 }
 
 // 🎯 处理"我要开播"
-export async function handleStartLive(chatId: number, messageId?: number) {
+export async function handleStartLive(chatId: number, messageId?: number, title?: string) {
   try {
     const { data: profile } = await supabase
       .from('profiles')
@@ -195,7 +195,7 @@ export async function handleStartLive(chatId: number, messageId?: number) {
       body: JSON.stringify({
         action: 'start',
         userId: profile.id,
-        title: `${profile.nickname || profile.username || profile.numeric_id} 的直播间`
+        title: title || `${profile.nickname || profile.username || profile.numeric_id} 的直播间`
       })
     })
 
@@ -207,6 +207,7 @@ export async function handleStartLive(chatId: number, messageId?: number) {
 
     const text =
       `🎥 <b>直播准备就绪！</b>\n\n` +
+      `<b>直播标题：</b> ${title || profile.nickname || profile.username || profile.numeric_id}\n\n` +
       `请将以下参数填入您的推流软件（如 OBS 或 Larix）：\n\n` +
       `📍 <b>服务器地址 (URL)：</b>\n<code>${data.rtmp_url}</code>\n\n` +
       `🔑 <b>推流密钥 (Stream Key)：</b>\n<code>${data.stream_key}</code>\n\n` +
@@ -231,6 +232,37 @@ export async function handleStartLive(chatId: number, messageId?: number) {
   }
 }
 
+// 🎯 处理"设置直播标题"
+export async function handleAskLiveTitle(chatId: number, messageId?: number) {
+  try {
+    const { updateUserState } = await import('../state.ts')
+    await updateUserState(chatId, {
+      state: 'waiting_live_title',
+      current_message_id: messageId
+    })
+
+    const text =
+      `🎬 <b>设置直播间标题</b>\n\n` +
+      `请输入您的直播间标题：\n\n` +
+      `💡 好的标题能吸引更多观众哦！\n` +
+      `💡 直接发送文字即可设置标题并开播\n\n` +
+      `发送 /cancel 可取消操作。`
+
+    const keyboard = {
+      inline_keyboard: [[{ text: '⬅️ 取消并返回', callback_data: 'user_profile' }]]
+    }
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: keyboard })
+    }
+  } catch (error) {
+    console.error('handleAskLiveTitle error:', error)
+    await sendMessage(chatId, '❌ 系统错误，请稍后重试')
+  }
+}
+
 // 🎯 处理"申请开播"
 export async function handleApplyLive(chatId: number, messageId?: number) {
   try {
@@ -244,7 +276,8 @@ export async function handleApplyLive(chatId: number, messageId?: number) {
     const text =
       `✅ <b>申请提交成功！</b>\n\n` +
       `您的直播申请已进入审核队列，管理员将在 24 小时内完成审核。\n\n` +
-      `💡 审核通过后，您将在「个人中心」看到「我要开播」按钮。`
+      `💡 审核通过后，您将在「个人中心」看到「我要开播」按钮。\n\n` +
+      `🗣 <b>联系 <a href="tg://resolve?domain=Edison521">@Edison521</a> 申请通过</b>`
 
     const keyboard = {
       inline_keyboard: [[{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }]]

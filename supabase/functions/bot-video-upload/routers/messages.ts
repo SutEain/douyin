@@ -119,6 +119,32 @@ export async function handleText(chatId: number, text: string, userMessageId: nu
     return
   }
 
+  // ✅ 直播流程：设置标题
+  if (userState.state === 'waiting_live_title') {
+    await deleteTelegramMessage(chatId, userMessageId)
+    if (!userState.current_message_id) return
+
+    const title = text.trim()
+    if (title === '/cancel') {
+      await updateUserState(chatId, { state: 'idle' })
+      const { handleUserProfile } = await import('../features/profileCenter.ts')
+      await handleUserProfile(chatId, userState.current_message_id)
+      return
+    }
+
+    if (title.length < 2 || title.length > 50) {
+      await sendSelfDestructMessage(chatId, '❌ 直播标题长度请在 2-50 字之间')
+      return
+    }
+
+    // 更新状态回 idle
+    await updateUserState(chatId, { state: 'idle' })
+
+    const { handleStartLive } = await import('../features/profileCenter.ts')
+    await handleStartLive(chatId, userState.current_message_id, title)
+    return
+  }
+
   if (!userState.draft_video_id || !userState.current_message_id) return
 
   const { data: video } = await supabase

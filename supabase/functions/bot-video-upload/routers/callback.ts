@@ -119,9 +119,9 @@ export async function handleCallback(
         context: { ...ctx, ui_locks: { ...uiLocks, start_live_until: now + 5000 } }
       })
 
-      await answerCallbackQuery(callbackQueryId, '🚀 正在为您准备直播间...')
-      const { handleStartLive } = await import('../features/profileCenter.ts')
-      await handleStartLive(chatId, messageId)
+      await answerCallbackQuery(callbackQueryId)
+      const { handleAskLiveTitle } = await import('../features/profileCenter.ts')
+      await handleAskLiveTitle(chatId, messageId)
       return
     }
 
