@@ -73,12 +73,25 @@
 
         <!-- 评论列表 -->
         <div v-else class="comment-items">
-          <div v-for="(item, i) in comments" :key="item.comment_id || i" class="comment-item">
+          <div
+            v-for="(item, i) in comments"
+            :key="item.comment_id || i"
+            class="comment-item"
+            :class="{ 'show-delete': showDeleteActionId === item.comment_id }"
+            @touchstart="handleTouchStartLong(item)"
+            @touchend="handleTouchEndLong"
+            @mousedown="handleTouchStartLong(item)"
+            @mouseup="handleTouchEndLong"
+          >
             <!-- 主评论 -->
             <div class="comment-main">
-              <img :src="_checkImgUrl(item.avatar)" class="avatar" />
+              <img
+                :src="_checkImgUrl(item.avatar)"
+                class="avatar"
+                @click="handleAvatarClick(item)"
+              />
               <div class="comment-body">
-                <div class="username">{{ item.nickname }}</div>
+                <div class="username" @click="handleAvatarClick(item)">{{ item.nickname }}</div>
                 <div class="comment-text" :class="{ 'text-gray': item.user_buried }">
                   {{ item.user_buried ? '该评论已折叠' : item.content }}
                 </div>
@@ -113,16 +126,35 @@
               </div>
             </div>
 
+            <!-- 删除操作按钮 -->
+            <div
+              v-if="showDeleteActionId === item.comment_id"
+              class="delete-overlay"
+              @click.stop="handleDeleteComment(item)"
+            >
+              <div class="delete-btn">删除</div>
+              <div class="cancel-delete" @click.stop="showDeleteActionId = null">取消</div>
+            </div>
+
             <!-- 回复列表 -->
             <div v-if="item.showChildren && item.children?.length" class="reply-list">
               <div
                 v-for="(child, j) in item.children"
                 :key="child.comment_id || j"
                 class="reply-item"
+                :class="{ 'show-delete': showDeleteActionId === child.comment_id }"
+                @touchstart="handleTouchStartLong(child)"
+                @touchend="handleTouchEndLong"
+                @mousedown="handleTouchStartLong(child)"
+                @mouseup="handleTouchEndLong"
               >
-                <img :src="_checkImgUrl(child.avatar)" class="avatar" />
+                <img
+                  :src="_checkImgUrl(child.avatar)"
+                  class="avatar"
+                  @click="handleAvatarClick(child)"
+                />
                 <div class="reply-body">
-                  <div class="username">{{ child.nickname }}</div>
+                  <div class="username" @click="handleAvatarClick(child)">{{ child.nickname }}</div>
                   <div class="reply-text">
                     <span v-if="child.reply_to_user" class="reply-to"
                       >回复 @{{ child.reply_to_user }}：</span
@@ -160,6 +192,16 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- 删除操作按钮 (回复) -->
+                <div
+                  v-if="showDeleteActionId === child.comment_id"
+                  class="delete-overlay"
+                  @click.stop="handleDeleteComment(child)"
+                >
+                  <div class="delete-btn">删除</div>
+                  <div class="cancel-delete" @click.stop="showDeleteActionId = null">取消</div>
+                </div>
               </div>
             </div>
 
@@ -193,10 +235,19 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import Loading from './Loading.vue'
-import { videoComments, sendVideoComment, toggleCommentLike, getCommentReplies } from '@/api/videos'
+import {
+  videoComments,
+  sendVideoComment,
+  toggleCommentLike,
+  getCommentReplies,
+  deleteVideoComment
+} from '@/api/videos'
 import { _formatNumber, _time, _checkImgUrl, _notice, sampleSize } from '@/utils'
+import { useBaseStore } from '@/store/pinia'
+import { useVideoStore } from '@/stores/video'
 
 interface Props {
   modelValue: boolean
@@ -216,12 +267,102 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
+const router = useRouter()
+const baseStore = useBaseStore()
+const videoStore = useVideoStore()
+
+// 🎯 计算当前用户和视频作者
+const currentUserUid = computed(() => baseStore.userinfo.uid)
+const videoAuthorUid = computed(
+  () => videoStore.currentVideo?.author?.user_id || videoStore.currentVideo?.author?.uid
+)
+
 // 评论数据
 const comments = ref<any[]>([])
 const commentsLoading = ref(false)
 const commentText = ref('')
 const listRef = ref<HTMLElement | null>(null)
 const replyingTo = ref<any>(null) // 🎯 正在回复的评论
+
+// 🎯 长按删除相关
+const longPressTimer = ref<any>(null)
+const showDeleteActionId = ref<string | null>(null)
+
+// 🎯 处理头像点击
+const handleAvatarClick = (item: any) => {
+  const userId = item.user_id
+  if (!userId) return
+
+  // 关闭评论区
+  handleClose()
+
+  // 跳转到用户主页
+  router.push({
+    name: 'user-page',
+    params: { id: userId }
+  })
+}
+
+// 🎯 长按逻辑
+const handleTouchStartLong = (item: any) => {
+  // 校验权限：是视频作者或者是评论作者
+  const isAuthor = videoAuthorUid.value === currentUserUid.value
+  const isMyComment = item.user_id === currentUserUid.value
+
+  if (!isAuthor && !isMyComment) return
+
+  longPressTimer.value = setTimeout(() => {
+    showDeleteActionId.value = item.comment_id
+    // 触发震动反馈（如果可用）
+    if (window.navigator?.vibrate) {
+      window.navigator.vibrate(50)
+    }
+  }, 600) // 600ms 触发长按
+}
+
+const handleTouchEndLong = () => {
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value)
+    longPressTimer.value = null
+  }
+}
+
+// 🎯 删除评论
+const handleDeleteComment = async (item: any) => {
+  const confirmDelete = window.confirm('确认删除这条评论吗？')
+  if (!confirmDelete) {
+    showDeleteActionId.value = null
+    return
+  }
+
+  try {
+    const res: any = await deleteVideoComment(item.comment_id)
+    _notice('评论已删除')
+
+    // 从列表中移除（主评论或回复）
+    const index = comments.value.findIndex((c) => c.comment_id === item.comment_id)
+    if (index !== -1) {
+      comments.value.splice(index, 1)
+      total.value--
+    } else {
+      // 可能是回复，遍历查找
+      for (const parent of comments.value) {
+        if (parent.children) {
+          const childIndex = parent.children.findIndex((c: any) => c.comment_id === item.comment_id)
+          if (childIndex !== -1) {
+            parent.children.splice(childIndex, 1)
+            parent.sub_comment_count = Math.max(0, (parent.sub_comment_count || 0) - 1)
+            break
+          }
+        }
+      }
+    }
+  } catch (error: any) {
+    _notice(error?.message || '删除失败')
+  } finally {
+    showDeleteActionId.value = null
+  }
+}
 // 🎯 分页数据
 const pageNo = ref(0)
 const pageSize = 20
@@ -711,9 +852,57 @@ watch(
 .comment-item {
   padding: 15px;
   border-bottom: 1px solid #f5f5f5;
+  position: relative; // 🎯 必须 relative 才能定位 delete-overlay
 
   &:last-child {
     border-bottom: none;
+  }
+
+  // 🎯 长按显示删除时的样式
+  &.show-delete {
+    background: #f9f9f9;
+  }
+}
+
+// 🎯 删除操作层
+.delete-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  z-index: 100;
+  animation: fadeIn 0.2s ease;
+
+  .delete-btn {
+    padding: 8px 25px;
+    background: #fe2c55;
+    color: white;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .cancel-delete {
+    padding: 8px 25px;
+    background: #eee;
+    color: #666;
+    border-radius: 20px;
+    font-size: 14px;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
@@ -820,6 +1009,11 @@ watch(
   display: flex;
   gap: 10px;
   padding: 5px 0;
+  position: relative; // 🎯 必须 relative
+
+  &.show-delete {
+    background: #f9f9f9;
+  }
 
   .avatar {
     width: 20px;

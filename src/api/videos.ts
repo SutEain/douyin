@@ -152,6 +152,14 @@ export async function toggleCommentLike(commentId: string, liked: boolean) {
   })
 }
 
+// 🎯 删除评论
+export async function deleteVideoComment(commentId: string) {
+  return callAppServer('/comment/delete', {
+    method: 'POST',
+    body: { comment_id: commentId }
+  })
+}
+
 // 🎯 获取评论的回复列表
 export async function getCommentReplies(commentId: string) {
   try {

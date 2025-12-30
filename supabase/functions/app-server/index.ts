@@ -26,7 +26,8 @@ import {
   handleVideoComments,
   handleVideoCreateComment,
   handleCommentLike,
-  handleCommentReplies
+  handleCommentReplies,
+  handleDeleteComment
 } from './routes/comments.ts'
 import {
   handleFollowUser,
@@ -125,6 +126,9 @@ serve(async (req) => {
     }
     if (route === '/comment/like' && method === 'POST') {
       return handleCommentLike(req)
+    }
+    if (route === '/comment/delete' && method === 'POST') {
+      return handleDeleteComment(req)
     }
     if (route === '/user/follow' && method === 'POST') {
       return handleFollowUser(req)

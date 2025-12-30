@@ -336,3 +336,47 @@ export async function handleCommentLike(req: Request): Promise<Response> {
     like_count: comment?.like_count ?? 0
   })
 }
+
+// 🎯 删除评论
+export async function handleDeleteComment(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+  const body = await parseJsonBody<{ comment_id?: string }>(req)
+
+  if (!body.comment_id) {
+    throw new HttpError('Missing comment_id', 400)
+  }
+
+  // 1. 获取评论信息和所属视频的作者
+  const { data: comment, error: fetchError } = await supabaseAdmin
+    .from('video_comments')
+    .select('user_id, video_id, videos(author_id)')
+    .eq('id', body.comment_id)
+    .single()
+
+  if (fetchError || !comment) {
+    throw new HttpError('Comment not found', 404)
+  }
+
+  const videoAuthorId = (comment as any).videos?.author_id
+  const commentAuthorId = comment.user_id
+
+  // 2. 权限校验：视频作者可以删除所有评论，用户可以删除自己的评论
+  const isAuthorized = user.id === videoAuthorId || user.id === commentAuthorId
+
+  if (!isAuthorized) {
+    throw new HttpError('Permission denied', 403)
+  }
+
+  // 3. 执行逻辑删除
+  const { error: deleteError } = await supabaseAdmin
+    .from('video_comments')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', body.comment_id)
+
+  if (deleteError) {
+    console.error('[app-server] Delete comment failed:', deleteError)
+    return errorResponse('Failed to delete comment', 1, 500)
+  }
+
+  return successResponse({ message: 'Comment deleted successfully' })
+}
