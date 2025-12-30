@@ -65,12 +65,19 @@ export const VideoList = () => {
     syncWithLocation: true,
     sorters: {
       initial: [
-        // ✅ 默认按创建时间倒序，最新发布的在最上面
-        { field: 'created_at', order: 'desc' }
+        // ✅ 默认按业务逻辑排序：待审核(10) > 就绪(20) > 处理中(30) > 已发布(40) > 拒绝/失败/草稿
+        { field: 'admin_sort_rank', order: 'asc' },
+        // ✅ 同一状态下，按发布/创建时间倒序
+        { field: 'admin_sort_time', order: 'desc' }
       ]
     },
     pagination: {
+      current: 1,
       pageSize: 20
+    } as any,
+    queryOptions: {
+      staleTime: 0, // ✅ 禁用缓存，确保每次进入页面都重新获取最新数据
+      refetchOnMount: 'always' // ✅ 强制挂载时重新获取
     },
     onSearch: (params: Record<string, any>) => {
       const filters: any[] = []
