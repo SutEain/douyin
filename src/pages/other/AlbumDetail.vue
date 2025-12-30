@@ -30,10 +30,13 @@
             <div class="right">
               <div class="name">
                 {{
-                  props.detail.note_card?.user?.nickname ||
-                  props.detail.note_card?.user?.nick_name ||
-                  props.detail.note_card?.user?.name ||
-                  '用户'
+                  _truncate(
+                    props.detail.note_card?.user?.nickname ||
+                      props.detail.note_card?.user?.nick_name ||
+                      props.detail.note_card?.user?.name ||
+                      '用户',
+                    15
+                  )
                 }}
               </div>
               <div
@@ -78,7 +81,9 @@
                   @click="handleAvatarClick(item)"
                 />
                 <div class="comment-body">
-                  <div class="username" @click="handleAvatarClick(item)">{{ item.nickname }}</div>
+                  <div class="username" @click="handleAvatarClick(item)">
+                    {{ _truncate(item.nickname, 15) }}
+                  </div>
                   <div class="comment-text" :class="{ 'text-gray': item.user_buried }">
                     {{ item.user_buried ? '该评论已折叠' : item.content }}
                   </div>
@@ -134,11 +139,11 @@
                   />
                   <div class="reply-body">
                     <div class="username" @click="handleAvatarClick(child)">
-                      {{ child.nickname }}
+                      {{ _truncate(child.nickname, 15) }}
                     </div>
                     <div class="reply-text">
                       <span v-if="child.reply_to_user" class="reply-to"
-                        >回复 @{{ child.reply_to_user }}：</span
+                        >回复 @{{ _truncate(child.reply_to_user, 15) }}：</span
                       >
                       {{ child.content }}
                     </div>
@@ -205,7 +210,7 @@
     </div>
 
     <div v-if="replyingTo" class="reply-hint-bar">
-      <span>回复 @{{ replyingTo.nickname }}</span>
+      <span>回复 @{{ _truncate(replyingTo.nickname, 15) }}</span>
       <Icon icon="ic:round-close" class="close" @click.stop="cancelReply" />
     </div>
     <div class="toolbar">
@@ -214,7 +219,7 @@
           v-model="comments.input"
           class="comment-input"
           type="text"
-          :placeholder="replyingTo ? `回复 @${replyingTo.nickname}` : '说点什么...'"
+          :placeholder="replyingTo ? `回复 @${_truncate(replyingTo.nickname, 15)}` : '说点什么...'"
           @keyup.enter="sendComment"
         />
       </div>
@@ -274,7 +279,8 @@ import {
   _notice,
   _stopPropagation,
   cloneDeep,
-  _time
+  _time,
+  _truncate
 } from '@/utils'
 import {
   getCommentReplies,

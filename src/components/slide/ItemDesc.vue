@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { _truncate } from '@/utils'
 
 const props = defineProps({
   isMy: {
@@ -101,7 +102,7 @@ const publishDate = computed(() => {
       </div>
       <div class="live" v-if="props.isLive">直播中</div>
       <div class="name mb1r f18 fb" @click.stop="emit('goUserInfo')">
-        @{{ item?.author?.nickname }}
+        @{{ _truncate(item?.author?.nickname, 15) }}
       </div>
       <div v-if="publishDate" class="publish-date">发布于 {{ publishDate }}</div>
       <div class="description-wrapper" v-if="fullDescription">

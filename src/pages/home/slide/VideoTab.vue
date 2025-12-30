@@ -1,6 +1,6 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { _checkImgUrl, _duration, _formatNumber, _stopPropagation } from '@/utils'
+import { _checkImgUrl, _duration, _formatNumber, _stopPropagation, _truncate } from '@/utils'
 import { recommendedVideoTab } from '@/api/videos'
 import ScrollList from '@/components/ScrollList.vue'
 import { useNav } from '@/utils/hooks/useNav'
@@ -227,7 +227,7 @@ function onAvatarError(e) {
                     class="avatar"
                     @error="onAvatarError"
                   />
-                  <div class="name">{{ item.author.nickname }}</div>
+                  <div class="name">{{ _truncate(item.author.nickname, 15) }}</div>
                 </div>
                 <div class="r">
                   <Icon icon="icon-park-outline:like" />

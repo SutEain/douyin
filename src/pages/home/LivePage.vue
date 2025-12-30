@@ -41,7 +41,7 @@
               alt=""
             />
             <div class="desc-wrapper">
-              <div class="name">{{ roomInfo.anchor_info?.nickname || '主播' }}</div>
+              <div class="name">{{ _truncate(roomInfo.anchor_info?.nickname || '主播', 15) }}</div>
               <div class="count">{{ viewerCount }} 人正在看</div>
             </div>
             <div class="follow-btn" @click="attention" :class="{ isFollowed }">
@@ -77,15 +77,17 @@
               </div>
               <div class="comment" :key="msg.id" v-for="msg in messages" :class="msg.type">
                 <template v-if="msg.type === 'system'">
-                  <span class="system-text">{{ msg.user_nickname }} {{ msg.content }}</span>
+                  <span class="system-text"
+                    >{{ _truncate(msg.user_nickname, 15) }} {{ msg.content }}</span
+                  >
                 </template>
                 <template v-else-if="msg.type === 'gift'">
-                  <span class="name">{{ msg.user_nickname }}</span>
+                  <span class="name">{{ _truncate(msg.user_nickname, 15) }}</span>
                   <span class="gift-text">送出了 {{ msg.content }}</span>
                   <span class="combo-num" v-if="msg.combo > 1">x{{ msg.combo }}</span>
                 </template>
                 <template v-else>
-                  <span class="name">{{ msg.user_nickname }}:</span>
+                  <span class="name">{{ _truncate(msg.user_nickname, 15) }}:</span>
                   <span class="text">{{ msg.content }}</span>
                 </template>
               </div>
@@ -286,7 +288,7 @@ import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch, computed } 
 import { useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { supabase } from '@/utils/supabase'
-import { _checkImgUrl, _notice, _copy } from '@/utils'
+import { _checkImgUrl, _notice, _copy, _truncate } from '@/utils'
 import { toggleFollowUser, sendReward, sendRedPacket } from '@/api/videos'
 import DPPlayer from '@/components/live/DPPlayer.vue'
 import VapPlayer from '@/components/live/VapPlayer.vue'

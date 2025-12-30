@@ -370,6 +370,16 @@ export function _no() {
 }
 
 /**
+ * 🎯 截断字符串
+ * @param str 原始字符串
+ * @param len 截断长度
+ */
+export function _truncate(str: string, len: number = 15) {
+  if (!str) return ''
+  return str.length > len ? str.slice(0, len) + '...' : str
+}
+
+/**
  * 逃避国内某pages审查，因为json文件被提示有违禁词，json压缩成7z文件，7z和zip文件被屏蔽了，所以7z重命名为md
  * @param url
  * @returns Promise<{ json(): Promise<any> } | Response>

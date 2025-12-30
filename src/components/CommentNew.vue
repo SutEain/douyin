@@ -39,7 +39,7 @@
       >
         <!-- 回复提示 -->
         <div v-if="replyingTo" class="reply-hint">
-          <span>回复 @{{ replyingTo.nickname }}</span>
+          <span>回复 @{{ _truncate(replyingTo.nickname, 15) }}</span>
           <Icon icon="ic:round-close" @click="cancelReply" />
         </div>
         <div class="input-wrapper">
@@ -47,7 +47,9 @@
             v-model="commentText"
             class="comment-input"
             type="text"
-            :placeholder="replyingTo ? `回复 @${replyingTo.nickname}` : '善语结善缘，恶言伤人心'"
+            :placeholder="
+              replyingTo ? `回复 @${_truncate(replyingTo.nickname, 15)}` : '善语结善缘，恶言伤人心'
+            "
             @focus="handleInputFocus"
             @blur="handleInputBlur"
           />
@@ -91,7 +93,9 @@
                 @click="handleAvatarClick(item)"
               />
               <div class="comment-body">
-                <div class="username" @click="handleAvatarClick(item)">{{ item.nickname }}</div>
+                <div class="username" @click="handleAvatarClick(item)">
+                  {{ _truncate(item.nickname, 15) }}
+                </div>
                 <div class="comment-text" :class="{ 'text-gray': item.user_buried }">
                   {{ item.user_buried ? '该评论已折叠' : item.content }}
                 </div>
@@ -154,10 +158,12 @@
                   @click="handleAvatarClick(child)"
                 />
                 <div class="reply-body">
-                  <div class="username" @click="handleAvatarClick(child)">{{ child.nickname }}</div>
+                  <div class="username" @click="handleAvatarClick(child)">
+                    {{ _truncate(child.nickname, 15) }}
+                  </div>
                   <div class="reply-text">
                     <span v-if="child.reply_to_user" class="reply-to"
-                      >回复 @{{ child.reply_to_user }}：</span
+                      >回复 @{{ _truncate(child.reply_to_user, 15) }}：</span
                     >
                     {{ child.content }}
                   </div>
@@ -245,7 +251,7 @@ import {
   getCommentReplies,
   deleteVideoComment
 } from '@/api/videos'
-import { _formatNumber, _time, _checkImgUrl, _notice, sampleSize } from '@/utils'
+import { _formatNumber, _time, _checkImgUrl, _notice, sampleSize, _truncate } from '@/utils'
 import { useBaseStore } from '@/store/pinia'
 import { useVideoStore } from '@/stores/video'
 
