@@ -20,3 +20,14 @@ export function extractTags(text: string): string[] {
   const tags = [...new Set(matches.map((t) => t.substring(1)))].slice(0, 5)
   return tags
 }
+
+// 转义 HTML 特殊字符
+export function escapeHTML(str: string): string {
+  if (!str) return ''
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}

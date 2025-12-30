@@ -2,7 +2,7 @@ import { BOT_TOKEN, BOT_WORKER_URL } from '../env.ts'
 import { supabase } from '../supabaseClient.ts'
 import { getUserState, updateUserState } from '../state.ts'
 import { getOrCreateProfile } from '../services/profile.ts'
-import { extractTags, safeTruncate } from '../utils/text.ts'
+import { extractTags, safeTruncate, escapeHTML } from '../utils/text.ts'
 import { editMessage, sendMessage } from '../telegram.ts'
 import { getEditKeyboard, getEditMenuText } from './editor.ts'
 
@@ -227,7 +227,7 @@ export async function handlePhoto(
 
       if (error) {
         console.error('[handlePhoto] 创建相册失败:', error)
-        await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + error.message)
+        await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + escapeHTML(error.message))
         return
       }
 
@@ -314,7 +314,7 @@ export async function saveSinglePhoto(
 
   if (error) {
     console.error('保存图片记录失败:', error)
-    await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + error.message)
+    await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + escapeHTML(error.message))
     return
   }
 
@@ -366,25 +366,8 @@ export async function handleVideo(
       return
     }
 
-    // 🚫 拒绝媒体组（多视频/视频+图片混合）
-    if (mediaGroupId) {
-      console.log(`[handleVideo] 检测到 Media Group: ${mediaGroupId}，拒绝处理`)
-      const cacheKey = `media_group_reject_${chatId}_${mediaGroupId}`
-      const alreadyNotified = mediaGroupRejectCache.get(cacheKey)
-
-      if (!alreadyNotified) {
-        mediaGroupRejectCache.set(cacheKey, true)
-        setTimeout(() => mediaGroupRejectCache.delete(cacheKey), 5000)
-
-        await sendMessage(
-          chatId,
-          `⚠️ <b>暂不支持批量上传</b>\n\n` +
-            `请一次只上传一条视频。\n\n` +
-            `💡 如需上传多条视频，请分开发送。`
-        )
-      }
-      return
-    }
+    // 🚫 移除：不再对 mediaGroupId 进行拦截，允许转发自频道的视频（通常带 media_group_id）
+    // 混合组拦截已经在 app.ts 中由 mediaGroupRejectCache 处理
 
     // 🚫 单视频大小限制：从系统设置读取（默认 200 MiB）
     const maxMb = await getBotMaxVideoSizeMB()
@@ -436,7 +419,7 @@ export async function handleVideo(
 
     if (error) {
       console.error('保存视频记录失败:', error)
-      await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + error.message)
+      await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + escapeHTML(error.message))
       return
     }
 
@@ -463,7 +446,8 @@ export async function handleVideo(
     try {
       await sendMessage(
         chatId,
-        '❌ 处理失败，请重试\n\n错误: ' + (error instanceof Error ? error.message : String(error))
+        '❌ 处理失败，请重试\n\n错误: ' +
+          escapeHTML(error instanceof Error ? error.message : String(error))
       )
     } catch (sendError) {
       console.error('[handleVideo] 发送错误消息也失败了:', sendError)

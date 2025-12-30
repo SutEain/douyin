@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient.ts'
 import { getUserState, updateUserState } from '../state.ts'
-import { deleteTelegramMessage, editMessage } from '../telegram.ts'
+import { deleteTelegramMessage, editMessage, sendMessage } from '../telegram.ts'
+import { escapeHTML } from '../utils/text.ts'
 import { getEditKeyboard, getEditMenuText } from '../features/editor.ts'
 import { handleViewVideo } from '../features/videoActions.ts'
 import { handleMyPublished, setPublishedCtx } from '../features/myVideos.ts'
@@ -82,7 +83,7 @@ export async function handleForward(chatId: number, message: any) {
 
     const successText =
       `✅ <b>频道绑定成功！</b>\n\n` +
-      `📺 <b>频道：</b> ${channelTitle}\n` +
+      `📺 <b>频道：</b> ${escapeHTML(channelTitle || '')}\n` +
       `🆔 <b>ID：</b> <code>${channelId}</code>\n\n` +
       `💡 您在该频道发布的视频/图片，机器人将自动同步到平台。\n` +
       `💡 请确保机器人拥有「发布消息」权限以获取内容。`

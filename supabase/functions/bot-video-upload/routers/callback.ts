@@ -108,6 +108,15 @@ export async function handleCallback(
       return
     }
 
+    if (data === 'profile_live_pending') {
+      await answerCallbackQuery(
+        callbackQueryId,
+        '⏳ 直播申请正在审核中，请耐心等待。\n\n您可以联系 @Edison521 申请快速通过。',
+        { show_alert: true }
+      )
+      return
+    }
+
     if (data === 'profile_start_live') {
       // ✅ 防止连续点击：增加 5 秒冷却锁
       const userState = await getUserState(chatId)

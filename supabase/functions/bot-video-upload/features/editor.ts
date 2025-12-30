@@ -1,4 +1,5 @@
 import { getFlag } from '../utils/geo.ts'
+import { escapeHTML } from '../utils/text.ts'
 
 // 生成编辑菜单
 export function getEditKeyboard(video: any) {
@@ -127,9 +128,9 @@ export function getEditMenuText(video: any): string {
     '⚠️ <b>如果你上传的是东南亚风情内容，请勾选「东南亚板块：是」。</b>',
     '⛔ 严禁任何涉及儿童 / 未成年人的色情或暗示内容，一经发现将立刻封禁账号。',
     '',
-    `📝 描述：${descText}`,
-    `🏷️ 标签：${tagsText}`,
-    `📍 位置：${locationText}`,
+    `📝 描述：${escapeHTML(descText)}`,
+    `🏷️ 标签：${escapeHTML(tagsText)}`,
+    `📍 位置：${escapeHTML(locationText)}`,
     `🔐 隐私：${privacyText}`,
     `🔞 成人：${adultText}`,
     `🌏 东南亚：${seaText}`,

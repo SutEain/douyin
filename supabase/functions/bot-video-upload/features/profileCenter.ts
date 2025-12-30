@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient.ts'
+import { escapeHTML } from '../utils/text.ts'
 import { editMessage, sendMessage } from '../telegram.ts'
 import { getPersistentKeyboard } from '../keyboards.ts'
 
@@ -99,7 +100,7 @@ export async function handleUserProfile(
     // 根据直播状态显示不同按钮
     let liveButton = { text: '🎥 申请开播', callback_data: 'profile_apply_live' }
     if (profile.live_status === 1) {
-      liveButton = { text: '⏳ 直播审核中', callback_data: 'noop' }
+      liveButton = { text: '⏳ 直播审核中', callback_data: 'profile_live_pending' }
     } else if (profile.live_status === 2) {
       liveButton = { text: '🎥 我要开播', callback_data: 'profile_start_live' }
     } else if (profile.live_status === 3) {

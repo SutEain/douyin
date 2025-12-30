@@ -1,6 +1,6 @@
 import { BOT_TOKEN } from './env.ts'
 import { supabase } from './supabaseClient.ts'
-import { updateUserState } from './state.ts'
+import { getUserState, updateUserState } from './state.ts'
 import { handleSettings } from './features/settings.ts'
 import { handleInlineQuery } from './features/inlineShare.ts'
 import { handleMyVideosEdit, handleViewProcessing } from './features/myVideos.ts'
@@ -11,12 +11,14 @@ import { getOrCreateProfile } from './services/profile.ts'
 import { getEditKeyboard, getEditMenuText } from './features/editor.ts'
 import { handlePhoto, handleVideo, mediaGroupRejectCache } from './features/upload.ts'
 import { deleteTelegramMessage, sendMessage } from './telegram.ts'
+import { escapeHTML } from './utils/text.ts'
 import { handleCallback } from './routers/callback.ts'
 import { handleLocation, handleText, handleForward } from './routers/messages.ts'
 import { handleChannelPost } from './routers/channelPost.ts'
 
 // 主服务（由 index.ts 作为入口调用）
 export async function handleRequest(req: Request): Promise<Response> {
+  console.log('[BOT-APP] Incoming request:', req.method, req.url)
   try {
     const url = new URL(req.url)
 
@@ -29,7 +31,15 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     // 处理 Webhook
     if (req.method === 'POST') {
-      const update = await req.json()
+      let update: any
+      try {
+        update = await req.json()
+      } catch (e) {
+        console.error('[BOT-APP] Failed to parse request JSON:', e)
+        return new Response('Invalid JSON', { status: 400 })
+      }
+
+      console.log('[BOT-APP] Update received:', JSON.stringify(update).substring(0, 500))
 
       // ✅ 处理 Worker 完成回调
       if (update.type === 'worker_complete') {
@@ -93,8 +103,11 @@ export async function handleRequest(req: Request): Promise<Response> {
         const chatId = message.chat.id
 
         // 🎯 处理转发消息 (用于绑定频道)
-        if (message.forward_origin || message.forward_from_chat) {
-          console.log('[MAIN] 收到转发消息')
+        if (
+          (message.forward_origin || message.forward_from_chat) &&
+          (await getUserState(chatId)).state === 'waiting_channel_forward'
+        ) {
+          console.log('[MAIN] 收到转发消息 (用于绑定频道)')
           await handleForward(chatId, message)
           return new Response('OK', { status: 200 })
         }
@@ -127,7 +140,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             // 1. 先发送底部菜单（Persistent Keyboard）
             await sendMessage(
               chatId,
-              '👋 欢迎加入 [TG 抖音]  🔥\n 接受一切资源合作洽谈。成为股东，请联系 @vip843',
+              '👋 欢迎加入 [TG 抖音]  🔥\n 接受一切资源合作洽谈。成为股东，请联系 @Edison521',
               {
                 reply_markup: getPersistentKeyboard()
               }
@@ -222,7 +235,15 @@ export async function handleRequest(req: Request): Promise<Response> {
           await handleUserProfile(chatId, undefined, { forceNew: true })
         }
         // 📸 图片消息
-        else if (message.photo) {
+        else if (
+          message.photo ||
+          (message.document && message.document.mime_type?.startsWith('image/'))
+        ) {
+          const photo = message.photo || [message.document]
+          console.log('[MAIN] 识别到图片上传:', {
+            hasPhoto: !!message.photo,
+            hasDoc: !!message.document
+          })
           // 检查是否是混合相册（视频+图片）
           if (message.media_group_id) {
             const mixedCacheKey = `mixed_${chatId}_${message.media_group_id}`
@@ -239,16 +260,18 @@ export async function handleRequest(req: Request): Promise<Response> {
             setTimeout(() => mediaGroupRejectCache.delete(mixedCacheKey + '_photo'), 5000)
           }
 
-          await handlePhoto(
-            chatId,
-            message.photo,
-            message.caption,
-            message.from,
-            message.media_group_id
-          )
+          await handlePhoto(chatId, photo, message.caption, message.from, message.media_group_id)
         }
         // 🎬 视频消息
-        else if (message.video) {
+        else if (
+          message.video ||
+          (message.document && message.document.mime_type?.startsWith('video/'))
+        ) {
+          const video = message.video || message.document
+          console.log('[MAIN] 识别到视频上传:', {
+            hasVideo: !!message.video,
+            hasDoc: !!message.document
+          })
           // 检查是否是混合相册（视频+图片）
           if (message.media_group_id) {
             const mixedCacheKey = `mixed_${chatId}_${message.media_group_id}`
@@ -291,13 +314,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
           }
 
-          await handleVideo(
-            chatId,
-            message.video,
-            message.caption,
-            message.from,
-            message.media_group_id
-          )
+          await handleVideo(chatId, video, message.caption, message.from, message.media_group_id)
         }
         // 位置消息
         else if (message.location) {

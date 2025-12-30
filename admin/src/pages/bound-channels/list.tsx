@@ -1,10 +1,11 @@
 import { List, useTable, DateField } from '@refinedev/antd'
-import { Table, Space, Tag, Button, Input, Form } from 'antd'
+import { Table, Space, Tag, Button, Input, Form, Switch, message } from 'antd'
 import { DeleteOutlined, SyncOutlined } from '@ant-design/icons'
-import { useDelete } from '@refinedev/core'
+import { useDelete, useUpdate } from '@refinedev/core'
 
 export const BoundChannelList = () => {
   const { mutate: deleteChannel } = useDelete()
+  const { mutate: updateChannel } = useUpdate()
 
   const { tableProps, searchFormProps } = useTable({
     resource: 'bound_channels',
@@ -12,9 +13,17 @@ export const BoundChannelList = () => {
     sorters: {
       initial: [{ field: 'created_at', order: 'desc' }]
     },
+    meta: {
+      select: '*, profiles:user_id(nickname, numeric_id)'
+    },
+    queryOptions: {
+      staleTime: 0,
+      refetchOnMount: 'always'
+    },
     onSearch: (params: Record<string, any>) => {
       const filters: any[] = []
       const q = String(params.q || '').trim()
+      const userQ = String(params.user_q || '').trim()
 
       if (q) {
         filters.push({
@@ -26,6 +35,15 @@ export const BoundChannelList = () => {
         })
       }
 
+      if (userQ) {
+        const isNumeric = /^[0-9]+$/.test(userQ)
+        if (isNumeric) {
+          filters.push({ field: 'profiles.numeric_id', operator: 'eq', value: Number(userQ) })
+        } else {
+          filters.push({ field: 'profiles.nickname', operator: 'contains', value: userQ })
+        }
+      }
+
       return filters
     }
   })
@@ -34,7 +52,10 @@ export const BoundChannelList = () => {
     <List>
       <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
         <Form.Item name="q" label="频道搜索">
-          <Input placeholder="标题/用户名" allowClear />
+          <Input placeholder="标题/用户名" allowClear style={{ width: 180 }} />
+        </Form.Item>
+        <Form.Item name="user_q" label="归属用户">
+          <Input placeholder="昵称/数字ID" allowClear style={{ width: 180 }} />
         </Form.Item>
         <Form.Item>
           <Space>
@@ -54,26 +75,84 @@ export const BoundChannelList = () => {
       </Form>
       <Table {...tableProps} rowKey="id">
         <Table.Column dataIndex="id" title="频道 ID" />
+        <Table.Column
+          title="归属用户"
+          render={(_, record: any) => (
+            <Space direction="vertical" size={0}>
+              <span style={{ fontWeight: 'bold' }}>{record.profiles?.nickname || '-'}</span>
+              <span style={{ fontSize: '12px', color: '#999' }}>
+                ID: {record.profiles?.numeric_id}
+              </span>
+            </Space>
+          )}
+        />
         <Table.Column dataIndex="title" title="频道名称" />
         <Table.Column dataIndex="username" title="用户名" render={(v) => (v ? `@${v}` : '-')} />
         <Table.Column
           dataIndex="sync_enabled"
           title="同步状态"
-          render={(v) => (
-            <Tag color={v ? 'green' : 'gray'} icon={<SyncOutlined spin={v} />}>
-              {v ? '同步中' : '已暂停'}
-            </Tag>
+          render={(v, record: any) => (
+            <Switch
+              checked={v}
+              checkedChildren="同步"
+              unCheckedChildren="暂停"
+              onChange={(checked) => {
+                updateChannel({
+                  resource: 'bound_channels',
+                  id: record.id,
+                  values: { sync_enabled: checked },
+                  successNotification: () => ({
+                    message: '同步状态已更新',
+                    type: 'success'
+                  })
+                })
+              }}
+            />
           )}
         />
         <Table.Column
           dataIndex="is_adult"
-          title="成人内容"
-          render={(v) => (v ? <Tag color="red">🔞 是</Tag> : <Tag>否</Tag>)}
+          title="成人"
+          render={(v, record: any) => (
+            <Switch
+              checked={v}
+              checkedChildren="🔞"
+              unCheckedChildren="否"
+              onChange={(checked) => {
+                updateChannel({
+                  resource: 'bound_channels',
+                  id: record.id,
+                  values: { is_adult: checked },
+                  successNotification: () => ({
+                    message: '内容分级已更新',
+                    type: 'success'
+                  })
+                })
+              }}
+            />
+          )}
         />
         <Table.Column
           dataIndex="is_sea"
           title="东南亚"
-          render={(v) => (v ? <Tag color="blue">🌏 是</Tag> : <Tag>否</Tag>)}
+          render={(v, record: any) => (
+            <Switch
+              checked={v}
+              checkedChildren="🌏"
+              unCheckedChildren="否"
+              onChange={(checked) => {
+                updateChannel({
+                  resource: 'bound_channels',
+                  id: record.id,
+                  values: { is_sea: checked },
+                  successNotification: () => ({
+                    message: '板块属性已更新',
+                    type: 'success'
+                  })
+                })
+              }}
+            />
+          )}
         />
         <Table.Column
           dataIndex="created_at"
