@@ -54,6 +54,21 @@ export const CoinTransactionList = () => {
             ))}
           </Select>
         </Form.Item>
+        <Form.Item>
+          <Space>
+            <Button type="primary" htmlType="submit">
+              搜索
+            </Button>
+            <Button
+              onClick={() => {
+                searchFormProps.form?.resetFields()
+                searchFormProps.form?.submit()
+              }}
+            >
+              重置
+            </Button>
+          </Space>
+        </Form.Item>
       </Form>
 
       <Table {...tableProps} rowKey="id">

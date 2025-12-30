@@ -1,5 +1,5 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Avatar, Button, Tag, Switch, InputNumber } from 'antd'
+import { Table, Space, Avatar, Button, Tag, Switch, InputNumber, Form, Input } from 'antd'
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useUpdate, useDelete } from '@refinedev/core'
 
@@ -7,13 +7,20 @@ export const GiftList = () => {
   const { mutate: updateGift } = useUpdate()
   const { mutate: deleteGift } = useDelete()
 
-  const { tableProps } = useTable({
+  const { tableProps, searchFormProps } = useTable({
     resource: 'gifts',
     sorters: {
       initial: [{ field: 'sort_order', order: 'asc' }]
     },
     pagination: {
       pageSize: 50
+    },
+    onSearch: (params: any) => {
+      const filters: any[] = []
+      if (params.name) {
+        filters.push({ field: 'name', operator: 'contains', value: params.name })
+      }
+      return filters
     }
   })
 
@@ -54,6 +61,26 @@ export const GiftList = () => {
 
   return (
     <List>
+      <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
+        <Form.Item name="name" label="名称">
+          <Input placeholder="礼物名称" allowClear />
+        </Form.Item>
+        <Form.Item>
+          <Space>
+            <Button type="primary" htmlType="submit">
+              搜索
+            </Button>
+            <Button
+              onClick={() => {
+                searchFormProps.form?.resetFields()
+                searchFormProps.form?.submit()
+              }}
+            >
+              重置
+            </Button>
+          </Space>
+        </Form.Item>
+      </Form>
       <Table {...tableProps} rowKey="id">
         <Table.Column
           dataIndex="icon_filename"

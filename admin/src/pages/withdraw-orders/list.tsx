@@ -140,9 +140,19 @@ export const WithdrawOrderList = () => {
           </Select>
         </Form.Item>
         <Form.Item>
-          <Button type="primary" htmlType="submit">
-            搜索
-          </Button>
+          <Space>
+            <Button type="primary" htmlType="submit">
+              搜索
+            </Button>
+            <Button
+              onClick={() => {
+                searchFormProps.form?.resetFields()
+                searchFormProps.form?.submit()
+              }}
+            >
+              重置
+            </Button>
+          </Space>
         </Form.Item>
       </Form>
 

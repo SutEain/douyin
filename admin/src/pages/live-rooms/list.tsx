@@ -1,5 +1,17 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Button, Image, Switch, InputNumber, message, Tag } from 'antd'
+import {
+  Table,
+  Space,
+  Button,
+  Image,
+  Switch,
+  InputNumber,
+  message,
+  Tag,
+  Form,
+  Input,
+  Select
+} from 'antd'
 import { useInvalidate, useUpdate } from '@refinedev/core'
 import { useNavigate } from 'react-router-dom'
 import { useState } from 'react'
@@ -30,7 +42,7 @@ export const LiveRoomList = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [bulkProbing, setBulkProbing] = useState(false)
 
-  const { tableProps } = useTable<LiveRoomRow>({
+  const { tableProps, searchFormProps } = useTable<LiveRoomRow>({
     resource: 'live_rooms',
     sorters: {
       initial: [
@@ -41,6 +53,16 @@ export const LiveRoomList = () => {
     },
     pagination: {
       pageSize: 100
+    },
+    onSearch: (params: any) => {
+      const filters: any[] = []
+      if (params.title) {
+        filters.push({ field: 'title', operator: 'contains', value: params.title })
+      }
+      if (params.status) {
+        filters.push({ field: 'status', operator: 'eq', value: params.status })
+      }
+      return filters
     }
   })
 
@@ -211,6 +233,32 @@ export const LiveRoomList = () => {
         </Space>
       }
     >
+      <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
+        <Form.Item name="title" label="标题">
+          <Input placeholder="搜索标题" allowClear />
+        </Form.Item>
+        <Form.Item name="status" label="状态">
+          <Select placeholder="选择状态" allowClear style={{ width: 120 }}>
+            <Select.Option value="online">在线</Select.Option>
+            <Select.Option value="offline">离线</Select.Option>
+          </Select>
+        </Form.Item>
+        <Form.Item>
+          <Space>
+            <Button type="primary" htmlType="submit">
+              搜索
+            </Button>
+            <Button
+              onClick={() => {
+                searchFormProps.form?.resetFields()
+                searchFormProps.form?.submit()
+              }}
+            >
+              重置
+            </Button>
+          </Space>
+        </Form.Item>
+      </Form>
       <Table
         {...tableProps}
         rowKey="id"

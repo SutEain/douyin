@@ -17,7 +17,7 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
         `
         id, title, status, viewer_count, stream_key, anchor_id,
         node:live_broadcast_nodes(domain_name),
-        anchor:profiles(nickname, avatar_url)
+        anchor:profiles(id, nickname, avatar_url)
       `
       )
       .eq('id', id)
@@ -38,6 +38,7 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
           stream_url: `https://${selfRoom.node?.domain_name}/LiveApp/streams/${selfRoom.stream_key}.m3u8`,
           cover_url: selfRoom.anchor?.avatar_url,
           is_self_hosted: true,
+          anchor_id: selfRoom.anchor_id,
           anchor_info: selfRoom.anchor
         }
       })
@@ -103,6 +104,7 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
           cover_url: externalRoom.cover_url,
           status: currentStatus, // 🎯 返回最新探测的状态
           is_self_hosted: false,
+          anchor_id: globalAnchor?.id || '11c77e88-545b-4aa3-bbb1-db87e7d637f0',
           anchor_info: globalAnchor || {
             id: '11c77e88-545b-4aa3-bbb1-db87e7d637f0',
             nickname: '抖音精选',
@@ -146,7 +148,7 @@ export async function handleLiveRooms(req: Request): Promise<Response> {
         stream_key,
         anchor_id,
         node:live_broadcast_nodes(domain_name),
-        anchor:profiles(nickname, avatar_url)
+        anchor:profiles(id, nickname, avatar_url)
       `
       )
       .eq('status', 'live')
@@ -169,6 +171,7 @@ export async function handleLiveRooms(req: Request): Promise<Response> {
       is_self_hosted: true,
       anchor_id: r.anchor_id,
       anchor_info: {
+        id: r.anchor_id,
         nickname: r.anchor?.nickname || '匿名',
         avatar_url: r.anchor?.avatar_url || ''
       }

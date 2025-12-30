@@ -347,14 +347,24 @@ async function handleSendPacket() {
   if (!canSendPacket.value) return
 
   try {
+    // 🎯 深度克隆并清理未启用的条件
+    const finalForm = JSON.parse(JSON.stringify(packetForm))
+    if (!showKeywordInput.value) {
+      finalForm.claim_conditions.keyword = ''
+    }
+
     const res = await sendRedPacket({
       room_id: roomId.value,
-      ...packetForm
+      ...finalForm
     })
     if (res?.packet) {
       _notice('红包发放成功！')
       showSendPacket.value = false
       userCoins.value -= packetForm.total_coins
+
+      // 发放成功后重置表单部分字段
+      packetForm.claim_conditions.keyword = ''
+      showKeywordInput.value = false
     }
   } catch (e: any) {
     _notice(e.message || '发放失败')
@@ -489,6 +499,7 @@ async function initRoom() {
   messages.value = []
   viewerCount.value = 0
   viewers.value = []
+  isFollowed.value = false
 
   // 3. 加载新数据
   await fetchRoomInfo()
@@ -737,8 +748,8 @@ async function fetchRoomInfo() {
           userCoins.value = Math.floor(Number(profile.balance_coins || 0))
         }
 
-        // 如果是自建直播，检查关注状态
-        if (room.is_self_hosted && room.anchor_info?.id) {
+        // 检查关注状态 (不管是自建还是转播，只要有主播 ID)
+        if (room.anchor_info?.id) {
           const { data: follow } = await supabase
             .from('follows')
             .select('id')
