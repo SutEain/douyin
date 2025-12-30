@@ -42,7 +42,7 @@ export async function handleUserProfile(
     const { data: profile } = await supabase
       .from('profiles')
       .select(
-        'numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock, live_status, balance_coins'
+        'numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock, live_status, balance_coins, is_admin'
       )
       .eq('tg_user_id', chatId)
       .single()
@@ -62,13 +62,39 @@ export async function handleUserProfile(
       statusText = `🔓 已解锁 (剩余 ${diffHours} 小时)`
     }
 
-    const text =
+    let text =
       `👤 <b>个人中心</b>\n\n` +
       `🆔 <b>用户ID：</b> <code>${profile.numeric_id}</code>\n` +
       `💰 <b>抖币余额：</b> <code>${Math.floor(profile.balance_coins || 0)}</code>\n` +
       `🔞 <b>成人权限：</b> ${statusText}\n` +
-      `👥 <b>累计邀请：</b> ${profile.invite_success_count || 0} 人\n\n` +
-      `<i>请选择下方操作：</i>`
+      `👥 <b>累计邀请：</b> ${profile.invite_success_count || 0} 人\n\n`
+
+    // 📊 管理员统计数据
+    if (profile.is_admin) {
+      try {
+        // 统计打开小程序的用户数（有播放记录的）
+        const { count, error: countError } = await supabase
+          .from('watch_history')
+          .select('user_id', { count: 'exact', head: true })
+
+        // 注意：Supabase JS select('user_id', {count: 'exact'}) 可能不直接支持 DISTINCT count
+        // 这里的 count 是记录总数。为了统计去重后的用户数，我们可能需要一个自定义 RPC 或近似值。
+        // 但由于 watch_history 记录很多，直接 select 可能比较慢。
+        // 我们可以用一个更简单的统计：profiles 总数，或者最近活跃用户。
+        // 用户要求是：“统计到打开小程序有多少用户。应该可以统计有播放历史的 就算”
+
+        const { data: userData } = await supabase.rpc('get_active_user_count')
+
+        const activeCount = userData !== null && userData !== undefined ? userData : '查询中...'
+
+        text +=
+          `📊 <b>管理统计：</b>\n` + `📱 <b>累计活跃用户：</b> <code>${activeCount}</code> 人\n\n`
+      } catch (e) {
+        console.error('Admin stats fetch error:', e)
+      }
+    }
+
+    text += `<i>请选择下方操作：</i>`
 
     // 根据直播状态显示不同按钮
     let liveButton = { text: '🎥 申请开播', callback_data: 'profile_apply_live' }

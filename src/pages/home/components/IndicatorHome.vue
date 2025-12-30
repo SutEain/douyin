@@ -6,9 +6,9 @@
     <div class="toolbar" ref="toolbar" :style="toolbarStyle">
       <div class="tab-ctn">
         <div class="tabs" ref="tabs">
-          <!-- 视频 Tab -->
+          <!-- 关注 -->
           <div class="tab" :class="{ active: index === 0 }" @click.stop="change(0)">
-            <span>视频</span>
+            <span>{{ $t('home.following') }}</span>
           </div>
 
           <!-- 图文 Tab -->
@@ -16,9 +16,9 @@
             <span>图文</span>
           </div>
 
-          <!-- 直播 Tab -->
+          <!-- 视频 Tab -->
           <div class="tab" :class="{ active: index === 2 }" @click.stop="change(2)">
-            <span>直播</span>
+            <span>视频</span>
           </div>
 
           <!-- 东南亚 Tab -->
@@ -26,14 +26,14 @@
             <span>东南亚</span>
           </div>
 
-          <!-- 成人内容 Tab -->
+          <!-- 直播 Tab -->
           <div class="tab" :class="{ active: index === 4 }" @click.stop="change(4)">
-            <span>成人</span>
+            <span>直播</span>
           </div>
 
-          <!-- 关注 - 可点击 -->
+          <!-- 成人内容 Tab -->
           <div class="tab" :class="{ active: index === 5 }" @click.stop="change(5)">
-            <span>{{ $t('home.following') }}</span>
+            <span>成人</span>
           </div>
 
           <!-- 推荐 -->
@@ -287,21 +287,22 @@ export default {
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
-      // ✅ 收紧 Tab 占用宽度，给右侧搜索按钮留空间
-      width: 74%;
+      // ✅ 自动宽度并限制最大宽度，避免挡住右侧搜索按钮
+      width: fit-content;
+      max-width: 70%;
 
       .tabs {
         display: flex;
         justify-content: center;
         align-items: center;
-        // ✅ Tab 间距小一点，避免侵占搜索按钮区域
-        gap: 12rem;
+        // ✅ Tab 间距再缩小一点
+        gap: 8rem;
 
         .tab {
           transition: color 0.3s;
           color: rgba(white, 0.7);
           position: relative;
-          font-size: 15rem;
+          font-size: 13rem;
           cursor: pointer;
           font-weight: 600;
           white-space: nowrap;
@@ -309,24 +310,24 @@ export default {
 
           .tab1-img {
             position: absolute;
-            @width: 12rem;
+            @width: 8rem;
             width: @width;
             height: @width;
-            margin-left: 4rem;
+            margin-left: 2rem;
             transition: all 0.3s;
           }
 
           .tab2-img {
             position: absolute;
-            height: 15rem;
+            height: 12rem;
             left: 100%;
             margin-left: 2rem;
-            top: -5rem;
+            top: -4rem;
           }
 
           &.active {
             color: white;
-            font-size: 16rem;
+            font-size: 14rem;
           }
         }
       }
@@ -334,9 +335,9 @@ export default {
       .indicator {
         //transition: left .3s;
         position: absolute;
-        bottom: -8rem; // Adjusted bottom
-        height: 3rem; // Slightly thicker
-        width: 20rem; // Fixed width for indicator
+        bottom: -5rem; // Adjusted bottom
+        height: 2rem; // Thinner
+        width: 16rem; // Fixed width for indicator
         background: #fff;
         border-radius: 2rem;
       }

@@ -9,29 +9,26 @@
         v-model:index="state.navIndex"
       />
 
-      <!-- ✅ 视频内容区域：成人 / 关注 / 推荐 -->
+      <!-- ✅ 视频内容区域：关注 / 图文 / 视频 / 东南亚 / 直播 / 成人 / 推荐 -->
       <div class="video-content">
-        <!-- 0=视频（grid：普通视频，按 published_at 倒序） -->
-        <VideoTab v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
-        <!-- 1=图文（复用现有壁纸/瀑布流页面） -->
+        <!-- 0=关注 -->
+        <SlideFollow v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
+        <!-- 1=图文 -->
         <Community
           v-else-if="state.navIndex === 1"
           :active="state.active && state.navIndex === 1"
         />
-        <!-- 2=直播 -->
-        <LiveTab v-else-if="state.navIndex === 2" :active="state.active && state.navIndex === 2" />
-        <!-- 3=东南亚（grid：东南亚视频，按 published_at 倒序） -->
+        <!-- 2=视频 -->
+        <VideoTab v-else-if="state.navIndex === 2" :active="state.active && state.navIndex === 2" />
+        <!-- 3=东南亚 -->
         <LongVideo
           v-else-if="state.navIndex === 3"
           :active="state.active && state.navIndex === 3"
         />
-        <!-- 4=成人 -->
+        <!-- 4=直播 -->
+        <LiveTab v-else-if="state.navIndex === 4" :active="state.active && state.navIndex === 4" />
+        <!-- 5=成人 -->
         <SlideAdult
-          v-else-if="state.navIndex === 4"
-          :active="state.active && state.navIndex === 4"
-        />
-        <!-- 5=关注 -->
-        <SlideFollow
           v-else-if="state.navIndex === 5"
           :active="state.active && state.navIndex === 5"
         />
