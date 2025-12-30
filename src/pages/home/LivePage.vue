@@ -98,6 +98,13 @@
             <div class="option-item share" @click="shareRoom">
               <Icon icon="solar:share-bold" />
             </div>
+            <div
+              v-if="roomInfo.is_self_hosted && roomInfo.anchor_id === baseStore.userinfo.id"
+              class="option-item redpacket"
+              @click="showSendPacket = true"
+            >
+              <img src="/hongbao-.svg" style="width: 24rem; height: 24rem" />
+            </div>
             <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
           </div>
         </div>
@@ -187,6 +194,90 @@
 
     <!-- 透明视频礼物特效组件 -->
     <VapPlayer ref="vapPlayerRef" :src="vapSrc" />
+
+    <!-- 🧧 倒计时红包组件 -->
+    <RedPacketOverlay
+      v-if="roomId"
+      :room-id="roomId"
+      :is-followed="isFollowed"
+      :last-message="lastUserMessage"
+    />
+
+    <!-- 🧧 发红包弹窗 -->
+    <Transition name="slide-up">
+      <div v-if="showSendPacket" class="gift-panel-overlay" @click.self="showSendPacket = false">
+        <div class="gift-panel send-packet-panel">
+          <div class="panel-header">
+            <span>发放直播间红包</span>
+            <div class="coin-info">
+              <img src="../../assets/img/icon/home/redpack.png" alt="" />
+              <span>{{ userCoins }} 抖币</span>
+            </div>
+          </div>
+
+          <div class="packet-form">
+            <div class="form-item">
+              <label>红包金额</label>
+              <input
+                type="number"
+                v-model.number="packetForm.total_coins"
+                placeholder="请输入总金额"
+              />
+            </div>
+            <div class="form-item">
+              <label>红包个数</label>
+              <input
+                type="number"
+                v-model.number="packetForm.total_count"
+                placeholder="请输入个数"
+              />
+            </div>
+            <div class="form-item">
+              <label>红包类型</label>
+              <div class="cond-checks">
+                <label>
+                  <input type="radio" value="lucky" v-model="packetForm.packet_type" /> 拼手气
+                </label>
+                <label>
+                  <input type="radio" value="equal" v-model="packetForm.packet_type" /> 普通
+                </label>
+              </div>
+            </div>
+            <div class="form-item">
+              <label>倒计时 (秒)</label>
+              <select v-model.number="packetForm.countdown_seconds">
+                <option :value="60">60秒</option>
+                <option :value="180">3分钟</option>
+                <option :value="300">5分钟</option>
+                <option :value="600">10分钟</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <label>领取条件</label>
+              <div class="cond-checks">
+                <label
+                  ><input type="checkbox" v-model="packetForm.claim_conditions.follow" />
+                  必须关注</label
+                >
+                <label><input type="checkbox" v-model="showKeywordInput" /> 指定弹幕</label>
+              </div>
+              <input
+                v-if="showKeywordInput"
+                v-model="packetForm.claim_conditions.keyword"
+                placeholder="请输入弹幕关键词"
+                class="keyword-input"
+              />
+            </div>
+          </div>
+
+          <div class="panel-footer">
+            <div class="send-btn" :class="{ disabled: !canSendPacket }" @click="handleSendPacket">
+              立即发放 ({{ packetForm.total_coins || 0 }} 抖币)
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -196,9 +287,10 @@ import { useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { supabase } from '@/utils/supabase'
 import { _checkImgUrl, _notice, _copy } from '@/utils'
-import { toggleFollowUser, sendReward } from '@/api/videos'
+import { toggleFollowUser, sendReward, sendRedPacket } from '@/api/videos'
 import DPPlayer from '@/components/live/DPPlayer.vue'
 import VapPlayer from '@/components/live/VapPlayer.vue'
+import RedPacketOverlay from '@/components/live/RedPacketOverlay.vue'
 import Dom from '@/utils/dom'
 
 import { useBaseStore } from '@/store/pinia'
@@ -227,6 +319,50 @@ const giftList = ref<any[]>([])
 const selectedGiftId = ref<number | null>(null)
 const selectedQty = ref(1)
 const userCoins = ref(0) // 抖币余额
+
+// --- 红包相关 ---
+const showSendPacket = ref(false)
+const showKeywordInput = ref(false)
+const lastUserMessage = ref('')
+const packetForm = reactive({
+  total_coins: 100,
+  total_count: 10,
+  packet_type: 'lucky' as const,
+  countdown_seconds: 300,
+  claim_conditions: {
+    follow: false,
+    keyword: ''
+  }
+})
+
+const canSendPacket = computed(() => {
+  return (
+    packetForm.total_coins >= 10 &&
+    packetForm.total_count >= 1 &&
+    userCoins.value >= packetForm.total_coins
+  )
+})
+
+async function handleSendPacket() {
+  if (!canSendPacket.value) return
+
+  try {
+    const res = await sendRedPacket({
+      room_id: roomId.value,
+      ...packetForm
+    })
+    if (res?.packet) {
+      _notice('红包发放成功！')
+      showSendPacket.value = false
+      userCoins.value -= packetForm.total_coins
+    }
+  } catch (e: any) {
+    _notice(e.message || '发放失败')
+  }
+}
+
+// 增加“发红包”入口按钮 (在 options 区域)
+// ... 下面会修改模板增加按钮
 
 const qtyOptions = [1, 99, 520, 1314]
 
@@ -718,6 +854,7 @@ async function handleSendComment() {
   })
 
   if (!error) {
+    lastUserMessage.value = inputText.value.trim() // 🎯 记录最后一条消息用于红包条件
     inputText.value = ''
     showInput.value = false
   }
@@ -1817,6 +1954,60 @@ onBeforeUnmount(() => {
             opacity: 0.5;
             background: #666;
           }
+        }
+      }
+    }
+  }
+
+  .send-packet-panel {
+    .packet-form {
+      padding: 20rem;
+      color: white;
+
+      .form-item {
+        margin-bottom: 15rem;
+        display: flex;
+        flex-direction: column;
+        gap: 8rem;
+
+        label {
+          font-size: 13rem;
+          color: rgba(255, 255, 255, 0.6);
+        }
+
+        input,
+        select {
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 10rem;
+          border-radius: 8rem;
+          color: white;
+          font-size: 14rem;
+          outline: none;
+        }
+
+        .cond-checks {
+          display: flex;
+          gap: 20rem;
+          font-size: 14rem;
+
+          label {
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 5rem;
+
+            input[type='radio'],
+            input[type='checkbox'] {
+              width: 16rem;
+              height: 16rem;
+              accent-color: #fe2c55;
+            }
+          }
+        }
+
+        .keyword-input {
+          margin-top: 5rem;
         }
       }
     }

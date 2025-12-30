@@ -47,6 +47,11 @@ import {
 } from './routes/search.ts'
 import { handlePostRecommended } from './routes/post.ts'
 import { handleLiveRooms, handleLiveRoomsProbe, handleLiveRoomDetail } from './routes/live.ts'
+import {
+  handleSendRedPacket,
+  handleClaimRedPacket,
+  handleGetActiveRedPackets
+} from './routes/redPacket.ts'
 import { handleAdminDouyinParse, handleAdminDouyinPublish } from './routes/douyin.ts'
 import { handleSendReward } from './routes/reward.ts'
 import { handleAdminConfirmRecharge } from './routes/recharge.ts'
@@ -195,6 +200,16 @@ serve(async (req) => {
     }
     if (route === '/live/detail' && method === 'GET') {
       return handleLiveRoomDetail(req)
+    }
+    // 🧧 红包相关路由
+    if (route === '/live/red-packet/send' && method === 'POST') {
+      return handleSendRedPacket(req)
+    }
+    if (route === '/live/red-packet/claim' && method === 'POST') {
+      return handleClaimRedPacket(req)
+    }
+    if (route === '/live/red-packet/active' && method === 'GET') {
+      return handleGetActiveRedPackets(req)
     }
     // 🧪 探测直播间在线状态（仅 admin）
     if (route === '/live/rooms/probe' && method === 'POST') {

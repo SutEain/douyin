@@ -160,6 +160,34 @@ export async function deleteVideoComment(commentId: string) {
   })
 }
 
+// 🧧 红包相关接口
+export async function sendRedPacket(data: {
+  room_id: string
+  total_coins: number
+  total_count: number
+  packet_type: 'lucky' | 'equal'
+  countdown_seconds: number
+  claim_conditions: any
+}) {
+  return callAppServer('/live/red-packet/send', {
+    method: 'POST',
+    body: data
+  })
+}
+
+export async function claimRedPacket(packetId: string) {
+  return callAppServer('/live/red-packet/claim', {
+    method: 'POST',
+    body: { packet_id: packetId }
+  })
+}
+
+export async function getActiveRedPackets(roomId: string) {
+  return callAppServer(`/live/red-packet/active?room_id=${roomId}`, {
+    method: 'GET'
+  })
+}
+
 // 🎯 获取评论的回复列表
 export async function getCommentReplies(commentId: string) {
   try {
