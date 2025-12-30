@@ -18,6 +18,7 @@ interface DashboardStats {
   newVideosToday: number
   newNormalVideosToday: number
   newAdultVideosToday: number
+  usersWithHistory: number // 🎯 新增：看过视频的用户（总）
 }
 
 type ActiveUserRow = {
@@ -124,7 +125,8 @@ export const Dashboard = () => {
           newVideosRes,
           newNormalVideosRes,
           newAdultVideosRes,
-          newFirstPublishersRes // 🎯 新增
+          newFirstPublishersRes, // 🎯 新增
+          usersWithHistoryRes // 🎯 新增
         ] = await Promise.all([
           supabaseClient.from('profiles').select('*', { count: 'exact', head: true }),
           supabaseClient
@@ -177,7 +179,9 @@ export const Dashboard = () => {
             .gte('created_at', startISO)
             .eq('is_adult', true),
           // 🎯 调用 RPC 获取今日首次发作品用户数
-          supabaseClient.rpc('get_today_first_publishers_count', { p_start_iso: startISO })
+          supabaseClient.rpc('get_today_first_publishers_count', { p_start_iso: startISO }),
+          // 🎯 调用 RPC 获取有过观看历史的总用户数量
+          supabaseClient.rpc('get_active_user_count')
         ])
 
         setStats({
@@ -192,7 +196,8 @@ export const Dashboard = () => {
           totalSeaVideos: totalSeaVideosRes.count ?? 0,
           newVideosToday: newVideosRes.count ?? 0,
           newNormalVideosToday: newNormalVideosRes.count ?? 0,
-          newAdultVideosToday: newAdultVideosRes.count ?? 0
+          newAdultVideosToday: newAdultVideosRes.count ?? 0,
+          usersWithHistory: Number(usersWithHistoryRes.data) || 0 // 🎯 新增
         })
       } catch (error) {
         console.error('[Dashboard] 获取统计数据失败:', error)
@@ -489,6 +494,11 @@ export const Dashboard = () => {
                   </Text>
                 }
               />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card>
+              <Statistic title="有过观看历史的总用户数量" value={stats?.usersWithHistory ?? 0} />
             </Card>
           </Col>
           <Col xs={24} sm={12} md={6}>
