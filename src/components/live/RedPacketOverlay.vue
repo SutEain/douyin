@@ -86,6 +86,23 @@ const currentPacket = ref<any>(null)
 const claimedAmount = ref(0)
 const timer = ref<any>(null)
 
+// 🎯 记录每个红包是否已达成弹幕条件
+const metChatPackets = ref<Set<string>>(new Set())
+
+watch(
+  () => props.lastMessage,
+  (newMsg) => {
+    if (!newMsg) return
+    const msg = newMsg.trim()
+    packets.value.forEach((p) => {
+      const target = p.claim_conditions?.keyword?.trim()
+      if (target && msg === target) {
+        metChatPackets.value.add(p.id)
+      }
+    })
+  }
+)
+
 // 检查领取条件
 const condStatus = computed(() => {
   if (!currentPacket.value) return { follow: false, chat: false }
@@ -93,12 +110,8 @@ const condStatus = computed(() => {
   const status = { follow: true, chat: true }
 
   if (cond.follow && !props.isFollowed) status.follow = false
-  if (cond.keyword) {
-    const msg = props.lastMessage?.trim() || ''
-    const target = String(cond.keyword).trim()
-    if (msg !== target) {
-      status.chat = false
-    }
+  if (cond.keyword && !metChatPackets.value.has(currentPacket.value.id)) {
+    status.chat = false
   }
 
   return status
@@ -119,6 +132,15 @@ const claimDisabledReason = computed(() => {
   return '无法领取'
 })
 
+function checkMsgCondition(p: any) {
+  if (!props.lastMessage) return
+  const msg = props.lastMessage.trim()
+  const target = p.claim_conditions?.keyword?.trim()
+  if (target && msg === target) {
+    metChatPackets.value.add(p.id)
+  }
+}
+
 async function fetchPackets() {
   try {
     const res = await getActiveRedPackets(props.roomId)
@@ -127,6 +149,8 @@ async function fetchPackets() {
         ...p,
         timeLeft: Math.max(0, Math.floor((new Date(p.unlock_at).getTime() - Date.now()) / 1000))
       }))
+      // 🎯 初始化检查
+      packets.value.forEach(checkMsgCondition)
     }
   } catch (e) {
     console.error('[RedPacket] fetch error:', e)
@@ -146,7 +170,8 @@ async function onClaim() {
     if (res?.amount) {
       claimedAmount.value = res.amount
       showModal.value = false
-      // 从列表移除或更新状态
+      // 从列表移除并清理条件缓存
+      metChatPackets.value.delete(currentPacket.value.id)
       packets.value = packets.value.filter((p) => p.id !== currentPacket.value.id)
     }
   } catch (e: any) {
@@ -192,7 +217,9 @@ function setupRealtime() {
           0,
           Math.floor((new Date(p.unlock_at).getTime() - Date.now()) / 1000)
         )
-        packets.value.push({ ...p, timeLeft })
+        const newPacket = { ...p, timeLeft }
+        packets.value.push(newPacket)
+        checkMsgCondition(newPacket)
       }
     )
     .on(
@@ -208,6 +235,7 @@ function setupRealtime() {
         const idx = packets.value.findIndex((item) => item.id === p.id)
         if (idx > -1) {
           if (p.status === 'finished' || p.status === 'expired') {
+            metChatPackets.value.delete(p.id)
             packets.value.splice(idx, 1)
           } else {
             const timeLeft = Math.max(
