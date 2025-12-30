@@ -1,8 +1,8 @@
 import { List, useTable } from '@refinedev/antd'
 import { Table, Space, Tag, Button, Modal, Input, Select, Form, message } from 'antd'
-import { useEffect, useState, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useInvalidate, useUpdate, useDelete } from '@refinedev/core'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { EditOutlined, DeleteOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
@@ -37,7 +37,6 @@ const reviewStatusMap: Record<string, { text: string; color: string }> = {
 
 export const VideoList = () => {
   const navigate = useNavigate()
-  const location = useLocation()
   const [rejectModalVisible, setRejectModalVisible] = useState(false)
   const [previewModalVisible, setPreviewModalVisible] = useState(false)
   const [descriptionModalVisible, setDescriptionModalVisible] = useState(false)
@@ -71,8 +70,8 @@ export const VideoList = () => {
       ]
     },
     pagination: {
-      initialCurrent: 1,
-      initialPageSize: 20
+      current: 1,
+      pageSize: 20
     },
     onSearch: (params: Record<string, any>) => {
       const filters: any[] = []
