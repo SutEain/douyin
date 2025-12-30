@@ -93,7 +93,13 @@ const condStatus = computed(() => {
   const status = { follow: true, chat: true }
 
   if (cond.follow && !props.isFollowed) status.follow = false
-  if (cond.keyword && props.lastMessage !== cond.keyword) status.chat = false
+  if (cond.keyword) {
+    const msg = props.lastMessage?.trim() || ''
+    const target = String(cond.keyword).trim()
+    if (msg !== target) {
+      status.chat = false
+    }
+  }
 
   return status
 })

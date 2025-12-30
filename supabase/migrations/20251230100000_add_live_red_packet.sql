@@ -62,6 +62,7 @@ DECLARE
     v_claim_amount INT;
     v_already_claimed BOOLEAN;
     v_now TIMESTAMP WITH TIME ZONE := now();
+    v_balance_after NUMERIC;
 BEGIN
     -- 1. 检查是否已经领过
     SELECT EXISTS (
@@ -141,9 +142,14 @@ BEGIN
     INSERT INTO public.live_red_packet_claims (packet_id, user_id, amount)
     VALUES (p_packet_id, p_user_id, v_claim_amount);
 
-    -- c. 增加用户余额 (这里假设有 profiles.balance_coins 字段)
+    -- c. 增加用户余额
     UPDATE public.profiles SET balance_coins = balance_coins + v_claim_amount 
-    WHERE id = p_user_id;
+    WHERE id = p_user_id
+    RETURNING balance_coins INTO v_balance_after;
+
+    -- d. 记录资金流水
+    INSERT INTO public.coin_transactions (user_id, amount, balance_after, type, description, related_id)
+    VALUES (p_user_id, v_claim_amount, v_balance_after, 'red_packet_claim', '直播间抢红包', p_packet_id);
 
     RETURN json_build_object('success', true, 'amount', v_claim_amount);
 END;

@@ -873,9 +873,12 @@ function onPlayerError(err: any) {
 }
 
 async function attention() {
-  if (!roomInfo.value.anchor?.id) return
+  if (!roomInfo.value.anchor_info?.id) {
+    console.warn('[LivePage] attention failed: no anchor_info', roomInfo.value)
+    return
+  }
 
-  const targetId = roomInfo.value.anchor.id
+  const targetId = roomInfo.value.anchor_info.id
   const nextStatus = !isFollowed.value
 
   console.log('[LivePage] toggleFollow', { targetId, nextStatus })

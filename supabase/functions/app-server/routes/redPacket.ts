@@ -54,11 +54,11 @@ export async function handleSendRedPacket(req: Request): Promise<Response> {
     throw new HttpError('余额不足', 400)
   }
 
-  // 3. 执行发放逻辑（扣除余额并创建红包，放在事务中或按序执行）
-  // 这里简化处理：直接扣除余额
+  // 3. 执行发放逻辑（扣除余额并创建红包）
+  const balanceAfter = (profile.balance_coins || 0) - total_coins
   const { error: updateBalanceError } = await supabaseAdmin
     .from('profiles')
-    .update({ balance_coins: (profile.balance_coins || 0) - total_coins })
+    .update({ balance_coins: balanceAfter })
     .eq('id', user.id)
 
   if (updateBalanceError) {
@@ -66,7 +66,7 @@ export async function handleSendRedPacket(req: Request): Promise<Response> {
   }
 
   const unlockAt = new Date(Date.now() + countdown_seconds * 1000).toISOString()
-  const expiresAt = new Date(Date.now() + (countdown_seconds + 3600) * 1000).toISOString() // 默认领1小时
+  const expiresAt = new Date(Date.now() + (countdown_seconds + 3600) * 1000).toISOString()
 
   const { data: packet, error: insertError } = await supabaseAdmin
     .from('live_red_packets')
@@ -88,13 +88,23 @@ export async function handleSendRedPacket(req: Request): Promise<Response> {
     .single()
 
   if (insertError) {
-    // 如果插入失败，需要退还余额（补偿逻辑）
+    // 补偿逻辑
     await supabaseAdmin
       .from('profiles')
       .update({ balance_coins: profile.balance_coins })
       .eq('id', user.id)
     throw new HttpError('创建红包失败: ' + insertError.message, 500)
   }
+
+  // 🎯 记录资金流水
+  await supabaseAdmin.from('coin_transactions').insert({
+    user_id: user.id,
+    amount: -total_coins,
+    balance_after: balanceAfter,
+    type: 'red_packet_send',
+    description: '直播间发放红包',
+    related_id: packet.id
+  })
 
   // 4. 发送一条系统消息到直播间
   await supabaseAdmin.from('live_broadcast_messages').insert({
