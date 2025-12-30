@@ -70,7 +70,6 @@ export const VideoList = () => {
       ]
     },
     pagination: {
-      current: 1,
       pageSize: 20
     },
     onSearch: (params: Record<string, any>) => {
