@@ -89,7 +89,7 @@ export const UserList = () => {
         filters.push({ field: 'video_count', operator: 'eq', value: 0 })
       }
 
-      if (liveStatus !== undefined && liveStatus !== '') {
+      if (liveStatus !== undefined && liveStatus !== '' && liveStatus !== null) {
         filters.push({ field: 'live_status', operator: 'eq', value: Number(liveStatus) })
       }
 
@@ -221,7 +221,7 @@ export const UserList = () => {
             <Button
               onClick={() => {
                 searchFormProps.form?.resetFields()
-                searchFormProps.form?.submit()
+                searchFormProps.onFinish?.({})
               }}
             >
               重置

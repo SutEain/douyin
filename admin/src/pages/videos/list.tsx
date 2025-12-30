@@ -60,95 +60,62 @@ export const VideoList = () => {
   const [previewImages, setPreviewImages] = useState<string[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
-  // ✅ 强制默认“时间倒序”（最近发布在最前）
-  // 说明：useTable 的 initial sorter 会被 URL（syncWithLocation）中的 sorters 覆盖；
-  // 如果用户曾点击过表头导致 URL 里保存了“正序”，这里会清掉 sorters，让 initial 生效。
-  useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    let changed = false
-    for (const key of Array.from(params.keys())) {
-      if (key.startsWith('sorters')) {
-        params.delete(key)
-        changed = true
-      }
-    }
-    if (changed) {
-      const next = params.toString()
-      navigate(`${location.pathname}${next ? `?${next}` : ''}`, { replace: true })
-    }
-  }, [location.pathname, location.search, navigate])
-
   const { tableProps, searchFormProps } = useTable({
     // ✅ 后台视频列表使用视图（支持业务优先级排序 + 用户多字段搜索）
     resource: 'admin_videos_list',
     syncWithLocation: true,
     sorters: {
       initial: [
-        // ✅ 默认：待审核/就绪 优先，其次按时间倒序
-        { field: 'admin_sort_rank', order: 'asc' },
-        { field: 'admin_sort_time', order: 'desc' },
+        // ✅ 默认按创建时间倒序，最新发布的在最上面
         { field: 'created_at', order: 'desc' }
       ]
+    },
+    pagination: {
+      initialCurrent: 1,
+      initialPageSize: 20
     },
     onSearch: (params: Record<string, any>) => {
       const filters: any[] = []
 
-      // 搜索描述
-      if (params.description) {
+      // 1. 视频 ID (UUID)
+      const videoId = String(params.video_id || '').trim()
+      if (videoId) {
+        filters.push({ field: 'id', operator: 'eq', value: videoId })
+      }
+
+      // 2. 搜索描述
+      const desc = String(params.description || '').trim()
+      if (desc) {
         filters.push({
           field: 'description',
           operator: 'contains',
-          value: params.description
+          value: desc
         })
       }
 
-      // 搜索用户（author uuid / numeric_id / username / nickname）
-      const rawUserQ = String(params.user_q || '').trim()
-      if (rawUserQ) {
-        const q = rawUserQ.trim()
-        const isUuid =
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q)
-        const isNumeric = /^[0-9]+$/.test(q)
-
-        if (isUuid) {
-          filters.push({ field: 'author_id', operator: 'eq', value: q })
-        } else if (isNumeric) {
-          filters.push({ field: 'author_numeric_id', operator: 'eq', value: Number(q) })
-        } else {
-          // ✅ 避免 dataProvider 的 OR 过滤结构兼容性问题：改用视图字段 author_search
-          filters.push({ field: 'author_search', operator: 'contains', value: q.toLowerCase() })
-        }
+      // 3. 搜索用户（支持多种输入，统一走视图的 author_search）
+      const userQ = String(params.user_q || '').trim()
+      if (userQ) {
+        filters.push({ field: 'author_search', operator: 'contains', value: userQ.toLowerCase() })
       }
 
-      // 筛选状态
+      // 4. 筛选状态
       if (params.status) {
-        filters.push({
-          field: 'status',
-          operator: 'eq',
-          value: params.status
-        })
+        filters.push({ field: 'status', operator: 'eq', value: params.status })
       }
 
-      // 筛选审核状态
+      // 5. 筛选审核状态
       if (params.review_status) {
-        filters.push({
-          field: 'review_status',
-          operator: 'eq',
-          value: params.review_status
-        })
+        filters.push({ field: 'review_status', operator: 'eq', value: params.review_status })
       }
 
-      // 筛选内容类型
+      // 6. 筛选内容类型
       if (params.content_type) {
-        filters.push({
-          field: 'content_type',
-          operator: 'eq',
-          value: params.content_type
-        })
+        filters.push({ field: 'content_type', operator: 'eq', value: params.content_type })
       }
 
-      // 筛选推荐状态
-      if (params.is_recommended) {
+      // 7. 筛选推荐状态
+      if (params.is_recommended === 'true' || params.is_recommended === 'false') {
         filters.push({
           field: 'is_recommended',
           operator: 'eq',
@@ -156,8 +123,8 @@ export const VideoList = () => {
         })
       }
 
-      // 筛选成人内容
-      if (params.is_adult) {
+      // 8. 筛选成人内容
+      if (params.is_adult === 'true' || params.is_adult === 'false') {
         filters.push({
           field: 'is_adult',
           operator: 'eq',
@@ -165,8 +132,8 @@ export const VideoList = () => {
         })
       }
 
-      // 筛选东南亚板块
-      if (params.is_sea) {
+      // 9. 筛选东南亚板块
+      if (params.is_sea === 'true' || params.is_sea === 'false') {
         filters.push({
           field: 'is_sea',
           operator: 'eq',
@@ -610,15 +577,18 @@ export const VideoList = () => {
         }
       >
         {/* 搜索和筛选表单 */}
-        <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
-          <Form.Item name="user_q" label="搜索用户">
-            <Input placeholder="作者ID/数字ID/用户名/昵称" style={{ width: 220 }} />
+        <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16, gap: '8px 0' }}>
+          <Form.Item name="user_q" label="作者">
+            <Input placeholder="昵称/用户名/ID" allowClear style={{ width: 160 }} />
           </Form.Item>
-          <Form.Item name="description" label="搜索描述">
-            <Input placeholder="输入视频描述" style={{ width: 200 }} />
+          <Form.Item name="description" label="描述">
+            <Input placeholder="关键词" allowClear style={{ width: 140 }} />
           </Form.Item>
-          <Form.Item name="status" label="视频状态">
-            <Select placeholder="选择状态" allowClear style={{ width: 120 }}>
+          <Form.Item name="video_id" label="视频ID">
+            <Input placeholder="UUID" allowClear style={{ width: 120 }} />
+          </Form.Item>
+          <Form.Item name="status" label="状态">
+            <Select placeholder="视频状态" allowClear style={{ width: 100 }}>
               <Select.Option value="draft">草稿</Select.Option>
               <Select.Option value="processing">处理中</Select.Option>
               <Select.Option value="ready">就绪</Select.Option>
@@ -626,39 +596,38 @@ export const VideoList = () => {
               <Select.Option value="failed">失败</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="review_status" label="审核状态">
-            <Select placeholder="选择审核状态" allowClear style={{ width: 130 }}>
+          <Form.Item name="review_status" label="审核">
+            <Select placeholder="审核状态" allowClear style={{ width: 110 }}>
               <Select.Option value="pending">待审核</Select.Option>
               <Select.Option value="auto_approved">自动通过</Select.Option>
-              <Select.Option value="manual_review">人工审核中</Select.Option>
+              <Select.Option value="manual_review">人工审核</Select.Option>
               <Select.Option value="approved">已通过</Select.Option>
               <Select.Option value="rejected">已拒绝</Select.Option>
-              <Select.Option value="appealing">申诉中</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="content_type" label="内容类型">
-            <Select placeholder="选择类型" allowClear style={{ width: 100 }}>
+          <Form.Item name="content_type" label="类型">
+            <Select placeholder="全部" allowClear style={{ width: 90 }}>
               <Select.Option value="video">🎬 视频</Select.Option>
               <Select.Option value="image">🖼️ 图片</Select.Option>
               <Select.Option value="album">📷 相册</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="is_recommended" label="推荐状态">
-            <Select placeholder="推荐状态" allowClear style={{ width: 100 }}>
-              <Select.Option value="true">⭐ 已推荐</Select.Option>
-              <Select.Option value="false">未推荐</Select.Option>
+          <Form.Item name="is_recommended" label="推荐">
+            <Select placeholder="全部" allowClear style={{ width: 90 }}>
+              <Select.Option value="true">⭐ 是</Select.Option>
+              <Select.Option value="false">否</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="is_adult" label="成人内容">
-            <Select placeholder="是否成人" allowClear style={{ width: 110 }}>
-              <Select.Option value="true">🔞 成人</Select.Option>
-              <Select.Option value="false">普通</Select.Option>
+          <Form.Item name="is_adult" label="成人">
+            <Select placeholder="全部" allowClear style={{ width: 90 }}>
+              <Select.Option value="true">🔞 是</Select.Option>
+              <Select.Option value="false">否</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item name="is_sea" label="东南亚">
-            <Select placeholder="是否东南亚" allowClear style={{ width: 110 }}>
-              <Select.Option value="true">东南亚</Select.Option>
-              <Select.Option value="false">普通</Select.Option>
+            <Select placeholder="全部" allowClear style={{ width: 90 }}>
+              <Select.Option value="true">🌏 是</Select.Option>
+              <Select.Option value="false">否</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item>
@@ -669,7 +638,7 @@ export const VideoList = () => {
               <Button
                 onClick={() => {
                   searchFormProps.form?.resetFields()
-                  searchFormProps.form?.submit()
+                  searchFormProps.onFinish?.({})
                 }}
               >
                 重置
@@ -772,32 +741,32 @@ export const VideoList = () => {
           />
 
           <Table.Column
-            title="用户"
+            title="作者信息"
             width={180}
             render={(_, record: any) => {
-              const profile = record.profiles
-              // 兼容可能为数组的情况（虽然 user_id 应该是一对一）
-              const user = Array.isArray(profile) ? profile[0] : profile
+              const user = record.profiles
               const nickname = user?.nickname || '未知用户'
-              // 尝试获取头像
+              const numericId = user?.numeric_id || '-'
               let avatar = user?.avatar_url
 
-              // 如果是对象（Telegram 风格，数据库中可能是 jsonb）
               if (typeof avatar === 'object' && avatar !== null) {
                 avatar = avatar.url_list?.[0] || avatar.url
               }
 
               return (
-                <Space>
-                  <img
-                    src={avatar || 'https://via.placeholder.com/32'}
-                    alt={nickname}
-                    style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
-                    onError={(e) =>
-                      ((e.target as HTMLImageElement).src = 'https://via.placeholder.com/32')
-                    }
-                  />
-                  <span style={{ fontSize: 13 }}>{nickname}</span>
+                <Space direction="vertical" size={0}>
+                  <Space>
+                    <img
+                      src={avatar || 'https://via.placeholder.com/32'}
+                      alt={nickname}
+                      style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                      onError={(e) =>
+                        ((e.target as HTMLImageElement).src = 'https://via.placeholder.com/32')
+                      }
+                    />
+                    <span style={{ fontWeight: 500 }}>{nickname}</span>
+                  </Space>
+                  <small style={{ color: '#999', marginLeft: 36 }}>ID: {numericId}</small>
                 </Space>
               )
             }}
@@ -942,7 +911,6 @@ export const VideoList = () => {
             title="创建时间"
             width={160}
             sorter
-            defaultSortOrder="descend"
             render={(value) => formatBeijingTime(value)}
           />
 

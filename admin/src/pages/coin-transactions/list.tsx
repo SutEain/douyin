@@ -1,5 +1,5 @@
 import { List, useTable } from '@refinedev/antd'
-import { Form, Input, Select, Table, Tag } from 'antd'
+import { Form, Input, Select, Table, Tag, Space, Button } from 'antd'
 
 const typeColors: Record<string, string> = {
   recharge: 'green',
@@ -62,7 +62,7 @@ export const CoinTransactionList = () => {
             <Button
               onClick={() => {
                 searchFormProps.form?.resetFields()
-                searchFormProps.form?.submit()
+                searchFormProps.onFinish?.({})
               }}
             >
               重置

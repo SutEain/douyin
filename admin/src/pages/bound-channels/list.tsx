@@ -44,7 +44,7 @@ export const BoundChannelList = () => {
             <Button
               onClick={() => {
                 searchFormProps.form?.resetFields()
-                searchFormProps.form?.submit()
+                searchFormProps.onFinish?.({})
               }}
             >
               重置
