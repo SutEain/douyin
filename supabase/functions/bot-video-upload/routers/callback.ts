@@ -23,7 +23,12 @@ import {
   handleCreateRechargeOrder,
   handleCancelRechargeOrder,
   handleWithdrawStart,
-  handleWithdrawSubmit
+  handleWithdrawSubmit,
+  handleListChannels,
+  handleAskBindChannel,
+  handleToggleChannelSync,
+  handleUnbindChannel,
+  handleToggleChannelAttr
 } from '../features/profileCenter.ts'
 import { getEditKeyboard, getEditMenuText, parseVideoAction } from '../features/editor.ts'
 import {
@@ -184,6 +189,46 @@ export async function handleCallback(
     if (data === 'profile_transactions') {
       await answerCallbackQuery(callbackQueryId)
       await handleTransactions(chatId, messageId)
+      return
+    }
+
+    if (data === 'profile_channels') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleListChannels(chatId, messageId)
+      return
+    }
+
+    if (data === 'profile_bind_channel') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleAskBindChannel(chatId, messageId)
+      return
+    }
+
+    if (data.startsWith('channel_toggle:')) {
+      const channelId = data.split(':')[1]
+      await answerCallbackQuery(callbackQueryId, '🔄 切换同步状态...')
+      await handleToggleChannelSync(chatId, messageId, channelId)
+      return
+    }
+
+    if (data.startsWith('channel_unbind:')) {
+      const channelId = data.split(':')[1]
+      await answerCallbackQuery(callbackQueryId, '🗑 正在解绑频道...')
+      await handleUnbindChannel(chatId, messageId, channelId)
+      return
+    }
+
+    if (data.startsWith('channel_attr_adult:')) {
+      const channelId = data.split(':')[1]
+      await answerCallbackQuery(callbackQueryId, '🔞 正在切换成人标记...')
+      await handleToggleChannelAttr(chatId, messageId, channelId, 'is_adult')
+      return
+    }
+
+    if (data.startsWith('channel_attr_sea:')) {
+      const channelId = data.split(':')[1]
+      await answerCallbackQuery(callbackQueryId, '🌏 正在切换东南亚标记...')
+      await handleToggleChannelAttr(chatId, messageId, channelId, 'is_sea')
       return
     }
 

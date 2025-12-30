@@ -23,6 +23,7 @@ import { LiveRoomCreate, LiveRoomEdit, LiveRoomList } from './pages/live-rooms'
 import { GiftList } from './pages/gifts'
 import { RechargeOrderList } from './pages/recharge-orders'
 import { WithdrawOrderList } from './pages/withdraw-orders'
+import { BoundChannelList } from './pages/bound-channels'
 import { Login } from './pages/login'
 import { authProvider } from './authProvider'
 import { Dashboard } from './pages/dashboard'
@@ -178,6 +179,11 @@ function App() {
                 name: 'withdraw_orders',
                 list: '/withdraw-orders',
                 meta: { label: '提现申请' }
+              },
+              {
+                name: 'bound_channels',
+                list: '/bound-channels',
+                meta: { label: '频道同步管理' }
               }
             ]}
             options={{
@@ -225,6 +231,9 @@ function App() {
                 <Route path="/withdraw-orders" element={<WithdrawOrderList />} />
                 <Route path="/gifts">
                   <Route index element={<GiftList />} />
+                </Route>
+                <Route path="/bound-channels">
+                  <Route index element={<BoundChannelList />} />
                 </Route>
               </Route>
               <Route path="*" element={<ErrorComponent />} />

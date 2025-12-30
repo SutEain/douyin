@@ -267,7 +267,7 @@ onUnmounted(() => {
   width: 100vw;
   height: 100vh;
   pointer-events: none;
-  z-index: 9999;
+  z-index: 800; /* 降低层级，确保不遮挡红包和输入框 */
   display: flex;
   align-items: center;
   justify-content: center;

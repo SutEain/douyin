@@ -54,6 +54,12 @@ interface AlbumPhoto {
   order?: number
 }
 
+interface UploadExtraData {
+  is_adult?: boolean
+  is_sea?: boolean
+  status?: string // 可选，例如直接设为 'published'
+}
+
 // 🎯 触发 Worker 处理视频 (转存 R2)
 export async function triggerWorker(
   videoId: string,
@@ -91,7 +97,8 @@ export async function handlePhoto(
   photoSizes: any[], // Telegram 会发送多个尺寸的图片
   caption?: string,
   from?: any,
-  mediaGroupId?: string
+  mediaGroupId?: string,
+  extraData?: UploadExtraData
 ) {
   console.log('[handlePhoto] 开始处理图片')
   console.log('[handlePhoto] chatId:', chatId)
@@ -211,7 +218,9 @@ export async function handlePhoto(
           height: photo.height,
           storage_type: 'telegram',
           is_private: false,
-          status: 'draft'
+          is_adult: extraData?.is_adult || false,
+          is_sea: extraData?.is_sea || false,
+          status: extraData?.status || 'draft'
         })
         .select()
         .single()
@@ -240,7 +249,7 @@ export async function handlePhoto(
     }
 
     // 🎯 单图模式：直接保存
-    await saveSinglePhoto(chatId, photo, caption, from, profile)
+    await saveSinglePhoto(chatId, photo, caption, from, profile, extraData)
   } catch (error) {
     console.error('[handlePhoto] 处理图片失败:', error)
     await sendMessage(chatId, '❌ 图片上传失败，请重试')
@@ -253,7 +262,8 @@ export async function saveSinglePhoto(
   photo: any,
   caption?: string,
   from?: any,
-  profile?: any
+  profile?: any,
+  extraData?: UploadExtraData
 ) {
   console.log('[saveSinglePhoto] 保存单张图片')
 
@@ -295,7 +305,9 @@ export async function saveSinglePhoto(
       file_size: photo.file_size || 0,
       storage_type: 'telegram',
       is_private: false,
-      status: 'draft'
+      is_adult: extraData?.is_adult || false,
+      is_sea: extraData?.is_sea || false,
+      status: extraData?.status || 'draft'
     })
     .select()
     .single()
@@ -327,7 +339,8 @@ export async function handleVideo(
   video: any,
   caption?: string,
   from?: any,
-  mediaGroupId?: string
+  mediaGroupId?: string,
+  extraData?: UploadExtraData
 ) {
   console.log('[handleVideo] 开始处理视频')
   console.log('[handleVideo] chatId:', chatId)
@@ -414,7 +427,9 @@ export async function handleVideo(
         height: video.height,
         file_size: videoSize,
         is_private: false,
-        status: 'processing'
+        is_adult: extraData?.is_adult || false,
+        is_sea: extraData?.is_sea || false,
+        status: extraData?.status || 'processing'
       })
       .select()
       .single()

@@ -267,7 +267,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 100rem;
   right: 15rem;
-  z-index: 100;
+  z-index: 900; /* 提高到礼物特效(800)之上，确保挂件可点 */
   pointer-events: auto;
 
   .packet-entry {

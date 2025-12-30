@@ -101,7 +101,7 @@
               <Icon icon="solar:share-bold" />
             </div>
             <div
-              v-if="roomInfo.is_self_hosted && roomInfo.anchor_id === baseStore.userinfo.id"
+              v-if="roomInfo.is_self_hosted && roomInfo.anchor_id === baseStore.userinfo.uid"
               class="option-item redpacket"
               @click="showSendPacket = true"
             >
@@ -1209,7 +1209,7 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 20000;
+  z-index: 800; /* 降低层级，确保不遮挡红包和输入框 */
   pointer-events: none;
   display: flex;
   align-items: center;

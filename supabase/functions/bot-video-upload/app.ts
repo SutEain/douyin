@@ -12,7 +12,8 @@ import { getEditKeyboard, getEditMenuText } from './features/editor.ts'
 import { handlePhoto, handleVideo, mediaGroupRejectCache } from './features/upload.ts'
 import { deleteTelegramMessage, sendMessage } from './telegram.ts'
 import { handleCallback } from './routers/callback.ts'
-import { handleLocation, handleText } from './routers/messages.ts'
+import { handleLocation, handleText, handleForward } from './routers/messages.ts'
+import { handleChannelPost } from './routers/channelPost.ts'
 
 // 主服务（由 index.ts 作为入口调用）
 export async function handleRequest(req: Request): Promise<Response> {
@@ -79,10 +80,24 @@ export async function handleRequest(req: Request): Promise<Response> {
 
       console.log('收到更新:', JSON.stringify(update).substring(0, 200))
 
+      // 🎯 处理频道更新 (自动搬运)
+      if (update.channel_post) {
+        console.log('[MAIN] 收到频道更新 (channel_post)')
+        await handleChannelPost(update.channel_post)
+        return new Response('OK', { status: 200 })
+      }
+
       // 处理消息
       if (update.message) {
         const message = update.message
         const chatId = message.chat.id
+
+        // 🎯 处理转发消息 (用于绑定频道)
+        if (message.forward_origin || message.forward_from_chat) {
+          console.log('[MAIN] 收到转发消息')
+          await handleForward(chatId, message)
+          return new Response('OK', { status: 200 })
+        }
 
         console.log('[DEBUG] 消息类型:', {
           hasText: !!message.text,

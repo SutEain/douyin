@@ -121,6 +121,7 @@ export const useBaseStore = defineStore('base', {
       // 🎯 深链接：预加载的视频数据
       startVideoData: null as any,
       userinfo: {
+        uid: '',
         nickname: '',
         desc: '',
         user_age: -1,

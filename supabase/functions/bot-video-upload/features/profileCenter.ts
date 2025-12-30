@@ -111,6 +111,7 @@ export async function handleUserProfile(
         [{ text: '💰 我的钱包', callback_data: 'profile_wallet' }],
         [liveButton],
         [{ text: '📖 使用说明', callback_data: 'profile_help' }],
+        [{ text: '📺 绑定频道 (自动同步)', callback_data: 'profile_channels' }],
         [
           { text: '🔔 通知设置', callback_data: 'profile_settings_notify' },
           { text: '⚙️ 隐私设置', callback_data: 'profile_settings_privacy' }
@@ -863,6 +864,168 @@ export async function handleWithdrawSubmit(chatId: number, messageId: number) {
         inline_keyboard: [[{ text: '⬅️ 返回重试', callback_data: 'profile_withdraw' }]]
       }
     })
+  }
+}
+
+// 🎯 处理"我的频道"列表
+export async function handleListChannels(chatId: number, messageId?: number) {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile) throw new Error('User not found')
+
+    const { data: channels } = await supabase
+      .from('bound_channels')
+      .select('*')
+      .eq('user_id', profile.id)
+      .order('created_at', { ascending: false })
+
+    let text =
+      `📺 <b>我的绑定频道</b>\n\n` +
+      `绑定频道后，您在频道发送的<b>视频/图片</b>将自动同步到 TG抖音。\n\n`
+
+    const keyboard: any[][] = []
+
+    if (!channels || channels.length === 0) {
+      text += `<i>目前暂未绑定任何频道</i>`
+    } else {
+      channels.forEach((c: any) => {
+        const attrs = []
+        if (c.is_adult) attrs.push('🔞 成人')
+        if (c.is_sea) attrs.push('🌏 东南亚')
+        const attrText = attrs.length > 0 ? ` [${attrs.join(' | ')}]` : ''
+
+        text += `• <b>${c.title}</b> (${c.sync_enabled ? '✅ 同步中' : '⏸ 已暂停'})${attrText}\n`
+
+        keyboard.push([
+          { text: `🗑 解绑: ${c.title}`, callback_data: `channel_unbind:${c.id}` },
+          {
+            text: c.sync_enabled ? '⏸ 暂停' : '▶️ 开启',
+            callback_data: `channel_toggle:${c.id}`
+          }
+        ])
+        keyboard.push([
+          {
+            text: c.is_adult ? '✅ 标记成人' : '⬜️ 设为成人',
+            callback_data: `channel_attr_adult:${c.id}`
+          },
+          {
+            text: c.is_sea ? '✅ 标记东南亚' : '⬜️ 设为东南亚',
+            callback_data: `channel_attr_sea:${c.id}`
+          }
+        ])
+      })
+    }
+
+    keyboard.push([{ text: '➕ 绑定新频道', callback_data: 'profile_bind_channel' }])
+    keyboard.push([{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }])
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: { inline_keyboard: keyboard } })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: { inline_keyboard: keyboard } })
+    }
+  } catch (error) {
+    console.error('handleListChannels error:', error)
+    await sendMessage(chatId, '❌ 获取频道列表失败')
+  }
+}
+
+// 🎯 处理"开始绑定频道"引导
+export async function handleAskBindChannel(chatId: number, messageId?: number) {
+  try {
+    const { updateUserState } = await import('../state.ts')
+    await updateUserState(chatId, {
+      state: 'waiting_channel_forward',
+      current_message_id: messageId
+    })
+
+    const text =
+      `🔗 <b>如何绑定频道？</b>\n\n` +
+      `1. 首先，请将本机器人设置为频道的<b>管理员</b>。\n` +
+      `2. 然后，从该频道<b>转发任意一条消息</b>给我。\n\n` +
+      `💡 机器人收到转发消息后，将自动识别并完成绑定。\n` +
+      `💡 绑定成功后，您在该频道发布的视频将自动搬运到平台。`
+
+    const keyboard = {
+      inline_keyboard: [[{ text: '⬅️ 返回列表', callback_data: 'profile_channels' }]]
+    }
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: keyboard })
+    }
+  } catch (error) {
+    console.error('handleAskBindChannel error:', error)
+    await sendMessage(chatId, '❌ 系统错误，请稍后重试')
+  }
+}
+
+// 🎯 处理切换同步状态
+export async function handleToggleChannelSync(
+  chatId: number,
+  messageId: number,
+  channelId: string
+) {
+  try {
+    const { data: channel } = await supabase
+      .from('bound_channels')
+      .select('sync_enabled')
+      .eq('id', channelId)
+      .single()
+
+    if (channel) {
+      await supabase
+        .from('bound_channels')
+        .update({ sync_enabled: !channel.sync_enabled })
+        .eq('id', channelId)
+    }
+
+    await handleListChannels(chatId, messageId)
+  } catch (error) {
+    console.error('handleToggleChannelSync error:', error)
+  }
+}
+
+// 🎯 处理解绑频道
+export async function handleUnbindChannel(chatId: number, messageId: number, channelId: string) {
+  try {
+    await supabase.from('bound_channels').delete().eq('id', channelId)
+    await handleListChannels(chatId, messageId)
+  } catch (error) {
+    console.error('handleUnbindChannel error:', error)
+  }
+}
+
+// 🎯 处理频道属性切换 (成人/东南亚)
+export async function handleToggleChannelAttr(
+  chatId: number,
+  messageId: number,
+  channelId: string,
+  attr: 'is_adult' | 'is_sea'
+) {
+  try {
+    const { data: channel } = await supabase
+      .from('bound_channels')
+      .select(attr)
+      .eq('id', channelId)
+      .single()
+
+    if (channel) {
+      await supabase
+        .from('bound_channels')
+        .update({ [attr]: !channel[attr] })
+        .eq('id', channelId)
+    }
+
+    await handleListChannels(chatId, messageId)
+  } catch (error) {
+    console.error('handleToggleChannelAttr error:', error)
   }
 }
 

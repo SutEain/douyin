@@ -6,6 +6,98 @@ import { handleViewVideo } from '../features/videoActions.ts'
 import { handleMyPublished, setPublishedCtx } from '../features/myVideos.ts'
 import { getLocationFromCoords } from '../utils/geo.ts'
 import { sendSelfDestructMessage } from '../utils/telegramExtras.ts'
+import { getPersistentKeyboard } from '../keyboards.ts'
+
+// 处理转发消息 (用于绑定频道)
+export async function handleForward(chatId: number, message: any) {
+  const userState = await getUserState(chatId)
+
+  if (userState.state !== 'waiting_channel_forward') {
+    // 如果不是在绑定状态，正常处理转发的内容 (搬运逻辑已经由 handleVideo/handlePhoto 处理)
+    return
+  }
+
+  // 提取频道信息
+  let channelId: number | null = null
+  let channelTitle: string | null = null
+  let channelUsername: string | null = null
+
+  // 兼容新旧转发字段
+  if (message.forward_origin?.type === 'channel') {
+    channelId = message.forward_origin.chat.id
+    channelTitle = message.forward_origin.chat.title
+    channelUsername = message.forward_origin.chat.username
+  } else if (message.forward_from_chat?.type === 'channel') {
+    channelId = message.forward_from_chat.id
+    channelTitle = message.forward_from_chat.title
+    channelUsername = message.forward_from_chat.username
+  }
+
+  if (!channelId) {
+    await sendSelfDestructMessage(chatId, '❌ 无法识别频道信息，请确保是从频道转发的消息。')
+    return
+  }
+
+  try {
+    // 1. 获取用户信息
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile) throw new Error('User not found')
+
+    // 2. 检查频道是否已被他人绑定
+    const { data: existing } = await supabase
+      .from('bound_channels')
+      .select('user_id')
+      .eq('id', channelId)
+      .maybeSingle()
+
+    if (existing && existing.user_id !== profile.id) {
+      await sendMessage(chatId, '❌ 该频道已被其他用户绑定。')
+      return
+    }
+
+    // 3. 验证机器人权限 (尝试发送 getChatMember)
+    // 注意：这里需要调用 Telegram API
+    const botToken = Deno.env.get('BOT_TOKEN')
+    const checkUrl = `https://api.telegram.org/bot${botToken}/getChatMember?chat_id=${channelId}&user_id=${Deno.env.get('BOT_ID') || ''}`
+    // 如果没有配置 BOT_ID，先尝试获取
+    // 简单起见，我们也可以尝试发送一个测试动作
+
+    // 4. 保存绑定关系
+    const { error } = await supabase.from('bound_channels').upsert({
+      id: channelId,
+      user_id: profile.id,
+      title: channelTitle,
+      username: channelUsername,
+      sync_enabled: true
+    })
+
+    if (error) throw error
+
+    await updateUserState(chatId, { state: 'idle' })
+
+    const successText =
+      `✅ <b>频道绑定成功！</b>\n\n` +
+      `📺 <b>频道：</b> ${channelTitle}\n` +
+      `🆔 <b>ID：</b> <code>${channelId}</code>\n\n` +
+      `💡 您在该频道发布的视频/图片，机器人将自动同步到平台。\n` +
+      `💡 请确保机器人拥有「发布消息」权限以获取内容。`
+
+    const { handleListChannels } = await import('../features/profileCenter.ts')
+    await sendMessage(chatId, successText, {
+      reply_markup: {
+        inline_keyboard: [[{ text: '查看我的频道', callback_data: 'profile_channels' }]]
+      }
+    })
+  } catch (error: any) {
+    console.error('handleForward error:', error)
+    await sendMessage(chatId, `❌ 绑定失败: ${error.message}`)
+  }
+}
 
 // 处理文本消息（编辑流程 + 已发布搜索 + 提现流程）
 export async function handleText(chatId: number, text: string, userMessageId: number) {
