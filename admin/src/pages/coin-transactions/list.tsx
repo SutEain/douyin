@@ -8,7 +8,8 @@ const typeColors: Record<string, string> = {
   gift_in: 'purple',
   withdraw: 'volcano',
   red_packet_send: 'pink',
-  red_packet_claim: 'cyan'
+  red_packet_claim: 'cyan',
+  adjustment: 'geekblue'
 }
 
 const typeLabels: Record<string, string> = {
@@ -18,7 +19,8 @@ const typeLabels: Record<string, string> = {
   gift_in: '打赏收入',
   withdraw: '提现',
   red_packet_send: '发红包',
-  red_packet_claim: '抢红包'
+  red_packet_claim: '抢红包',
+  adjustment: '手动调整'
 }
 
 export const CoinTransactionList = () => {
@@ -26,7 +28,8 @@ export const CoinTransactionList = () => {
     resource: 'coin_transactions',
     syncWithLocation: true,
     meta: {
-      select: '*, profiles:user_id(nickname,numeric_id)'
+      // 🎯 使用 !inner 强制内联连接，这是在 PostgREST 中过滤关联表并获取正确 count 的关键
+      select: '*, profiles:user_id!inner(nickname,numeric_id)'
     },
     sorters: {
       initial: [{ field: 'created_at', order: 'desc' }]
@@ -38,13 +41,11 @@ export const CoinTransactionList = () => {
       if (userQ) {
         const isNumeric = /^[0-9]+$/.test(userQ)
         if (isNumeric) {
-          // 🎯 这里之前的错误是 filters.push({ field: 'profiles.numeric_id', ... })
-          // 这种跨表搜索在某些情况下会失效，或者导致 count 计算错误
-          // 我们需要确保 operator 和 value 正确
+          // 🎯 在 PostgREST 中过滤关联表字段必须使用 !inner join 配合 table.column 语法
           filters.push({
             field: 'profiles.numeric_id',
             operator: 'eq',
-            value: userQ // numeric_id 在数据库是 bigint，尝试传字符串由 PostgREST 处理
+            value: Number(userQ)
           })
         } else {
           filters.push({
