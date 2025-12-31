@@ -20,6 +20,7 @@
       :playsinline="true"
       :fullscreen="false"
       :autoplay="isPlay"
+      style="object-fit: contain; background: black"
     >
       <source
         v-for="(urlItem, index) in item.video.play_addr.url_list"

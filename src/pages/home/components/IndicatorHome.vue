@@ -250,11 +250,13 @@ export default {
   width: 100%;
   color: white;
   // ✅ 适配 iOS 安全区域：高度 = 基础高度 + 顶部安全距离 + 额外修正
-  // 使用 var(--tg-extra-padding) 动态调整全屏与非全屏的偏移
-  height: calc(
-    var(--home-header-height) + env(safe-area-inset-top, 0rem) + var(--tg-extra-padding, 0rem)
-  );
-  padding-top: calc(env(safe-area-inset-top, 0rem) + var(--tg-extra-padding, 0rem));
+  height: var(--home-header-height);
+  padding-top: 0;
+
+  :global(.is-tg-fullscreen) & {
+    height: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
+    padding-top: env(safe-area-inset-top, 0rem);
+  }
   transition: all 0.3s;
   font-weight: bold;
 

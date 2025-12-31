@@ -19,16 +19,19 @@ declare global {
 }
 
 if (typeof window !== 'undefined') {
-  // ✅ 已恢复 console 输出供调试使用
+  // ✅ 强制开启所有日志，确保无静默
   if (!window.__rawConsole__) {
     window.__rawConsole__ = window.console
   }
-  // const noop = () => {}
-  // ;(window.console.log as any) = noop
-  // ;(window.console.info as any) = noop
-  // ;(window.console.debug as any) = noop
-  // ;(window.console.warn as any) = noop
-  // ;(window.console.error as any) = noop
+  // 确保没有 noop 覆盖
+  const rawConsole = window.__rawConsole__
+  if (rawConsole) {
+    ;(window.console.log as any) = rawConsole.log
+    ;(window.console.info as any) = rawConsole.info
+    ;(window.console.debug as any) = rawConsole.debug
+    ;(window.console.warn as any) = rawConsole.warn
+    ;(window.console.error as any) = rawConsole.error
+  }
 
   window.TelegramGameProxy = window.TelegramGameProxy || {}
   if (typeof window.TelegramGameProxy.receiveEvent !== 'function') {

@@ -249,20 +249,26 @@ function onAvatarError(e) {
 .video-tab {
   font-size: 14rem;
   color: white;
-  // ✅ 适配顶部导航栏加高（包含 iOS 安全区域 + 动态额外偏移）
-  padding-top: calc(
-    var(--home-header-height) + env(safe-area-inset-top, 0rem) + var(--tg-extra-padding, 0rem)
-  );
+  // ✅ 默认紧凑模式布局
+  padding-top: var(--home-header-height);
   background: #000;
 
   .Scroll {
     height: calc(
-      var(--vh, 1vh) * 100 -
-        (
-          var(--home-header-height) + env(safe-area-inset-top, 0rem) + var(--tg-extra-padding, 0rem)
-        ) -
-        var(--footer-height)
+      var(--vh, 1vh) * 100 - var(--home-header-height) - var(--footer-height)
     ) !important;
+  }
+
+  // ✅ 全屏模式布局
+  :global(.is-tg-fullscreen) & {
+    padding-top: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
+
+    .Scroll {
+      height: calc(
+        var(--vh, 1vh) * 100 - (var(--home-header-height) + env(safe-area-inset-top, 0rem)) -
+          var(--footer-height)
+      ) !important;
+    }
   }
 }
 

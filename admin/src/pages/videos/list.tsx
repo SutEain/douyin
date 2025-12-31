@@ -400,11 +400,7 @@ export const VideoList = () => {
     selectedRowKeys,
     onChange: (newSelectedRowKeys: React.Key[]) => {
       setSelectedRowKeys(newSelectedRowKeys)
-    },
-    getCheckboxProps: (record: any) => ({
-      // 只有已发布且待审核的视频才能被选中
-      disabled: record.status !== 'published' || record.review_status !== 'pending'
-    })
+    }
   }
 
   // 判断是否需要显示审核按钮

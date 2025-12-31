@@ -91,11 +91,14 @@ onMounted(() => {
   color: #fff;
   display: flex;
   flex-direction: column;
-  // ✅ 放在顶级 tab（IndicatorHome）下面，避免覆盖（适配 iOS 安全区域 + 动态额外偏移）
-  padding-top: calc(
-    var(--home-header-height) + env(safe-area-inset-top, 0rem) + var(--tg-extra-padding, 0rem)
-  );
+  // ✅ 默认紧凑模式布局
+  padding-top: var(--home-header-height);
   box-sizing: border-box;
+
+  // ✅ 全屏模式布局
+  :global(.is-tg-fullscreen) & {
+    padding-top: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
+  }
 }
 
 .content {

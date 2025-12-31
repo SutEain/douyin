@@ -118,13 +118,17 @@ function resetVhAndPx() {
 
     if (isIOS) {
       if (isFullscreen) {
-        extraPadding = 28 // 全屏 iOS 额外下移
+        // 🎯 全屏模式：仅使用安全区域，不再额外加 28px
+        extraPadding = 0
       } else {
-        extraPadding = 0 // 紧凑模式不增加额外边距，避免下垂
+        // 🎯 紧凑模式：强制为 0，防止下垂
+        extraPadding = -20 // 尝试负值抵消 env() 如果 env 依然生效
       }
     }
 
+    // 💡 改进方案：我们直接控制是否启用 safe-area
     document.documentElement.style.setProperty('--tg-extra-padding', `${extraPadding}rem`)
+    document.documentElement.classList.toggle('is-tg-fullscreen', isFullscreen)
   }
 }
 
