@@ -29,18 +29,53 @@ const transitionName = ref('go')
 
 // 🎯 全局深链接处理
 async function handleDeepLink() {
+  console.log(
+    '[DeepLink][App] handleDeepLink 触发, startLiveId:',
+    store.startLiveId,
+    'startVideoId:',
+    store.startVideoId
+  )
+
   if (store.startLiveId) {
     const roomId = store.startLiveId
     console.log('[DeepLink][App] 检测到直播深链接，准备跳转:', roomId)
     store.clearStartLiveId()
+
+    console.log('[DeepLink][App] 等待 router.isReady()...')
     await router.isReady()
-    router.push({ path: '/home/live', query: { id: roomId } })
+    console.log('[DeepLink][App] router.isReady() 完成，当前路由:', route.fullPath)
+
+    // 延迟一小会儿确保稳定
+    setTimeout(() => {
+      console.log('[DeepLink][App] 执行 router.push 到直播间:', roomId)
+      router
+        .push({ path: '/home/live', query: { id: roomId } })
+        .then(() => {
+          console.log('[DeepLink][App] router.push 直播间完成')
+        })
+        .catch((err) => {
+          console.error('[DeepLink][App] router.push 直播间失败:', err)
+        })
+    }, 100)
   } else if (store.startVideoId) {
     const videoId = store.startVideoId
     console.log('[DeepLink][App] 检测到视频深链接，准备跳转:', videoId)
     store.clearStartVideoId()
+
+    console.log('[DeepLink][App] 等待 router.isReady()...')
     await router.isReady()
-    router.push({ path: '/video-detail', query: { id: videoId } })
+
+    setTimeout(() => {
+      console.log('[DeepLink][App] 执行 router.push 到视频详情:', videoId)
+      router
+        .push({ path: '/video-detail', query: { id: videoId } })
+        .then(() => {
+          console.log('[DeepLink][App] router.push 视频完成')
+        })
+        .catch((err) => {
+          console.error('[DeepLink][App] router.push 视频失败:', err)
+        })
+    }, 100)
   }
 }
 

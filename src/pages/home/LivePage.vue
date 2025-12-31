@@ -510,8 +510,12 @@ async function handleSendGift() {
 // --- 房间切换核心逻辑 ---
 async function initRoom() {
   const currentId = route.query.id as string
-  console.log('[LivePage] initRoom start', currentId)
-  if (!currentId) return
+  console.log('[DeepLink][LivePage] initRoom 开始执行, 当前 URL 中的 ID:', currentId)
+
+  if (!currentId) {
+    console.warn('[DeepLink][LivePage] initRoom 退出: 未检测到 ID')
+    return
+  }
 
   // 1. 先清理旧的订阅
   if (channel) {
@@ -1130,6 +1134,7 @@ function setupSubscription() {
 }
 
 onMounted(async () => {
+  console.log('[LivePage] onMounted, roomId from route query:', route.query.id)
   await fetchGifts()
   await initRoom()
 })
