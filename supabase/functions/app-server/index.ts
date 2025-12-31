@@ -52,7 +52,11 @@ import {
   handleClaimRedPacket,
   handleGetActiveRedPackets
 } from './routes/redPacket.ts'
-import { handleAdminDouyinParse, handleAdminDouyinPublish } from './routes/douyin.ts'
+import {
+  handleAdminDouyinParse,
+  handleAdminDouyinPublish,
+  handleAdminDouyinRefresh
+} from './routes/douyin.ts'
 import { handleSendReward } from './routes/reward.ts'
 import { handleAdminConfirmRecharge } from './routes/recharge.ts'
 import { handleAdminProcessWithdraw } from './routes/withdraw.ts'
@@ -226,6 +230,9 @@ serve(async (req) => {
     }
     if (route === '/admin/douyin/publish' && method === 'POST') {
       return handleAdminDouyinPublish(req)
+    }
+    if (route === '/admin/douyin/refresh-links' && method === 'POST') {
+      return handleAdminDouyinRefresh(req)
     }
 
     return errorResponse('Not found', 1, 404)

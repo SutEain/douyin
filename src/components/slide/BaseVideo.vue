@@ -6,6 +6,7 @@
     <div v-if="state.loading" class="loading-text">加载中...</div>
     <!--    <video :src="item.video + '?v=123'"-->
     <video
+      :key="videoKey"
       :poster="poster"
       ref="videoEl"
       :muted="state.isMuted"
@@ -146,6 +147,7 @@ const videoStore = useVideoStore()
 
 // 🎯 倍速播放：默认 1.0，仅对当前视频生效
 const playbackRate = ref<number>(1)
+const videoKey = ref(0) // 🎯 用于强制销毁并重新加载视频 DOM
 function setPlaybackRate(rate: number) {
   const safe = [0.5, 1, 1.25, 1.5, 2].includes(rate) ? rate : 1
   playbackRate.value = safe
@@ -367,11 +369,11 @@ onMounted(() => {
   bus.on(EVENT_KEY.ADD_MUTED, addMuted)
   bus.on(EVENT_KEY.REFRESH_VIDEO, (id) => {
     if (id === props.item.aweme_id) {
-      if (videoEl) {
-        // 🎯 仅调用 load() 和 play() 重新初始化现有资源
-        videoEl.load()
-        play()
-      }
+      console.log(`[BaseVideo] 🔄 彻底刷新视频, id=${id}`)
+      // 🎯 通过改变 key 强制 Vue 销毁并重建 video 元素
+      videoKey.value = Date.now()
+      // 重置进度条逻辑：由于 DOM 被销毁，Vue 会重新初始化所有状态
+      _notice('正在深度重载视频资源...')
     }
   })
 

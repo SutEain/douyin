@@ -483,3 +483,133 @@ export async function handleAdminDouyinPublish(req: Request): Promise<Response> 
     return errorResponse('Internal server error', 1, 500)
   }
 }
+
+/**
+ * 🎬 后台：批量刷新抖音精选视频播放链接 (Scheme A)
+ * POST /admin/douyin/refresh-links
+ */
+export async function handleAdminDouyinRefresh(req: Request): Promise<Response> {
+  try {
+    const { user } = await requireAuth(req)
+    if (!isAdminUser(user)) throw new HttpError('Forbidden', 403)
+
+    const body = await parseJsonBody<{ ids?: string[]; limit?: number }>(req)
+    const { ids, limit = 20 } = body
+
+    // 1. 查询需要刷新的视频
+    let query = supabaseAdmin
+      .from('videos')
+      .select('id, tg_file_id, description')
+      .eq('storage_type', 'douyin')
+      .eq('status', 'published')
+
+    if (ids && ids.length > 0) {
+      query = query.in('id', ids)
+    } else {
+      query = query.limit(limit).order('updated_at', { ascending: true })
+    }
+
+    const { data: videos, error: loadError } = await query
+    if (loadError) throw new HttpError('加载视频列表失败: ' + loadError.message, 500)
+
+    if (!videos || videos.length === 0) {
+      return successResponse({ message: '没有需要刷新的视频', updated_count: 0 })
+    }
+
+    console.log(`[douyin_refresh] 开始刷新 ${videos.length} 个视频的链接...`)
+
+    const results = []
+    let updatedCount = 0
+
+    for (const v of videos) {
+      const shareUrl = v.tg_file_id
+      if (!shareUrl || !/^https?:\/\//i.test(shareUrl)) {
+        results.push({ id: v.id, success: false, reason: '无效的分享链接' })
+        continue
+      }
+
+      try {
+        // 🎯 调用 TikHub 重新解析 (固定使用 app_v3_share 模式)
+        const api = `https://api.tikhub.io/api/v1/douyin/app/v3/fetch_one_video_by_share_url?share_url=${encodeURIComponent(
+          shareUrl
+        )}`
+
+        const resp = await fetch(api, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${TIKHUB_API_TOKEN}`,
+            'User-Agent': 'Mozilla/5.0 (admin-douyin-refresh)',
+            Accept: 'application/json'
+          }
+        })
+
+        if (!resp.ok) {
+          results.push({ id: v.id, success: false, reason: `TikHub 响应异常: ${resp.status}` })
+          continue
+        }
+
+        const json = await resp.json()
+        if (Number(json?.code) !== 200) {
+          results.push({ id: v.id, success: false, reason: json?.message_zh || '解析失败' })
+          continue
+        }
+
+        // 提取播放地址 (参考 handleAdminDouyinParse 的逻辑)
+        const data = json?.data || {}
+        let aweme = data.aweme_details?.[0] || data.aweme_detail || data.aweme || data
+        if (aweme?.aweme_detail) aweme = aweme.aweme_detail
+        if (aweme?.aweme_info) aweme = aweme.aweme_info
+        if (aweme?.aweme) aweme = aweme.aweme
+
+        const video = aweme?.video || {}
+        const playUrl = pickBestPlayUrl([
+          video?.play_addr?.url_list,
+          video?.play_addr_h264?.url_list
+        ])
+        const coverUrl = pickFirstUrl(video?.cover?.url_list)
+
+        if (!playUrl) {
+          results.push({ id: v.id, success: false, reason: '未获取到有效播放链接' })
+          continue
+        }
+
+        // 更新数据库
+        const { error: updateError } = await supabaseAdmin
+          .from('videos')
+          .update({
+            play_url: playUrl,
+            cover_url: coverUrl || v.cover_url,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', v.id)
+
+        if (updateError) {
+          results.push({
+            id: v.id,
+            success: false,
+            reason: '更新数据库失败: ' + updateError.message
+          })
+        } else {
+          results.push({ id: v.id, success: true })
+          updatedCount++
+        }
+      } catch (err) {
+        console.error(`[douyin_refresh] 视频 ${v.id} 刷新异常:`, err)
+        results.push({ id: v.id, success: false, reason: '内部异常' })
+      }
+
+      // 稍微控制频率，避免 TikHub 并发限制
+      await new Promise((r) => setTimeout(r, 100))
+    }
+
+    return successResponse({
+      message: `刷新完成，成功: ${updatedCount}, 失败: ${videos.length - updatedCount}`,
+      updated_count: updatedCount,
+      details: results
+    })
+  } catch (e) {
+    if (e instanceof HttpError) return errorResponse(e.message, 1, e.status)
+    console.error('[handleAdminDouyinRefresh] unexpected error:', e)
+    return errorResponse('Internal server error', 1, 500)
+  }
+}

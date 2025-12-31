@@ -207,26 +207,67 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  const { data, error, count } = await supabaseAdmin
-    .from('videos')
-    .select('*', { count: 'exact' })
-    .eq('status', 'published')
-    .eq('is_adult', false)
-    .eq('is_sea', true)
-    .order('published_at', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: false })
-    .range(from, to)
+  let rows: any[] = []
+  let totalCount = 0
 
-  if (error) {
-    console.error('[LongFeed] 查询视频失败:', error)
-    return errorResponse('Failed to load long feed', 1, 500)
+  if (user?.id) {
+    // 🎯 已登录用户：排除已观看历史，按发布时间倒序
+    const { data, error } = await supabaseAdmin.rpc('get_sea_feed', {
+      p_user_id: user.id,
+      p_page_no: pageNo,
+      p_page_size: pageSize
+    })
+
+    if (error) {
+      console.error('[LongFeed] get_sea_feed RPC 失败:', error)
+      // 降级到普通查询
+      const fallback = await supabaseAdmin
+        .from('videos')
+        .select('*', { count: 'exact' })
+        .eq('status', 'published')
+        .eq('is_adult', false)
+        .eq('is_sea', true)
+        .order('published_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .range(from, to)
+      rows = fallback.data || []
+      totalCount = fallback.count ?? 0
+    } else {
+      rows = data || []
+      // 这里的 total 可能需要单独查一次，或者由 RPC 返回
+      const { count } = await supabaseAdmin
+        .from('videos')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'published')
+        .eq('is_adult', false)
+        .eq('is_sea', true)
+      totalCount = count ?? 0
+    }
+  } else {
+    // 未登录用户：普通查询
+    const { data, error, count } = await supabaseAdmin
+      .from('videos')
+      .select('*', { count: 'exact' })
+      .eq('status', 'published')
+      .eq('is_adult', false)
+      .eq('is_sea', true)
+      .order('published_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    if (error) {
+      console.error('[LongFeed] 查询视频失败:', error)
+      return errorResponse('Failed to load long feed', 1, 500)
+    }
+    rows = data || []
+    totalCount = count ?? 0
   }
 
-  await attachUserFlags(data ?? [], user?.id ?? null)
+  await attachUserFlags(rows, user?.id ?? null)
 
   const profileCache = new Map<string, any>()
   const list: any[] = []
-  for (const row of data ?? []) {
+  for (const row of rows) {
     const authorProfile = await getVideoAuthorProfile(row, profileCache)
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
@@ -237,7 +278,7 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
 
   return successResponse({
     list,
-    total: count ?? 0,
+    total: totalCount,
     pageNo,
     pageSize,
     hasMore: list.length >= pageSize
