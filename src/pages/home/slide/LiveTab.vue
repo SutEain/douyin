@@ -97,7 +97,8 @@ onMounted(() => {
 
   // ✅ 全屏模式布局
   :root[data-tg-fullscreen='true'] & {
-    padding-top: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
+    // 💡 额外增加 10rem 的 padding，防止 tab 遮挡内容
+    padding-top: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem) + 10rem);
   }
 }
 
