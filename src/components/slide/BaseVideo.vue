@@ -18,11 +18,12 @@
       :playsinline="true"
       :fullscreen="false"
       :autoplay="isPlay"
+      :key="'v-' + refreshCounter"
     >
       <source
         v-for="(urlItem, index) in item.video.play_addr.url_list"
-        :key="index"
-        :src="urlItem"
+        :key="index + '-' + refreshCounter"
+        :src="urlItem + (urlItem.includes('?') ? '&' : '?') + 'r=' + refreshCounter"
         type="video/mp4"
         @error="handleVideoError"
       />
@@ -146,6 +147,7 @@ const videoStore = useVideoStore()
 
 // 🎯 倍速播放：默认 1.0，仅对当前视频生效
 const playbackRate = ref<number>(1)
+const refreshCounter = ref(0)
 function setPlaybackRate(rate: number) {
   const safe = [0.5, 1, 1.25, 1.5, 2].includes(rate) ? rate : 1
   playbackRate.value = safe
@@ -367,10 +369,11 @@ onMounted(() => {
   bus.on(EVENT_KEY.ADD_MUTED, addMuted)
   bus.on(EVENT_KEY.REFRESH_VIDEO, (id) => {
     if (id === props.item.aweme_id) {
-      if (videoEl) {
-        videoEl.load()
-        play()
-      }
+      // 🎯 强制刷新：增加计数器触发 video 标签和 source 重新渲染
+      refreshCounter.value++
+      _notice('正在重新加载视频...')
+      // 由于 key 变了，Vue 会销毁旧 video 创建新 video，
+      // 这里不需要手动调用 load()，新 video 会根据 autoplay 自动播放（如果 state 允许）
     }
   })
 

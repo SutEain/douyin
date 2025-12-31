@@ -250,8 +250,20 @@ export default {
   width: 100%;
   color: white;
   // ✅ 适配 iOS 安全区域：高度 = 基础高度 + 顶部安全距离
-  height: calc(var(--home-header-height) + env(safe-area-inset-top));
-  padding-top: env(safe-area-inset-top);
+  // 使用 0rem 作为兜底，如果 env 不支持则为 0
+  height: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
+  padding-top: env(safe-area-inset-top, 0rem);
+
+  // 🎯 针对 Telegram WebApp 或部分环境 env 失效的额外加固
+  // 如果是在 iOS 且 env(safe-area-inset-top) 为 0，手动增加一点边距
+  @media screen and (max-device-width: 450px) and (orientation: portrait) {
+    & {
+      // 如果没有安全区域支持，至少预留 20px（约 20rem）的刘海/状态栏空间
+      // 实际上 env() 为空时，这里会生效
+      padding-top: max(0rem, env(safe-area-inset-top, 20rem));
+      height: calc(var(--home-header-height) + max(0rem, env(safe-area-inset-top, 20rem)));
+    }
+  }
   transition: all 0.3s;
   font-weight: bold;
 
