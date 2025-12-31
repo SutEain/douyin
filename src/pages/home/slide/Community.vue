@@ -227,7 +227,9 @@ function showDetail(e, item) {
   background: #000;
 
   .Scroll {
-    height: calc(var(--vh, 1vh) * 100 - var(--home-header-height) - var(--footer-height)) !important;
+    height: calc(
+      var(--vh, 1vh) * 100 - var(--home-header-height) - var(--footer-height)
+    ) !important;
   }
 
   // ✅ 全屏模式布局
@@ -241,9 +243,6 @@ function showDetail(e, item) {
       ) !important;
     }
   }
-}
-
-  @p: 1rem;
 
   .list {
     margin-left: 2%;
