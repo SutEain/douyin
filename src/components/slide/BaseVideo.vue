@@ -365,6 +365,15 @@ onMounted(() => {
 
   bus.on(EVENT_KEY.REMOVE_MUTED, removeMuted)
   bus.on(EVENT_KEY.ADD_MUTED, addMuted)
+  bus.on(EVENT_KEY.REFRESH_VIDEO, (id) => {
+    if (id === props.item.aweme_id) {
+      if (videoEl) {
+        videoEl.load()
+        play()
+        _notice('正在重新加载视频...')
+      }
+    }
+  })
 
   // 监听视频加载错误（303等网络错误）
   if (videoEl) {
@@ -473,6 +482,7 @@ onUnmounted(() => {
   bus.off(EVENT_KEY.CLOSE_SUB_TYPE, onCloseSubType)
   bus.off(EVENT_KEY.REMOVE_MUTED, removeMuted)
   bus.off(EVENT_KEY.ADD_MUTED, addMuted)
+  bus.off(EVENT_KEY.REFRESH_VIDEO)
 })
 
 function removeMuted() {

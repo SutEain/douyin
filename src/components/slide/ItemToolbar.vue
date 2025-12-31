@@ -31,7 +31,6 @@ const baseStore = useBaseStore()
 // 🎯 倍速播放（仅对当前视频生效，由上层播放器提供 setPlaybackRate）
 const injectedPlaybackRate = inject<any>('playbackRate', null)
 const injectedSetPlaybackRate = inject<any>('setPlaybackRate', null)
-const showSpeedPanel = ref(false)
 const speedOptions = [0.5, 1.0, 1.25, 1.5, 2.0]
 const playbackRateText = computed(() => {
   const r = injectedPlaybackRate?.value ?? 1
@@ -39,25 +38,21 @@ const playbackRateText = computed(() => {
   return `${r}x`
 })
 
-function toggleSpeedPanel() {
-  showSpeedPanel.value = !showSpeedPanel.value
-}
-
 function choosePlaybackRate(rate: number) {
   if (typeof injectedSetPlaybackRate === 'function') {
     injectedSetPlaybackRate(rate)
   } else {
     console.warn('[ItemToolbar] setPlaybackRate 未注入，无法设置倍速')
   }
-  showSpeedPanel.value = false
 }
 
-// 🎯 切换到新视频时：重置倍速面板状态（倍速本身由播放器在切换时重置为 1.0）
+// 🎯 切换到新视频时：重置抽屉状态
 watch(
   () => (props.item as any)?.aweme_id,
   (newId, oldId) => {
     if (newId && newId !== oldId) {
-      showSpeedPanel.value = false
+      showMoreDrawer.value = false
+      showRewardPanel.value = false
     }
   }
 )
@@ -256,6 +251,15 @@ const rewardAmount = ref('')
 const rewardPresets = [10, 50, 100, 500]
 const isRewarding = ref(false)
 
+// 🎯 更多选项抽屉
+const showMoreDrawer = ref(false)
+
+function refreshVideo() {
+  if (props.item?.aweme_id) {
+    bus.emit(EVENT_KEY.REFRESH_VIDEO, props.item.aweme_id)
+  }
+}
+
 async function handleReward() {
   if (isRewarding.value) return
   const amount = Number(rewardAmount.value)
@@ -338,83 +342,17 @@ const vClick = useClick()
       <Icon icon="mage:message-dots-round-fill" class="icon" style="color: white" />
       <span>{{ _formatNumber(item.statistics.comment_count) }}</span>
     </div>
-    <!--TODO     -->
-    <div class="message mb2r" v-click="collected">
-      <Icon
-        v-if="item.isCollect"
-        icon="ic:round-star"
-        class="icon"
-        style="color: rgb(252, 179, 3)"
-      />
-      <Icon v-else icon="ic:round-star" class="icon" style="color: white" />
-      <span>{{ _formatNumber(item.statistics.collect_count) }}</span>
-    </div>
-    <!-- 🎯 视频打赏按钮 -->
-    <div
-      v-if="!props.isMy"
-      class="message mb2r"
-      v-click="() => (showRewardPanel = !showRewardPanel)"
-    >
-      <Icon icon="basil:award-solid" class="icon" style="color: #face15" />
-      <span>打赏</span>
 
-      <transition name="fade">
-        <div v-if="showRewardPanel" class="reward-panel" @click.stop>
-          <div class="reward-title">打赏作者</div>
-          <div class="reward-presets">
-            <div
-              v-for="p in rewardPresets"
-              :key="p"
-              class="preset-item"
-              v-click="() => selectPreset(p)"
-            >
-              {{ p }}
-            </div>
-          </div>
-          <div class="reward-input-wrap">
-            <input
-              type="number"
-              v-model="rewardAmount"
-              placeholder="自定义打赏金额"
-              class="reward-input"
-              @click.stop
-            />
-            <div class="reward-send" :class="{ loading: isRewarding }" v-click="handleReward">
-              {{ isRewarding ? '发送中...' : '确认打赏' }}
-            </div>
-          </div>
-        </div>
-      </transition>
+    <!-- 刷新按钮 -->
+    <div class="refresh mb2r" v-click="refreshVideo">
+      <Icon icon="solar:refresh-bold" class="icon" style="color: white" />
+      <span>刷新</span>
     </div>
 
-    <!-- 🎯 分享按钮 - 调起 Telegram 联系人选择器 -->
-    <div v-if="!props.isMy" class="share mb2r" v-click="shareToTelegram">
-      <img src="../../assets/img/icon/share-white-full.png" alt="" class="share-image" />
-      <span>{{ _formatNumber(item.statistics.share_count) }}</span>
-    </div>
-    <!-- 自己的视频显示菜单图标（保留旧逻辑） -->
-    <div v-else class="share mb2r" v-click="() => bus.emit(EVENT_KEY.SHOW_SHARE)">
-      <img src="../../assets/img/icon/menu-white.png" alt="" class="share-image" />
-    </div>
-
-    <!-- 倍速开关 -->
-    <div class="speed-toggle mb2r" v-click="toggleSpeedPanel">
-      <Icon icon="mdi:speedometer" class="icon" style="color: white" />
-      <div class="speed-text">{{ playbackRateText }}</div>
-
-      <transition name="fade">
-        <div v-if="showSpeedPanel" class="speed-panel" v-click.stop="() => {}">
-          <div
-            v-for="r in speedOptions"
-            :key="r"
-            class="speed-item"
-            :class="{ active: (injectedPlaybackRate?.value ?? 1) === r }"
-            v-click="() => choosePlaybackRate(r)"
-          >
-            {{ r }}x
-          </div>
-        </div>
-      </transition>
+    <!-- 更多选项按钮 -->
+    <div class="more-toggle mb2r" v-click="() => (showMoreDrawer = true)">
+      <Icon icon="solar:menu-dots-bold" class="icon" style="color: white" />
+      <span>更多</span>
     </div>
 
     <!-- 静音开关 -->
@@ -430,6 +368,96 @@ const vClick = useClick()
         </div>
       </transition>
     </div>
+
+    <!-- 更多选项抽屉 -->
+    <transition name="slide-up">
+      <div v-if="showMoreDrawer" class="more-drawer-overlay" @click.self="showMoreDrawer = false">
+        <div class="more-drawer">
+          <div class="drawer-header">
+            <span>更多选项</span>
+            <Icon
+              icon="solar:close-circle-bold"
+              class="close-btn"
+              @click="showMoreDrawer = false"
+            />
+          </div>
+
+          <div class="action-grid">
+            <!-- 转发分享 -->
+            <div class="action-item" v-click="shareToTelegram">
+              <div class="icon-wrap">
+                <Icon icon="solar:share-bold" />
+              </div>
+              <span>转发分享</span>
+            </div>
+
+            <!-- 收藏视频 -->
+            <div class="action-item" v-click="collected">
+              <div class="icon-wrap" :class="{ active: item.isCollect }">
+                <Icon :icon="item.isCollect ? 'solar:star-bold' : 'solar:star-outline'" />
+              </div>
+              <span>{{ item.isCollect ? '已收藏' : '收藏' }}</span>
+            </div>
+
+            <!-- 视频打赏 -->
+            <div class="action-item" v-click="() => (showRewardPanel = true)">
+              <div class="icon-wrap reward-icon">
+                <Icon icon="basil:award-solid" />
+              </div>
+              <span>打赏</span>
+            </div>
+          </div>
+
+          <!-- 倍速选择 -->
+          <div class="speed-section">
+            <div class="section-title">播放倍速 ({{ playbackRateText }})</div>
+            <div class="speed-options">
+              <div
+                v-for="r in speedOptions"
+                :key="r"
+                class="speed-btn"
+                :class="{ active: (injectedPlaybackRate?.value ?? 1) === r }"
+                v-click="() => choosePlaybackRate(r)"
+              >
+                {{ r }}x
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 打赏面板弹窗 -->
+    <transition name="fade">
+      <div v-if="showRewardPanel" class="reward-overlay" @click.self="showRewardPanel = false">
+        <div class="reward-panel" @click.stop>
+          <div class="reward-title">打赏作者</div>
+          <div class="reward-presets">
+            <div
+              v-for="p in rewardPresets"
+              :key="p"
+              class="preset-item"
+              v-click="() => selectPreset(p)"
+            >
+              {{ p }}
+            </div>
+          </div>
+          <div class="reward-input-wrap">
+            <input
+              type="number"
+              v-model="rewardAmount"
+              placeholder="自定义金额"
+              class="reward-input"
+              @click.stop
+            />
+            <div class="reward-send" :class="{ loading: isRewarding }" v-click="handleReward">
+              {{ isRewarding ? '发送中...' : '确认打赏' }}
+            </div>
+          </div>
+          <div class="reward-close" v-click="() => (showRewardPanel = false)">取消</div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -508,7 +536,10 @@ const vClick = useClick()
 
   .love,
   .message,
-  .share {
+  .share,
+  .refresh,
+  .more-toggle,
+  .mute-toggle {
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -522,113 +553,158 @@ const vClick = useClick()
     }
 
     span {
-      font-size: 12rem;
+      font-size: 10rem;
+      margin-top: 2rem;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     }
   }
 
   .icon {
-    font-size: 36rem;
+    font-size: 32rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
   }
 
   .loved {
     background: red;
   }
 
-  // 🎯 静音开关容器
-  .mute-toggle {
-    position: relative;
-  }
+  // 🎯 更多选项抽屉样式
+  .more-drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.4);
 
-  // 🎯 倍速开关容器
-  .speed-toggle {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-
-    .speed-text {
-      font-size: 11rem;
-      margin-top: 2rem;
-      color: rgba(255, 255, 255, 0.9);
-    }
-
-    .speed-panel {
+    .more-drawer {
       position: absolute;
-      right: 50px;
-      top: 50%;
-      transform: translateY(-50%);
-      background: rgba(0, 0, 0, 0.85);
-      backdrop-filter: blur(10px);
-      border-radius: 12px;
-      padding: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      z-index: 120;
-      min-width: 84px;
-    }
-
-    .speed-item {
-      color: rgba(255, 255, 255, 0.9);
-      font-size: 13px;
-      padding: 6px 10px;
-      border-radius: 8px;
-      cursor: pointer;
-      user-select: none;
-    }
-  }
-
-  // 🎯 声音提示气泡
-  .sound-tip-bubble {
-    position: absolute;
-    right: 50px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(10px);
-    padding: 8px 14px;
-    border-radius: 20px;
-    white-space: nowrap;
-    pointer-events: none; // 不影响点击
-    z-index: 100;
-
-    span {
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(22, 24, 35, 0.98);
+      backdrop-filter: blur(20px);
+      border-top-left-radius: 16rem;
+      border-top-right-radius: 16rem;
+      padding: 20rem 20rem calc(20rem + env(safe-area-inset-bottom));
       color: white;
-      font-size: 13px;
-      font-weight: 500;
-    }
 
-    // 右侧箭头
-    .bubble-arrow {
-      position: absolute;
-      right: -6px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 0;
-      height: 0;
-      border-top: 6px solid transparent;
-      border-bottom: 6px solid transparent;
-      border-left: 6px solid rgba(0, 0, 0, 0.8);
+      .drawer-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25rem;
+        font-size: 16rem;
+        font-weight: bold;
+
+        .close-btn {
+          font-size: 24rem;
+          opacity: 0.5;
+        }
+      }
+
+      .action-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20rem;
+        margin-bottom: 30rem;
+
+        .action-item {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8rem;
+
+          .icon-wrap {
+            width: 50rem;
+            height: 50rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24rem;
+
+            &.active {
+              color: #face15;
+              background: rgba(250, 206, 21, 0.15);
+            }
+
+            &.reward-icon {
+              color: #face15;
+            }
+          }
+
+          span {
+            font-size: 12rem;
+            color: rgba(255, 255, 255, 0.7);
+          }
+
+          &:active {
+            opacity: 0.7;
+          }
+        }
+      }
+
+      .speed-section {
+        .section-title {
+          font-size: 14rem;
+          margin-bottom: 15rem;
+          color: rgba(255, 255, 255, 0.6);
+        }
+
+        .speed-options {
+          display: flex;
+          gap: 10rem;
+          flex-wrap: wrap;
+
+          .speed-btn {
+            padding: 8rem 16rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8rem;
+            font-size: 14rem;
+            transition: all 0.2s;
+
+            &.active {
+              background: #fe2c55;
+              color: white;
+            }
+
+            &:active {
+              transform: scale(0.95);
+            }
+          }
+        }
+      }
     }
   }
 
-  // 🎯 打赏面板
+  // 🎯 打赏弹窗背景
+  .reward-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2100;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  // 🎯 打赏面板样式更新
   .reward-panel {
-    position: absolute;
-    right: 50rem;
-    bottom: 40rem; /* 向上移动，避开进度条 */
-    background: rgba(0, 0, 0, 0.95);
-    backdrop-filter: blur(15px);
-    border-radius: 16rem;
-    padding: 16rem;
-    width: 180rem;
-    z-index: 200;
-    box-shadow: 0 8rem 24rem rgba(0, 0, 0, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: #1e1e1e;
+    border-radius: 20rem;
+    padding: 24rem;
+    width: 280rem;
+    box-shadow: 0 10rem 30rem rgba(0, 0, 0, 0.5);
 
     .reward-title {
-      font-size: 14rem;
-      margin-bottom: 12rem;
+      font-size: 18rem;
+      margin-bottom: 20rem;
       color: #face15;
       text-align: center;
       font-weight: bold;
@@ -637,76 +713,76 @@ const vClick = useClick()
     .reward-presets {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 10rem;
-      margin-bottom: 16rem;
+      gap: 12rem;
+      margin-bottom: 20rem;
 
       .preset-item {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 8rem;
-        padding: 8rem 0;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10rem;
+        padding: 12rem 0;
         text-align: center;
-        font-size: 13rem;
+        font-size: 15rem;
         color: white;
-        transition: all 0.2s;
 
         &:active {
-          background: #face15;
-          color: black;
-          transform: scale(0.95);
+          background: rgba(250, 206, 21, 0.2);
+          border-color: #face15;
         }
       }
     }
 
     .reward-input-wrap {
-      display: flex;
-      flex-direction: column; /* 改为纵向，更清晰 */
-      gap: 10rem;
-
       .reward-input {
         width: 100%;
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 8rem;
-        padding: 10rem;
-        color: #face15;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10rem;
+        padding: 12rem;
+        color: white;
         font-size: 16rem;
-        font-weight: bold;
         text-align: center;
+        margin-bottom: 15rem;
         outline: none;
-
-        &::placeholder {
-          color: rgba(255, 255, 255, 0.3);
-          font-weight: normal;
-          font-size: 13rem;
-        }
 
         &:focus {
           border-color: #face15;
-          background: rgba(250, 206, 21, 0.05);
         }
       }
 
       .reward-send {
         background: #face15;
         color: black;
-        border-radius: 8rem;
-        padding: 10rem 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14rem;
+        border-radius: 10rem;
+        padding: 12rem 0;
+        text-align: center;
+        font-size: 16rem;
         font-weight: bold;
-        transition: opacity 0.2s;
-
-        &:active {
-          opacity: 0.8;
-        }
 
         &.loading {
           opacity: 0.5;
-          pointer-events: none;
         }
       }
+    }
+
+    .reward-close {
+      margin-top: 15rem;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 14rem;
+    }
+  }
+
+  // 🎯 动画
+  .slide-up-enter-active,
+  .slide-up-leave-active {
+    transition: all 0.3s ease;
+  }
+  .slide-up-enter-from,
+  .slide-up-leave-to {
+    opacity: 0;
+    .more-drawer {
+      transform: translateY(100%);
     }
   }
 }

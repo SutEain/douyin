@@ -19,11 +19,9 @@
 
       <DPPlayer
         v-else-if="roomInfo.stream_url"
-        :key="playerKey"
         :src="roomInfo.stream_url"
         :poster="roomInfo.cover_url"
-        :muted="isMuted"
-        :playbackRate="playbackRate"
+        :muted="false"
         :controls="false"
         @error="onPlayerError"
         @contextmenu.prevent
@@ -99,6 +97,9 @@
             <div class="input" @click="showInput = true">
               <span>说点什么...</span>
             </div>
+            <div class="option-item share" @click="shareRoom">
+              <Icon icon="solar:share-bold" />
+            </div>
             <div
               v-if="roomInfo.is_self_hosted && roomInfo.anchor_id === baseStore.userinfo.uid"
               class="option-item redpacket"
@@ -109,67 +110,8 @@
             <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
           </div>
         </div>
-
-        <div class="right-toolbar">
-          <div class="toolbar-item" @click="refreshPlayer">
-            <Icon icon="solar:refresh-bold" />
-            <span>刷新</span>
-          </div>
-          <div class="toolbar-item" @click="showMoreDrawer = true">
-            <Icon icon="solar:menu-dots-bold" />
-            <span>更多</span>
-          </div>
-          <div class="toolbar-item" @click="toggleMute">
-            <Icon :icon="isMuted ? 'solar:muted-bold' : 'solar:volume-loud-bold'" />
-            <span>{{ isMuted ? '取消静音' : '静音' }}</span>
-          </div>
-        </div>
       </div>
     </div>
-
-    <!-- 更多选项抽屉 -->
-    <Transition name="slide-up">
-      <div v-if="showMoreDrawer" class="more-drawer-overlay" @click.self="showMoreDrawer = false">
-        <div class="more-drawer">
-          <div class="drawer-header">
-            <span>更多选项</span>
-            <Icon
-              icon="solar:close-circle-bold"
-              class="close-btn"
-              @click="showMoreDrawer = false"
-            />
-          </div>
-          <div class="action-grid">
-            <div class="action-item" @click="shareRoom">
-              <div class="icon-wrap">
-                <Icon icon="solar:share-bold" />
-              </div>
-              <span>转发分享</span>
-            </div>
-            <div class="action-item" @click="toggleCollect">
-              <div class="icon-wrap" :class="{ active: isCollected }">
-                <Icon :icon="isCollected ? 'solar:star-bold' : 'solar:star-outline'" />
-              </div>
-              <span>{{ isCollected ? '已收藏' : '收藏' }}</span>
-            </div>
-          </div>
-          <div class="speed-section">
-            <div class="section-title">播放倍速 ({{ playbackRate }}x)</div>
-            <div class="speed-options">
-              <div
-                v-for="rate in speedOptions"
-                :key="rate"
-                class="speed-btn"
-                :class="{ active: playbackRate === rate }"
-                @click="setPlaybackRate(rate)"
-              >
-                {{ rate }}x
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Transition>
 
     <!-- 弹出的输入框 -->
     <Transition name="fade">
@@ -383,34 +325,6 @@ const vapSrc = ref('') // 初始值为空
 const viewerCount = ref(0)
 const viewers = ref<any[]>([]) // 存储前几名观众
 const fallbackAvatar = new URL('../../assets/img/icon/avatar/0.png', import.meta.url).href
-
-// --- 视频控制相关 ---
-const playerKey = ref(1)
-const isMuted = ref(false)
-const playbackRate = ref(1)
-const showMoreDrawer = ref(false)
-const isCollected = ref(false)
-const speedOptions = [0.5, 1.0, 1.25, 1.5, 2.0]
-
-function refreshPlayer() {
-  playerKey.value++
-  _notice('正在重新加载视频...')
-}
-
-function toggleMute() {
-  isMuted.value = !isMuted.value
-}
-
-function toggleCollect() {
-  // 🎯 直播间暂不支持后端收藏，这里做个模拟或者复用关注逻辑
-  isCollected.value = !isCollected.value
-  _notice(isCollected.value ? '已添加到收藏' : '已取消收藏')
-}
-
-function setPlaybackRate(rate: number) {
-  playbackRate.value = rate
-  showMoreDrawer.value = false
-}
 
 // --- 礼物相关 ---
 const showGiftPanel = ref(false)
@@ -1310,7 +1224,7 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 800; /* 降低层级，确保不遮挡红包和输入框 */
+  z-index: 800; /* 降低层级，确保不遮挡红包 and 输入框 */
   pointer-events: none;
   display: flex;
   align-items: center;
@@ -1751,45 +1665,6 @@ onBeforeUnmount(() => {
     .bottom {
       margin-top: auto;
       pointer-events: auto;
-      display: flex;
-      align-items: flex-end;
-      gap: 10rem;
-
-      .left {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .right-toolbar {
-        display: flex;
-        flex-direction: column;
-        gap: 15rem;
-        padding-bottom: 5rem;
-        align-items: center;
-
-        .toolbar-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 4rem;
-          color: white;
-
-          svg {
-            font-size: 28rem;
-            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
-          }
-
-          span {
-            font-size: 10rem;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-          }
-
-          &:active {
-            opacity: 0.7;
-            transform: scale(0.9);
-          }
-        }
-      }
 
       .comments {
         max-height: 30vh;
@@ -2164,114 +2039,6 @@ onBeforeUnmount(() => {
 
         .keyword-input {
           margin-top: 5rem;
-        }
-      }
-    }
-  }
-
-  /* 更多选项抽屉样式 */
-  .more-drawer-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 2000;
-    background: rgba(0, 0, 0, 0.4);
-
-    .more-drawer {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: rgba(22, 24, 35, 0.98);
-      backdrop-filter: blur(20px);
-      border-top-left-radius: 16rem;
-      border-top-right-radius: 16rem;
-      padding: 20rem 20rem calc(20rem + env(safe-area-inset-bottom));
-      color: white;
-
-      .drawer-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 25rem;
-        font-size: 16rem;
-        font-weight: bold;
-
-        .close-btn {
-          font-size: 24rem;
-          opacity: 0.5;
-        }
-      }
-
-      .action-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 20rem;
-        margin-bottom: 30rem;
-
-        .action-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8rem;
-
-          .icon-wrap {
-            width: 50rem;
-            height: 50rem;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 12rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24rem;
-
-            &.active {
-              color: #face15;
-              background: rgba(250, 206, 21, 0.15);
-            }
-          }
-
-          span {
-            font-size: 12rem;
-            color: rgba(255, 255, 255, 0.7);
-          }
-
-          &:active {
-            opacity: 0.7;
-          }
-        }
-      }
-
-      .speed-section {
-        .section-title {
-          font-size: 14rem;
-          margin-bottom: 15rem;
-          color: rgba(255, 255, 255, 0.6);
-        }
-
-        .speed-options {
-          display: flex;
-          gap: 10rem;
-          flex-wrap: wrap;
-
-          .speed-btn {
-            padding: 8rem 16rem;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8rem;
-            font-size: 14rem;
-            transition: all 0.2s;
-
-            &.active {
-              background: #fe2c55;
-              color: white;
-            }
-
-            &:active {
-              transform: scale(0.95);
-            }
-          }
         }
       }
     }
