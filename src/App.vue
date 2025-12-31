@@ -94,42 +94,26 @@ watch(
 
 function resetVhAndPx() {
   let innerHeight = window.innerHeight
-  // 🎯 优先使用 Telegram SDK 提供的视口高度，解决 iOS 状态栏/动态高度问题
+
+  // 🎯 优先使用 Telegram SDK 提供的视口高度
   const tg = (window as any).Telegram?.WebApp
-  if (tg?.viewportHeight) {
+  if (tg?.viewportHeight && tg.viewportHeight > 100) {
     innerHeight = tg.viewportHeight
   }
+
+  // 🛡️ 极端兜底：如果高度太小（比如 0），尝试使用当前屏幕高度
+  if (innerHeight < 100) {
+    innerHeight = window.screen.height > 100 ? window.screen.height * 0.8 : 600
+  }
+
   let vh = innerHeight * 0.01
   document.documentElement.style.setProperty('--vh', `${vh}px`)
 
-  // 🎯 动态计算顶部安全距离 (解决全屏 vs 90% 视图)
+  // 🎯 动态计算全屏状态并挂载到 html 属性上
   if (tg) {
-    const isIOS =
-      /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-      tg.platform === 'ios' ||
-      tg.platform === 'macos'
-
-    // 如果高度占比较大（全屏模式），增加额外边距
-    // 如果高度占比较小（90% 紧凑模式），边距设为 0
-    // 用户要求全屏时再下来 2 个字体高度 (2 * 14rem = 28rem)
-    // 加上原来的基础，我们设置全屏时额外增加 28rem
-    // 🎯 只要视口高度超过屏幕的 70%，我们就认为它是全屏模式（Telegram 紧凑模式通常 < 70%）
     const isFullscreen = tg.isExpanded || tg.viewportHeight > window.screen.height * 0.7
-    let extraPadding = 0
-
-    if (isIOS) {
-      if (isFullscreen) {
-        // 🎯 全屏模式：仅使用安全区域，不再额外加 28px
-        extraPadding = 0
-      } else {
-        // 🎯 紧凑模式：强制为 0，防止下垂
-        extraPadding = -20 // 尝试负值抵消 env() 如果 env 依然生效
-      }
-    }
-
-    // 💡 改进方案：我们直接控制是否启用 safe-area
-    document.documentElement.style.setProperty('--tg-extra-padding', `${extraPadding}rem`)
-    document.documentElement.classList.toggle('is-tg-fullscreen', isFullscreen)
+    // 使用属性选择器 [data-tg-fullscreen="true"] 替代类名，更稳定
+    document.documentElement.setAttribute('data-tg-fullscreen', isFullscreen ? 'true' : 'false')
   }
 }
 

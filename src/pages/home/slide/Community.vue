@@ -230,10 +230,11 @@ function showDetail(e, item) {
     height: calc(
       var(--vh, 1vh) * 100 - var(--home-header-height) - var(--footer-height)
     ) !important;
+    min-height: 200px;
   }
 
   // ✅ 全屏模式布局
-  :global(.is-tg-fullscreen) & {
+  :root[data-tg-fullscreen='true'] & {
     padding-top: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
 
     .Scroll {

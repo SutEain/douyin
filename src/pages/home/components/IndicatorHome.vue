@@ -249,11 +249,11 @@ export default {
   z-index: 2;
   width: 100%;
   color: white;
-  // ✅ 适配 iOS 安全区域：高度 = 基础高度 + 顶部安全距离 + 额外修正
   height: var(--home-header-height);
   padding-top: 0;
 
-  :global(.is-tg-fullscreen) & {
+  // 💡 使用属性选择器，适配全屏模式
+  :root[data-tg-fullscreen='true'] & {
     height: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
     padding-top: env(safe-area-inset-top, 0rem);
   }

@@ -96,7 +96,7 @@ onMounted(() => {
   box-sizing: border-box;
 
   // ✅ 全屏模式布局
-  :global(.is-tg-fullscreen) & {
+  :root[data-tg-fullscreen='true'] & {
     padding-top: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
   }
 }
