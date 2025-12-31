@@ -19,8 +19,8 @@ declare global {
 }
 
 if (typeof window !== 'undefined') {
-  // ✅ 临时启用 console 输出用于调试深链接问题
-  /*
+  // ✅ A2: 前端全环境静默 console 输出（开发环境也不输出）
+  // 如需临时排查，可在控制台手动使用 window.__rawConsole__ 查看原始 console
   if (!window.__rawConsole__) {
     window.__rawConsole__ = window.console
   }
@@ -30,7 +30,6 @@ if (typeof window !== 'undefined') {
   ;(window.console.debug as any) = noop
   ;(window.console.warn as any) = noop
   ;(window.console.error as any) = noop
-  */
 
   window.TelegramGameProxy = window.TelegramGameProxy || {}
   if (typeof window.TelegramGameProxy.receiveEvent !== 'function') {

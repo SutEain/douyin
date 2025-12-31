@@ -27,11 +27,9 @@ const isLoading = ref(true)
 const errorMessage = ref('')
 
 onMounted(async () => {
-  console.log('[TelegramLogin] onMounted, 检查 Session 状态...')
   // 🎯 如果已经有 session 了，说明是回退回来的，直接进入首页
   const { data } = await supabase.auth.getSession()
   if (data.session) {
-    console.log('[TelegramLogin] 检测到已存在 Session，准备重定向到首页...')
     // 只有在当前确实还在登录页时才 replace，避免干扰正在进行的深链接跳转
     if (router.currentRoute.value.path === '/login/telegram') {
       router.replace('/')
@@ -78,16 +76,10 @@ const initTelegramLogin = async () => {
     if (urlInitData) {
       // @ts-ignore
       window.__TG_INIT_DATA__ = { raw: urlInitData, source: 'url' }
-      console.log(
-        '[TelegramLogin] ✅ 从 URL tgWebAppData 获取到 initData, len=',
-        urlInitData.length
-      )
 
-      console.log('[TelegramLogin] 🔐 准备登录（URL initData）...')
       const result = await loginWithTelegram(urlInitData)
       if (result?.user) {
         baseStore.applyProfile(result.user)
-        console.log('[TelegramLogin] ✅ 登录成功（URL initData）')
       }
 
       // 🎯 等待 session 写入
@@ -97,7 +89,6 @@ const initTelegramLogin = async () => {
       // 🎯 彻底修复深链接跳转冲突：
       // 如果当前路由已经不再是登录页（说明深链接已经跳转成功），则绝不执行首页重定向
       if (router.currentRoute.value.path !== '/login/telegram') {
-        console.log('[TelegramLogin] 检测到路由已由深链接接管，取消强制首页重定向')
         return
       }
 
@@ -127,37 +118,22 @@ const initTelegramLogin = async () => {
       return
     }
 
-    console.log('[TelegramLogin] 🔐 准备登录...')
-
     // 调用登录 API（内部会调用 setSession）
     const result = await loginWithTelegram(initData)
 
     if (result?.user) {
       baseStore.applyProfile(result.user)
-      console.log('[TelegramLogin] ✅ 登录成功')
     }
 
     // 🎯 等待 session 真正写入本地存储
-    console.log('[TelegramLogin] ⏳ 等待 session 写入...')
     await new Promise((resolve) => setTimeout(resolve, 100))
 
     // 验证 session 是否可用
-    const {
-      data: { session }
-    } = await supabase.auth.getSession()
-    if (session) {
-      console.log(
-        '[TelegramLogin] ✅ Session 已就绪:',
-        session.access_token.substring(0, 20) + '...'
-      )
-    } else {
-      console.warn('[TelegramLogin] ⚠️ Session 未找到，可能需要重新登录')
-    }
+    await supabase.auth.getSession()
 
     // 🎯 彻底修复深链接跳转冲突：
     // 如果当前路由已经不再是登录页（说明深链接已经跳转成功），则绝不执行首页重定向
     if (router.currentRoute.value.path !== '/login/telegram') {
-      console.log('[TelegramLogin] 检测到路由已由深链接接管，取消强制首页重定向')
       return
     }
 
@@ -205,24 +181,20 @@ const waitForTelegram = (): Promise<any> => {
 }
 
 const getInitData = (): string | null => {
-  console.log('[TelegramLogin] 🔍 获取 initData...')
-
-  // 优先使用早期捕获的 initData
+  // 优先使用早期捕获 of initData
   try {
     // @ts-ignore
     if (window.__TG_INIT_DATA__?.raw) {
-      console.log('[TelegramLogin] ✅ 从 __TG_INIT_DATA__ 获取到 initData')
       // @ts-ignore
       return window.__TG_INIT_DATA__.raw
     }
   } catch (e) {
-    console.warn('[TelegramLogin] __TG_INIT_DATA__ 不可用:', e)
+    // ignore
   }
 
   // ✅ 兜底：从 URL 解析 tgWebAppData
   const urlInitData = getInitDataFromUrl()
   if (urlInitData) {
-    console.log('[TelegramLogin] ✅ 从 URL tgWebAppData 获取到 initData')
     // @ts-ignore
     window.__TG_INIT_DATA__ = { raw: urlInitData, source: 'url' }
     return urlInitData
@@ -233,19 +205,12 @@ const getInitData = (): string | null => {
     // @ts-ignore
     const tg = window.Telegram?.WebApp
     if (tg?.initData) {
-      console.log('[TelegramLogin] ✅ 从 Telegram.WebApp 获取到 initData')
-      console.log('[TelegramLogin] initData 长度:', tg.initData.length)
-      console.log('[TelegramLogin] initData 预览:', tg.initData.substring(0, 100) + '...')
       return tg.initData
-    } else {
-      console.warn('[TelegramLogin] ⚠️ Telegram.WebApp.initData 为空')
-      console.log('[TelegramLogin] Telegram.WebApp 对象:', tg)
     }
   } catch (e) {
-    console.error('[TelegramLogin] ❌ 获取 Telegram.WebApp 失败:', e)
+    // ignore
   }
 
-  console.error('[TelegramLogin] ❌ 无法获取 initData')
   return null
 }
 </script>

@@ -179,17 +179,8 @@ export const useBaseStore = defineStore('base', {
   },
   actions: {
     async init() {
-      console.log('[Store] ========== init() 开始 ==========')
-
       // 🎯 解析 Telegram 启动参数（深链接）
-      console.log('[Store] 准备调用 parseStartParam()')
       this.parseStartParam()
-      console.log(
-        '[Store] parseStartParam() 调用完成，startVideoId:',
-        this.startVideoId,
-        'startLiveId:',
-        this.startLiveId
-      )
 
       // 优先从 Supabase 获取用户数据
       try {
@@ -200,12 +191,11 @@ export const useBaseStore = defineStore('base', {
         // @ts-ignore
         const tg = window.Telegram?.WebApp
         if (!profile && tg?.initData) {
-          console.log('[Store] 检测到 TG 环境且未登录，尝试自动登录...')
           try {
             await loginWithTelegram(tg.initData)
             profile = await getCurrentProfile()
           } catch (e) {
-            console.error('[Store] 自动登录失败:', e)
+            // ignore
           }
         }
 
@@ -238,65 +228,44 @@ export const useBaseStore = defineStore('base', {
 
     // 🎯 自动初始化用户（用于深链接等场景）
     async autoInitUser() {
-      console.log('[Store] autoInitUser: 开始')
+      const { callAppServer } = await import('@/api/videos')
+      const res = await callAppServer('/user/auto-init', {
+        method: 'POST'
+      })
 
-      try {
-        const { callAppServer } = await import('@/api/videos')
-        const res = await callAppServer('/user/auto-init', {
-          method: 'POST'
-        })
-
-        if (res.code === 0) {
-          console.log('[Store] autoInitUser: 成功', res.data)
-          // 更新用户信息到 store
-          this.userinfo = {
-            ...this.userinfo,
-            id: res.data.id,
-            uid: res.data.id,
-            short_id: res.data.numeric_id || '',
-            unique_id: res.data.username || '',
-            nickname: res.data.nickname || 'Telegram 用户',
-            avatar_168x168: {
-              url_list: [res.data.avatar || '']
-            }
+      if (res.code === 0) {
+        // 更新用户信息到 store
+        this.userinfo = {
+          ...this.userinfo,
+          id: res.data.id,
+          uid: res.data.id,
+          short_id: res.data.numeric_id || '',
+          unique_id: res.data.username || '',
+          nickname: res.data.nickname || 'Telegram 用户',
+          avatar_168x168: {
+            url_list: [res.data.avatar || '']
           }
-          return res.data
-        } else {
-          throw new Error(res.msg || '初始化失败')
         }
-      } catch (error) {
-        console.error('[Store] autoInitUser: 失败', error)
-        throw error
+        return res.data
+      } else {
+        throw new Error(res.msg || '初始化失败')
       }
     },
 
     // 🎯 解析 Telegram 启动参数
     parseStartParam() {
       try {
-        console.log('[DeepLink] ========== 开始解析启动参数 ==========')
-
         // @ts-ignore
         const tg = window.Telegram?.WebApp
-        console.log('[DeepLink] Telegram WebApp 对象:', tg ? '存在' : '不存在')
 
         if (!tg) {
-          console.log('[DeepLink] 非 Telegram 环境，跳过解析')
           return
         }
 
-        // 打印完整的 initDataUnsafe
-        console.log('[DeepLink] initDataUnsafe:', JSON.stringify(tg.initDataUnsafe, null, 2))
-        console.log('[DeepLink] window.location.href:', window.location.href)
-        console.log('[DeepLink] window.location.search:', window.location.search)
-        console.log('[DeepLink] window.location.hash:', window.location.hash)
-
         // 方式1: 从 start_param 获取（格式：video_xxxxx）
         const startParam = tg.initDataUnsafe?.start_param
-        console.log('[DeepLink] start_param:', startParam)
 
         if (startParam) {
-          console.log('[DeepLink] 收到启动参数:', startParam)
-
           // 解析格式：video_xxxxx[_iyyyyy]
           if (startParam.startsWith('video_')) {
             let videoId = startParam.replace('video_', '')
@@ -305,7 +274,6 @@ export const useBaseStore = defineStore('base', {
               videoId = videoId.split('_i')[0]
             }
             this.startVideoId = videoId
-            console.log('[DeepLink] ✅ 方式1成功 - 从 start_param 解析到 video_id:', videoId)
             return
           } else if (startParam.startsWith('live_')) {
             let roomId = startParam.replace('live_', '')
@@ -314,24 +282,16 @@ export const useBaseStore = defineStore('base', {
               roomId = roomId.split('_i')[0]
             }
             this.startLiveId = roomId
-            console.log('[DeepLink] ✅ 方式1成功 - 从 start_param 解析到 live_id:', roomId)
             return
-          } else {
-            console.log(
-              '[DeepLink] ⚠️ start_param 格式不匹配，期望 video_xxxxx 或 live_xxxxx，实际:',
-              startParam
-            )
           }
         }
 
         // 方式2: 从 URL 参数获取（格式：?video_id=abcd）
         const urlParams = new URLSearchParams(window.location.search)
         const videoId = urlParams.get('video_id')
-        console.log('[DeepLink] URL 参数 video_id:', videoId)
 
         if (videoId) {
           this.startVideoId = videoId
-          console.log('[DeepLink] ✅ 方式2成功 - 从 URL 解析到 video_id:', videoId)
           return
         }
 
@@ -339,35 +299,26 @@ export const useBaseStore = defineStore('base', {
         if (window.location.hash) {
           const hashParams = new URLSearchParams(window.location.hash.substring(1))
           const hashVideoId = hashParams.get('video_id')
-          console.log('[DeepLink] Hash 参数 video_id:', hashVideoId)
 
           if (hashVideoId) {
             this.startVideoId = hashVideoId
-            console.log('[DeepLink] ✅ 方式3成功 - 从 hash 解析到 video_id:', hashVideoId)
             return
           }
         }
-
-        console.log('[DeepLink] ❌ 未检测到 video_id 参数')
-        console.log('[DeepLink] ========== 解析结束 ==========')
       } catch (error) {
-        console.error('[DeepLink] ❌ 解析启动参数失败:', error)
-        console.error('[DeepLink] 错误堆栈:', error.stack)
+        // ignore
       }
     },
     // 🎯 设置深链接视频数据
     setStartVideoData(videoData: any) {
-      console.log('[Store] 设置深链接视频数据:', videoData?.aweme_id)
       this.startVideoData = videoData
     },
     // 🎯 清空启动参数（已使用）
     clearStartVideoId() {
-      console.log('[Store] 清空深链接参数')
       this.startVideoId = null
       this.startVideoData = null
     },
     clearStartLiveId() {
-      console.log('[Store] 清空直播深链接参数')
       this.startLiveId = null
     },
     setUserinfo(val) {

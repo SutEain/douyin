@@ -470,7 +470,6 @@ async function handleSendGift() {
   try {
     // 1. 调用后端接口处理真实扣款、分成、代发消息和通知
     const receiverId = roomInfo.value.anchor_id || roomInfo.value.anchor_info?.id
-    console.log('[Gift] Sending gift to receiver:', receiverId)
 
     const res = await sendReward({
       receiver_id: receiverId,
@@ -510,12 +509,7 @@ async function handleSendGift() {
 // --- 房间切换核心逻辑 ---
 async function initRoom() {
   const currentId = route.query.id as string
-  console.log('[DeepLink][LivePage] initRoom 开始执行, 当前 URL 中的 ID:', currentId)
-
-  if (!currentId) {
-    console.warn('[DeepLink][LivePage] initRoom 退出: 未检测到 ID')
-    return
-  }
+  if (!currentId) return
 
   // 1. 先清理旧的订阅
   if (channel) {
@@ -703,7 +697,6 @@ function triggerLargeGiftEffect(
     // 处理相对路径
     const finalUrl = effectUrl.startsWith('http') ? effectUrl : effectUrl
     vapSrc.value = finalUrl
-    console.log('[LivePage] Playing VAP effect:', finalUrl)
 
     // 给一点时间让 src 切换生效
     nextTick(() => {
@@ -741,7 +734,6 @@ function triggerLargeGiftEffect(
 // 获取直播间信息
 async function fetchRoomInfo() {
   const currentRoomId = roomId.value
-  console.log('[LivePage] fetchRoomInfo v2 start:', currentRoomId)
 
   try {
     const {
@@ -759,7 +751,6 @@ async function fetchRoomInfo() {
 
     if (resp.ok && payload.code === 0) {
       const room = payload.data.room
-      console.log('[LivePage] Room detail loaded:', room.title)
       roomInfo.value = {
         ...room,
         stream_url: buildPlayUrl(room.stream_url)
@@ -829,7 +820,6 @@ function buildPlayUrl(url: string) {
 // 获取历史评论
 async function fetchHistoryMessages() {
   const currentRoomId = roomId.value
-  console.log('[LivePage] fetchHistoryMessages for room:', currentRoomId)
 
   const { data, error } = await supabase
     .from('live_broadcast_messages')
@@ -924,18 +914,14 @@ function onPlayerError(err: any) {
 
 async function attention() {
   if (!roomInfo.value.anchor_info?.id) {
-    console.warn('[LivePage] attention failed: no anchor_info', roomInfo.value)
     return
   }
 
   const targetId = roomInfo.value.anchor_info.id
   const nextStatus = !isFollowed.value
 
-  console.log('[LivePage] toggleFollow', { targetId, nextStatus })
-
   try {
     const res = await toggleFollowUser(targetId, nextStatus)
-    console.log('[LivePage] toggleFollow success:', res)
     // res 是后端返回的 data: { follow: boolean, ... }
     if (res && typeof res.follow === 'boolean') {
       isFollowed.value = res.follow
@@ -944,7 +930,6 @@ async function attention() {
       isFollowed.value = nextStatus
     }
   } catch (e: any) {
-    console.error('关注操作失败:', e)
     // 如果是 500 错误，可能是后端问题
     _notice('关注失败: ' + (e.message || '未知错误'))
   }
@@ -994,7 +979,6 @@ function setupSubscription() {
         const avatar = profile?.avatar_url || ''
 
         if (isGift) {
-          console.log('[LivePage] Received gift message:', giftPayload)
           // 根据单次送礼的总价值计算停留时间
           const giftId = Number(giftPayload.gift_id)
           const gift = giftList.value.find((g) => g.id === giftId)
@@ -1022,12 +1006,6 @@ function setupSubscription() {
           // 如果礼物自带 effect_url (数据库配置的 MP4)，则直接播放 MP4 特效
           // 否则根据价值触发基础的全屏图标动画
           if (giftPayload.effect_url || totalValue >= 100) {
-            console.log('[LivePage] Triggering full screen effect:', {
-              name: giftPayload.gift_name,
-              effectUrl: giftPayload.effect_url,
-              totalValue
-            })
-
             const giftIcon = giftPayload.gift_icon || ''
             const isSvg = giftIcon.toLowerCase().endsWith('.svg')
 
@@ -1134,7 +1112,6 @@ function setupSubscription() {
 }
 
 onMounted(async () => {
-  console.log('[LivePage] onMounted, roomId from route query:', route.query.id)
   await fetchGifts()
   await initRoom()
 })
