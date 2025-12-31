@@ -251,12 +251,6 @@ export default {
   color: white;
   height: var(--home-header-height);
   padding-top: 0;
-
-  // 💡 使用属性选择器，适配全屏模式
-  :root[data-tg-fullscreen='true'] & {
-    height: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
-    padding-top: env(safe-area-inset-top, 0rem);
-  }
   transition: all 0.3s;
   font-weight: bold;
 

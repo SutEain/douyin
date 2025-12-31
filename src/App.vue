@@ -94,47 +94,16 @@ watch(
 
 function resetVhAndPx() {
   let innerHeight = window.innerHeight
-
-  // 🎯 优先使用 Telegram SDK 提供的视口高度
-  const tg = (window as any).Telegram?.WebApp
-  if (tg?.viewportHeight && tg.viewportHeight > 100) {
-    innerHeight = tg.viewportHeight
-  }
-
-  // 🛡️ 极端兜底：如果高度太小（比如 0），尝试使用当前屏幕高度
-  if (innerHeight < 100) {
-    innerHeight = window.screen.height > 100 ? window.screen.height * 0.8 : 600
-  }
-
   let vh = innerHeight * 0.01
   document.documentElement.style.setProperty('--vh', `${vh}px`)
-
-  // 🎯 动态计算全屏状态并挂载到 html 属性上
-  if (tg) {
-    const isFullscreen = tg.isExpanded || tg.viewportHeight > window.screen.height * 0.7
-    // 使用属性选择器 [data-tg-fullscreen="true"] 替代类名，更稳定
-    document.documentElement.setAttribute('data-tg-fullscreen', isFullscreen ? 'true' : 'false')
-  }
 }
 
 onMounted(() => {
   // 🎯 初始化应用（登录时自动创建用户，无需额外调用）
   store.init()
   resetVhAndPx()
-  // ⏳ 50ms 后再次计算，确保 Telegram SDK 完全准备好视口数据
-  setTimeout(resetVhAndPx, 50)
-  setTimeout(resetVhAndPx, 500) // 再次兜底
-
-  // 🎯 监听 Telegram 视口变化事件
-  const tg = (window as any).Telegram?.WebApp
-  if (tg) {
-    tg.onEvent('viewportChanged', resetVhAndPx)
-    // 监听展开事件
-    tg.onEvent('settingsCustomButtonClicked', resetVhAndPx) // 兜底
-  }
 
   // 监听resize事件 视图大小发生变化就重新计算1vh的值
-  // ⚠️ 注意：移动端键盘弹出也会触发 resize，不能在这里刷新页面
   window.addEventListener('resize', () => {
     resetVhAndPx()
   })

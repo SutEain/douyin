@@ -200,11 +200,6 @@ onDeactivated(() => {
     top: 10rem;
     z-index: 999;
 
-    // 💡 适配全屏模式下的返回按钮
-    :root[data-tg-fullscreen='true'] & {
-      top: calc(10rem + env(safe-area-inset-top, 0rem));
-    }
-
     .back-icon {
       font-size: 28rem;
       color: #fff;

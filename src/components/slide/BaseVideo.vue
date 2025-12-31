@@ -6,8 +6,6 @@
     <div v-if="state.loading" class="loading-text">加载中...</div>
     <!--    <video :src="item.video + '?v=123'"-->
     <video
-      v-if="!isRefreshing"
-      :key="videoKey"
       :poster="poster"
       ref="videoElRef"
       :muted="state.isMuted"
@@ -23,8 +21,8 @@
       style="object-fit: contain; background: black"
     >
       <source
-        v-for="(urlItem, index) in videoSources"
-        :key="index + '-' + videoKey"
+        v-for="(urlItem, index) in item.video.play_addr.url_list"
+        :key="index"
         :src="urlItem"
         type="video/mp4"
         @error="handleVideoError"
@@ -159,19 +157,6 @@ const videoStore = useVideoStore()
 
 // 🎯 倍速播放：默认 1.0，仅对当前视频生效
 const playbackRate = ref<number>(1)
-const videoKey = ref(0) // 🎯 用于强制销毁并重新加载视频 DOM
-const isRefreshing = ref(false) // 🎯 彻底销毁 DOM 标记
-
-// 🎯 计算视频源，刷新时增加时间戳
-const videoSources = computed(() => {
-  const list = props.item.video?.play_addr?.url_list || []
-  if (videoKey.value === 0) return list
-  return list.map((url) => {
-    const separator = url.includes('?') ? '&' : '?'
-    return `${url}${separator}t=${videoKey.value}`
-  })
-})
-
 function setPlaybackRate(rate: number) {
   const safe = [0.5, 1, 1.25, 1.5, 2].includes(rate) ? rate : 1
   playbackRate.value = safe
@@ -392,34 +377,6 @@ onMounted(() => {
 
   bus.on(EVENT_KEY.REMOVE_MUTED, removeMuted)
   bus.on(EVENT_KEY.ADD_MUTED, addMuted)
-  bus.on(EVENT_KEY.REFRESH_VIDEO, async (id) => {
-    if (id === props.item.aweme_id) {
-      console.log(`[BaseVideo] 🔄 彻底刷新视频 (销毁DOM + 时间戳), id=${id}`)
-      _notice('正在深度重载视频资源...')
-
-      // 🎯 先销毁 DOM
-      isRefreshing.value = true
-      videoKey.value = Date.now() // 更新时间戳
-
-      await nextTick()
-
-      // 🎯 再重建 DOM
-      isRefreshing.value = false
-
-      await nextTick()
-
-      // 🎯 重建后自动播放
-      if (props.isPlay || state.status === SlideItemPlayStatus.Play) {
-        // 给浏览器一点点时间处理 DOM 插入
-        setTimeout(() => {
-          if (videoEl.value) {
-            videoEl.value.load()
-            play()
-          }
-        }, 50)
-      }
-    }
-  })
 
   // 监听视频加载错误（303等网络错误）
   if (videoEl.value) {

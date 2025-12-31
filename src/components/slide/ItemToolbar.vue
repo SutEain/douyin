@@ -253,20 +253,6 @@ const isRewarding = ref(false)
 
 // 🎯 更多选项抽屉
 const showMoreDrawer = ref(false)
-const refreshing = ref(false)
-
-function refreshVideo() {
-  if (props.item?.aweme_id && !refreshing.value) {
-    refreshing.value = true
-    _notice('正在重新加载视频...')
-    bus.emit(EVENT_KEY.REFRESH_VIDEO, props.item.aweme_id)
-
-    // 1秒后重置状态
-    setTimeout(() => {
-      refreshing.value = false
-    }, 1000)
-  }
-}
 
 async function handleReward() {
   if (isRewarding.value) return
@@ -351,15 +337,10 @@ const vClick = useClick()
       <span>{{ _formatNumber(item.statistics.comment_count) }}</span>
     </div>
 
-    <!-- 刷新按钮 -->
-    <div class="refresh mb2r" v-click="refreshVideo">
-      <Icon
-        icon="solar:refresh-bold"
-        class="icon"
-        :class="{ 'refresh-anim': refreshing }"
-        style="color: white"
-      />
-      <span>刷新</span>
+    <!-- 打赏按钮（从抽屉中解放出来） -->
+    <div class="reward mb2r" v-click="() => (showRewardPanel = true)">
+      <Icon icon="basil:award-solid" class="icon" style="color: #face15" />
+      <span>打赏</span>
     </div>
 
     <!-- 更多选项按钮 -->
@@ -410,14 +391,6 @@ const vClick = useClick()
                 <Icon :icon="item.isCollect ? 'solar:star-bold' : 'solar:star-outline'" />
               </div>
               <span>{{ item.isCollect ? '已收藏' : '收藏' }}</span>
-            </div>
-
-            <!-- 视频打赏 -->
-            <div class="action-item" v-click="() => (showRewardPanel = true)">
-              <div class="icon-wrap reward-icon">
-                <Icon icon="basil:award-solid" />
-              </div>
-              <span>打赏</span>
             </div>
           </div>
 
@@ -656,10 +629,6 @@ const vClick = useClick()
               color: #face15;
               background: rgba(250, 206, 21, 0.15);
             }
-
-            &.reward-icon {
-              color: #face15;
-            }
           }
 
           span {
@@ -799,7 +768,7 @@ const vClick = useClick()
     }
   }
 
-  // 🎯 动画
+  // 🎯 抽屉动画
   .slide-up-enter-active,
   .slide-up-leave-active {
     transition: all 0.3s ease;
