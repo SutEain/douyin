@@ -222,12 +222,14 @@ function showDetail(e, item) {
 #Community {
   font-size: 14rem;
   color: white;
-  padding-top: var(--home-header-height);
+  // ✅ 适配顶部导航栏加高（包含 iOS 安全区域）
+  padding-top: calc(var(--home-header-height) + env(safe-area-inset-top));
   background: #000;
 
   .Scroll {
     height: calc(
-      var(--vh, 1vh) * 100 - var(--home-header-height) - var(--footer-height)
+      var(--vh, 1vh) * 100 - (var(--home-header-height) + env(safe-area-inset-top)) -
+        var(--footer-height)
     ) !important;
   }
 

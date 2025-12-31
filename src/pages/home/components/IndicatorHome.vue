@@ -249,7 +249,9 @@ export default {
   z-index: 2;
   width: 100%;
   color: white;
-  height: var(--home-header-height);
+  // ✅ 适配 iOS 安全区域：高度 = 基础高度 + 顶部安全距离
+  height: calc(var(--home-header-height) + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
   transition: all 0.3s;
   font-weight: bold;
 

@@ -91,8 +91,8 @@ onMounted(() => {
   color: #fff;
   display: flex;
   flex-direction: column;
-  // ✅ 放在顶级 tab（IndicatorHome）下面，避免覆盖
-  padding-top: var(--home-header-height);
+  // ✅ 放在顶级 tab（IndicatorHome）下面，避免覆盖（适配 iOS 安全区域）
+  padding-top: calc(var(--home-header-height) + env(safe-area-inset-top));
   box-sizing: border-box;
 }
 
