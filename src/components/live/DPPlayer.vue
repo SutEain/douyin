@@ -29,6 +29,7 @@ interface Props {
   autoplay?: boolean
   muted?: boolean
   controls?: boolean
+  playbackRate?: number
   debug?: boolean
 }
 
@@ -37,6 +38,7 @@ const props = withDefaults(defineProps<Props>(), {
   autoplay: true,
   muted: true,
   controls: true,
+  playbackRate: 1,
   debug: false
 })
 
@@ -288,6 +290,20 @@ watch(
     const video = videoRef.value
     if (!video) return
     video.muted = !!muted
+  },
+  { immediate: true }
+)
+
+watch(
+  [() => props.playbackRate, videoRef],
+  ([rate]) => {
+    const video = videoRef.value
+    if (!video) return
+    try {
+      video.playbackRate = rate || 1
+    } catch {
+      // ignore
+    }
   },
   { immediate: true }
 )
