@@ -20,17 +20,45 @@ export async function handleSendReward(req: Request): Promise<Response> {
 
     const {
       receiver_id,
-      gift_amount,
+      gift_amount: frontendGiftAmount, // 🎯 前端传来的金额，仅作参考，后端需重新计算
       room_or_video_id,
       gift_type,
       gift_name,
       gift_id,
       gift_icon,
-      gift_qty,
+      gift_qty: rawGiftQty,
       effect_url
     } = body
 
+    // 🎯 核心安全加固：校验数量，限制最大为 999，且必须大于 0
+    const gift_qty = Math.min(Math.max(Number(rawGiftQty) || 1, 1), 999)
+
     let finalReceiverId = receiver_id
+    let finalGiftAmount = 0
+    let finalGiftName = gift_name
+
+    // 🎯 核心安全加固：必须从数据库获取真实的礼物价格，不能信任前端传来的金额
+    if (gift_type === 'live' && gift_id) {
+      const { data: giftData } = await supabaseAdmin
+        .from('gifts')
+        .select('price, name')
+        .eq('id', gift_id)
+        .maybeSingle()
+
+      if (giftData) {
+        finalGiftAmount = giftData.price * gift_qty
+        finalGiftName = giftData.name
+      } else {
+        // 如果找不到礼物配置，且是直播打赏，拒绝请求
+        throw new HttpError('礼物配置不存在', 400)
+      }
+    } else {
+      // 视频打赏目前前端没传 gift_id，暂时信任 gift_amount，但也要校验
+      finalGiftAmount = Number(frontendGiftAmount)
+      if (isNaN(finalGiftAmount) || finalGiftAmount <= 0) {
+        throw new HttpError('打赏金额无效', 400)
+      }
+    }
 
     // 🎯 优化：如果没传接收者 ID (通常是外部转播直播间)，尝试打赏给 ID 为 88888 的用户
     if (!finalReceiverId && gift_type === 'live') {
@@ -55,13 +83,8 @@ export async function handleSendReward(req: Request): Promise<Response> {
       }
     }
 
-    if (!finalReceiverId || !gift_amount || !room_or_video_id || !gift_type || !gift_name) {
+    if (!finalReceiverId || !finalGiftAmount || !room_or_video_id || !gift_type || !finalGiftName) {
       throw new HttpError('Missing required parameters (receiver_id not found)', 400)
-    }
-
-    // 🎯 核心安全加固：校验金额必须大于 0
-    if (gift_amount <= 0) {
-      throw new HttpError('打赏金额必须大于 0', 400)
     }
 
     if (finalReceiverId === user.id && receiver_id) {
@@ -72,10 +95,10 @@ export async function handleSendReward(req: Request): Promise<Response> {
     const { data: res, error: rpcError } = await supabaseAdmin.rpc('process_gift_reward', {
       sender_id: user.id,
       receiver_id: finalReceiverId,
-      gift_amount: gift_amount,
+      gift_amount: finalGiftAmount,
       room_or_video_id: room_or_video_id,
       gift_type: gift_type,
-      gift_name: gift_name
+      gift_name: finalGiftName
     })
 
     if (rpcError) {
@@ -93,14 +116,14 @@ export async function handleSendReward(req: Request): Promise<Response> {
     const { error: msgError } = await supabaseAdmin.from('live_broadcast_messages').insert({
       room_id: room_or_video_id,
       user_id: user.id,
-      content: gift_name,
+      content: finalGiftName,
       msg_type: 'gift',
       payload: {
         gift_id: gift_id,
-        gift_name: gift_name,
+        gift_name: finalGiftName,
         gift_icon: gift_icon,
-        amount: gift_qty || 1,
-        combo: gift_qty || 1,
+        amount: gift_qty, // 🎯 使用经过校验后的数量
+        combo: gift_qty, // 🎯 使用经过校验后的数量
         effect_url: effect_url
       }
     })
@@ -114,7 +137,7 @@ export async function handleSendReward(req: Request): Promise<Response> {
     if (receiver_id) {
       const senderName = profile.nickname || profile.username || '神秘用户'
       const targetType = gift_type === 'live' ? '直播间' : '作品'
-      const notificationMsg = `💰 <b>${senderName}</b> 给你的${targetType}打赏了 <b>${gift_amount}</b> 抖币！`
+      const notificationMsg = `💰 <b>${senderName}</b> 给你的${targetType}打赏了 <b>${finalGiftAmount}</b> 抖币！`
 
       // 如果是视频，带上跳转链接
       const startParam = gift_type === 'video' ? `video_${room_or_video_id}` : undefined

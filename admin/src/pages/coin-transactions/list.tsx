@@ -1,5 +1,9 @@
 import { List, useTable } from '@refinedev/antd'
 import { Form, Input, Select, Table, Tag, Space, Button } from 'antd'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+
+dayjs.extend(utc)
 
 const typeColors: Record<string, string> = {
   recharge: 'green',
@@ -137,7 +141,12 @@ export const CoinTransactionList = () => {
           render={(v) => <span style={{ fontFamily: 'monospace' }}>{v}</span>}
         />
         <Table.Column dataIndex="description" title="备注" render={(v) => v || '-'} />
-        <Table.Column dataIndex="created_at" title="时间" width={180} />
+        <Table.Column
+          dataIndex="created_at"
+          title="时间"
+          width={180}
+          render={(v) => (v ? dayjs(v).utcOffset(8).format('YYYY-MM-DD HH:mm:ss') : '-')}
+        />
       </Table>
     </List>
   )

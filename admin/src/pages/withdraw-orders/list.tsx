@@ -1,4 +1,4 @@
-import { List, useTable, DateField } from '@refinedev/antd'
+import { List, useTable } from '@refinedev/antd'
 import {
   Table,
   Space,
@@ -20,6 +20,10 @@ import {
 } from '@ant-design/icons'
 import { supabaseClient } from '../../supabaseClient'
 import { useState, useEffect } from 'react'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+
+dayjs.extend(utc)
 
 const { Text } = Typography
 
@@ -311,7 +315,7 @@ export const WithdrawOrderList = () => {
         <Table.Column
           dataIndex="created_at"
           title="申请时间"
-          render={(value) => <DateField value={value} format="MM-DD HH:mm" />}
+          render={(v) => (v ? dayjs(v).utcOffset(8).format('MM-DD HH:mm') : '-')}
         />
         <Table.Column
           title="操作"

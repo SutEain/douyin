@@ -1,4 +1,4 @@
-import { List, useTable, DateField } from '@refinedev/antd'
+import { List, useTable } from '@refinedev/antd'
 import { Table, Space, Button, Tag, message, Modal, Form, Input, Select } from 'antd'
 import {
   CheckCircleOutlined,
@@ -8,6 +8,10 @@ import {
 } from '@ant-design/icons'
 import { supabaseClient } from '../../supabaseClient'
 import { useState, useEffect } from 'react'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+
+dayjs.extend(utc)
 
 export const RechargeOrderList = () => {
   const [adminId, setAdminId] = useState<string | null>(null)
@@ -202,16 +206,16 @@ export const RechargeOrderList = () => {
         <Table.Column
           dataIndex="created_at"
           title="创建时间"
-          render={(value) => <DateField value={value} format="MM-DD HH:mm" />}
+          render={(v) => (v ? dayjs(v).utcOffset(8).format('MM-DD HH:mm') : '-')}
         />
         <Table.Column
           dataIndex="expires_at"
           title="过期时间"
-          render={(value, record: any) => {
-            const isExpired = new Date(value) < new Date() && record.status === 'pending'
+          render={(v, record: any) => {
+            const isExpired = new Date(v) < new Date() && record.status === 'pending'
             return (
               <span style={{ color: isExpired ? '#f5222d' : 'inherit' }}>
-                <DateField value={value} format="HH:mm" />
+                {v ? dayjs(v).utcOffset(8).format('HH:mm') : '-'}
                 {isExpired && ' (已过支付期)'}
               </span>
             )

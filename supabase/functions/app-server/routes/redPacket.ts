@@ -39,74 +39,34 @@ export async function handleSendRedPacket(req: Request): Promise<Response> {
     throw new HttpError('只有主播可以发放红包', 403)
   }
 
-  // 2. 检查主播余额
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('balance_coins')
-    .eq('id', user.id)
-    .single()
-
-  if (profileError || !profile) {
-    throw new HttpError('用户信息查询失败', 500)
-  }
-
-  if ((profile.balance_coins || 0) < total_coins) {
-    throw new HttpError('余额不足', 400)
-  }
-
-  // 3. 执行发放逻辑（扣除余额并创建红包）
-  const balanceAfter = (profile.balance_coins || 0) - total_coins
-  const { error: updateBalanceError } = await supabaseAdmin
-    .from('profiles')
-    .update({ balance_coins: balanceAfter })
-    .eq('id', user.id)
-
-  if (updateBalanceError) {
-    throw new HttpError('扣除余额失败', 500)
-  }
-
   const unlockAt = new Date(Date.now() + countdown_seconds * 1000).toISOString()
   const expiresAt = new Date(Date.now() + (countdown_seconds + 3600) * 1000).toISOString()
 
-  const { data: packet, error: insertError } = await supabaseAdmin
-    .from('live_red_packets')
-    .insert({
-      room_id,
-      sender_id: user.id,
-      total_coins,
-      total_count,
-      packet_type,
-      countdown_seconds,
-      claim_conditions,
-      remaining_coins: total_coins,
-      remaining_count: total_count,
-      status: 'pending',
-      unlock_at: unlockAt,
-      expires_at: expiresAt
-    })
-    .select()
-    .single()
-
-  if (insertError) {
-    // 补偿逻辑
-    await supabaseAdmin
-      .from('profiles')
-      .update({ balance_coins: profile.balance_coins })
-      .eq('id', user.id)
-    throw new HttpError('创建红包失败: ' + insertError.message, 500)
-  }
-
-  // 🎯 记录资金流水
-  await supabaseAdmin.from('coin_transactions').insert({
-    user_id: user.id,
-    amount: -total_coins,
-    balance_after: balanceAfter,
-    type: 'red_packet_send',
-    description: '直播间发放红包',
-    related_id: packet.id
+  // 2. 调用原子 RPC 发放红包 (内部处理：锁定、余额校验、扣除、记录流水、创建红包)
+  const { data: res, error: rpcError } = await supabaseAdmin.rpc('send_live_red_packet', {
+    p_room_id: room_id,
+    p_sender_id: user.id,
+    p_total_coins: total_coins,
+    p_total_count: total_count,
+    p_packet_type: packet_type,
+    p_countdown_seconds: countdown_seconds,
+    p_claim_conditions: claim_conditions,
+    p_unlock_at: unlockAt,
+    p_expires_at: expiresAt
   })
 
-  // 4. 发送一条系统消息到直播间
+  if (rpcError) {
+    console.error('[RedPacket] RPC Error:', rpcError)
+    throw new HttpError('发放红包失败: ' + rpcError.message, 500)
+  }
+
+  if (!res.success) {
+    throw new HttpError(res.message || '发放失败', 400)
+  }
+
+  const packetId = res.packet_id
+
+  // 3. 发送一条系统消息到直播间
   await supabaseAdmin.from('live_broadcast_messages').insert({
     room_id,
     user_id: user.id,
@@ -114,12 +74,12 @@ export async function handleSendRedPacket(req: Request): Promise<Response> {
     msg_type: 'system',
     payload: {
       type: 'red_packet',
-      packet_id: packet.id,
+      packet_id: packetId,
       unlock_at: unlockAt
     }
   })
 
-  return successResponse({ packet })
+  return successResponse({ success: true, packet_id: packetId })
 }
 
 /**
