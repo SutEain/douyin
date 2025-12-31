@@ -82,6 +82,13 @@ const initTelegramLogin = async () => {
       // 🎯 等待 session 写入
       await new Promise((resolve) => setTimeout(resolve, 100))
       await supabase.auth.getSession()
+
+      // 🎯 修复深链接跳转冲突：如果 store 中有深链接 ID，则不强制跳转到首页，让 App.vue 的全局监听处理
+      if (baseStore.startLiveId || baseStore.startVideoId) {
+        console.log('[TelegramLogin] 检测到深链接参数，跳过强制首页重定向')
+        return
+      }
+
       router.replace('/')
       return
     }
@@ -133,6 +140,12 @@ const initTelegramLogin = async () => {
       )
     } else {
       console.warn('[TelegramLogin] ⚠️ Session 未找到，可能需要重新登录')
+    }
+
+    // 🎯 修复深链接跳转冲突：如果 store 中有深链接 ID，则不强制跳转到首页，让 App.vue 的全局监听处理
+    if (baseStore.startLiveId || baseStore.startVideoId) {
+      console.log('[TelegramLogin] 检测到深链接参数，跳过强制首页重定向')
+      return
     }
 
     // 登录成功，跳转到首页
