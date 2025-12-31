@@ -26,7 +26,18 @@ const baseStore = useBaseStore()
 const isLoading = ref(true)
 const errorMessage = ref('')
 
-onMounted(() => {
+onMounted(async () => {
+  console.log('[TelegramLogin] onMounted, 检查 Session 状态...')
+  // 🎯 如果已经有 session 了，说明是回退回来的，直接进入首页
+  const { data } = await supabase.auth.getSession()
+  if (data.session) {
+    console.log('[TelegramLogin] 检测到已存在 Session，准备重定向到首页...')
+    // 只有在当前确实还在登录页时才 replace，避免干扰正在进行的深链接跳转
+    if (router.currentRoute.value.path === '/login/telegram') {
+      router.replace('/')
+    }
+    return
+  }
   initTelegramLogin()
 })
 
