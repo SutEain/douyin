@@ -45,12 +45,16 @@ export const WithdrawOrderList = () => {
       const filters: any[] = []
       const status = params.status
       const userId = params.user_id
+      const orderNo = params.order_no
 
       if (status) {
         filters.push({ field: 'status', operator: 'eq', value: status })
       }
       if (userId) {
         filters.push({ field: 'profiles.numeric_id', operator: 'eq', value: Number(userId) })
+      }
+      if (orderNo) {
+        filters.push({ field: 'order_no', operator: 'contains', value: orderNo })
       }
 
       return filters
@@ -198,6 +202,9 @@ export const WithdrawOrderList = () => {
   return (
     <List title="提现申请管理">
       <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
+        <Form.Item name="order_no" label="订单编号">
+          <Input placeholder="输入单号搜索" allowClear />
+        </Form.Item>
         <Form.Item name="user_id" label="用户数字ID">
           <Input placeholder="输入用户ID搜索" allowClear />
         </Form.Item>
