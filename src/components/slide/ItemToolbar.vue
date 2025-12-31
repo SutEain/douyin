@@ -57,20 +57,13 @@ watch(
   }
 )
 
-// 🎯 声音提示气泡
-const showSoundTip = ref(false)
-
 onMounted(() => {
-  // 首次打开 App 时显示气泡提示
+  // 首次打开 App 时显示提示
   if (!sessionStorage.getItem('sound-tip-shown')) {
     setTimeout(() => {
-      showSoundTip.value = true
+      _notice('点击右下角,打开声音', 5000)
       sessionStorage.setItem('sound-tip-shown', '1')
-      // 5秒后自动消失（原来是 2 秒）
-      setTimeout(() => {
-        showSoundTip.value = false
-      }, 5000)
-    }, 500)
+    }, 1500)
   }
 })
 
@@ -352,14 +345,6 @@ const vClick = useClick()
     <div class="mute-toggle mb2r" v-click="toggleMute" @click.stop>
       <Icon v-if="isMuted" icon="ph:speaker-simple-slash-fill" class="icon" style="color: white" />
       <Icon v-else icon="ph:speaker-simple-high-fill" class="icon" style="color: white" />
-
-      <!-- 🎯 声音提示气泡 -->
-      <transition name="bubble">
-        <div v-if="showSoundTip" class="sound-tip-bubble" @click.stop="showSoundTip = false">
-          <span>点这打开声音 🔊</span>
-          <div class="bubble-arrow"></div>
-        </div>
-      </transition>
     </div>
 
     <!-- 更多选项抽屉 -->
@@ -779,36 +764,6 @@ const vClick = useClick()
     .more-drawer {
       transform: translateY(100%);
     }
-  }
-}
-
-// 🎯 气泡动画
-.bubble-enter-active {
-  animation: bubble-in 0.3s ease-out;
-}
-.bubble-leave-active {
-  animation: bubble-out 0.3s ease-in;
-}
-
-@keyframes bubble-in {
-  0% {
-    opacity: 0;
-    transform: translateY(-50%) translateX(10px) scale(0.8);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(-50%) translateX(0) scale(1);
-  }
-}
-
-@keyframes bubble-out {
-  0% {
-    opacity: 1;
-    transform: translateY(-50%) translateX(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-50%) translateX(10px) scale(0.8);
   }
 }
 </style>
