@@ -83,9 +83,10 @@ const initTelegramLogin = async () => {
       await new Promise((resolve) => setTimeout(resolve, 100))
       await supabase.auth.getSession()
 
-      // 🎯 修复深链接跳转冲突：如果 store 中有深链接 ID，则不强制跳转到首页，让 App.vue 的全局监听处理
-      if (baseStore.startLiveId || baseStore.startVideoId) {
-        console.log('[TelegramLogin] 检测到深链接参数，跳过强制首页重定向')
+      // 🎯 彻底修复深链接跳转冲突：
+      // 如果当前路由已经不再是登录页（说明深链接已经跳转成功），则绝不执行首页重定向
+      if (router.currentRoute.value.path !== '/login/telegram') {
+        console.log('[TelegramLogin] 检测到路由已由深链接接管，取消强制首页重定向')
         return
       }
 
@@ -142,9 +143,10 @@ const initTelegramLogin = async () => {
       console.warn('[TelegramLogin] ⚠️ Session 未找到，可能需要重新登录')
     }
 
-    // 🎯 修复深链接跳转冲突：如果 store 中有深链接 ID，则不强制跳转到首页，让 App.vue 的全局监听处理
-    if (baseStore.startLiveId || baseStore.startVideoId) {
-      console.log('[TelegramLogin] 检测到深链接参数，跳过强制首页重定向')
+    // 🎯 彻底修复深链接跳转冲突：
+    // 如果当前路由已经不再是登录页（说明深链接已经跳转成功），则绝不执行首页重定向
+    if (router.currentRoute.value.path !== '/login/telegram') {
+      console.log('[TelegramLogin] 检测到路由已由深链接接管，取消强制首页重定向')
       return
     }
 
