@@ -136,9 +136,10 @@ export const WithdrawOrderList = () => {
 
   // 自动出款：一键转账
   const handleAutoPayout = (record: any) => {
+    const isRetry = record.status === 'completed'
     Modal.confirm({
-      title: '确认一键自动出款？',
-      icon: <ThunderboltOutlined style={{ color: '#faad14' }} />,
+      title: isRetry ? '确认重新打款？' : '确认一键自动出款？',
+      icon: <ThunderboltOutlined style={{ color: isRetry ? '#ff4d4f' : '#faad14' }} />,
       content: (
         <Space direction="vertical">
           <Text>
@@ -147,8 +148,10 @@ export const WithdrawOrderList = () => {
           <Text>
             金额：{record.amount} 抖币 (约 {(record.amount / 100).toFixed(2)} USDT)
           </Text>
-          <Text type="warning" strong>
-            点击确认后，系统将自动通过 TRC20 网络进行转账。
+          <Text type={isRetry ? 'danger' : 'warning'} strong>
+            {isRetry
+              ? '该订单已标记为完成，但未发现交易哈希。重新打款将再次发起真实转账，请务必确认之前未实际到账！'
+              : '点击确认后，系统将自动通过 TRC20 网络进行转账。'}
           </Text>
           <Text type="danger">请确保后台配置的出款钱包余额充足，操作不可撤回！</Text>
           <Text code ellipsis>
@@ -315,32 +318,40 @@ export const WithdrawOrderList = () => {
           fixed="right"
           render={(_, record: any) => (
             <Space size="small">
-              {record.status === 'pending' && (
+              {(record.status === 'pending' ||
+                (record.status === 'completed' && !record.tx_hash)) && (
                 <>
                   <Button
                     type="primary"
                     size="small"
                     icon={<ThunderboltOutlined />}
-                    style={{ backgroundColor: '#faad14', borderColor: '#faad14' }}
+                    style={{
+                      backgroundColor: record.status === 'completed' ? '#ff4d4f' : '#faad14',
+                      borderColor: record.status === 'completed' ? '#ff4d4f' : '#faad14'
+                    }}
                     onClick={() => handleAutoPayout(record)}
                   >
-                    一键出款
+                    {record.status === 'completed' ? '重新打款' : '一键出款'}
                   </Button>
-                  <Button
-                    type="primary"
-                    size="small"
-                    style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                    onClick={() => handleProcessWithdraw(record, 'approve')}
-                  >
-                    确认汇款
-                  </Button>
-                  <Button
-                    danger
-                    size="small"
-                    onClick={() => handleProcessWithdraw(record, 'reject')}
-                  >
-                    拒绝
-                  </Button>
+                  {record.status === 'pending' && (
+                    <>
+                      <Button
+                        type="primary"
+                        size="small"
+                        style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                        onClick={() => handleProcessWithdraw(record, 'approve')}
+                      >
+                        确认汇款
+                      </Button>
+                      <Button
+                        danger
+                        size="small"
+                        onClick={() => handleProcessWithdraw(record, 'reject')}
+                      >
+                        拒绝
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
             </Space>

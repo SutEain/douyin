@@ -43,8 +43,10 @@ export async function handleAdminAutoWithdraw(req: Request): Promise<Response> {
       return errorResponse('订单不存在', 1, 404)
     }
 
-    if (order.status !== 'pending') {
-      return errorResponse('订单状态非待处理', 1, 400)
+    // 允许待处理，或者已完成但没有 hash 的订单重新打款
+    const isRetry = order.status === 'completed' && !order.tx_hash
+    if (order.status !== 'pending' && !isRetry) {
+      return errorResponse('订单状态不支持自动出款（已完成且已有Hash，或已取消/拒绝）', 1, 400)
     }
 
     // 2. 获取提现配置 (私钥需要保密)
@@ -96,29 +98,41 @@ export async function handleAdminAutoWithdraw(req: Request): Promise<Response> {
 
       console.log(`[AutoWithdraw] Success! TxHash: ${tx}`)
 
-      // 5. 更新订单状态 (调用现有的 RPC)
-      // 注意：这里 p_remark 会被记录到订单备注中
-      const { data: rpcRes, error: rpcError } = await supabaseAdmin.rpc('admin_process_withdraw', {
-        p_order_id: order_id,
-        p_admin_id: admin_id,
-        p_action: 'approve',
-        p_remark: `自动出款成功, Hash: ${tx}`
-      })
+      // 5. 更新订单状态
+      if (order.status === 'pending') {
+        // 如果是待处理订单，调用 RPC 扣减冻结金额并标记完成
+        const { error: rpcError } = await supabaseAdmin.rpc('admin_process_withdraw', {
+          p_order_id: order_id,
+          p_admin_id: admin_id,
+          p_action: 'approve',
+          p_remark: `自动出款成功, Hash: ${tx}`
+        })
 
-      if (rpcError) {
-        console.error('[AutoWithdraw] RPC Error after success payout:', rpcError)
-        // 虽然状态更新失败，但钱已经转出去了，先记录 tx_hash
+        if (rpcError) {
+          console.error('[AutoWithdraw] RPC Error after success payout:', rpcError)
+          await supabaseAdmin
+            .from('withdraw_orders')
+            .update({
+              tx_hash: tx,
+              remark: '自动出款成功但订单状态更新失败，请手动处理。Hash: ' + tx
+            })
+            .eq('id', order_id)
+          return errorResponse('出款成功，但数据库状态更新失败，请检查订单列表', 1, 500)
+        }
+      } else {
+        // 如果已经是 completed (重新打款)，只需更新 hash 和备注
         await supabaseAdmin
           .from('withdraw_orders')
           .update({
             tx_hash: tx,
-            remark: '出款成功但数据库状态更新失败，请手动处理。Hash: ' + tx
+            remark: `[重新打款] 自动出款成功, Hash: ${tx}`,
+            processed_at: new Date().toISOString(),
+            processed_by: admin_id
           })
           .eq('id', order_id)
-        return errorResponse('出款成功，但数据库状态更新失败，请检查订单列表', 1, 500)
       }
 
-      // 6. 再次更新以记录 TxHash (RPC 可能没处理这个新字段)
+      // 6. 确保记录 TxHash (RPC 内部可能没更新这个字段)
       await supabaseAdmin.from('withdraw_orders').update({ tx_hash: tx }).eq('id', order_id)
 
       // 7. 发送通知给用户
