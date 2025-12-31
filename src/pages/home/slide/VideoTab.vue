@@ -256,7 +256,7 @@ function onAvatarError(e) {
   // 🎯 针对 Telegram WebApp 或部分环境 env 失效的额外加固
   @media screen and (max-device-width: 450px) and (orientation: portrait) {
     & {
-      padding-top: calc(var(--home-header-height) + max(0rem, env(safe-area-inset-top, 20rem)));
+      padding-top: calc(var(--home-header-height) + max(20rem, env(safe-area-inset-top, 0rem)));
     }
   }
 
@@ -270,7 +270,7 @@ function onAvatarError(e) {
       & {
         height: calc(
           var(--vh, 1vh) * 100 -
-            (var(--home-header-height) + max(0rem, env(safe-area-inset-top, 20rem))) -
+            (var(--home-header-height) + max(20rem, env(safe-area-inset-top, 0rem))) -
             var(--footer-height)
         ) !important;
       }

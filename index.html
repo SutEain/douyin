@@ -6,7 +6,7 @@
     <meta name="referrer" content="no-referrer" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
       id="viewport"
     />
     <title>Douyin</title>
@@ -108,6 +108,13 @@
               try {
                 tg.ready()
                 tg.expand()
+                // 🎯 设置顶部栏和背景颜色，增强 iOS 沉浸式体验
+                if (typeof tg.setHeaderColor === 'function') {
+                  tg.setHeaderColor('secondary_bg_color')
+                }
+                if (typeof tg.setBackgroundColor === 'function') {
+                  tg.setBackgroundColor('secondary_bg_color')
+                }
                 if (typeof tg.disableVerticalSwipes === 'function') {
                   tg.disableVerticalSwipes()
                 }
@@ -123,6 +130,13 @@
               try {
                 tg.ready()
                 tg.expand()
+                // 🎯 设置顶部栏和背景颜色，增强 iOS 沉浸式体验
+                if (typeof tg.setHeaderColor === 'function') {
+                  tg.setHeaderColor('secondary_bg_color')
+                }
+                if (typeof tg.setBackgroundColor === 'function') {
+                  tg.setBackgroundColor('secondary_bg_color')
+                }
                 if (typeof tg.disableVerticalSwipes === 'function') {
                   tg.disableVerticalSwipes()
                 }

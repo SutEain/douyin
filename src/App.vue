@@ -93,15 +93,27 @@ watch(
 )
 
 function resetVhAndPx() {
-  let vh = window.innerHeight * 0.01
+  let innerHeight = window.innerHeight
+  // 🎯 优先使用 Telegram SDK 提供的视口高度，解决 iOS 状态栏/动态高度问题
+  const tg = (window as any).Telegram?.WebApp
+  if (tg?.viewportHeight) {
+    innerHeight = tg.viewportHeight
+  }
+  let vh = innerHeight * 0.01
   document.documentElement.style.setProperty('--vh', `${vh}px`)
-  //document.documentElement.style.fontSize = document.documentElement.clientWidth / 375 + 'px'
 }
 
 onMounted(() => {
   // 🎯 初始化应用（登录时自动创建用户，无需额外调用）
   store.init()
   resetVhAndPx()
+
+  // 🎯 监听 Telegram 视口变化事件
+  const tg = (window as any).Telegram?.WebApp
+  if (tg) {
+    tg.onEvent('viewportChanged', resetVhAndPx)
+  }
+
   // 监听resize事件 视图大小发生变化就重新计算1vh的值
   // ⚠️ 注意：移动端键盘弹出也会触发 resize，不能在这里刷新页面
   window.addEventListener('resize', () => {
