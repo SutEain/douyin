@@ -1644,6 +1644,7 @@ defineExpose({
   overflow: hidden;
   background: black;
   touch-action: none;
+  min-height: 200px; // ✅ 增加最小高度兜底，防止加载瞬间塌陷
 }
 
 .tri-video-list.comments-open {

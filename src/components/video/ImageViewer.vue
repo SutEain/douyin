@@ -8,6 +8,7 @@
       @load="onImageLoad"
       @error="onImageError"
       @click.stop="openPreview"
+      draggable="false"
     />
 
     <!-- 加载中 -->

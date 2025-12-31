@@ -152,8 +152,8 @@ function onTouchMove(e: TouchEvent) {
   if (!touch.isHorizontal) {
     const absX = Math.abs(touch.deltaX)
     const absY = Math.abs(touch.deltaY)
-    // 水平位移足够大且明显大于垂直位移时，认定为水平滑动
-    if (absX > 8 && absX > absY * 1.2) {
+    // 💡 优化判定：水平位移需超过 15px，且明显大于垂直位移（2倍关系），才认定为切图操作
+    if (absX > 15 && absX > absY * 2) {
       touch.isHorizontal = true
     }
   }
