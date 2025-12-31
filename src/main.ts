@@ -19,18 +19,10 @@ declare global {
 }
 
 if (typeof window !== 'undefined') {
-  // ✅ 强制开启所有日志，确保无静默
-  if (!window.__rawConsole__) {
-    window.__rawConsole__ = window.console
-  }
-  // 确保没有 noop 覆盖
-  const rawConsole = window.__rawConsole__
-  if (rawConsole) {
-    ;(window.console.log as any) = rawConsole.log
-    ;(window.console.info as any) = rawConsole.info
-    ;(window.console.debug as any) = rawConsole.debug
-    ;(window.console.warn as any) = rawConsole.warn
-    ;(window.console.error as any) = rawConsole.error
+  // ✅ 强制开启所有日志
+  if (window.console && (window.console as any).log) {
+    const rawConsole = window.console
+    window.__rawConsole__ = rawConsole
   }
 
   window.TelegramGameProxy = window.TelegramGameProxy || {}

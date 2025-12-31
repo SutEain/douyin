@@ -113,7 +113,8 @@ function resetVhAndPx() {
     // 如果高度占比较小（90% 紧凑模式），边距设为 0
     // 用户要求全屏时再下来 2 个字体高度 (2 * 14rem = 28rem)
     // 加上原来的基础，我们设置全屏时额外增加 28rem
-    const isFullscreen = tg.isExpanded || tg.viewportHeight > window.screen.height * 0.85
+    // 🎯 只要视口高度超过屏幕的 70%，我们就认为它是全屏模式（Telegram 紧凑模式通常 < 70%）
+    const isFullscreen = tg.isExpanded || tg.viewportHeight > window.screen.height * 0.7
     let extraPadding = 0
 
     if (isIOS) {
@@ -136,6 +137,9 @@ onMounted(() => {
   // 🎯 初始化应用（登录时自动创建用户，无需额外调用）
   store.init()
   resetVhAndPx()
+  // ⏳ 50ms 后再次计算，确保 Telegram SDK 完全准备好视口数据
+  setTimeout(resetVhAndPx, 50)
+  setTimeout(resetVhAndPx, 500) // 再次兜底
 
   // 🎯 监听 Telegram 视口变化事件
   const tg = (window as any).Telegram?.WebApp
