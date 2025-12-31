@@ -59,6 +59,11 @@ export async function handleSendReward(req: Request): Promise<Response> {
       throw new HttpError('Missing required parameters (receiver_id not found)', 400)
     }
 
+    // 🎯 核心安全加固：校验金额必须大于 0
+    if (gift_amount <= 0) {
+      throw new HttpError('打赏金额必须大于 0', 400)
+    }
+
     if (finalReceiverId === user.id && receiver_id) {
       throw new HttpError('不能打赏自己', 400)
     }
