@@ -253,10 +253,18 @@ const isRewarding = ref(false)
 
 // 🎯 更多选项抽屉
 const showMoreDrawer = ref(false)
+const refreshing = ref(false)
 
 function refreshVideo() {
-  if (props.item?.aweme_id) {
+  if (props.item?.aweme_id && !refreshing.value) {
+    refreshing.value = true
+    _notice('正在重新加载视频...')
     bus.emit(EVENT_KEY.REFRESH_VIDEO, props.item.aweme_id)
+
+    // 1秒后重置状态
+    setTimeout(() => {
+      refreshing.value = false
+    }, 1000)
   }
 }
 
@@ -345,7 +353,12 @@ const vClick = useClick()
 
     <!-- 刷新按钮 -->
     <div class="refresh mb2r" v-click="refreshVideo">
-      <Icon icon="solar:refresh-bold" class="icon" style="color: white" />
+      <Icon
+        icon="solar:refresh-bold"
+        class="icon"
+        :class="{ 'refresh-anim': refreshing }"
+        style="color: white"
+      />
       <span>刷新</span>
     </div>
 
@@ -467,7 +480,7 @@ const vClick = useClick()
   position: absolute;
   bottom: 0;
   right: 10rem;
-  z-index: 10;
+  z-index: 100; // ✅ 提高层级，确保在 ItemDesc 的按钮之上
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -562,6 +575,19 @@ const vClick = useClick()
   .icon {
     font-size: 32rem;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+
+    &.refresh-anim {
+      animation: refresh-rotate 0.8s linear infinite;
+    }
+  }
+
+  @keyframes refresh-rotate {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .loved {

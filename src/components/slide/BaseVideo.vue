@@ -370,7 +370,6 @@ onMounted(() => {
       if (videoEl) {
         videoEl.load()
         play()
-        _notice('正在重新加载视频...')
       }
     }
   })
