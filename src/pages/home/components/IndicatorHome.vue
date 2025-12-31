@@ -249,19 +249,12 @@ export default {
   z-index: 2;
   width: 100%;
   color: white;
-  // ✅ 适配 iOS 安全区域：高度 = 基础高度 + 顶部安全距离
-  // 使用 0rem 作为兜底，如果 env 不支持则为 0
-  height: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
-  padding-top: env(safe-area-inset-top, 0rem);
-
-  // 🎯 针对 Telegram WebApp 或部分环境 env 失效的额外加固
-  @media screen and (max-device-width: 450px) and (orientation: portrait) {
-    & {
-      // 如果没有安全区域支持，至少预留 20px (≈ 20rem) 的空间
-      padding-top: max(20rem, env(safe-area-inset-top, 0rem));
-      height: calc(var(--home-header-height) + max(20rem, env(safe-area-inset-top, 0rem)));
-    }
-  }
+  // ✅ 适配 iOS 安全区域：高度 = 基础高度 + 顶部安全距离 + 额外修正
+  // 使用 var(--tg-extra-padding) 动态调整全屏与非全屏的偏移
+  height: calc(
+    var(--home-header-height) + env(safe-area-inset-top, 0rem) + var(--tg-extra-padding, 0rem)
+  );
+  padding-top: calc(env(safe-area-inset-top, 0rem) + var(--tg-extra-padding, 0rem));
   transition: all 0.3s;
   font-weight: bold;
 

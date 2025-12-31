@@ -101,6 +101,31 @@ function resetVhAndPx() {
   }
   let vh = innerHeight * 0.01
   document.documentElement.style.setProperty('--vh', `${vh}px`)
+
+  // 🎯 动态计算顶部安全距离 (解决全屏 vs 90% 视图)
+  if (tg) {
+    const isIOS =
+      /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      tg.platform === 'ios' ||
+      tg.platform === 'macos'
+
+    // 如果高度占比较大（全屏模式），增加额外边距
+    // 如果高度占比较小（90% 紧凑模式），边距设为 0
+    // 用户要求全屏时再下来 2 个字体高度 (2 * 14rem = 28rem)
+    // 加上原来的基础，我们设置全屏时额外增加 28rem
+    const isFullscreen = tg.isExpanded || tg.viewportHeight > window.screen.height * 0.85
+    let extraPadding = 0
+
+    if (isIOS) {
+      if (isFullscreen) {
+        extraPadding = 28 // 全屏 iOS 额外下移
+      } else {
+        extraPadding = 0 // 紧凑模式不增加额外边距，避免下垂
+      }
+    }
+
+    document.documentElement.style.setProperty('--tg-extra-padding', `${extraPadding}rem`)
+  }
 }
 
 onMounted(() => {
@@ -112,6 +137,8 @@ onMounted(() => {
   const tg = (window as any).Telegram?.WebApp
   if (tg) {
     tg.onEvent('viewportChanged', resetVhAndPx)
+    // 监听展开事件
+    tg.onEvent('settingsCustomButtonClicked', resetVhAndPx) // 兜底
   }
 
   // 监听resize事件 视图大小发生变化就重新计算1vh的值

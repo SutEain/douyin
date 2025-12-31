@@ -91,16 +91,11 @@ onMounted(() => {
   color: #fff;
   display: flex;
   flex-direction: column;
-  // ✅ 放在顶级 tab（IndicatorHome）下面，避免覆盖（适配 iOS 安全区域）
-  padding-top: calc(var(--home-header-height) + env(safe-area-inset-top, 0rem));
+  // ✅ 放在顶级 tab（IndicatorHome）下面，避免覆盖（适配 iOS 安全区域 + 动态额外偏移）
+  padding-top: calc(
+    var(--home-header-height) + env(safe-area-inset-top, 0rem) + var(--tg-extra-padding, 0rem)
+  );
   box-sizing: border-box;
-
-  // 🎯 针对 Telegram WebApp 或部分环境 env 失效的额外加固
-  @media screen and (max-device-width: 450px) and (orientation: portrait) {
-    & {
-      padding-top: calc(var(--home-header-height) + max(20rem, env(safe-area-inset-top, 0rem)));
-    }
-  }
 }
 
 .content {

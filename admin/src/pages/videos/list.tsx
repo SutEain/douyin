@@ -1,9 +1,15 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Tag, Button, Modal, Input, Select, Form, message } from 'antd'
+import { Table, Space, Tag, Button, Modal, Input, Select, Form, message, Tooltip } from 'antd'
 import { useState, useRef } from 'react'
 import { useInvalidate, useUpdate, useDelete } from '@refinedev/core'
 import { useNavigate } from 'react-router-dom'
-import { EditOutlined, DeleteOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
+import {
+  EditOutlined,
+  DeleteOutlined,
+  LeftOutlined,
+  RightOutlined,
+  SyncOutlined
+} from '@ant-design/icons'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
@@ -14,6 +20,7 @@ import {
   getContentTypeInfo,
   buildCdnUrl
 } from '../../utils/media'
+import { supabaseClient } from '../../supabaseClient'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -48,6 +55,7 @@ export const VideoList = () => {
   const [savingDescription, setSavingDescription] = useState(false)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [batchLoading, setBatchLoading] = useState(false)
+  const [refreshingDouyin, setRefreshingDouyin] = useState(false)
   const [rejectForm] = Form.useForm()
   const { mutate: updateVideo } = useUpdate()
   const { mutate: deleteVideo } = useDelete()
@@ -569,12 +577,64 @@ export const VideoList = () => {
     )
   }
 
+  // 🎯 批量刷新抖音链接
+  const handleRefreshDouyinLinks = async () => {
+    setRefreshingDouyin(true)
+    try {
+      const { data: sessionData } = await supabaseClient.auth.getSession()
+      const token = sessionData?.session?.access_token
+      if (!token) {
+        message.error('未登录或会话已过期')
+        return
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_APP_SERVER_URL}/admin/douyin/refresh-links`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            ids: selectedRowKeys.length > 0 ? selectedRowKeys : undefined,
+            limit: 20
+          })
+        }
+      )
+
+      const result = await response.json()
+      if (result.code === 0) {
+        message.success(result.data?.message || '刷新成功')
+        if (result.data?.updated_count > 0) {
+          invalidate({ resource: 'admin_videos_list', invalidates: ['list'] })
+        }
+      } else {
+        message.error(result.msg || '操作失败')
+      }
+    } catch (error) {
+      console.error('Refresh douyin error:', error)
+      message.error('操作失败，请重试')
+    } finally {
+      setRefreshingDouyin(false)
+    }
+  }
+
   return (
     <>
       <List
         title="视频管理"
         headerButtons={
           <Space>
+            <Tooltip title="针对 storage_type 为 douyin 的视频，重新获取失效播放链接。默认处理最近 20 条，如有勾选则处理勾选项。">
+              <Button
+                icon={<SyncOutlined />}
+                onClick={handleRefreshDouyinLinks}
+                loading={refreshingDouyin}
+              >
+                刷新抖音链接
+              </Button>
+            </Tooltip>
             <Button type="primary" onClick={() => navigate('/videos/douyin-create')}>
               抖音解析新增
             </Button>

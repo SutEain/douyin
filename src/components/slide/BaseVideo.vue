@@ -6,9 +6,10 @@
     <div v-if="state.loading" class="loading-text">加载中...</div>
     <!--    <video :src="item.video + '?v=123'"-->
     <video
+      v-if="!isRefreshing"
       :key="videoKey"
       :poster="poster"
-      ref="videoEl"
+      ref="videoElRef"
       :muted="state.isMuted"
       preload="auto"
       loop
@@ -98,7 +99,17 @@ import ItemToolbar from './ItemToolbar.vue'
 import ItemDesc from './ItemDesc.vue'
 import bus, { EVENT_KEY } from '../../utils/bus'
 import { SlideItemPlayStatus } from '@/utils/const_var'
-import { computed, onMounted, onUnmounted, onUpdated, provide, reactive, ref, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  onUpdated,
+  provide,
+  reactive,
+  ref,
+  watch
+} from 'vue'
 import { _css } from '@/utils/dom'
 import { Icon } from '@iconify/vue'
 import { toggleVideoLike } from '@/api/videos'
@@ -148,11 +159,12 @@ const videoStore = useVideoStore()
 // 🎯 倍速播放：默认 1.0，仅对当前视频生效
 const playbackRate = ref<number>(1)
 const videoKey = ref(0) // 🎯 用于强制销毁并重新加载视频 DOM
+const isRefreshing = ref(false) // 🎯 彻底销毁 DOM 标记
 function setPlaybackRate(rate: number) {
   const safe = [0.5, 1, 1.25, 1.5, 2].includes(rate) ? rate : 1
   playbackRate.value = safe
   try {
-    if (videoEl) videoEl.playbackRate = safe
+    if (videoEl.value) videoEl.value.playbackRate = safe
   } catch (e) {
     console.warn('[BaseVideo] 设置 playbackRate 失败:', e)
   }
@@ -175,7 +187,8 @@ provide(
 provide('playbackRate', playbackRate)
 provide('setPlaybackRate', setPlaybackRate)
 
-const videoEl = $ref<HTMLVideoElement>()
+const videoElRef = ref<HTMLVideoElement | null>(null)
+const videoEl = computed(() => videoElRef.value)
 const progressEl = $ref<HTMLDivElement>()
 const initialMuted = typeof window.isMuted === 'boolean' ? window.isMuted : true
 if (window.isMuted === undefined) {
@@ -226,10 +239,10 @@ watch(
 watch(
   () => window.isMuted,
   (val) => {
-    if (videoEl) {
+    if (videoEl.value) {
       // 同步全局静音状态到当前视频
       state.isMuted = val
-      videoEl.muted = val
+      videoEl.value.muted = val
     }
   }
 )
@@ -269,27 +282,27 @@ const progressClass = $computed(() => {
 onMounted(() => {
   state.height = document.body.clientHeight
   state.width = document.body.clientWidth
-  if (videoEl) {
-    videoEl.currentTime = 0
+  if (videoEl.value) {
+    videoEl.value.currentTime = 0
   }
 
   let fun = (e) => {
     state.currentTime = Math.ceil(e.target.currentTime)
     state.playX = (state.currentTime - 1) * state.step
   }
-  videoEl.addEventListener('loadedmetadata', () => {
-    if (!videoEl) return
-    state.videoScreenHeight = videoEl.videoHeight / (videoEl.videoWidth / state.width)
-    state.duration = videoEl.duration
+  videoEl.value.addEventListener('loadedmetadata', () => {
+    if (!videoEl.value) return
+    state.videoScreenHeight = videoEl.value.videoHeight / (videoEl.value.videoWidth / state.width)
+    state.duration = videoEl.value.duration
     if (progressEl) {
       state.progressBarRect = progressEl.getBoundingClientRect()
       state.step = state.progressBarRect.width / Math.floor(state.duration)
     }
-    videoEl.addEventListener('timeupdate', fun)
+    videoEl.value.addEventListener('timeupdate', fun)
   })
 
   let eventTester = (e, t: string) => {
-    videoEl.addEventListener(
+    videoEl.value.addEventListener(
       e,
       () => {
         // console.log('eventTester', e, state.item.aweme_id)
@@ -322,15 +335,15 @@ onMounted(() => {
   // eventTester("loadeddata"); //
   eventTester('waiting', '等待数据，并非错误') //等待数据，并非错误
   // ✅ 监听 playing 事件，但不立即隐藏 loading
-  videoEl.addEventListener('playing', () => {
+  videoEl.value.addEventListener('playing', () => {
     // playing 事件表示视频开始播放，但画面可能还没渲染
     // 继续等待 timeupdate 确认
   })
 
   // ✅ 监听 timeupdate，确保画面真正开始播放后才隐藏 loading
-  videoEl.addEventListener('timeupdate', () => {
+  videoEl.value.addEventListener('timeupdate', () => {
     // 只有当视频时间>0.1秒且正在播放时，才隐藏 loading
-    if (!state.loadingHidden && videoEl.currentTime > 0.1 && !videoEl.paused) {
+    if (!state.loadingHidden && videoEl.value.currentTime > 0.1 && !videoEl.value.paused) {
       state.loading = false
       state.loadingHidden = true
       // 视频开始播放，隐藏 loading
@@ -338,11 +351,11 @@ onMounted(() => {
   })
 
   // ✅ 当视频暂停或跳转时，重置标志
-  videoEl.addEventListener('pause', () => {
+  videoEl.value.addEventListener('pause', () => {
     state.loadingHidden = false
   })
 
-  videoEl.addEventListener('seeking', () => {
+  videoEl.value.addEventListener('seeking', () => {
     state.loadingHidden = false
   })
   // eventTester("canplay", '/可以播放，但中途可能因为加载而暂停'); //可以播放，但中途可能因为加载而暂停
@@ -367,24 +380,37 @@ onMounted(() => {
 
   bus.on(EVENT_KEY.REMOVE_MUTED, removeMuted)
   bus.on(EVENT_KEY.ADD_MUTED, addMuted)
-  bus.on(EVENT_KEY.REFRESH_VIDEO, (id) => {
+  bus.on(EVENT_KEY.REFRESH_VIDEO, async (id) => {
     if (id === props.item.aweme_id) {
-      console.log(`[BaseVideo] 🔄 彻底刷新视频, id=${id}`)
-      // 🎯 通过改变 key 强制 Vue 销毁并重建 video 元素
-      videoKey.value = Date.now()
-      // 重置进度条逻辑：由于 DOM 被销毁，Vue 会重新初始化所有状态
+      console.log(`[BaseVideo] 🔄 彻底刷新视频 (销毁DOM), id=${id}`)
       _notice('正在深度重载视频资源...')
+
+      // 🎯 先销毁 DOM
+      isRefreshing.value = true
+
+      await nextTick()
+
+      // 🎯 再重建 DOM
+      isRefreshing.value = false
+      videoKey.value = Date.now()
+
+      await nextTick()
+
+      // 🎯 重建后自动播放
+      if (props.isPlay || state.status === SlideItemPlayStatus.Play) {
+        play()
+      }
     }
   })
 
   // 监听视频加载错误（303等网络错误）
-  if (videoEl) {
-    videoEl.addEventListener('error', handleVideoError)
+  if (videoEl.value) {
+    videoEl.value.addEventListener('error', handleVideoError)
   }
 
   // 预加载视频 - 在元素挂载后立即开始加载
-  if (videoEl && videoEl.readyState === 0) {
-    videoEl.load()
+  if (videoEl.value && videoEl.value.readyState === 0) {
+    videoEl.value.load()
   }
 
   // ✅ 如果是第一个视频（isPlay=true），设置 currentVideo 并调用 play()
@@ -410,13 +436,13 @@ function handleVideoError(e: Event) {
     errorType: isSourceError ? 'SOURCE元素错误' : 'VIDEO元素错误',
     target: target.tagName,
     src: target.src?.substring(target.src.length - 40) || '无',
-    readyState: videoEl?.readyState,
-    networkState: videoEl?.networkState,
-    error: videoEl?.error,
-    errorCode: videoEl?.error?.code,
-    errorMessage: videoEl?.error?.message,
+    readyState: videoEl.value?.readyState,
+    networkState: videoEl.value?.networkState,
+    error: videoEl.value?.error,
+    errorCode: videoEl.value?.error?.code,
+    errorMessage: videoEl.value?.error?.message,
     errorRetryCount,
-    allSources: Array.from(videoEl?.querySelectorAll('source') || []).map((s) => ({
+    allSources: Array.from(videoEl.value?.querySelectorAll('source') || []).map((s) => ({
       src: s.src.substring(s.src.length - 30),
       type: s.type
     }))
@@ -429,13 +455,13 @@ function handleVideoError(e: Event) {
       `[video] 🔄 重试加载 (${errorRetryCount}/${MAX_ERROR_RETRY}), videoId=${props.item.aweme_id?.substring(0, 8)}`
     )
     setTimeout(() => {
-      if (videoEl) {
-        videoEl.load()
+      if (videoEl.value) {
+        videoEl.value.load()
         // 如果是当前正在播放的视频 或 第一个视频（isPlay），重新播放
         if (state.status === SlideItemPlayStatus.Play || props.isPlay) {
           console.log(`[video] 🔄 重试后自动播放, videoId=${props.item.aweme_id?.substring(0, 8)}`)
           setTimeout(() => {
-            videoEl.play().catch((err) => {
+            videoEl.value.play().catch((err) => {
               console.error('[video] 重新播放失败:', err)
               // 重试失败，隐藏 loading
               state.loading = false
@@ -460,14 +486,14 @@ onUnmounted(() => {
   // 组件卸载
 
   // 强制暂停并清理
-  if (videoEl && !videoEl.paused) {
-    videoEl.pause()
-    videoEl.currentTime = 0
+  if (videoEl.value && !videoEl.value.paused) {
+    videoEl.value.pause()
+    videoEl.value.currentTime = 0
   }
 
   // 移除error事件监听
-  if (videoEl) {
-    videoEl.removeEventListener('error', handleVideoError)
+  if (videoEl.value) {
+    videoEl.value.removeEventListener('error', handleVideoError)
   }
 
   // 如果当前是正在播放的视频，清理管理器引用
@@ -491,8 +517,8 @@ function removeMuted() {
   // 全局取消静音（所有视频组件都会响应，但只有播放中的视频会发声）
   window.isMuted = false
   state.isMuted = false
-  if (videoEl) {
-    videoEl.muted = false
+  if (videoEl.value) {
+    videoEl.value.muted = false
   }
 }
 
@@ -500,8 +526,8 @@ function addMuted() {
   // 全局静音
   window.isMuted = true
   state.isMuted = true
-  if (videoEl) {
-    videoEl.muted = true
+  if (videoEl.value) {
+    videoEl.value.muted = true
   }
 }
 
@@ -570,13 +596,13 @@ function click({ uniqueId, index, type }) {
     }
     if (type === EVENT_KEY.ITEM_STOP) {
       // ✅ 滑动切换到其他视频时，重置播放位置（下次回来从头播放）
-      videoEl.currentTime = 0
+      videoEl.value.currentTime = 0
       state.ignoreWaiting = true
       pause()
       setTimeout(() => (state.ignoreWaiting = false), 300)
     }
     if (type === EVENT_KEY.ITEM_PLAY) {
-      videoEl.currentTime = 0
+      videoEl.value.currentTime = 0
       state.ignoreWaiting = true
       play()
       setTimeout(() => (state.ignoreWaiting = false), 300)
@@ -585,7 +611,7 @@ function click({ uniqueId, index, type }) {
 }
 
 function play() {
-  if (!videoEl) {
+  if (!videoEl.value) {
     return
   }
 
@@ -606,22 +632,22 @@ function play() {
   // （切换视频时，ITEM_PLAY 事件会在528行重置 currentTime）
 
   // ✅ 方案 C：每个视频都有独立的 DOM，如果 readyState 为 0，调用 load()
-  if (videoEl.readyState === 0) {
-    videoEl.load()
+  if (videoEl.value.readyState === 0) {
+    videoEl.value.load()
   }
 
   // 设置状态 - 明确同步静音状态
   state.status = SlideItemPlayStatus.Play
   state.isMuted = window.isMuted
-  videoEl.muted = window.isMuted
+  videoEl.value.muted = window.isMuted
 
   // 确保视频已加载足够数据再播放
   const tryPlay = () => {
-    if (videoEl.readyState < 2) {
+    if (videoEl.value.readyState < 2) {
       return false
     }
 
-    const playPromise = videoEl.play()
+    const playPromise = videoEl.value.play()
 
     if (playPromise?.catch) {
       playPromise
@@ -632,9 +658,9 @@ function play() {
         .catch((err) => {
           if (err?.name === 'NotAllowedError') {
             // ✅ 自动静音重试（浏览器策略：重建DOM后必须静音）
-            videoEl.muted = true
+            videoEl.value.muted = true
             state.isMuted = true
-            videoEl.play().catch(() => {
+            videoEl.value.play().catch(() => {
               // 播放失败，隐藏 loading
               state.loading = false
             })
@@ -648,7 +674,7 @@ function play() {
   }
 
   // 如果视频还未加载，等待canplay事件（有足够数据开始播放）
-  if (videoEl.readyState < 2) {
+  if (videoEl.value.readyState < 2) {
     state.loading = true
 
     let canplayFired = false
@@ -662,7 +688,7 @@ function play() {
 
     const onLoadedData = () => {
       if (canplayFired) return
-      if (videoEl.readyState >= 2) {
+      if (videoEl.value.readyState >= 2) {
         canplayFired = true
         tryPlay()
         cleanup()
@@ -670,33 +696,33 @@ function play() {
     }
 
     const cleanup = () => {
-      videoEl.removeEventListener('canplay', onCanPlay)
-      videoEl.removeEventListener('loadeddata', onLoadedData)
+      videoEl.value.removeEventListener('canplay', onCanPlay)
+      videoEl.value.removeEventListener('loadeddata', onLoadedData)
     }
 
-    videoEl.addEventListener('canplay', onCanPlay, { once: true })
-    videoEl.addEventListener('loadeddata', onLoadedData)
+    videoEl.value.addEventListener('canplay', onCanPlay, { once: true })
+    videoEl.value.addEventListener('loadeddata', onLoadedData)
 
     // 设置超时，最多等待1000ms
     setTimeout(() => {
       if (!canplayFired) {
         console.log(
-          `[BaseVideo] ⚠️ canplay 超时, readyState=${videoEl.readyState}, index=${(props.position as any)?.index}`
+          `[BaseVideo] ⚠️ canplay 超时, readyState=${videoEl.value.readyState}, index=${(props.position as any)?.index}`
         )
         cleanup()
 
-        if (videoEl.readyState >= 2) {
+        if (videoEl.value.readyState >= 2) {
           tryPlay()
-        } else if (videoEl.readyState === 1) {
+        } else if (videoEl.value.readyState === 1) {
           // 直接播放，让浏览器边加载边播放
           // ⚠️ 不隐藏 loading，等待 timeupdate 确认
-          videoEl.play().catch((err) => {
+          videoEl.value.play().catch((err) => {
             if (err?.name === 'NotAllowedError') {
               // ✅ 自动静音重试
-              videoEl.muted = true
+              videoEl.value.muted = true
               state.isMuted = true
               window.isMuted = true
-              videoEl.play().catch(() => {
+              videoEl.value.play().catch(() => {
                 // 静音重试也失败，隐藏 loading
                 state.loading = false
               })
@@ -707,14 +733,14 @@ function play() {
           })
         } else {
           // readyState === 0，再次 load()
-          videoEl.load()
+          videoEl.value.load()
           const onLoadedAfterLoad = () => {
-            videoEl.play().catch(() => {})
+            videoEl.value.play().catch(() => {})
             // ⚠️ 不隐藏 loading，等待 timeupdate 确认
           }
-          videoEl.addEventListener('loadeddata', onLoadedAfterLoad, { once: true })
+          videoEl.value.addEventListener('loadeddata', onLoadedAfterLoad, { once: true })
           setTimeout(() => {
-            videoEl.removeEventListener('loadeddata', onLoadedAfterLoad)
+            videoEl.value.removeEventListener('loadeddata', onLoadedAfterLoad)
             // ⚠️ 超时后也不隐藏 loading，让用户看到加载状态
           }, 500)
         }
@@ -727,8 +753,8 @@ function play() {
 
 function pause() {
   state.status = SlideItemPlayStatus.Pause
-  if (videoEl && !videoEl.paused) {
-    videoEl.pause()
+  if (videoEl.value && !videoEl.value.paused) {
+    videoEl.value.pause()
   }
 }
 
@@ -760,10 +786,10 @@ function handleProgressPointerMove(e: PointerEvent) {
 function handleProgressPointerUp(e: PointerEvent) {
   _stopPropagation(e)
   isDraggingProgress = false
-  videoEl.currentTime = state.currentTime
+  videoEl.value.currentTime = state.currentTime
   setTimeout(() => (state.isMove = false), 1000)
   state.status = SlideItemPlayStatus.Play
-  videoEl.play().catch(() => {})
+  videoEl.value.play().catch(() => {})
 }
 
 function ensureStatistics() {
