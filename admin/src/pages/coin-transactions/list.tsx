@@ -29,9 +29,17 @@ export const CoinTransactionList = () => {
     },
     onSearch: (params: Record<string, any>) => {
       const filters: any[] = []
-      if (params.username) {
-        filters.push({ field: 'profiles.nickname', operator: 'contains', value: params.username })
+      const userQ = String(params.user_q || '').trim()
+
+      if (userQ) {
+        const isNumeric = /^[0-9]+$/.test(userQ)
+        if (isNumeric) {
+          filters.push({ field: 'profiles.numeric_id', operator: 'eq', value: Number(userQ) })
+        } else {
+          filters.push({ field: 'profiles.nickname', operator: 'contains', value: userQ })
+        }
       }
+
       if (params.type) {
         filters.push({ field: 'type', operator: 'eq', value: params.type })
       }
@@ -42,8 +50,8 @@ export const CoinTransactionList = () => {
   return (
     <List title="抖币流水">
       <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
-        <Form.Item name="username" label="用户">
-          <Input placeholder="昵称" style={{ width: 160 }} allowClear />
+        <Form.Item name="user_q" label="用户搜索">
+          <Input placeholder="昵称/数字ID" style={{ width: 160 }} allowClear />
         </Form.Item>
         <Form.Item name="type" label="类型">
           <Select placeholder="全部" allowClear style={{ width: 140 }}>
