@@ -12,7 +12,12 @@ import {
   Typography,
   Tooltip
 } from 'antd'
-import { CheckCircleOutlined, CloseCircleOutlined, SyncOutlined } from '@ant-design/icons'
+import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  SyncOutlined,
+  ThunderboltOutlined
+} from '@ant-design/icons'
 import { supabaseClient } from '../../supabaseClient'
 import { useState, useEffect } from 'react'
 
@@ -125,6 +130,71 @@ export const WithdrawOrderList = () => {
     })
   }
 
+  // 自动出款：一键转账
+  const handleAutoPayout = (record: any) => {
+    Modal.confirm({
+      title: '确认一键自动出款？',
+      icon: <ThunderboltOutlined style={{ color: '#faad14' }} />,
+      content: (
+        <Space direction="vertical">
+          <Text>
+            用户：{record.profiles?.nickname} (ID: {record.profiles?.numeric_id})
+          </Text>
+          <Text>
+            金额：{record.amount} 抖币 (约 {(record.amount / 100).toFixed(2)} USDT)
+          </Text>
+          <Text type="warning" strong>
+            点击确认后，系统将自动通过 TRC20 网络进行转账。
+          </Text>
+          <Text type="danger">请确保后台配置的出款钱包余额充足，操作不可撤回！</Text>
+          <Text code ellipsis>
+            目标地址：{record.address}
+          </Text>
+        </Space>
+      ),
+      onOk: async () => {
+        try {
+          const { data: sessionData } = await supabaseClient.auth.getSession()
+          const accessToken = sessionData.session?.access_token
+
+          if (!accessToken) {
+            message.error('未登录或登录已过期')
+            return
+          }
+
+          message.loading({ content: '正在进行链上转账，请稍后...', key: 'payout' })
+
+          const response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/app-server/admin/withdraw/auto-payout`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+                apikey: import.meta.env.VITE_SUPABASE_ANON_KEY
+              },
+              body: JSON.stringify({
+                order_id: record.id,
+                admin_id: adminId
+              })
+            }
+          )
+
+          const result = await response.json()
+
+          if (!response.ok || result.code !== 0) {
+            throw new Error(result.msg || '出款失败')
+          }
+
+          message.success({ content: '自动出款成功！', key: 'payout', duration: 3 })
+          queryResult?.refetch()
+        } catch (err: any) {
+          message.error({ content: err.message || '操作失败', key: 'payout', duration: 5 })
+        }
+      }
+    })
+  }
+
   return (
     <List title="提现申请管理">
       <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
@@ -189,12 +259,25 @@ export const WithdrawOrderList = () => {
         <Table.Column
           title="TRC20 地址"
           dataIndex="address"
-          render={(v) => (
-            <Tooltip title={v}>
-              <Text copyable style={{ width: 150 }} ellipsis>
-                {v}
-              </Text>
-            </Tooltip>
+          render={(v, record: any) => (
+            <Space direction="vertical" size={0}>
+              <Tooltip title={v}>
+                <Text copyable style={{ width: 150 }} ellipsis>
+                  {v}
+                </Text>
+              </Tooltip>
+              {record.tx_hash && (
+                <Tooltip title={record.tx_hash}>
+                  <Text
+                    copyable
+                    style={{ fontSize: '11px', color: '#1890ff', width: 150 }}
+                    ellipsis
+                  >
+                    Hash: {record.tx_hash}
+                  </Text>
+                </Tooltip>
+              )}
+            </Space>
           )}
         />
         <Table.Column
@@ -227,6 +310,15 @@ export const WithdrawOrderList = () => {
             <Space size="small">
               {record.status === 'pending' && (
                 <>
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<ThunderboltOutlined />}
+                    style={{ backgroundColor: '#faad14', borderColor: '#faad14' }}
+                    onClick={() => handleAutoPayout(record)}
+                  >
+                    一键出款
+                  </Button>
                   <Button
                     type="primary"
                     size="small"

@@ -56,6 +56,7 @@ import { handleAdminDouyinParse, handleAdminDouyinPublish } from './routes/douyi
 import { handleSendReward } from './routes/reward.ts'
 import { handleAdminConfirmRecharge } from './routes/recharge.ts'
 import { handleAdminProcessWithdraw } from './routes/withdraw.ts'
+import { handleAdminAutoWithdraw } from './routes/adminWithdraw.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -167,6 +168,9 @@ serve(async (req) => {
     // 💰 提现处理 (仅 admin)
     if (route === '/withdraw/process' && method === 'POST') {
       return handleAdminProcessWithdraw(req)
+    }
+    if (route === '/admin/withdraw/auto-payout' && method === 'POST') {
+      return handleAdminAutoWithdraw(req)
     }
 
     // 🔍 搜索相关路由

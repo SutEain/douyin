@@ -124,8 +124,12 @@
             @keyup.enter="handleSendComment"
             @blur="showInput = false"
           />
-          <div class="send-btn" @click="handleSendComment" :class="{ active: inputText.trim() }">
-            发送
+          <div
+            class="send-btn"
+            @click="handleSendComment"
+            :class="{ active: inputText.trim() && !isSendingComment, disabled: isSendingComment }"
+          >
+            {{ isSendingComment ? '...' : '发送' }}
           </div>
         </div>
       </div>
@@ -184,10 +188,10 @@
             </div>
             <div
               class="send-btn"
-              :class="{ disabled: !selectedGiftId || !selectedQty }"
+              :class="{ disabled: !selectedGiftId || !selectedQty || isSendingGift }"
               @click="handleSendGift"
             >
-              发送
+              {{ isSendingGift ? '发送中...' : '发送' }}
             </div>
           </div>
         </div>
@@ -273,8 +277,12 @@
           </div>
 
           <div class="panel-footer">
-            <div class="send-btn" :class="{ disabled: !canSendPacket }" @click="handleSendPacket">
-              立即发放 ({{ packetForm.total_coins || 0 }} 抖币)
+            <div
+              class="send-btn"
+              :class="{ disabled: !canSendPacket || isSendingPacket }"
+              @click="handleSendPacket"
+            >
+              {{ isSendingPacket ? '发放中...' : `立即发放 (${packetForm.total_coins || 0} 抖币)` }}
             </div>
           </div>
         </div>
@@ -309,6 +317,9 @@ const showInput = ref(false)
 const inputText = ref('')
 const comments = ref<HTMLElement | null>(null)
 const commentInput = ref<HTMLInputElement | null>(null) // 新增 Ref
+const isSendingComment = ref(false)
+const isSendingGift = ref(false)
+const isSendingPacket = ref(false)
 const vapPlayerRef = ref<any>(null)
 const vapSrc = ref('') // 初始值为空
 const viewerCount = ref(0)
@@ -346,7 +357,8 @@ const canSendPacket = computed(() => {
 })
 
 async function handleSendPacket() {
-  if (!canSendPacket.value) return
+  if (!canSendPacket.value || isSendingPacket.value) return
+  isSendingPacket.value = true
 
   try {
     // 🎯 深度克隆并清理未启用的条件
@@ -370,6 +382,8 @@ async function handleSendPacket() {
     }
   } catch (e: any) {
     _notice(e.message || '发放失败')
+  } finally {
+    isSendingPacket.value = false
   }
 }
 
@@ -419,16 +433,21 @@ function sendGift() {
 }
 
 async function handleSendGift() {
-  if (!selectedGiftId.value || !selectedQty.value) return
+  if (!selectedGiftId.value || !selectedQty.value || isSendingGift.value) return
+  isSendingGift.value = true
 
   const gift = giftList.value.find((g) => g.id === selectedGiftId.value)
-  if (!gift) return
+  if (!gift) {
+    isSendingGift.value = false
+    return
+  }
 
   const {
     data: { user }
   } = await supabase.auth.getUser()
   if (!user) {
     _notice('请先登录后再送礼物')
+    isSendingGift.value = false
     return
   }
 
@@ -436,6 +455,7 @@ async function handleSendGift() {
   if (selectedQty.value > 9999) {
     _notice('单次发送礼物数量不能超过 9999')
     selectedQty.value = 9999
+    isSendingGift.value = false
     return
   }
 
@@ -443,6 +463,7 @@ async function handleSendGift() {
   const totalCost = gift.cost * selectedQty.value
   if (userCoins.value < totalCost) {
     _notice('抖币余额不足，请先充值')
+    isSendingGift.value = false
     return
   }
 
@@ -481,6 +502,8 @@ async function handleSendGift() {
     } else {
       _notice('发送礼物失败: ' + (msg || '网络繁忙'))
     }
+  } finally {
+    isSendingGift.value = false
   }
 }
 
@@ -850,26 +873,36 @@ async function fetchHistoryMessages() {
 
 // 发送评论
 async function handleSendComment() {
-  if (!inputText.value.trim()) return
+  if (!inputText.value.trim() || isSendingComment.value) return
+  isSendingComment.value = true
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser()
-  if (!user) {
-    _notice('请先登录')
-    return
-  }
+  try {
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
+    if (!user) {
+      _notice('请先登录')
+      return
+    }
 
-  const { error } = await supabase.from('live_broadcast_messages').insert({
-    room_id: roomId.value,
-    user_id: user.id,
-    content: inputText.value.trim()
-  })
+    const { error } = await supabase.from('live_broadcast_messages').insert({
+      room_id: roomId.value,
+      user_id: user.id,
+      content: inputText.value.trim()
+    })
 
-  if (!error) {
-    lastUserMessage.value = inputText.value.trim() // 🎯 记录最后一条消息用于红包条件
-    inputText.value = ''
-    showInput.value = false
+    if (!error) {
+      lastUserMessage.value = inputText.value.trim() // 🎯 记录最后一条消息用于红包条件
+      inputText.value = ''
+      showInput.value = false
+    } else {
+      console.error('发送评论失败:', error)
+      _notice('发送失败，请重试')
+    }
+  } catch (e) {
+    console.error('发送评论异常:', e)
+  } finally {
+    isSendingComment.value = false
   }
 }
 

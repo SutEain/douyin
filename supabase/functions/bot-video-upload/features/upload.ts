@@ -158,6 +158,27 @@ export async function handlePhoto(
 
         console.log(`[handlePhoto] 相册已更新，当前 ${currentImages.length} 张图片`)
 
+        // 🎯 频道同步：如果是自动处理模式
+        if (extraData?.status === 'ready' || extraData?.status === 'published') {
+          console.log(`[handlePhoto] 频道同步：自动处理模式，不更新菜单。id=${existingPost.id}`)
+
+          // 🎯 解决重复通知问题：使用数据库 context 记录已通知的 mediaGroupId
+          const userState = await getUserState(chatId)
+          const context = userState.context || {}
+
+          if (context.last_notified_mgid !== mediaGroupId) {
+            // 第一次看到这个组，发送通知
+            const statusText =
+              extraData.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
+            await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新相册，${statusText}。`)
+            // 更新 context 防止重复发送
+            await updateUserState(chatId, {
+              context: { ...context, last_notified_mgid: mediaGroupId }
+            })
+          }
+          return
+        }
+
         // 尝试更新用户的编辑菜单（如果还在同一条菜单上）
         try {
           const userState = await getUserState(chatId)
@@ -220,7 +241,9 @@ export async function handlePhoto(
           is_private: false,
           is_adult: extraData?.is_adult || false,
           is_sea: extraData?.is_sea || false,
-          status: extraData?.status || 'draft'
+          status: extraData?.status || 'draft',
+          review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
+          published_at: extraData?.status === 'published' ? new Date().toISOString() : null
         })
         .select()
         .single()
@@ -232,6 +255,22 @@ export async function handlePhoto(
       }
 
       console.log(`[handlePhoto] 相册记录已创建: ${newPost.id}`)
+
+      // 🎯 频道同步：如果是自动处理模式
+      if (extraData?.status === 'ready' || extraData?.status === 'published') {
+        console.log(`[handlePhoto] 频道同步：自动处理模式，不显示编辑菜单。id=${newPost.id}`)
+
+        // 发送第一次通知并记录
+        const statusText =
+          extraData.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
+        await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新相册，${statusText}。`)
+
+        const userState = await getUserState(chatId)
+        await updateUserState(chatId, {
+          context: { ...(userState.context || {}), last_notified_mgid: mediaGroupId }
+        })
+        return
+      }
 
       const menuResult = await sendMessage(chatId, getEditMenuText(newPost), {
         reply_markup: getEditKeyboard(newPost)
@@ -307,7 +346,9 @@ export async function saveSinglePhoto(
       is_private: false,
       is_adult: extraData?.is_adult || false,
       is_sea: extraData?.is_sea || false,
-      status: extraData?.status || 'draft'
+      status: extraData?.status || 'draft',
+      review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
+      published_at: extraData?.status === 'published' ? new Date().toISOString() : null
     })
     .select()
     .single()
@@ -319,6 +360,15 @@ export async function saveSinglePhoto(
   }
 
   console.log(`[saveSinglePhoto] 图片记录已保存: ${draftPost.id}`)
+
+  // 🎯 如果是频道同步（自动就绪/发布），则跳过编辑菜单
+  if (extraData?.status === 'ready' || extraData?.status === 'published') {
+    console.log(`[saveSinglePhoto] 频道同步：自动处理模式，不显示编辑菜单。id=${draftPost.id}`)
+    const statusText =
+      extraData.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
+    await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新图片，${statusText}。`)
+    return
+  }
 
   const menuResult = await sendMessage(chatId, getEditMenuText(draftPost), {
     reply_markup: getEditKeyboard(draftPost)
@@ -412,7 +462,9 @@ export async function handleVideo(
         is_private: false,
         is_adult: extraData?.is_adult || false,
         is_sea: extraData?.is_sea || false,
-        status: extraData?.status || 'processing'
+        status: extraData?.status || 'processing',
+        review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
+        published_at: extraData?.status === 'published' ? new Date().toISOString() : null
       })
       .select()
       .single()

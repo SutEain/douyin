@@ -69,6 +69,16 @@ export async function handleRequest(req: Request): Promise<Response> {
             return new Response('OK', { status: 200 })
           }
 
+          // 🎯 频道同步：如果是自动发布模式（就绪/已发布），则删除处理中消息后直接退出，不显示编辑菜单
+          if (video.status === 'ready' || video.status === 'published') {
+            console.log(`[WorkerCallback] 频道同步：自动发布模式，不显示编辑菜单。id=${videoId}`)
+            // 发送自动发布成功的通知
+            const statusText =
+              video.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
+            await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新视频，${statusText}。`)
+            return new Response('OK', { status: 200 })
+          }
+
           // 3. 发送编辑菜单
           const menuResult = await sendMessage(chatId, getEditMenuText(video), {
             reply_markup: getEditKeyboard(video)

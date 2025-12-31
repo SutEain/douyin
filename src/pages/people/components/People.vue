@@ -1,12 +1,12 @@
 <template>
   <div class="People">
-    <img 
-      :src="_checkImgUrl(people.avatar || people.avatar_url)" 
-      alt="" 
-      class="head-image pull-left" 
+    <img
+      :src="_checkImgUrl(people.avatar || people.avatar_url)"
+      alt=""
+      class="head-image pull-left"
       @click.stop="$emit('clickAvatar', people)"
     />
-    <div class="content">
+    <div class="content" @click.stop="$emit('clickAvatar', people)">
       <template v-if="mode === 'normal'">
         <div class="left">
           <div class="name">{{ people.name || people.nickname }}</div>
@@ -236,6 +236,7 @@ export default {
     width: 45rem;
     height: 45rem;
     border-radius: 50%;
+    cursor: pointer;
   }
 
   .add {
@@ -252,6 +253,7 @@ export default {
     display: flex;
     justify-content: space-between;
     padding: 15px 0;
+    cursor: pointer;
 
     .left {
       .name {

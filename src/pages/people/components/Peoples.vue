@@ -10,6 +10,7 @@
         @unfollow="unfollow(index)"
         @agree="agree(index)"
         @ignore="ignore(index)"
+        @clickAvatar="goUserInfo"
         :mode="mode"
       />
     </transition-group>
@@ -118,6 +119,12 @@ export default {
     cancel() {
       this.isShowUnfollow = false
       this.currentIndex = -1
+    },
+    goUserInfo(user) {
+      const userId = user.id || user.user_id || user.uid
+      if (userId) {
+        this.$router.push(`/user/${userId}`)
+      }
     },
     noLook() {
       this.isShowUnfollow = false

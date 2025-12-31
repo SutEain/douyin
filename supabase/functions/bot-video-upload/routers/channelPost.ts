@@ -14,7 +14,7 @@ export async function handleChannelPost(post: any) {
     // 1. 查询该频道是否已绑定且开启同步
     const { data: channel, error: qErr } = await supabase
       .from('bound_channels')
-      .select('user_id, is_adult, is_sea, profiles(id, tg_user_id)')
+      .select('user_id, is_adult, is_sea, profiles(id, tg_user_id, auto_approve)')
       .eq('id', channelId)
       .eq('sync_enabled', true)
       .single()
@@ -24,11 +24,19 @@ export async function handleChannelPost(post: any) {
       return
     }
 
+    const profile = channel.profiles as any
     const ownerUserId = channel.user_id
-    const ownerTgChatId = (channel.profiles as any)?.tg_user_id
+    const ownerTgChatId = profile?.tg_user_id
+    const autoApprove = profile?.auto_approve === true
+
+    // 🎯 根据用户免审核状态决定初始状态
+    // 如果免审核，直接设为 published；否则设为 ready（待后台审核）
+    const initialStatus = autoApprove ? ('published' as const) : ('ready' as const)
+
     const extraData = {
       is_adult: channel.is_adult,
-      is_sea: channel.is_sea
+      is_sea: channel.is_sea,
+      status: initialStatus
     }
 
     // 2. 识别内容类型并调用上传逻辑
@@ -46,15 +54,15 @@ export async function handleChannelPost(post: any) {
       // 检查媒体组（频道同步暂不支持多视频/混合组，handleVideo 会处理拒绝逻辑）
       if (post.media_group_id) {
         console.log(`[ChannelSync] 视频属于媒体组，暂不支持频道多媒体搬运，跳过。`)
+        await sendMessage(
+          ownerTgChatId,
+          `📢 频道同步通知：检测到您的频道发布了多视频内容，已跳过搬运。目前仅支持单视频自动发布。`
+        )
         return
       }
 
       await handleVideo(ownerTgChatId, post.video, post.caption, mockFrom, undefined, extraData)
-
-      await sendMessage(
-        ownerTgChatId,
-        `同步成功 📢：检测到您的频道发布了新视频，已自动搬运至草稿箱。`
-      )
+      // 🎯 通知逻辑已移至 app.ts (WorkerCallback) 处理，确保视频处理完再通知
     } else if (post.photo) {
       // 🎯 图片/相册搬运逻辑
       console.log(`[ChannelSync] 发现图片/相册，开始搬运...`)
@@ -67,13 +75,7 @@ export async function handleChannelPost(post: any) {
         post.media_group_id,
         extraData
       )
-
-      if (!post.media_group_id) {
-        await sendMessage(
-          ownerTgChatId,
-          `同步成功 📢：检测到您的频道发布了新图片，已自动搬运至草稿箱。`
-        )
-      }
+      // 🎯 通知逻辑已移至 handlePhoto 内部处理 (单图直接发，相册延时发)
     } else {
       console.log(`[ChannelSync] 非搬运类型消息，跳过。`)
     }
