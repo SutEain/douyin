@@ -6,7 +6,9 @@ const typeColors: Record<string, string> = {
   reward: 'blue',
   gift_out: 'orange',
   gift_in: 'purple',
-  withdraw: 'volcano'
+  withdraw: 'volcano',
+  red_packet_send: 'pink',
+  red_packet_claim: 'cyan'
 }
 
 const typeLabels: Record<string, string> = {
@@ -14,7 +16,9 @@ const typeLabels: Record<string, string> = {
   reward: '奖励',
   gift_out: '打赏支出',
   gift_in: '打赏收入',
-  withdraw: '提现'
+  withdraw: '提现',
+  red_packet_send: '发红包',
+  red_packet_claim: '抢红包'
 }
 
 export const CoinTransactionList = () => {
@@ -34,9 +38,20 @@ export const CoinTransactionList = () => {
       if (userQ) {
         const isNumeric = /^[0-9]+$/.test(userQ)
         if (isNumeric) {
-          filters.push({ field: 'profiles.numeric_id', operator: 'eq', value: Number(userQ) })
+          // 🎯 这里之前的错误是 filters.push({ field: 'profiles.numeric_id', ... })
+          // 这种跨表搜索在某些情况下会失效，或者导致 count 计算错误
+          // 我们需要确保 operator 和 value 正确
+          filters.push({
+            field: 'profiles.numeric_id',
+            operator: 'eq',
+            value: userQ // numeric_id 在数据库是 bigint，尝试传字符串由 PostgREST 处理
+          })
         } else {
-          filters.push({ field: 'profiles.nickname', operator: 'contains', value: userQ })
+          filters.push({
+            field: 'profiles.nickname',
+            operator: 'contains',
+            value: userQ
+          })
         }
       }
 
