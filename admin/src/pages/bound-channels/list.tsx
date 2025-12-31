@@ -1,6 +1,6 @@
 import { List, useTable, DateField } from '@refinedev/antd'
-import { Table, Space, Tag, Button, Input, Form, Switch, message } from 'antd'
-import { DeleteOutlined, SyncOutlined } from '@ant-design/icons'
+import { Table, Space, Button, Input, Form, Switch } from 'antd'
+import { DeleteOutlined } from '@ant-design/icons'
 import { useDelete, useUpdate } from '@refinedev/core'
 
 export const BoundChannelList = () => {
