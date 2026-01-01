@@ -521,6 +521,7 @@ function setPlaybackRate(rate: number) {
 function getSlotContentType(slot: SlotState): 'video' | 'image' | 'album' {
   if (slot.videoIndex == null) return 'video'
   const item = props.items[slot.videoIndex]
+  // 🎯 如果 images 数组中包含视频，且类型是 album，则统一交由 AlbumSwiper 处理
   return getContentType(item)
 }
 

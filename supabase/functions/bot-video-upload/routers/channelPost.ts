@@ -51,18 +51,14 @@ export async function handleChannelPost(post: any) {
       // 🎯 视频搬运逻辑
       console.log(`[ChannelSync] 发现视频，开始搬运...`)
 
-      // 检查媒体组（频道同步暂不支持多视频/混合组，handleVideo 会处理拒绝逻辑）
-      if (post.media_group_id) {
-        console.log(`[ChannelSync] 视频属于媒体组，暂不支持频道多媒体搬运，跳过。`)
-        await sendMessage(
-          ownerTgChatId,
-          `📢 频道同步通知：检测到您的频道发布了多视频内容，已跳过搬运。目前仅支持单视频自动发布。`
-        )
-        return
-      }
-
-      await handleVideo(ownerTgChatId, post.video, post.caption, mockFrom, undefined, extraData)
-      // 🎯 通知逻辑已移至 app.ts (WorkerCallback) 处理，确保视频处理完再通知
+      await handleVideo(
+        ownerTgChatId,
+        post.video,
+        post.caption,
+        mockFrom,
+        post.media_group_id,
+        extraData
+      )
     } else if (post.photo) {
       // 🎯 图片/相册搬运逻辑
       console.log(`[ChannelSync] 发现图片/相册，开始搬运...`)

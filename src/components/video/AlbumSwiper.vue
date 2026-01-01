@@ -9,11 +9,39 @@
     @mouseup="onMouseUp"
     @mouseleave="onMouseUp"
   >
-    <!-- 图片容器 -->
+    <!-- 媒体容器 -->
     <div class="swiper-container" :style="swiperStyle" :class="{ transitioning: isTransitioning }">
-      <div v-for="(image, index) in images" :key="index" class="swiper-slide">
+      <div v-for="(media, index) in images" :key="index" class="swiper-slide">
+        <!-- 🎬 视频类型 -->
+        <template v-if="media.type === 'video'">
+          <video
+            :ref="setVideoRef(index)"
+            :src="getMediaUrl(media)"
+            class="slide-video"
+            preload="auto"
+            loop
+            playsinline
+            webkit-playsinline
+            x5-playsinline
+            x5-video-player-type="h5-page"
+            :muted="isMuted"
+            :poster="getPosterUrl(media)"
+            @click.stop="toggleVideoPlay(index)"
+          />
+          <!-- 暂停图标 -->
+          <div
+            v-if="index === currentIndex && !videoPlayingStates[index]"
+            class="pause-layer"
+            @click.stop="toggleVideoPlay(index)"
+          >
+            <Icon icon="fluent:play-28-filled" class="pause-icon" />
+          </div>
+        </template>
+
+        <!-- 🖼️ 图片类型 -->
         <img
-          :src="getImageUrl(image)"
+          v-else
+          :src="getMediaUrl(media)"
           class="slide-image"
           @load="onImageLoad(index)"
           @error="onImageError(index)"
@@ -24,11 +52,17 @@
 
     <!-- 左上角类型标识 + 页码（毛玻璃效果） -->
     <div class="content-type-badge">
-      <span class="badge-text">相册 {{ currentIndex + 1 }}/{{ images.length }}</span>
+      <span class="badge-text"
+        >{{ getBadgeText() }} {{ currentIndex + 1 }}/{{ images.length }}</span
+      >
     </div>
 
-    <!-- 点击查看高清提示 -->
-    <div class="hd-tip" @click.stop="openPreview(currentIndex)">
+    <!-- 点击查看高清提示（仅对图片显示） -->
+    <div
+      v-if="images[currentIndex]?.type !== 'video'"
+      class="hd-tip"
+      @click.stop="openPreview(currentIndex)"
+    >
       <Icon icon="mdi:magnify-plus" />
       <span>查看高清</span>
     </div>
@@ -50,21 +84,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, inject, onMounted, onUnmounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { buildCdnUrl } from '@/utils/media'
 import ImagePreview from './ImagePreview.vue'
 
-interface ImageItem {
+interface MediaItem {
+  type?: 'image' | 'video'
   file_id: string
-  url?: string // 🎯 后端返回的完整 CDN URL
+  url?: string
+  play_url?: string
+  cover_url?: string
   width?: number
   height?: number
   order?: number
 }
 
 interface Props {
-  images: ImageItem[]
+  images: MediaItem[]
 }
 
 const props = defineProps<Props>()
@@ -76,11 +113,115 @@ const currentIndex = ref(0)
 const showPreview = ref(false)
 const previewIndex = ref(0)
 
+// 🎯 注入全局播放/静音状态
+const isMuted = inject('isMuted', ref(true))
+const isParentPlaying = inject('isPlaying', ref(true))
+
+// 🎯 视频 DOM 引用和播放状态
+const videoRefs = new Map<number, HTMLVideoElement>()
+const videoPlayingStates = reactive<Record<number, boolean>>({})
+
+function setVideoRef(index: number) {
+  return (el: any) => {
+    if (el) {
+      videoRefs.set(index, el)
+    } else {
+      videoRefs.delete(index)
+    }
+  }
+}
+
 // 🎯 打开高清预览
 function openPreview(index: number) {
-  previewIndex.value = index
-  showPreview.value = true
+  // 过滤掉视频，只预览图片
+  const onlyImages = props.images.filter((m) => m.type !== 'video')
+  const imgIndex = onlyImages.findIndex((img) => img.file_id === props.images[index].file_id)
+  if (imgIndex !== -1) {
+    previewIndex.value = imgIndex
+    showPreview.value = true
+  }
 }
+
+// 🎯 切换视频播放/暂停
+function toggleVideoPlay(index: number) {
+  const video = videoRefs.get(index)
+  if (!video) return
+
+  if (video.paused) {
+    playVideo(index)
+  } else {
+    video.pause()
+    videoPlayingStates[index] = false
+  }
+}
+
+async function playVideo(index: number) {
+  const video = videoRefs.get(index)
+  if (!video) return
+
+  try {
+    // 暂停其他所有视频
+    videoRefs.forEach((v, idx) => {
+      if (idx !== index) {
+        v.pause()
+        videoPlayingStates[idx] = false
+      }
+    })
+
+    await video.play()
+    videoPlayingStates[index] = true
+  } catch (e) {
+    console.warn('[AlbumSwiper] Video play failed:', e)
+  }
+}
+
+// 🎯 获取标识文本
+function getBadgeText() {
+  const current = props.images[currentIndex.value]
+  if (current?.type === 'video') return '视频'
+  return '相册'
+}
+
+// 🎯 处理当前项切换
+watch(currentIndex, (newIdx) => {
+  const media = props.images[newIdx]
+  if (media?.type === 'video' && isParentPlaying.value) {
+    // 延迟一小会儿，等待 swiper 动画完成或 DOM 就绪
+    setTimeout(() => playVideo(newIdx), 100)
+  } else {
+    // 滑走时，如果是视频则暂停
+    videoRefs.forEach((v) => v.pause())
+    Object.keys(videoPlayingStates).forEach((k) => (videoPlayingStates[Number(k)] = false))
+  }
+})
+
+// 🎯 响应父级播放/暂停
+watch(isParentPlaying, (playing) => {
+  const currentMedia = props.images[currentIndex.value]
+  if (currentMedia?.type === 'video') {
+    if (playing) {
+      playVideo(currentIndex.value)
+    } else {
+      const video = videoRefs.get(currentIndex.value)
+      video?.pause()
+      videoPlayingStates[currentIndex.value] = false
+    }
+  }
+})
+
+onMounted(() => {
+  // 初始加载如果是视频，尝试播放
+  const currentMedia = props.images[currentIndex.value]
+  if (currentMedia?.type === 'video' && isParentPlaying.value) {
+    playVideo(currentIndex.value)
+  }
+})
+
+onUnmounted(() => {
+  videoRefs.forEach((v) => v.pause())
+  videoRefs.clear()
+})
+
 const isTransitioning = ref(false)
 const loadedImages = reactive<Set<number>>(new Set())
 
@@ -103,10 +244,16 @@ const swiperStyle = computed(() => {
   }
 })
 
-function getImageUrl(image: ImageItem) {
+function getMediaUrl(media: MediaItem) {
   // 🎯 优先使用后端返回的完整 URL，否则尝试构建
-  if (image.url) return image.url
-  return buildCdnUrl(image.file_id)
+  if (media.type === 'video' && media.play_url) return media.play_url
+  if (media.url) return media.url
+  return buildCdnUrl(media.file_id)
+}
+
+function getPosterUrl(media: MediaItem) {
+  if (media.cover_url) return media.cover_url
+  return ''
 }
 
 function onImageLoad(index: number) {
@@ -266,12 +413,32 @@ function finishSwipe() {
   justify-content: center;
 }
 
-.slide-image {
+.slide-image,
+.slide-video {
   max-width: 100%;
   max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
+}
+
+.pause-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 11;
+
+  .pause-icon {
+    font-size: 60rem;
+    color: rgba(255, 255, 255, 0.5);
+    filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.3));
+  }
 }
 
 .content-type-badge {

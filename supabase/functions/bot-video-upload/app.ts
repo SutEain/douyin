@@ -254,21 +254,6 @@ export async function handleRequest(req: Request): Promise<Response> {
             hasPhoto: !!message.photo,
             hasDoc: !!message.document
           })
-          // 检查是否是混合相册（视频+图片）
-          if (message.media_group_id) {
-            const mixedCacheKey = `mixed_${chatId}_${message.media_group_id}`
-            const hasVideo = mediaGroupRejectCache.get(mixedCacheKey + '_video')
-
-            if (hasVideo) {
-              // 已经有视频了，拒绝图片
-              console.log('[MAIN] 检测到混合相册（视频+图片），忽略图片')
-              return new Response('OK', { status: 200 })
-            }
-
-            // 标记这个组有图片
-            mediaGroupRejectCache.set(mixedCacheKey + '_photo', true)
-            setTimeout(() => mediaGroupRejectCache.delete(mixedCacheKey + '_photo'), 5000)
-          }
 
           await handlePhoto(chatId, photo, message.caption, message.from, message.media_group_id)
         }
@@ -282,47 +267,6 @@ export async function handleRequest(req: Request): Promise<Response> {
             hasVideo: !!message.video,
             hasDoc: !!message.document
           })
-          // 检查是否是混合相册（视频+图片）
-          if (message.media_group_id) {
-            const mixedCacheKey = `mixed_${chatId}_${message.media_group_id}`
-            const hasPhoto = mediaGroupRejectCache.get(mixedCacheKey + '_photo')
-
-            // 标记这个组有视频
-            mediaGroupRejectCache.set(mixedCacheKey + '_video', true)
-            setTimeout(() => mediaGroupRejectCache.delete(mixedCacheKey + '_video'), 5000)
-
-            if (hasPhoto) {
-              // 已经有图片了，这是混合相册，拒绝并清理数据库中的相册记录
-              const { data: albumPost } = await supabase
-                .from('videos')
-                .select('id')
-                .eq('tg_user_id', chatId)
-                .eq('media_group_id', message.media_group_id)
-                .single()
-
-              if (albumPost) {
-                // 删除已创建的相册记录
-                await supabase.from('videos').delete().eq('id', albumPost.id)
-                console.log(`[MAIN] 已删除混合相册记录: ${albumPost.id}`)
-              }
-
-              // 发送拒绝提示（只发一次）
-              const rejectKey = `media_group_reject_${chatId}_${message.media_group_id}`
-              if (!mediaGroupRejectCache.get(rejectKey)) {
-                mediaGroupRejectCache.set(rejectKey, true)
-                setTimeout(() => mediaGroupRejectCache.delete(rejectKey), 5000)
-
-                await sendMessage(
-                  chatId,
-                  `⚠️ <b>暂不支持视频和图片混合上传</b>\n\n` +
-                    `请分开发送：\n` +
-                    `• 视频单独发一条\n` +
-                    `• 图片可以一起发（最多9张）`
-                )
-              }
-              return new Response('OK', { status: 200 })
-            }
-          }
 
           await handleVideo(chatId, video, message.caption, message.from, message.media_group_id)
         }

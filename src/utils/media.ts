@@ -36,11 +36,19 @@ export function buildCdnUrl(fileIdOrUrl: string): string {
 }
 
 /**
- * 解析 images 字段
+ * 解析 images 字段（支持混排）
  */
-export function parseImages(
-  images: any
-): Array<{ file_id: string; url?: string; width?: number; height?: number; order?: number }> {
+export function parseImages(images: any): Array<{
+  type?: 'image' | 'video'
+  file_id: string
+  url?: string
+  play_url?: string
+  cover_url?: string
+  width?: number
+  height?: number
+  duration?: number
+  order?: number
+}> {
   if (!images) return []
   if (typeof images === 'string') {
     try {

@@ -136,6 +136,7 @@ export async function handlePhoto(
         }
 
         currentImages.push({
+          type: 'image',
           file_id: photo.file_id,
           width: photo.width,
           height: photo.height,
@@ -146,7 +147,7 @@ export async function handlePhoto(
           .from('videos')
           .update({
             images: JSON.stringify(currentImages),
-            title: `相册 (${currentImages.length}张)`,
+            title: `合集 (${currentImages.length}个内容)`,
             content_type: 'album'
           })
           .eq('id', existingPost.id)
@@ -222,13 +223,14 @@ export async function handlePhoto(
         .insert({
           tg_user_id: chatId,
           author_id: profile.id,
-          title: '相册 (1张)',
+          title: '合集 (1个内容)',
           description: description,
           tags: tags.length > 0 ? tags : null,
           content_type: 'album',
           media_group_id: mediaGroupId,
           images: JSON.stringify([
             {
+              type: 'image',
               file_id: photo.file_id,
               width: photo.width,
               height: photo.height,
@@ -333,6 +335,7 @@ export async function saveSinglePhoto(
       content_type: 'image',
       images: JSON.stringify([
         {
+          type: 'image',
           file_id: photo.file_id,
           width: photo.width,
           height: photo.height,
@@ -437,6 +440,56 @@ export async function handleVideo(
       return
     }
 
+    // 🎯 相册模式：如果是媒体组的一部分，尝试合并
+    if (mediaGroupId) {
+      const { data: existingPost } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('tg_user_id', chatId)
+        .eq('media_group_id', mediaGroupId)
+        .single()
+
+      if (existingPost) {
+        // 已经有记录了，追加到 images (相册模式)
+        const currentMedia: any[] =
+          typeof existingPost.images === 'string'
+            ? JSON.parse(existingPost.images)
+            : existingPost.images || []
+
+        // 检查是否已存在
+        const exists = currentMedia.some((m) => m.file_id === video.file_id)
+        if (exists) {
+          console.log('[handleVideo] 视频已存在于相册中，跳过')
+          return
+        }
+
+        currentMedia.push({
+          type: 'video',
+          file_id: video.file_id,
+          width: video.width,
+          height: video.height,
+          duration: video.duration,
+          order: currentMedia.length
+        })
+
+        const { error: updateError } = await supabase
+          .from('videos')
+          .update({
+            images: JSON.stringify(currentMedia),
+            title: `合集 (${currentMedia.length}个内容)`,
+            content_type: 'album' // 统一标记为 album，前端会自动判断内容并展示混排
+          })
+          .eq('id', existingPost.id)
+
+        if (updateError) {
+          console.error('[handleVideo] 更新合集失败:', updateError)
+        }
+
+        console.log(`[handleVideo] 合集已更新，当前 ${currentMedia.length} 个内容`)
+        return
+      }
+    }
+
     const sizeMB = (videoSize / 1024 / 1024).toFixed(1)
 
     console.log(`[handleVideo] 视频大小: ${sizeMB} MB, 准备转存 R2`)
@@ -464,7 +517,22 @@ export async function handleVideo(
         is_sea: extraData?.is_sea || false,
         status: extraData?.status || 'processing',
         review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
-        published_at: extraData?.status === 'published' ? new Date().toISOString() : null
+        published_at: extraData?.status === 'published' ? new Date().toISOString() : null,
+        media_group_id: mediaGroupId, // 🎯 记录 media_group_id，方便后续追加
+        // 🎯 如果是媒体组，初始化 images 数组
+        images: mediaGroupId
+          ? JSON.stringify([
+              {
+                type: 'video',
+                file_id: video.file_id,
+                width: video.width,
+                height: video.height,
+                duration: video.duration,
+                order: 0
+              }
+            ])
+          : null,
+        content_type: mediaGroupId ? 'album' : 'video'
       })
       .select()
       .single()

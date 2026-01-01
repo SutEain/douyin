@@ -17,13 +17,18 @@ export interface VideoItem {
   isLoved?: boolean
   isCollect?: boolean
   isAttention?: boolean
-  // 🎯 内容类型：video=视频, image=单图, album=相册
+  // 🎯 内容类型：video=视频, image=单图, album=相册 (支持混排)
   content_type?: 'video' | 'image' | 'album'
-  // 🎯 图片数组（用于 image 和 album 类型）
+  // 🎯 媒体数组（用于 album 类型，支持混排图片和视频）
   images?: Array<{
+    type?: 'image' | 'video' // 默认为 image
     file_id: string
+    url?: string // 完整链接
+    play_url?: string // 视频播放链接
+    cover_url?: string // 视频封面
     width?: number
     height?: number
+    duration?: number
     order?: number
   }>
   statistics: {
