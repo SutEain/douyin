@@ -27,18 +27,10 @@
         data-progress="true"
         data-progress-bar="true"
       >
-        <!-- 🎯 没有更多内容时显示空状态 -->
-        <template v-if="slot.videoIndex === null && !hasMore">
-          <div class="no-more-page">
-            <div class="no-more-icon">📭</div>
-            <p class="no-more-text">暂时没有更多了</p>
-            <p v-if="noMoreSubtext" class="no-more-subtext">
-              {{ noMoreSubtext }}
-            </p>
-            <template v-if="inviteLink">
-              <button class="share-invite-btn" @click="shareInvite">选择联系人发送</button>
-              <button class="copy-invite-btn" @click="copyInviteLink">复制专属邀请链接</button>
-            </template>
+        <!-- 🎯 内容加载占位（取消“没有更多”判断，只显示加载背景） -->
+        <template v-if="slot.videoIndex === null">
+          <div class="no-more-page" style="background: #000">
+            <Loading style="width: 40rem" />
           </div>
         </template>
 
@@ -843,21 +835,11 @@ function prepareSlots(initial = false) {
 }
 
 function rotateToNext() {
-  // 🎯 如果已经在"没有更多"页面（超出最后一个视频），不再继续
-  if (currentIndex.value >= props.items.length) {
-    return
-  }
-
-  // 🎯 如果在最后一个视频
+  // 🎯 如果已经在最后一个视频，强制触发加载，但不允许继续向下轮转空槽位
   if (currentIndex.value >= props.items.length - 1) {
-    // 如果没有更多数据，允许滑动到"没有更多"页面
-    if (!props.hasMore) {
-      // 继续执行，滑动到 next slot（显示"没有更多"）
-    } else {
-      // 还有更多数据，触发加载
-      emit('loadMore')
-      return
-    }
+    console.log('[VideoList] 已到达最后一条，请求追载新内容...')
+    emit('loadMore')
+    return
   }
 
   // 🎯 离开当前视频，清除完播计时器

@@ -95,10 +95,10 @@ async function loadMore() {
         state.list.push(...uniqueNewList)
         state.pageNo++ // 成功获得新数据，页码加1
         state.retryCount = 0
-        state.hasMore = res.data.hasMore !== false
+        state.hasMore = true // 💡 永远认为还有更多，保持滑动流
       } else if (newList.length > 0) {
         // 💡 如果这一页全是重复的，强制翻下一页再试一次
-        if (state.retryCount < 5) {
+        if (state.retryCount < 8) {
           state.retryCount++
           state.pageNo++
           console.log(
@@ -106,15 +106,13 @@ async function loadMore() {
           )
           return loadMore()
         }
-        state.hasMore = false
       } else {
         // 返回空列表，尝试翻页重试
-        if (state.retryCount < 3) {
+        if (state.retryCount < 5) {
           state.retryCount++
           state.pageNo++
           return loadMore()
         }
-        state.hasMore = false
       }
     }
   } catch (e) {
