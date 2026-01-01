@@ -110,12 +110,32 @@ export default defineConfig((): Promise<UserConfig> => {
           rollupOptions: {
             // https://rollupjs.org/guide/en/#outputmanualchunks
             output: {
-              manualChunks(id: string) {
+              manualChunks(id: string, { getModuleInfo }: any) {
+                // 1. 优先提取体积巨大的独立库
                 if (id.includes('node_modules')) {
                   if (id.includes('@supabase')) return 'supabase'
                   if (id.includes('@iconify')) return 'icons'
-                  if (id.includes('vue-virtual-scroller')) return 'scroller'
                   return 'vendor'
+                }
+
+                // 2. 恢复原有的公共组件识别逻辑
+                const reg = /(.*)\/src\/components\/(.*)/
+                if (reg.test(id)) {
+                  const importersLen = getModuleInfo(id)?.importers.length ?? 0
+                  if (importersLen > 1) return 'common'
+                }
+
+                // 3. 恢复原有的页面分包逻辑，减少主包体积
+                if (
+                  id.includes('/src/pages/home/Publish.vue') ||
+                  id.includes('/src/pages/home/Music.vue') ||
+                  id.includes('/src/pages/home/LivePage.vue') ||
+                  id.includes('/src/pages/shop/') ||
+                  id.includes('/src/pages/message/') ||
+                  id.includes('/src/pages/me/') ||
+                  id.includes('/src/pages/other/')
+                ) {
+                  return 'other'
                 }
               },
               chunkFileNames: 'js/[name]-[hash].js', // 引入文件名的名称
