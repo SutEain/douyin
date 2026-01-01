@@ -17,9 +17,9 @@ export interface VideoItem {
   isLoved?: boolean
   isCollect?: boolean
   isAttention?: boolean
-  // 🎯 内容类型：video=视频, image=单图, album=相册 (支持混排)
-  content_type?: 'video' | 'image' | 'album'
-  // 🎯 媒体数组（用于 album 类型，支持混排图片和视频）
+  // 🎯 内容类型：video=视频, image=单图, album=纯图文相册, collection=混排合集
+  content_type?: 'video' | 'image' | 'album' | 'collection'
+  // 🎯 媒体数组（用于 album 和 collection 类型）
   images?: Array<{
     type?: 'image' | 'video' // 默认为 image
     file_id: string

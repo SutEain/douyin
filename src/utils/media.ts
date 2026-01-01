@@ -63,6 +63,6 @@ export function parseImages(images: any): Array<{
 /**
  * 获取内容类型
  */
-export function getContentType(item: any): 'video' | 'image' | 'album' {
+export function getContentType(item: any): 'video' | 'image' | 'album' | 'collection' {
   return item?.content_type || 'video'
 }

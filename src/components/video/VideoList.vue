@@ -71,8 +71,12 @@
           <ImageViewer :images="getSlotImages(slot)" @click="handleImageClick(slot)" />
         </template>
 
-        <!-- 📷 相册 -->
-        <template v-else-if="getSlotContentType(slot) === 'album'">
+        <!-- 📷 相册 / 合集 -->
+        <template
+          v-else-if="
+            getSlotContentType(slot) === 'album' || getSlotContentType(slot) === 'collection'
+          "
+        >
           <AlbumSwiper
             :images="getSlotImages(slot)"
             @click="handleImageClick(slot)"
@@ -331,7 +335,7 @@ function openGraphicDetail() {
   const item = currentItemLocal.value
   if (!item) return
   const t = String((item as any)?.content_type || 'video')
-  if (t !== 'image' && t !== 'album') return
+  if (t !== 'image' && t !== 'album' && t !== 'collection') return
   graphicDetail.detail = buildNoteCardDetailFromItem(item)
   graphicDetail.visible = true
   console.log('[VideoList] open graphic detail from feed:', { id: item.aweme_id, type: t })
@@ -648,11 +652,11 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
   // 🎯 检查内容类型
   const contentType = getSlotContentType(slot)
 
-  // 📸 图片/相册类型：不需要处理视频
-  if (contentType === 'image' || contentType === 'album') {
+  // 📸 图片/相册/合集类型：不需要处理外层视频容器
+  if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
     slot.posterUrl = ''
     slot.isPlaying = false
-    // 图片/相册不需要视频元素，直接返回
+    // 这些类型交由 ImageViewer 或 AlbumSwiper 处理，不需要外层视频元素，直接返回
     return
   }
 

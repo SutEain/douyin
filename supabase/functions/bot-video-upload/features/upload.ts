@@ -148,7 +148,11 @@ export async function handlePhoto(
           .update({
             images: JSON.stringify(currentImages),
             title: `合集 (${currentImages.length}个内容)`,
-            content_type: 'album'
+            content_type: 'collection',
+            // 如果原来的封面是空的，或者原来是占位符，更新封面
+            ...(!existingPost.cover_url || existingPost.cover_url === ''
+              ? { cover_url: photo.file_id }
+              : {})
           })
           .eq('id', existingPost.id)
 
@@ -226,8 +230,9 @@ export async function handlePhoto(
           title: '合集 (1个内容)',
           description: description,
           tags: tags.length > 0 ? tags : null,
-          content_type: 'album',
+          content_type: 'collection',
           media_group_id: mediaGroupId,
+          cover_url: photo.file_id, // 🎯 使用第一张图作为封面
           images: JSON.stringify([
             {
               type: 'image',
@@ -478,7 +483,11 @@ export async function handleVideo(
           .update({
             images: JSON.stringify(currentMedia),
             title: `合集 (${currentMedia.length}个内容)`,
-            content_type: 'album' // 统一标记为 album，前端会自动判断内容并展示混排
+            content_type: 'collection', // 🎯 统一标记为 collection，区分纯图文 album
+            // 如果原来没有封面，使用当前视频封面
+            ...(!existingPost.cover_url || existingPost.cover_url === ''
+              ? { cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '' }
+              : {})
           })
           .eq('id', existingPost.id)
 
@@ -533,7 +542,7 @@ export async function handleVideo(
               }
             ])
           : null,
-        content_type: mediaGroupId ? 'album' : 'video'
+        content_type: mediaGroupId ? 'collection' : 'video'
       })
       .select()
       .single()

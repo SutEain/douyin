@@ -173,15 +173,27 @@ async function playVideo(index: number) {
 
     // 🎯 确保静音状态正确，符合自动播放策略
     video.muted = isMuted.value
-    await video.play()
-    videoPlayingStates[index] = true
-  } catch (e) {
-    console.warn('[AlbumSwiper] Video play failed:', e)
-    // 如果播放失败，可能是因为没静音被拦截，尝试静音播放
-    if (e instanceof Error && e.name === 'NotAllowedError' && !video.muted) {
-      video.muted = true
-      video.play().catch(() => {})
+
+    // 🎯 处理某些环境下的 play() Promise
+    const playPromise = video.play()
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          videoPlayingStates[index] = true
+        })
+        .catch((e) => {
+          console.warn('[AlbumSwiper] Video play failed:', e)
+          if (e instanceof Error && e.name === 'NotAllowedError') {
+            video.muted = true
+            video.play().catch(() => {})
+          }
+        })
+    } else {
+      // 老旧环境没有 Promise
+      videoPlayingStates[index] = true
     }
+  } catch (e) {
+    console.warn('[AlbumSwiper] playVideo failed:', e)
   }
 }
 
@@ -193,19 +205,17 @@ function onVideoCanplay(index: number) {
 }
 
 function onVideoPlaying(index: number) {
-  console.log('[AlbumSwiper] Video playing:', index)
   videoPlayingStates[index] = true
 }
 
 function onVideoPause(index: number) {
-  console.log('[AlbumSwiper] Video pause:', index)
   videoPlayingStates[index] = false
 }
 
 // 🎯 获取标识文本
 function getBadgeText() {
   const current = props.images[currentIndex.value]
-  if (current?.type === 'video') return '视频'
+  if (current?.type === 'video') return '合辑'
   return '相册'
 }
 
@@ -279,7 +289,7 @@ function getMediaUrl(media: MediaItem) {
 }
 
 function getPosterUrl(media: MediaItem) {
-  if (media.cover_url) return media.cover_url
+  if (media.cover_url) return buildCdnUrl(media.cover_url)
   return ''
 }
 

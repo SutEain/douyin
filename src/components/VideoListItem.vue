@@ -30,9 +30,19 @@
         <Icon icon="solar:gallery-bold" />
         <span>图片</span>
       </div>
-      <div class="content-type-badge album" v-if="video.content_type === 'album'">
-        <Icon icon="solar:album-bold" />
-        <span>{{ video.images?.length || 0 }}张</span>
+      <div
+        class="content-type-badge album"
+        v-if="video.content_type === 'album' || video.content_type === 'collection'"
+      >
+        <Icon
+          :icon="
+            video.content_type === 'collection' ? 'solar:box-minimalistic-bold' : 'solar:album-bold'
+          "
+        />
+        <span
+          >{{ video.content_type === 'collection' ? '合辑' : '相册' }}
+          {{ video.images?.length || 0 }}</span
+        >
       </div>
       <div class="video-info">
         <div class="stats">
@@ -50,7 +60,8 @@
           v-if="
             (video.video?.duration || video.duration) &&
             video.content_type !== 'image' &&
-            video.content_type !== 'album'
+            video.content_type !== 'album' &&
+            video.content_type !== 'collection'
           "
         >
           {{ formatDuration(video.video?.duration || video.duration) }}
@@ -76,6 +87,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { _checkImgUrl } from '@/utils'
+import { buildCdnUrl } from '@/utils/media'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps<{
@@ -103,7 +115,8 @@ const coverUrl = computed(() => {
   // 支持多种封面字段格式
   const cover =
     props.video.video?.poster || props.video.video?.cover?.url_list?.[0] || props.video.cover_url
-  return _checkImgUrl(cover)
+  // 🎯 增加 buildCdnUrl 支持，处理 file_id 类型的封面
+  return buildCdnUrl(cover)
 })
 
 // 格式化用户 ID
