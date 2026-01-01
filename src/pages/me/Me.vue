@@ -347,6 +347,9 @@ function copyTgUsername() {
 // 加载我的作品
 async function loadMyVideos() {
   if (state.loadings.loading0) return
+  // 🎯 优化：如果未登录，直接跳过加载请求（页面会由 UI 显示重试登录页）
+  if (!userinfo.value.uid) return
+
   if (state.videos.my.total !== -1 && state.videos.my.list.length >= state.videos.my.total) {
     return
   }

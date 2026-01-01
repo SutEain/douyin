@@ -355,6 +355,19 @@ async function requestSupabaseVideoList(
     }
   } catch (error: any) {
     console.error('[requestSupabaseVideoList] 获取 accessToken 失败:', error)
+    // 🎯 如果是强制要求的鉴权失败，直接返回，不再发起 fetch
+    if (requireAuth) {
+      return {
+        success: false,
+        data: {
+          list: [],
+          total: 0,
+          pageNo: params?.pageNo ?? 0,
+          pageSize: params?.pageSize ?? 15,
+          message: error?.message || '请先登录'
+        }
+      }
+    }
   }
 
   const search = new URLSearchParams()
@@ -416,7 +429,8 @@ function getAppServerBase() {
     return explicit.replace(/\/$/, '')
   }
 
-  if (import.meta.env.DEV) {
+  // 🎯 本地开发或预览模式下，优先使用相对路径（走 Vite 代理）
+  if (import.meta.env.DEV || window.location.port === '5555' || window.location.port === '3000') {
     return '/api/app-server'
   }
 
