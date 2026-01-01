@@ -26,6 +26,9 @@
             x5-video-player-type="h5-page"
             :muted="isMuted"
             :poster="getPosterUrl(media)"
+            @canplay="onVideoCanplay(index)"
+            @playing="videoPlayingStates[index] = true"
+            @pause="videoPlayingStates[index] = false"
             @click.stop="toggleVideoPlay(index)"
           />
           <!-- 暂停图标 -->
@@ -168,10 +171,24 @@ async function playVideo(index: number) {
       }
     })
 
+    // 🎯 确保静音状态正确，符合自动播放策略
+    video.muted = isMuted.value
     await video.play()
     videoPlayingStates[index] = true
   } catch (e) {
     console.warn('[AlbumSwiper] Video play failed:', e)
+    // 如果播放失败，可能是因为没静音被拦截，尝试静音播放
+    if (e instanceof Error && e.name === 'NotAllowedError' && !video.muted) {
+      video.muted = true
+      video.play().catch(() => {})
+    }
+  }
+}
+
+// 🎯 视频就绪回调
+function onVideoCanplay(index: number) {
+  if (index === currentIndex.value && isParentPlaying.value) {
+    playVideo(index)
   }
 }
 
@@ -431,13 +448,14 @@ function finishSwipe() {
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
+  pointer-events: auto; // 🎯 允许点击
   z-index: 11;
 
   .pause-icon {
     font-size: 60rem;
     color: rgba(255, 255, 255, 0.5);
     filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.3));
+    pointer-events: none; // 图标不阻挡点击
   }
 }
 
