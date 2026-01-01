@@ -168,7 +168,8 @@ export const useBaseStore = defineStore('base', {
         ]
       },
       friends: resource.users,
-      message: ''
+      message: '',
+      isAppReady: false // 🎯 应用初始化就绪标志（登录+信息同步完成）
     }
   },
   getters: {
@@ -204,10 +205,14 @@ export const useBaseStore = defineStore('base', {
           const lang = normalizeLang(this.userinfo.lang)
           this.userinfo.lang = lang
           i18n.global.locale.value = lang
+          this.isAppReady = true // ✅ 设置就绪
           return
         }
       } catch (error) {
         console.warn('获取用户数据或登录失败:', error)
+      } finally {
+        // 即使登录失败（比如网络问题），也要标记 Ready，允许展示默认内容
+        this.isAppReady = true
       }
 
       // 如果没有用户数据，尝试使用 Telegram 语言设置

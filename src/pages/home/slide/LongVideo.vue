@@ -29,6 +29,7 @@
 import { onMounted, reactive, watch } from 'vue'
 import VideoList from '@/components/video/VideoList.vue'
 import { recommendedLongVideo } from '@/api/videos'
+import { useBaseStore } from '@/store/pinia'
 import type { VideoItem } from '@/types'
 
 const props = defineProps({
@@ -40,9 +41,7 @@ const props = defineProps({
 
 const state = reactive({
   list: [] as VideoItem[],
-  totalSize: 0,
   pageSize: 10,
-  pageNo: 0,
   hasMore: true,
   loading: false
 })
@@ -50,46 +49,47 @@ const state = reactive({
 async function loadMore() {
   if (state.loading) return
 
-  // ✅ 如果列表为空且手动重试，重置分页
-  if (state.list.length === 0) {
-    state.hasMore = true
-    state.pageNo = 0
+  // 1. 🎯 核心重构：等待 App Ready
+  const store = useBaseStore()
+  if (!store.isAppReady) {
+    console.log('[LongVideo] 等待 App Ready...')
+    const unwatch = watch(
+      () => store.isAppReady,
+      (ready) => {
+        if (ready) {
+          unwatch()
+          loadMore()
+        }
+      }
+    )
+    return
   }
-
-  if (!state.hasMore) return
 
   state.loading = true
 
-  const requestParams = {
-    pageNo: state.pageNo,
-    pageSize: state.pageSize
-  }
-
-  console.log('[LongVideo] 请求 API', requestParams)
-
   try {
-    const res = await recommendedLongVideo(requestParams)
+    // 💡 东南亚流后端也会排除已观看历史，所以不需要传 pageNo 偏移
+    const res = await recommendedLongVideo({
+      pageSize: state.pageSize
+    })
 
     if (res.success) {
       const newList = res.data.list || []
 
-      // ✅ 前端去重
+      // 💡 前端去重
       const existingIds = new Set(state.list.map((v) => v.aweme_id || v.id))
       const uniqueNewList = newList.filter((v: any) => !existingIds.has(v.aweme_id || v.id))
 
       if (uniqueNewList.length > 0) {
         state.list.push(...uniqueNewList)
+        state.hasMore = true
+      } else if (newList.length > 0) {
+        // 如果全是重复，递归再取一批
+        state.loading = false
+        return loadMore()
+      } else {
+        state.hasMore = false
       }
-
-      state.totalSize = res.data.total
-      state.pageNo++
-      state.hasMore = state.list.length < state.totalSize && newList.length >= state.pageSize
-
-      console.log('[LongVideo] ✅ 加载成功', {
-        currentLength: state.list.length,
-        total: state.totalSize,
-        hasMore: state.hasMore
-      })
     }
   } catch (error) {
     console.error('[LongVideo] ❌ 加载失败', error)
