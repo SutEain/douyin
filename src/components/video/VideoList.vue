@@ -1323,7 +1323,25 @@ watch(
 
 watch(
   () => props.items.length,
-  () => {
+  (newLen, oldLen) => {
+    // 💡 重点：如果列表从 0 变为有数据，且当前 slot 为空，立即填充并播放
+    if (newLen > 0 && oldLen === 0) {
+      const currentSlot = getSlotByRole('current')
+      if (currentSlot && currentSlot.videoIndex === null) {
+        console.log('[VideoList] 🚀 数据延迟到达，立即填充 SlotB')
+        currentIndex.value = 0
+        currentSlot.videoIndex = 0
+        updateSlotSource(currentSlot)
+
+        // 预载 next
+        const nextSlot = getSlotByRole('next')
+        if (nextSlot && props.items.length > 1) {
+          nextSlot.videoIndex = 1
+          updateSlotSource(nextSlot, true)
+        }
+      }
+    }
+
     const nextSlot = getSlotByRole('next')
     if (nextSlot && nextSlot.videoIndex == null && currentIndex.value + 1 < props.items.length) {
       nextSlot.videoIndex = currentIndex.value + 1

@@ -56,23 +56,21 @@ const state = reactive({
   pageSize: 10,
   hasMore: true,
   quotaExceeded: false,
-  retryCount: 0 // 🎯 记录连续空数据的重试次数
+  pageNo: 0, // 🎯 独立记录页码，支持强制翻页重试
+  retryCount: 0
 })
 
 async function loadMore() {
-  // 🛡️ 避免重复加载
   if (store.loading) return
 
-  // 🎯 登录态校验兜底：如果 store 还没 init 完，稍微等一下
   if (!store.userinfo.uid) {
-    console.log('[Slide4] 等待登录态就绪...')
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
 
   store.loading = true
 
   const requestParams: any = {
-    start: state.list.length,
+    start: state.pageNo * state.pageSize, // 💡 使用独立页码，确保重试时是下一页
     pageSize: state.pageSize
   }
 
@@ -81,7 +79,6 @@ async function loadMore() {
     store.loading = false
 
     if (res.success) {
-      // 1. 配额检查
       if (res.data.reason === 'quota_exceeded') {
         state.hasMore = false
         state.quotaExceeded = true
@@ -89,32 +86,35 @@ async function loadMore() {
       }
 
       const newList = res.data.list || []
-      const totalNum = Number(res.data.total)
 
-      // 2. 更新 hasMore：只要返回了数据，或者 total 还没到，就认为还有
-      if (newList.length > 0) {
-        state.hasMore = res.data.hasMore !== false
-        state.retryCount = 0 // 重置重试计数
-      } else {
-        // 💡 如果没给数据，且已经重试了 3 次，才彻底认为没了
-        if (state.retryCount < 3) {
-          state.retryCount++
-          console.log(`[Slide4] 接口返回空，尝试自动重试第 ${state.retryCount} 次`)
-          return loadMore()
-        }
-        state.hasMore = false
-      }
-
-      // 3. 去重合并
+      // 💡 过滤重复数据
       const existingIds = new Set(state.list.map((v) => v.aweme_id || v.id))
       const uniqueNewList = newList.filter((v: any) => !existingIds.has(v.aweme_id || v.id))
 
       if (uniqueNewList.length > 0) {
         state.list.push(...uniqueNewList)
-      } else if (newList.length > 0 && state.hasMore) {
-        // 💡 重点：如果返回了数据但全是重复的，自动加载下一页，防止卡在 1 条
-        console.log('[Slide4] 数据全部重复，自动追载下一页...')
-        return loadMore()
+        state.pageNo++ // 成功获得新数据，页码加1
+        state.retryCount = 0
+        state.hasMore = res.data.hasMore !== false
+      } else if (newList.length > 0) {
+        // 💡 如果这一页全是重复的，强制翻下一页再试一次
+        if (state.retryCount < 5) {
+          state.retryCount++
+          state.pageNo++
+          console.log(
+            `[Slide4] 第 ${state.pageNo} 页全是重复，自动穿透到下一页 (重试 ${state.retryCount})`
+          )
+          return loadMore()
+        }
+        state.hasMore = false
+      } else {
+        // 返回空列表，尝试翻页重试
+        if (state.retryCount < 3) {
+          state.retryCount++
+          state.pageNo++
+          return loadMore()
+        }
+        state.hasMore = false
       }
     }
   } catch (e) {
