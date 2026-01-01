@@ -55,105 +55,71 @@ const state = reactive({
   totalSize: 0,
   pageSize: 10,
   hasMore: true,
-  quotaExceeded: false
+  quotaExceeded: false,
+  retryCount: 0 // 🎯 记录连续空数据的重试次数
 })
 
 async function loadMore() {
-  console.log('[Slide4] loadMore 被调用', {
-    listLength: state.list.length,
-    totalSize: state.totalSize,
-    loading: store.loading,
-    hasMore: state.hasMore
-  })
+  // 🛡️ 避免重复加载
+  if (store.loading) return
 
-  if (store.loading) {
-    console.log('[Slide4] 正在加载中，跳过')
-    return
-  }
-
-  // ✅ 如果列表为空且手动重试，强制重置 hasMore
-  if (state.list.length === 0) {
-    state.hasMore = true
-  }
-
-  if (!state.hasMore) {
-    console.log('[Slide4] 没有更多数据，跳过')
-    return
+  // 🎯 登录态校验兜底：如果 store 还没 init 完，稍微等一下
+  if (!store.userinfo.uid) {
+    console.log('[Slide4] 等待登录态就绪...')
+    await new Promise((resolve) => setTimeout(resolve, 500))
   }
 
   store.loading = true
 
-  // 🎯 首次加载时，如果有深链接视频ID，传递给后端API
   const requestParams: any = {
     start: state.list.length,
     pageSize: state.pageSize
   }
 
-  // 🎯 深链接由后端自动处理，前端无需传递参数
-  console.log('[Slide4] 开始请求 API（深链接由后端自动处理）', requestParams)
+  try {
+    const res = await recommendedVideo(requestParams)
+    store.loading = false
 
-  const res = await recommendedVideo(requestParams)
+    if (res.success) {
+      // 1. 配额检查
+      if (res.data.reason === 'quota_exceeded') {
+        state.hasMore = false
+        state.quotaExceeded = true
+        return
+      }
 
-  console.log('[Slide4] API 响应', {
-    success: res.success,
-    total: res.data?.total,
-    listLength: res.data?.list?.length,
-    hasMore: res.data?.hasMore,
-    reason: res.data?.reason
-  })
+      const newList = res.data.list || []
+      const totalNum = Number(res.data.total)
 
-  store.loading = false
+      // 2. 更新 hasMore：只要返回了数据，或者 total 还没到，就认为还有
+      if (newList.length > 0) {
+        state.hasMore = res.data.hasMore !== false
+        state.retryCount = 0 // 重置重试计数
+      } else {
+        // 💡 如果没给数据，且已经重试了 3 次，才彻底认为没了
+        if (state.retryCount < 3) {
+          state.retryCount++
+          console.log(`[Slide4] 接口返回空，尝试自动重试第 ${state.retryCount} 次`)
+          return loadMore()
+        }
+        state.hasMore = false
+      }
 
-  if (res.success) {
-    // 🎯 检查配额限制
-    if (res.data.reason === 'quota_exceeded') {
-      console.log('[Slide4] 🚫 配额已用完')
-      state.hasMore = false
-      state.quotaExceeded = true
+      // 3. 去重合并
+      const existingIds = new Set(state.list.map((v) => v.aweme_id || v.id))
+      const uniqueNewList = newList.filter((v: any) => !existingIds.has(v.aweme_id || v.id))
 
-      _showNoticeDialog(
-        '今日次数已用完',
-        '您今天的免费观看次数已用完，请明天再来，或邀请好友获取更多次数。',
-        '',
-        () => {},
-        '知道了'
-      )
-      return
+      if (uniqueNewList.length > 0) {
+        state.list.push(...uniqueNewList)
+      } else if (newList.length > 0 && state.hasMore) {
+        // 💡 重点：如果返回了数据但全是重复的，自动加载下一页，防止卡在 1 条
+        console.log('[Slide4] 数据全部重复，自动追载下一页...')
+        return loadMore()
+      }
     }
-
-    const totalNum = Number(res.data.total)
-    state.totalSize = Number.isFinite(totalNum) ? totalNum : res.data.total
-
-    // 🎯 更新 hasMore 状态：优先用 total；total 不可用再用 hasMore；最后用条数判断
-    if (Number.isFinite(totalNum)) {
-      const nextLen = state.list.length + res.data.list.length
-      state.hasMore = nextLen < totalNum
-    } else if (typeof res.data.hasMore === 'boolean') {
-      state.hasMore = res.data.hasMore
-    } else {
-      state.hasMore = res.data.list.length >= state.pageSize
-    }
-
-    // 🎯 前端去重（过滤掉列表中已存在的视频）
-    const existingIds = new Set(state.list.map((v) => v.aweme_id || v.id))
-    const uniqueNewList = res.data.list.filter((v: any) => !existingIds.has(v.aweme_id || v.id))
-
-    if (uniqueNewList.length > 0) {
-      state.list.push(...uniqueNewList)
-      console.log('[Slide4] ✅ 数据加载成功 (已去重)', {
-        原始数量: res.data.list.length,
-        有效新增: uniqueNewList.length,
-        totalSize: state.totalSize,
-        currentLength: state.list.length,
-        hasMore: state.hasMore
-      })
-    } else {
-      console.log('[Slide4] ⚠️ 获取的数据全部重复，未添加到列表')
-      // 如果数据重复且后端说还有更多，可能需要再试一次？
-      // 暂时不重试，避免死循环，等待用户再次下拉
-    }
-  } else {
-    console.error('[Slide4] ❌ API 调用失败', res)
+  } catch (e) {
+    store.loading = false
+    console.error('[Slide4] 加载异常', e)
   }
 }
 
