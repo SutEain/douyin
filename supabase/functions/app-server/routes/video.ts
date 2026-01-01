@@ -1271,9 +1271,12 @@ export async function handleRecordView(req: Request): Promise<Response> {
         completed: completed === true
       })
 
-      // 🎯 首次观看，view_count + 1
+      // 🎯 首次观看，view_count + 1，同时标记用户为有过观看记录
       if (!insertError) {
-        await supabaseAdmin.rpc('increment_view_count', { p_video_id: video_id })
+        await Promise.all([
+          supabaseAdmin.rpc('increment_view_count', { p_video_id: video_id }),
+          supabaseAdmin.from('profiles').update({ has_watched: true }).eq('id', user.id)
+        ])
       }
     }
 
