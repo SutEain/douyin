@@ -56,6 +56,14 @@ if (typeof window !== 'undefined') {
       return false
     }
 
+    // ✅ 过滤 Vercel Analytics/Speed Insights 脚本在本地环境的 404 报错（保持控制台整洁）
+    if (target instanceof HTMLScriptElement) {
+      const src = target.src || ''
+      if (src.includes('_vercel/insights') || src.includes('_vercel/speed-insights')) {
+        return false
+      }
+    }
+
     console.warn(
       '[GlobalError]',
       (event as ErrorEvent).message || (event as ErrorEvent).error || event
