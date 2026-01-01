@@ -20,38 +20,38 @@ export async function handleTaskReward(chatId: number, messageId?: number) {
 
     if (statsError) throw statsError
 
-    const v = stats.views
-    const l = stats.likes
+    const v = stats.views_stats
+    const l = stats.likes_stats
 
     const text =
       `🎁 <b>创作者奖励中心</b>\n\n` +
-      `📺 <b>作品播放奖励 (50次=5币)</b>\n` +
-      `• 总播放：<code>${v.total}</code> 次\n` +
-      `• 待领取：<code>${v.pending * 5}</code> 抖币 (${v.pending}份)\n` +
-      `• 下一份还差：<code>${v.next_dist}</code> 次\n\n` +
-      `❤️ <b>作品获赞奖励 (5个赞=10币)</b>\n` +
-      `• 总获赞：<code>${l.total}</code> 次\n` +
-      `• 待领取：<code>${l.pending * 10}</code> 抖币 (${l.pending}份)\n` +
-      `• 下一份还差：<code>${l.next_dist}</code> 个赞\n\n` +
+      `📺 <b>作品播放奖励 (${v.threshold}次=${v.reward_amount}币)</b>\n` +
+      `• 总播放：<code>${v.current_total}</code> 次\n` +
+      `• 待领取：<code>${v.pending_count * Number(v.reward_amount)}</code> 抖币 (${v.pending_count}份)\n` +
+      `• 下一份还差：<code>${v.next_reward_distance}</code> 次\n\n` +
+      `❤️ <b>作品获赞奖励 (${l.threshold}个赞=${l.reward_amount}币)</b>\n` +
+      `• 总获赞：<code>${l.current_total}</code> 次\n` +
+      `• 待领取：<code>${l.pending_count * Number(l.reward_amount)}</code> 抖币 (${l.pending_count}份)\n` +
+      `• 下一份还差：<code>${l.next_reward_distance}</code> 个赞\n\n` +
       `<i>💡 点击下方按钮领取对应奖励：</i>`
 
     const keyboard = {
       inline_keyboard: [] as any[][]
     }
 
-    if (v.pending > 0) {
+    if (v.pending_count > 0) {
       keyboard.inline_keyboard.push([
         {
-          text: `💰 领取播放奖励 (${v.pending * 5} 币)`,
+          text: `💰 领取播放奖励 (${v.pending_count * Number(v.reward_amount)} 币)`,
           callback_data: 'claim_reward:author_views_reward'
         }
       ])
     }
 
-    if (l.pending > 0) {
+    if (l.pending_count > 0) {
       keyboard.inline_keyboard.push([
         {
-          text: `💰 领取获赞奖励 (${l.pending * 10} 币)`,
+          text: `💰 领取获赞奖励 (${l.pending_count * Number(l.reward_amount)} 币)`,
           callback_data: 'claim_reward:author_likes_reward'
         }
       ])
