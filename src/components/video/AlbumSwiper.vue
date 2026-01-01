@@ -27,8 +27,8 @@
             :muted="isMuted"
             :poster="getPosterUrl(media)"
             @canplay="onVideoCanplay(index)"
-            @playing="videoPlayingStates[index] = true"
-            @pause="videoPlayingStates[index] = false"
+            @playing="onVideoPlaying(index)"
+            @pause="onVideoPause(index)"
             @click.stop="toggleVideoPlay(index)"
           />
           <!-- 暂停图标 -->
@@ -190,6 +190,16 @@ function onVideoCanplay(index: number) {
   if (index === currentIndex.value && isParentPlaying.value) {
     playVideo(index)
   }
+}
+
+function onVideoPlaying(index: number) {
+  console.log('[AlbumSwiper] Video playing:', index)
+  videoPlayingStates[index] = true
+}
+
+function onVideoPause(index: number) {
+  console.log('[AlbumSwiper] Video pause:', index)
+  videoPlayingStates[index] = false
 }
 
 // 🎯 获取标识文本
@@ -428,15 +438,16 @@ function finishSwipe() {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  background: #000; // 🎯 确保背景是黑的，防止闪现
 }
 
 .slide-image,
 .slide-video {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: contain; // 🎯 统一使用 contain 保证画面完整
+  display: block;
 }
 
 .pause-layer {

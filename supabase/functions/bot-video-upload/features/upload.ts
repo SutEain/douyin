@@ -469,6 +469,7 @@ export async function handleVideo(
           width: video.width,
           height: video.height,
           duration: video.duration,
+          cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '', // 🎯 给单项也存一份封面
           order: currentMedia.length
         })
 
@@ -499,11 +500,11 @@ export async function handleVideo(
       .insert({
         tg_user_id: chatId,
         author_id: profile.id,
-        title: video.file_name || '未命名视频',
+        title: video.file_name || '未命名视频合集',
         description: description,
         tags: tags.length > 0 ? tags : null,
         play_url: null,
-        cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '',
+        cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '', // 🎯 这里的封面会被用于作品列表展示
         tg_file_id: video.file_id,
         tg_thumbnail_file_id: video.thumbnail?.file_id || video.thumb?.file_id,
         tg_unique_id: video.file_unique_id,
@@ -518,8 +519,7 @@ export async function handleVideo(
         status: extraData?.status || 'processing',
         review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
         published_at: extraData?.status === 'published' ? new Date().toISOString() : null,
-        media_group_id: mediaGroupId, // 🎯 记录 media_group_id，方便后续追加
-        // 🎯 如果是媒体组，初始化 images 数组
+        media_group_id: mediaGroupId,
         images: mediaGroupId
           ? JSON.stringify([
               {
@@ -528,6 +528,7 @@ export async function handleVideo(
                 width: video.width,
                 height: video.height,
                 duration: video.duration,
+                cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '', // 🎯 给单项也存一份封面
                 order: 0
               }
             ])
