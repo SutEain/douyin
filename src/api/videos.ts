@@ -416,8 +416,7 @@ function getAppServerBase() {
     return explicit.replace(/\/$/, '')
   }
 
-  // 🎯 本地开发或预览模式下，优先使用相对路径（走 Vite 代理）
-  if (import.meta.env.DEV || window.location.port === '5555' || window.location.port === '3000') {
+  if (import.meta.env.DEV) {
     return '/api/app-server'
   }
 

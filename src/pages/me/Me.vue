@@ -1,7 +1,22 @@
 <template>
   <div class="Me">
-    <!-- 整体可滚动区域 -->
-    <div class="scroll-container" @scroll.passive="handleScroll">
+    <!-- 🎯 情况 A：已就绪但未登录 (重试页面) -->
+    <div v-if="baseStore.isAppReady && !userinfo.uid" class="not-logged-in">
+      <div class="content">
+        <img src="../../assets/img/icon/avatar/0.png" class="placeholder-avatar" />
+        <h2>登录后查看更多精彩</h2>
+        <p>您的 Telegram 账号尚未成功同步</p>
+        <div class="retry-btn" :class="{ loading: baseStore.loading }" @click="handleRetryLogin">
+          <Icon v-if="baseStore.loading" icon="eos-icons:loading" class="icon" />
+          <span>{{ baseStore.loading ? '正在重试...' : '点击重试登录' }}</span>
+        </div>
+      </div>
+      <!-- 未登录也要有底部导航，方便切回首页 -->
+      <BaseFooter :init-tab="5" />
+    </div>
+
+    <!-- 🎯 情况 B：正常显示 (或正在初始化) -->
+    <div v-else class="scroll-container" @scroll.passive="handleScroll">
       <!-- 用户信息区域 -->
       <div class="user-info">
         <header :style="headerBackgroundStyle" @click="handleHeaderClick">
@@ -301,6 +316,20 @@ function handleHeaderClick() {
   }
 }
 
+// 🎯 点击重试登录
+async function handleRetryLogin() {
+  if (baseStore.loading) return
+  baseStore.loading = true
+  try {
+    await baseStore.init()
+    if (userinfo.value.uid) {
+      loadMyVideos() // 登录成功后立即加载数据
+    }
+  } finally {
+    baseStore.loading = false
+  }
+}
+
 // 🎯 复制数字ID
 function copyNumericId() {
   if (userinfo.value.numeric_id) {
@@ -470,6 +499,79 @@ onMounted(() => {
   background: #000; // ✅ 改为纯黑
   position: relative;
   overflow: hidden;
+
+  // 🎯 情况 A：未登录状态页样式 (放在这里，不再嵌套在 scroll-container 里)
+  .not-logged-in {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    color: white;
+    z-index: 100;
+
+    .content {
+      text-align: center;
+      padding: 0 40px;
+      margin-bottom: 100px;
+
+      .placeholder-avatar {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        margin-bottom: 20px;
+        opacity: 0.5;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+      }
+
+      h2 {
+        font-size: 20px;
+        margin-bottom: 10px;
+      }
+
+      p {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.6);
+        margin-bottom: 30px;
+      }
+
+      .retry-btn {
+        background: #fe2c55;
+        color: white;
+        padding: 0 30px;
+        height: 48px;
+        line-height: 48px;
+        border-radius: 4px;
+        font-size: 16px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: opacity 0.3s;
+
+        &:active {
+          opacity: 0.8;
+        }
+
+        &.loading {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .icon {
+          font-size: 20px;
+          animation: rotate 1s linear infinite;
+        }
+      }
+    }
+  }
 
   .scroll-container {
     height: 100vh;
@@ -818,5 +920,14 @@ onMounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

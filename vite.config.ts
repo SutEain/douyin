@@ -65,9 +65,9 @@ export default defineConfig((): Promise<UserConfig> => {
                   }
                 }
               },
-              chunkFileNames: 'js/[name]-[hash].js', // 引入文件名的名称
-              entryFileNames: 'js/[name]-[hash].js', // 包的入口文件名称
-              assetFileNames: 'assets/[name]-[hash].[ext]' // 资源文件像 字体，图片等
+              chunkFileNames: 'js/[name]-[hash].js',
+              entryFileNames: 'js/[name]-[hash].js',
+              assetFileNames: 'assets/[name]-[hash].[ext]'
             }
           },
           assetsInlineLimit: 2048
@@ -76,9 +76,6 @@ export default defineConfig((): Promise<UserConfig> => {
           LATEST_COMMIT_HASH: JSON.stringify(
             latestCommitHash + (process.env.NODE_ENV === 'production' ? '' : ' (dev)')
           )
-        },
-        esbuild: {
-          // drop: ['console', 'debugger']
         },
         server: {
           port: 3000,
