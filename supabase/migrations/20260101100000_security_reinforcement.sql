@@ -3,7 +3,8 @@ CREATE OR REPLACE FUNCTION public.admin_process_withdraw(
     p_order_id UUID,
     p_admin_id UUID,
     p_action TEXT, -- 'approve' or 'reject'
-    p_remark TEXT DEFAULT NULL
+    p_remark TEXT DEFAULT NULL,
+    p_tx_hash TEXT DEFAULT NULL -- 🎯 新增：支持传入交易哈希
 ) RETURNS JSON 
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -32,7 +33,7 @@ BEGIN
     END IF;
 
     IF p_action = 'approve' THEN
-        -- 审核通过：扣减冻结金额，不增加余额（之前已经从余额扣到冻结了）
+        -- 审核通过：扣减冻结金额
         UPDATE public.profiles 
         SET frozen_coins = GREATEST(COALESCE(frozen_coins, 0) - v_order.amount, 0)
         WHERE id = v_order.user_id 
@@ -42,6 +43,7 @@ BEGIN
         SET status = 'completed', 
             processed_at = NOW(), 
             processed_by = p_admin_id,
+            tx_hash = COALESCE(p_tx_hash, tx_hash), -- ✅ 更新哈希
             remark = COALESCE(p_remark, '管理员已确认打款')
         WHERE id = p_order_id;
 

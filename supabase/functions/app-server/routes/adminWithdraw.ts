@@ -105,7 +105,8 @@ export async function handleAdminAutoWithdraw(req: Request): Promise<Response> {
           p_order_id: order_id,
           p_admin_id: admin_id,
           p_action: 'approve',
-          p_remark: `自动出款成功, Hash: ${tx}`
+          p_remark: `自动出款成功, Hash: ${tx}`,
+          p_tx_hash: tx // ✅ 传入交易哈希供 RPC 更新
         })
 
         if (rpcError) {
