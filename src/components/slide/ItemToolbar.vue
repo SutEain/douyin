@@ -338,16 +338,16 @@ const vClick = useClick()
       <Icon icon="basil:award-solid" class="icon" style="color: #face15" />
     </div>
 
-    <!-- 更多选项按钮 -->
-    <div class="more-toggle mb2r" v-click="() => (showMoreDrawer = true)">
-      <Icon icon="solar:menu-dots-bold" class="icon" style="color: white" />
-      <span>更多</span>
-    </div>
-
     <!-- 静音开关 -->
     <div class="mute-toggle mb2r" v-click="toggleMute" @click.stop>
       <Icon v-if="isMuted" icon="ph:speaker-simple-slash-fill" class="icon" style="color: white" />
       <Icon v-else icon="ph:speaker-simple-high-fill" class="icon" style="color: white" />
+    </div>
+
+    <!-- 更多选项按钮 -->
+    <div class="more-toggle mb2r" v-click="() => (showMoreDrawer = true)">
+      <Icon icon="solar:menu-dots-bold" class="icon" style="color: white" />
+      <span>更多</span>
     </div>
 
     <!-- 更多选项抽屉 -->
@@ -438,7 +438,7 @@ const vClick = useClick()
 .toolbar {
   //width: 40px;
   position: absolute;
-  bottom: 0;
+  bottom: 20rem; // ✅ 整体上移 (原为 0)
   right: 10rem;
   z-index: 100; // ✅ 提高层级，确保在 ItemDesc 的按钮之上
   color: #fff;

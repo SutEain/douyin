@@ -218,8 +218,8 @@ const publishDate = computed(() => {
 
     .desc-actions {
       position: absolute;
-      right: -40px;
-      bottom: 40px; // ✅ 与原“展开/收起”位置对齐
+      right: -30rem; // ✅ 靠左移动一点 (原为 -40px，即约 -40rem)
+      bottom: 40rem; // ✅ 与原“展开/收起”位置对齐
       display: flex;
       flex-direction: column;
       gap: 8rem;
