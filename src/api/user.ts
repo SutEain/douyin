@@ -171,3 +171,40 @@ export async function getFollowersList() {
 
   return { success: true, data: { list, total: list.length } }
 }
+
+/**
+ * 获取任务中心数据（包含所有规则和当前用户进度）
+ */
+export async function getTasks() {
+  const {
+    data: { session }
+  } = await supabase.auth.getSession()
+  if (!session?.user) {
+    return { success: false, message: '未登录', data: [] }
+  }
+
+  // 并行获取规则和进度
+  const [rulesRes, progressRes] = await Promise.all([
+    supabase
+      .from('incentive_rules')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true }),
+    supabase.from('user_incentive_progress').select('*').eq('user_id', session.user.id)
+  ])
+
+  if (rulesRes.error) return { success: false, message: rulesRes.error.message, data: [] }
+
+  const progressMap = new Map((progressRes.data || []).map((p) => [p.rule_id, p]))
+
+  const list = (rulesRes.data || []).map((rule) => {
+    const progress = progressMap.get(rule.id)
+    return {
+      ...rule,
+      current_progress: progress?.progress_value || 0,
+      total_claims: progress?.cap_used || 0
+    }
+  })
+
+  return { success: true, data: list }
+}

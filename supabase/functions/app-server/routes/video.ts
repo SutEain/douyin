@@ -1256,12 +1256,23 @@ export async function handleRecordView(req: Request): Promise<Response> {
       if (progress !== undefined && (existing.progress === null || progress > existing.progress)) {
         updateData.progress = Math.min(100, Math.max(0, progress))
       }
+
+      let justCompleted = false
       // 完播状态只能设为 true，不能撤销
       if (completed === true && !existing.completed) {
         updateData.completed = true
+        justCompleted = true
       }
 
       await supabaseAdmin.from('watch_history').update(updateData).eq('id', existing.id)
+
+      // 🎯 任务系统：如果是刚刚完成（从 false -> true），增加进度
+      if (justCompleted) {
+        await supabaseAdmin.rpc('increment_task_progress', {
+          p_user_id: user.id,
+          p_task_code: 'total_views_reward'
+        })
+      }
     } else {
       // 不存在，插入新记录
       const { error: insertError } = await supabaseAdmin.from('watch_history').insert({
@@ -1273,10 +1284,22 @@ export async function handleRecordView(req: Request): Promise<Response> {
 
       // 🎯 首次观看，view_count + 1，同时标记用户为有过观看记录
       if (!insertError) {
-        await Promise.all([
+        const tasks = [
           supabaseAdmin.rpc('increment_view_count', { p_video_id: video_id }),
           supabaseAdmin.from('profiles').update({ has_watched: true }).eq('id', user.id)
-        ])
+        ]
+
+        // 🎯 如果首屏就直接完播了，也要增加进度
+        if (completed === true) {
+          tasks.push(
+            supabaseAdmin.rpc('increment_task_progress', {
+              p_user_id: user.id,
+              p_task_code: 'total_views_reward'
+            })
+          )
+        }
+
+        await Promise.all(tasks)
       }
     }
 

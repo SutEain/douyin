@@ -16,6 +16,8 @@ import {
   handlePrivacySettings,
   handlePrivacySettingsEdit,
   handleUserProfile,
+  handleTaskReward,
+  handleClaimGenericReward,
   handleApplyLive,
   handleWallet,
   handleRecharge,
@@ -273,6 +275,19 @@ export async function handleCallback(
           inline_keyboard: [[{ text: '⬅️ 返回首页', callback_data: 'back_home' }]]
         }
       })
+      return
+    }
+
+    if (data === 'profile_task_reward') {
+      await answerCallbackQuery(callbackQueryId)
+      await handleTaskReward(chatId, messageId)
+      return
+    }
+
+    if (data.startsWith('claim_reward:')) {
+      const ruleCode = data.split(':')[1]
+      await answerCallbackQuery(callbackQueryId, '🚀 正在核算奖励...')
+      await handleClaimGenericReward(chatId, messageId, ruleCode)
       return
     }
 

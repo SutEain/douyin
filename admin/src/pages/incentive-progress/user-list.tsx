@@ -82,7 +82,7 @@ export const UserIncentiveProgressList = () => {
           }}
         />
         <Table.Column
-          title="奖励(USDT)"
+          title="奖励(抖币)"
           width={120}
           render={(_, record: any) => (
             <span style={{ fontFamily: 'monospace' }}>

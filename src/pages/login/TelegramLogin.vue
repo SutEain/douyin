@@ -160,20 +160,20 @@ const waitForTelegram = (): Promise<any> => {
       return
     }
 
-    // 轮询检查（最多等待 5 秒）
+    // ✅ 轮询检查（最多等待 3 秒）
     let attempts = 0
-    // ✅ 延长等待：部分机型/网络下 Telegram 注入可能更慢
-    const maxAttempts = 150 // 15s
+    // 🎯 缩短等待时间：3s 已经足够大部分设备加载 WebApp SDK
+    const maxAttempts = 30
     const checkInterval = setInterval(() => {
       attempts++
       // @ts-ignore
-      if (window.Telegram?.WebApp) {
+      if (window.Telegram?.WebApp?.initData) {
         clearInterval(checkInterval)
         // @ts-ignore
         resolve(window.Telegram.WebApp)
-        // @ts-ignore
       } else if (attempts >= maxAttempts) {
         clearInterval(checkInterval)
+        console.warn('[TelegramLogin] 等待 WebApp SDK 超时')
         resolve(null)
       }
     }, 100)

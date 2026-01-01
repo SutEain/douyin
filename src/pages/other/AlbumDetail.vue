@@ -223,15 +223,19 @@
           @keyup.enter="sendComment"
         />
       </div>
-      <!-- ✅ 发送按钮：放到输入框右侧，避免挤在 input 里面 -->
-      <div
-        class="send-btn"
-        :class="[comments.input.trim() && 'active']"
-        :style="comments.sending ? 'pointer-events:none;opacity:.6;' : ''"
-        @click.stop="sendComment"
-      >
-        发送
-      </div>
+
+      <!-- ✅ 只有输入内容时才显示发送按钮，平时隐藏以腾出空间 -->
+      <transition name="fade">
+        <div
+          v-if="comments.input.trim()"
+          class="send-btn active"
+          :style="comments.sending ? 'pointer-events:none;opacity:.6;' : ''"
+          @click.stop="sendComment"
+        >
+          发送
+        </div>
+      </transition>
+
       <div class="options">
         <div
           class="option"
@@ -240,11 +244,8 @@
           @click.stop="toggleLike"
         >
           <Icon :icon="local.isLoved ? 'solar:heart-bold' : 'solar:heart-linear'" />
-          <div class="text">
-            {{ _formatNumber(local.likeCount) }}
-          </div>
+          <div class="text">{{ _formatNumber(local.likeCount) }}</div>
         </div>
-        <!-- ✅ 评论按钮移除：评论内容已在详情页直接展示 -->
 
         <div
           class="option"
@@ -253,18 +254,49 @@
           @click.stop="toggleCollect"
         >
           <Icon :icon="local.isCollect ? 'solar:star-bold' : 'mage:star'" />
-          <div class="text">
-            {{ _formatNumber(local.collectCount) }}
-          </div>
+          <div class="text">{{ _formatNumber(local.collectCount) }}</div>
         </div>
+
         <div class="option" @click.stop="shareToTelegram">
           <Icon icon="ph:share-fat-light" />
-          <div class="text">
-            {{ _formatNumber(local.shareCount) }}
-          </div>
+          <div class="text">{{ _formatNumber(local.shareCount) }}</div>
+        </div>
+
+        <!-- 🎯 打赏：去掉文字，保持图标风格统一 -->
+        <div class="option reward" @click.stop="showRewardPanel = true">
+          <Icon icon="basil:award-solid" style="color: #face15" />
         </div>
       </div>
     </div>
+
+    <!-- 🎯 打赏面板弹窗 (Teleport 到 body 避免层级问题) -->
+    <teleport to="body">
+      <transition name="fade">
+        <div v-if="showRewardPanel" class="reward-overlay" @click.self="showRewardPanel = false">
+          <div class="reward-panel" @click.stop>
+            <div class="reward-title">打赏作者</div>
+            <div class="reward-presets">
+              <div v-for="p in rewardPresets" :key="p" class="preset-item" @click="selectPreset(p)">
+                {{ p }}
+              </div>
+            </div>
+            <div class="reward-input-wrap">
+              <input
+                type="number"
+                v-model="rewardAmount"
+                placeholder="自定义金额"
+                class="reward-input"
+                @click.stop
+              />
+              <div class="reward-send" :class="{ loading: isRewarding }" @click="handleReward">
+                {{ isRewarding ? '发送中...' : '确认打赏' }}
+              </div>
+            </div>
+            <div class="reward-close" @click="showRewardPanel = false">取消</div>
+          </div>
+        </div>
+      </transition>
+    </teleport>
   </div>
 </template>
 
@@ -290,7 +322,8 @@ import {
   toggleVideoCollect,
   toggleVideoLike,
   videoComments,
-  deleteVideoComment
+  deleteVideoComment,
+  sendReward
 } from '@/api/videos'
 import { useRouter } from 'vue-router'
 import { useBaseStore } from '@/store/pinia'
@@ -370,6 +403,62 @@ const comments = reactive({
 })
 
 const replyingTo = ref(null)
+
+// 🎯 打赏相关
+const showRewardPanel = ref(false)
+const rewardAmount = ref('')
+const rewardPresets = [10, 50, 100, 500]
+const isRewarding = ref(false)
+
+async function handleReward() {
+  if (isRewarding.value) return
+  const amount = Number(rewardAmount.value)
+  if (!amount || amount <= 0) {
+    _notice('请输入有效的金额')
+    return
+  }
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
+  if (!user) {
+    _notice('请先登录')
+    return
+  }
+
+  isRewarding.value = true
+  try {
+    const id = String(currentId.value || '')
+    await sendReward({
+      receiver_id:
+        props.detail.author?.user_id ||
+        props.detail.author?.uid ||
+        props.detail.note_card?.user?.id,
+      gift_amount: amount,
+      room_or_video_id: id,
+      gift_type: 'video', // 后端目前短视频和图文统一归类为 video
+      gift_name: '图文打赏'
+    })
+
+    _notice(`成功打赏 ${amount} 抖币！`)
+    showRewardPanel.value = false
+    rewardAmount.value = ''
+  } catch (e) {
+    console.error('[Reward] error:', e)
+    const msg = e.message || ''
+    if (msg.includes('余额不足')) {
+      _notice('抖币余额不足，请先充值')
+    } else {
+      _notice('打赏失败: ' + (msg || '网络繁忙'))
+    }
+  } finally {
+    isRewarding.value = false
+  }
+}
+
+function selectPreset(amount) {
+  rewardAmount.value = amount.toString()
+}
 
 // 🎯 长按删除和点击头像逻辑
 const longPressTimer = ref(null)
@@ -1148,21 +1237,19 @@ function close() {
     border-top: 1px solid rgba(white, 0.1);
     display: flex;
     align-items: center;
-    padding: 8rem 10rem;
-    padding-right: 0;
+    padding: 8rem 12rem;
     box-sizing: border-box;
-    gap: 6rem;
+    gap: 10rem; // 🎯 增加整体间距
 
     .input-wrap {
       flex: 1;
-      height: 34rem;
+      height: 36rem;
       border-radius: 30rem;
-      background: var(--second-btn-color-tran);
-      color: gray;
+      background: rgba(255, 255, 255, 0.08);
+      color: white;
       display: flex;
       align-items: center;
-      padding: 0 10rem;
-      gap: 8rem;
+      padding: 0 12rem;
 
       .comment-input {
         flex: 1;
@@ -1171,55 +1258,163 @@ function close() {
         border: none;
         background: transparent;
         color: white;
-        font-size: 13rem;
+        font-size: 14rem;
       }
     }
 
-    // ✅ 发送按钮：独立在输入框右侧
     .send-btn {
       height: 34rem;
-      min-width: 54rem;
-      margin-right: 8rem;
-      padding: 0 12rem;
+      padding: 0 15rem;
       border-radius: 18rem;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 12rem;
-      background: rgba(255, 255, 255, 0.12);
-      color: gray;
-      user-select: none;
-    }
-
-    .send-btn.active {
+      font-size: 13rem;
       background: var(--primary-btn-color);
       color: white;
       font-weight: 600;
+      white-space: nowrap;
     }
 
     .options {
-      width: 180rem;
       display: flex;
+      gap: 15rem; // 🎯 进一步增加图标间距，呼吸感更好
+      padding-left: 5rem;
+      align-items: flex-start; // 🎯 顶部对齐图标
 
       .option {
-        flex: 1;
         display: flex;
         justify-content: center;
         align-items: center;
         flex-direction: column;
-        font-size: 13rem;
+        min-width: 32rem;
         color: white;
         cursor: pointer;
 
         svg {
-          font-size: 24rem;
+          font-size: 22rem;
+        }
+
+        .text {
+          font-size: 10rem;
+          margin-top: 2rem;
+          color: rgba(255, 255, 255, 0.7);
+          height: 12rem; // 🎯 固定高度，防止没有文字时高度抖动
+          line-height: 12rem;
+        }
+      }
+
+      .option.reward {
+        padding-top: 0;
+        // 🎯 打赏没有数字，为了对齐其他带数字的图标，给它一个占位或调整居中
+        justify-content: flex-start;
+
+        svg {
+          margin-bottom: 14rem; // 🎯 视觉补偿，对齐旁边图标的中心
         }
       }
 
       .option.active {
         color: var(--primary-btn-color);
+        .text {
+          color: var(--primary-btn-color);
+        }
       }
     }
+  }
+}
+
+// 🎯 打赏弹窗样式 (全局样式或 scoped 均可)
+.reward-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reward-panel {
+  background: #1e1e1e;
+  border-radius: 20rem;
+  padding: 24rem;
+  width: 280rem;
+  box-shadow: 0 10rem 30rem rgba(0, 0, 0, 0.5);
+  color: white;
+
+  .reward-title {
+    font-size: 18rem;
+    margin-bottom: 20rem;
+    color: #face15;
+    text-align: center;
+    font-weight: bold;
+  }
+
+  .reward-presets {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12rem;
+    margin-bottom: 20rem;
+
+    .preset-item {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10rem;
+      padding: 12rem 0;
+      text-align: center;
+      font-size: 15rem;
+      color: white;
+
+      &:active {
+        background: rgba(250, 206, 21, 0.2);
+        border-color: #face15;
+      }
+    }
+  }
+
+  .reward-input-wrap {
+    .reward-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10rem;
+      padding: 12rem;
+      color: white;
+      font-size: 16rem;
+      text-align: center;
+      margin-bottom: 15rem;
+      outline: none;
+      box-sizing: border-box;
+
+      &:focus {
+        border-color: #face15;
+      }
+    }
+
+    .reward-send {
+      background: #face15;
+      color: black;
+      border-radius: 10rem;
+      padding: 12rem 0;
+      text-align: center;
+      font-size: 16rem;
+      font-weight: bold;
+
+      &.loading {
+        opacity: 0.5;
+      }
+    }
+  }
+
+  .reward-close {
+    margin-top: 15rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14rem;
   }
 }
 

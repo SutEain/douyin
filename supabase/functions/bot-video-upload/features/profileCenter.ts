@@ -3,6 +3,126 @@ import { escapeHTML } from '../utils/text.ts'
 import { editMessage, sendMessage } from '../telegram.ts'
 import { getPersistentKeyboard } from '../keyboards.ts'
 
+// 处理"任务奖励"
+export async function handleTaskReward(chatId: number, messageId?: number) {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile) return
+
+    const { data: stats, error: statsError } = await supabase.rpc('get_author_reward_stats', {
+      p_user_id: profile.id
+    })
+
+    if (statsError) throw statsError
+
+    const v = stats.views
+    const l = stats.likes
+
+    const text =
+      `🎁 <b>创作者奖励中心</b>\n\n` +
+      `📺 <b>作品播放奖励 (50次=5币)</b>\n` +
+      `• 总播放：<code>${v.total}</code> 次\n` +
+      `• 待领取：<code>${v.pending * 5}</code> 抖币 (${v.pending}份)\n` +
+      `• 下一份还差：<code>${v.next_dist}</code> 次\n\n` +
+      `❤️ <b>作品获赞奖励 (5个赞=10币)</b>\n` +
+      `• 总获赞：<code>${l.total}</code> 次\n` +
+      `• 待领取：<code>${l.pending * 10}</code> 抖币 (${l.pending}份)\n` +
+      `• 下一份还差：<code>${l.next_dist}</code> 个赞\n\n` +
+      `<i>💡 点击下方按钮领取对应奖励：</i>`
+
+    const keyboard = {
+      inline_keyboard: [] as any[][]
+    }
+
+    if (v.pending > 0) {
+      keyboard.inline_keyboard.push([
+        {
+          text: `💰 领取播放奖励 (${v.pending * 5} 币)`,
+          callback_data: 'claim_reward:author_views_reward'
+        }
+      ])
+    }
+
+    if (l.pending > 0) {
+      keyboard.inline_keyboard.push([
+        {
+          text: `💰 领取获赞奖励 (${l.pending * 10} 币)`,
+          callback_data: 'claim_reward:author_likes_reward'
+        }
+      ])
+    }
+
+    keyboard.inline_keyboard.push([{ text: '⬅️ 返回个人中心', callback_data: 'user_profile' }])
+
+    if (messageId) {
+      await editMessage(chatId, messageId, text, { reply_markup: keyboard })
+    } else {
+      await sendMessage(chatId, text, { reply_markup: keyboard })
+    }
+  } catch (error) {
+    console.error('handleTaskReward error:', error)
+    await sendMessage(chatId, '❌ 获取任务信息失败')
+  }
+}
+
+// 处理正式领取奖励 (通用)
+export async function handleClaimGenericReward(
+  chatId: number,
+  messageId: number,
+  ruleCode: string
+) {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile) return
+
+    const { data: res, error: rpcError } = await supabase.rpc('claim_author_generic_reward', {
+      p_user_id: profile.id,
+      p_rule_code: ruleCode
+    })
+
+    if (rpcError) throw rpcError
+
+    if (res.success) {
+      const successText =
+        `✅ <b>领取成功！</b>\n\n` +
+        `💰 <b>获得奖励：</b> <code>${res.reward_coins}</code> 抖币\n` +
+        `📋 <b>领取份数：</b> ${res.claims_count} 份\n` +
+        `📊 <b>当前指标：</b> ${res.current_total}\n` +
+        `💵 <b>最新余额：</b> <code>${Math.floor(res.balance_after)}</code> 抖币\n\n` +
+        `奖励已自动发放，感谢您的优质内容创作！`
+
+      await editMessage(chatId, messageId, successText, {
+        reply_markup: {
+          inline_keyboard: [[{ text: '⬅️ 返回奖励中心', callback_data: 'profile_task_reward' }]]
+        }
+      })
+    } else {
+      await editMessage(chatId, messageId, `❌ 领取失败：${res.message}`, {
+        reply_markup: {
+          inline_keyboard: [[{ text: '⬅️ 返回重试', callback_data: 'profile_task_reward' }]]
+        }
+      })
+    }
+  } catch (error: any) {
+    console.error('handleClaimReward error:', error)
+    await editMessage(chatId, messageId, `❌ 领取异常: ${error.message}`, {
+      reply_markup: {
+        inline_keyboard: [[{ text: '⬅️ 返回奖励中心', callback_data: 'profile_task_reward' }]]
+      }
+    })
+  }
+}
+
 // 处理"使用说明"
 export async function handleHelp(chatId: number, messageId?: number) {
   const text =
@@ -43,7 +163,7 @@ export async function handleUserProfile(
     const { data: profile } = await supabase
       .from('profiles')
       .select(
-        'numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock, live_status, balance_coins, is_admin'
+        'id, numeric_id, invite_success_count, adult_unlock_until, adult_permanent_unlock, live_status, balance_coins, is_admin'
       )
       .eq('tg_user_id', chatId)
       .single()
@@ -111,7 +231,7 @@ export async function handleUserProfile(
       inline_keyboard: [
         [{ text: '💰 我的钱包', callback_data: 'profile_wallet' }],
         [liveButton],
-        [{ text: '📖 使用说明', callback_data: 'profile_help' }],
+        [{ text: '🎁 任务奖励', callback_data: 'profile_task_reward' }],
         [{ text: '📺 绑定频道 (自动同步)', callback_data: 'profile_channels' }],
         [
           { text: '🔔 通知设置', callback_data: 'profile_settings_notify' },

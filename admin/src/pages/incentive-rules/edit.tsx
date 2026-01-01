@@ -40,6 +40,9 @@ export const IncentiveRuleEdit = () => {
             <Select.Option value="video_like_threshold">单作品达标</Select.Option>
             <Select.Option value="invite_success">邀请成功</Select.Option>
             <Select.Option value="invitee_publish">徒弟发布</Select.Option>
+            <Select.Option value="total_views">总浏览奖励</Select.Option>
+            <Select.Option value="author_views">作品播放奖励</Select.Option>
+            <Select.Option value="author_likes">作品获赞奖励</Select.Option>
           </Select>
         </Form.Item>
 
@@ -75,7 +78,7 @@ export const IncentiveRuleEdit = () => {
         </Form.Item>
 
         <Form.Item
-          label="奖励(USDT)"
+          label="奖励(抖币)"
           name="reward_usdt"
           rules={[{ required: true, message: '请输入奖励金额' }]}
         >

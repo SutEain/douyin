@@ -5,7 +5,10 @@ import { useNavigate } from 'react-router-dom'
 const ruleTypeText: Record<string, { text: string; color: string }> = {
   video_like_threshold: { text: '单作品达标', color: 'blue' },
   invite_success: { text: '邀请成功', color: 'green' },
-  invitee_publish: { text: '徒弟发布', color: 'orange' }
+  invitee_publish: { text: '徒弟发布', color: 'orange' },
+  total_views: { text: '总浏览奖励', color: 'cyan' },
+  author_views: { text: '作品播放奖励', color: 'purple' },
+  author_likes: { text: '作品获赞奖励', color: 'magenta' }
 }
 
 export const IncentiveRuleList = () => {
@@ -55,6 +58,9 @@ export const IncentiveRuleList = () => {
             <Select.Option value="video_like_threshold">单作品达标</Select.Option>
             <Select.Option value="invite_success">邀请成功</Select.Option>
             <Select.Option value="invitee_publish">徒弟发布</Select.Option>
+            <Select.Option value="total_views">总浏览奖励</Select.Option>
+            <Select.Option value="author_views">作品播放奖励</Select.Option>
+            <Select.Option value="author_likes">作品获赞奖励</Select.Option>
           </Select>
         </Form.Item>
         <Form.Item name="is_active" label="启用">
@@ -91,7 +97,7 @@ export const IncentiveRuleList = () => {
         <Table.Column dataIndex="threshold" title="阈值" width={90} render={(v) => v ?? '-'} />
         <Table.Column
           dataIndex="reward_usdt"
-          title="奖励(USDT)"
+          title="奖励(抖币)"
           width={140}
           render={(v) => <span style={{ fontFamily: 'monospace' }}>{v ?? '0'}</span>}
         />

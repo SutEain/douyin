@@ -265,12 +265,15 @@ async function handleReward() {
 
   isRewarding.value = true
   try {
+    // 🎯 优化：根据内容实际类型自动传递（后端目前统一用 video）
+    const contentType = (props.item as any)?.content_type === 'video' ? 'video' : 'video'
+
     await sendReward({
       receiver_id: props.item.author?.user_id || props.item.author?.uid,
       gift_amount: amount,
       room_or_video_id: props.item.aweme_id,
-      gift_type: 'video',
-      gift_name: '视频打赏'
+      gift_type: contentType,
+      gift_name: contentType === 'video' ? '视频打赏' : '图文打赏'
     })
 
     _notice(`成功打赏 ${amount} 抖币！`)
