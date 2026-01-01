@@ -26,18 +26,31 @@
             x5-video-player-type="h5-page"
             :muted="isMuted"
             :poster="getPosterUrl(media)"
+            @loadstart="videoLoadingStates[index] = true"
             @canplay="onVideoCanplay(index)"
             @playing="onVideoPlaying(index)"
             @pause="onVideoPause(index)"
+            @error="onVideoError(index)"
             @click.stop="toggleVideoPlay(index)"
           />
+          <!-- 加载中 -->
+          <div v-if="videoLoadingStates[index]" class="video-loading">
+            <Icon icon="eos-icons:loading" class="loading-icon" />
+          </div>
           <!-- 暂停图标 -->
           <div
-            v-if="index === currentIndex && !videoPlayingStates[index]"
+            v-if="
+              index === currentIndex && !videoPlayingStates[index] && !videoLoadingStates[index]
+            "
             class="pause-layer"
             @click.stop="toggleVideoPlay(index)"
           >
             <Icon icon="fluent:play-28-filled" class="pause-icon" />
+          </div>
+          <!-- 错误提示 -->
+          <div v-if="videoErrorStates[index]" class="video-error" @click.stop="retryVideo(index)">
+            <Icon icon="material-symbols:refresh" class="error-icon" />
+            <span>播放失败，点击重试</span>
           </div>
         </template>
 
@@ -123,6 +136,8 @@ const isParentPlaying = inject('isPlaying', ref(true))
 // 🎯 视频 DOM 引用和播放状态
 const videoRefs = new Map<number, HTMLVideoElement>()
 const videoPlayingStates = reactive<Record<number, boolean>>({})
+const videoLoadingStates = reactive<Record<number, boolean>>({})
+const videoErrorStates = reactive<Record<number, boolean>>({})
 
 function setVideoRef(index: number) {
   return (el: any) => {
@@ -134,11 +149,28 @@ function setVideoRef(index: number) {
   }
 }
 
+// 🎯 重新尝试播放
+function retryVideo(index: number) {
+  const video = videoRefs.get(index)
+  if (!video) return
+  videoErrorStates[index] = false
+  videoLoadingStates[index] = true
+  const src = video.src
+  video.src = ''
+  video.load()
+  video.src = src
+  video.load()
+  playVideo(index)
+}
+
 // 🎯 打开高清预览
 function openPreview(index: number) {
   // 过滤掉视频，只预览图片
   const onlyImages = props.images.filter((m) => m.type !== 'video')
-  const imgIndex = onlyImages.findIndex((img) => img.file_id === props.images[index].file_id)
+  const currentMedia = props.images[index]
+  if (currentMedia?.type === 'video') return // 视频不预览
+
+  const imgIndex = onlyImages.findIndex((img) => img.file_id === currentMedia.file_id)
   if (imgIndex !== -1) {
     previewIndex.value = imgIndex
     showPreview.value = true
@@ -180,25 +212,34 @@ async function playVideo(index: number) {
       playPromise
         .then(() => {
           videoPlayingStates[index] = true
+          videoLoadingStates[index] = false
+          videoErrorStates[index] = false
         })
         .catch((e) => {
           console.warn('[AlbumSwiper] Video play failed:', e)
           if (e instanceof Error && e.name === 'NotAllowedError') {
             video.muted = true
             video.play().catch(() => {})
+          } else {
+            videoErrorStates[index] = true
+            videoLoadingStates[index] = false
           }
         })
     } else {
       // 老旧环境没有 Promise
       videoPlayingStates[index] = true
+      videoLoadingStates[index] = false
     }
   } catch (e) {
     console.warn('[AlbumSwiper] playVideo failed:', e)
+    videoErrorStates[index] = true
+    videoLoadingStates[index] = false
   }
 }
 
 // 🎯 视频就绪回调
 function onVideoCanplay(index: number) {
+  videoLoadingStates[index] = false
   if (index === currentIndex.value && isParentPlaying.value) {
     playVideo(index)
   }
@@ -206,10 +247,17 @@ function onVideoCanplay(index: number) {
 
 function onVideoPlaying(index: number) {
   videoPlayingStates[index] = true
+  videoLoadingStates[index] = false
 }
 
 function onVideoPause(index: number) {
   videoPlayingStates[index] = false
+}
+
+function onVideoError(index: number) {
+  console.error('[AlbumSwiper] Video error:', index)
+  videoErrorStates[index] = true
+  videoLoadingStates[index] = false
 }
 
 // 🎯 获取标识文本
@@ -460,7 +508,9 @@ function finishSwipe() {
   display: block;
 }
 
-.pause-layer {
+.pause-layer,
+.video-loading,
+.video-error {
   position: absolute;
   left: 0;
   top: 0;
@@ -469,15 +519,43 @@ function finishSwipe() {
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: auto; // 🎯 允许点击
   z-index: 11;
+}
 
-  .pause-icon {
-    font-size: 60rem;
-    color: rgba(255, 255, 255, 0.5);
-    filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.3));
-    pointer-events: none; // 图标不阻挡点击
+.pause-layer,
+.video-error {
+  pointer-events: auto;
+}
+
+.video-loading {
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.video-error {
+  flex-direction: column;
+  gap: 12rem;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  font-size: 14rem;
+  cursor: pointer;
+
+  .error-icon {
+    font-size: 40rem;
+    opacity: 0.8;
   }
+}
+
+.loading-icon {
+  font-size: 40rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pause-icon {
+  font-size: 60rem;
+  color: rgba(255, 255, 255, 0.5);
+  filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.3));
+  pointer-events: none; // 图标不阻挡点击
 }
 
 .content-type-badge {

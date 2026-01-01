@@ -202,6 +202,15 @@ export const VideoEdit = () => {
           <Input.TextArea rows={3} placeholder="如果审核状态为已拒绝，请填写拒绝理由" />
         </Form.Item>
 
+        <Form.Item label="内容类型" name="content_type">
+          <Select placeholder="请选择内容类型">
+            <Select.Option value="video">🎬 视频</Select.Option>
+            <Select.Option value="image">🖼️ 图片</Select.Option>
+            <Select.Option value="album">📷 相册</Select.Option>
+            <Select.Option value="collection">📦 合集</Select.Option>
+          </Select>
+        </Form.Item>
+
         <Form.Item label="成人" name="is_adult" valuePropName="checked">
           <Switch checkedChildren="成人" unCheckedChildren="普通" />
         </Form.Item>

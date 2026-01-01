@@ -671,6 +671,7 @@ export const VideoList = () => {
               <Select.Option value="video">🎬 视频</Select.Option>
               <Select.Option value="image">🖼️ 图片</Select.Option>
               <Select.Option value="album">📷 相册</Select.Option>
+              <Select.Option value="collection">📦 合集</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item name="is_recommended" label="推荐">

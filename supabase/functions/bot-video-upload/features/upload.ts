@@ -149,8 +149,8 @@ export async function handlePhoto(
             images: JSON.stringify(currentImages),
             title: `合集 (${currentImages.length}个内容)`,
             content_type: 'collection',
-            // 如果原来的封面是空的，或者原来是占位符，更新封面
-            ...(!existingPost.cover_url || existingPost.cover_url === ''
+            // 🎯 只要当前没封面，就强制补齐封面
+            ...(!existingPost.cover_url || existingPost.cover_url.length < 5
               ? { cover_url: photo.file_id }
               : {})
           })
@@ -483,9 +483,9 @@ export async function handleVideo(
           .update({
             images: JSON.stringify(currentMedia),
             title: `合集 (${currentMedia.length}个内容)`,
-            content_type: 'collection', // 🎯 统一标记为 collection，区分纯图文 album
-            // 如果原来没有封面，使用当前视频封面
-            ...(!existingPost.cover_url || existingPost.cover_url === ''
+            content_type: 'collection', // 统一标记为 collection，区分纯图文 album
+            // 🎯 只要当前没封面，就强制补齐封面
+            ...(!existingPost.cover_url || existingPost.cover_url.length < 5
               ? { cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '' }
               : {})
           })

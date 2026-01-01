@@ -82,9 +82,9 @@ export function getCoverUrl(record: any): string {
     return buildCdnUrl(record.tg_thumbnail_file_id)
   }
 
-  // 📸 图片/相册：使用第一张图片作为封面
+  // 📸 图片/相册/合集：使用第一张图片作为封面
   const contentType = record.content_type || 'video'
-  if (contentType === 'image' || contentType === 'album') {
+  if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
     const images = parseImages(record.images)
     if (images.length > 0) {
       return buildCdnUrl(images[0].file_id)
@@ -124,6 +124,8 @@ export function getContentTypeInfo(contentType: string): {
       return { text: '图片', icon: '🖼️', color: 'green' }
     case 'album':
       return { text: '相册', icon: '📷', color: 'blue' }
+    case 'collection':
+      return { text: '合集', icon: '📦', color: 'orange' }
     case 'video':
     default:
       return { text: '视频', icon: '🎬', color: 'purple' }

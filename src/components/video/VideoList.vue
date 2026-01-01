@@ -545,7 +545,7 @@ function handleImageClick(slot: SlotState) {
   console.log('[VideoList] Image clicked:', slot.key)
 }
 
-// 🎯 相册滑到最后一张，记录完播
+// 🎯 相册/合集滑到最后一张，记录完播
 function handleAlbumComplete(slot: SlotState) {
   const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
   if (item?.aweme_id && !completedViews.has(item.aweme_id)) {
