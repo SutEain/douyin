@@ -15,8 +15,8 @@ export async function handleVideoMy(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const { pageNo, pageSize, from, to } = parsePagination(url)
 
-  const userField = profile.tg_user_id ? 'tg_user_id' : 'author_id'
-  const userValue = profile.tg_user_id ?? profile.id
+  // 🎯 统一使用 author_id (UUID) 进行查询，这是 videos 表的标准关联字段
+  const userValue = profile.id
 
   // ✅ 只返回已发布和草稿状态的视频（不包括 processing）
   const {
@@ -26,7 +26,7 @@ export async function handleVideoMy(req: Request): Promise<Response> {
   } = await supabaseAdmin
     .from('videos')
     .select('*', { count: 'exact' })
-    .eq(userField, userValue)
+    .eq('author_id', userValue)
     .in('status', ['draft', 'ready', 'published']) // ✅ 排除 processing
     .order('is_top', { ascending: false })
     .order('created_at', { ascending: false })

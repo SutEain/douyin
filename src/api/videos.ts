@@ -289,6 +289,10 @@ export async function recordVideoView(
   options?: { progress?: number; completed?: boolean }
 ) {
   try {
+    // 🎯 优化：如果是游客（未登录），直接跳过历史记录，不抛出异常
+    const token = await resolveAccessToken(false)
+    if (!token) return
+
     await callAppServer('/video/view', {
       method: 'POST',
       body: {
@@ -299,7 +303,7 @@ export async function recordVideoView(
       requireAuth: true
     })
   } catch (error) {
-    // 静默失败，不影响用户体验
+    // 仅在真正的请求失败时打印警告
     console.warn('[recordVideoView] 记录观看历史失败:', error)
   }
 }
@@ -412,7 +416,8 @@ function getAppServerBase() {
     return explicit.replace(/\/$/, '')
   }
 
-  if (import.meta.env.DEV) {
+  // 🎯 本地开发或预览模式下，优先使用相对路径（走 Vite 代理）
+  if (import.meta.env.DEV || window.location.port === '5555' || window.location.port === '3000') {
     return '/api/app-server'
   }
 

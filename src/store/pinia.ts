@@ -180,12 +180,38 @@ export const useBaseStore = defineStore('base', {
   },
   actions: {
     async init() {
-      // 🎯 解析 Telegram 启动参数（深链接）
-      this.parseStartParam()
+      // 1. 🎯 并行启动：解析参数、加载 API
+      // 提前加载核心 API 模块，避免后续顺序调用导致的等待
+      const paramPromise = Promise.resolve().then(() => this.parseStartParam())
+      const authApiPromise = import('@/api/auth')
+      const videoApiPromise = import('@/api/videos')
 
-      // 优先从 Supabase 获取用户数据
+      await paramPromise // 确保 startVideoId/startLiveId 已从 URL/TG 环境解析完成
+
+      // 2. 🎯 并行执行任务池：身份验证 & 深链接数据预取
+      // 这样在验证身份的同时，已经在拉取视频详情了
+      const tasks: Promise<any>[] = [authApiPromise]
+
+      let videoTaskIndex = -1
+      if (this.startVideoId && !this.startVideoData) {
+        tasks.push(videoApiPromise.then(({ getVideoById }) => getVideoById(this.startVideoId!)))
+        videoTaskIndex = tasks.length - 1
+      }
+
       try {
-        const { getCurrentProfile, loginWithTelegram } = await import('@/api/auth')
+        const results = await Promise.all(tasks)
+        const { getCurrentProfile, loginWithTelegram } = results[0]
+
+        // 处理深链接视频预加载结果（如果存在）
+        if (videoTaskIndex !== -1) {
+          const videoRes = results[videoTaskIndex]
+          if (videoRes?.success && videoRes.data) {
+            this.setStartVideoData(videoRes.data)
+            console.log('[Store.init] 深链接视频预加载成功')
+          }
+        }
+
+        // 3. 处理身份验证逻辑
         let profile = await getCurrentProfile()
 
         // 🎯 自动登录：如果在 TG 环境且没登录，尝试自动登录
@@ -205,30 +231,19 @@ export const useBaseStore = defineStore('base', {
           const lang = normalizeLang(this.userinfo.lang)
           this.userinfo.lang = lang
           i18n.global.locale.value = lang
-          this.isAppReady = true // ✅ 设置就绪
-          return
+        } else {
+          // 如果最终没有 profile (未登录)，尝试使用 Telegram 语言设置
+          const tgLang = tg?.initDataUnsafe?.user?.language_code
+          const lang = normalizeLang(tgLang)
+          this.userinfo.lang = lang
+          i18n.global.locale.value = lang
         }
       } catch (error) {
-        console.warn('获取用户数据或登录失败:', error)
+        console.warn('[Store.init] 获取用户数据或登录失败:', error)
       } finally {
-        // 即使登录失败（比如网络问题），也要标记 Ready，允许展示默认内容
+        // ✅ 无论如何都要标记就绪，允许 App 渲染
         this.isAppReady = true
       }
-
-      // 如果没有用户数据，尝试使用 Telegram 语言设置
-      // @ts-ignore
-      const tgLang = window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code
-      if (tgLang) {
-        const lang = normalizeLang(tgLang)
-        this.userinfo.lang = lang
-        i18n.global.locale.value = lang
-      } else {
-        const fallback = normalizeLang()
-        this.userinfo.lang = fallback
-        i18n.global.locale.value = fallback
-      }
-
-      // ✅ 不再调用 mock API，等待用户登录后获取真实数据
     },
 
     // 🎯 自动初始化用户（用于深链接等场景）
