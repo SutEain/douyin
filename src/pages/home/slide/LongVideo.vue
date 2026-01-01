@@ -41,6 +41,7 @@ const props = defineProps({
 
 const state = reactive({
   list: [] as VideoItem[],
+  page: 0,
   pageSize: 10,
   hasMore: true,
   loading: false
@@ -68,8 +69,9 @@ async function loadMore() {
   state.loading = true
 
   try {
-    // 💡 东南亚流后端也会排除已观看历史，所以不需要传 pageNo 偏移
+    // 💡 显式传递 pageNo 偏移，利用后端 get_sea_feed 的分页逻辑
     const res = await recommendedLongVideo({
+      pageNo: state.page,
       pageSize: state.pageSize
     })
 
@@ -82,9 +84,11 @@ async function loadMore() {
 
       if (uniqueNewList.length > 0) {
         state.list.push(...uniqueNewList)
+        state.page++
         state.hasMore = true
       } else if (newList.length > 0) {
-        // 如果全是重复，递归再取一批
+        // 如果全是重复，尝试下一页
+        state.page++
         state.loading = false
         return loadMore()
       } else {

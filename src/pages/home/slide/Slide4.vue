@@ -45,6 +45,7 @@ const props = defineProps({
 
 const state = reactive({
   list: [] as VideoItem[],
+  page: 0, // 🎯 增加页码计数，用于辅助后端逻辑（如跳过深链接首位）
   pageSize: 10,
   hasMore: true
 })
@@ -70,8 +71,9 @@ async function loadMore() {
   store.loading = true
 
   try {
-    // 💡 首页推荐不需要传 pageNo，后端会自动根据历史推荐
+    // 💡 即使后端是随机流，传一个变化的 start 也能帮助后端区分请求阶段
     const res = await recommendedVideo({
+      start: state.page * state.pageSize,
       pageSize: state.pageSize
     })
 
@@ -84,10 +86,18 @@ async function loadMore() {
 
       if (uniqueNewList.length > 0) {
         state.list.push(...uniqueNewList)
+        state.page++
         state.hasMore = true
-        console.log(`[Slide4] 成功加载 ${uniqueNewList.length} 条新内容`)
+        console.log(`[Slide4] 成功加载 ${uniqueNewList.length} 条新内容，总计 ${state.list.length}`)
+
+        // 💡 策略优化：如果去重后新内容太少（不足5条），且后端还能给数据，则自动多加载一批，确保流畅
+        if (state.list.length < 5 && newList.length >= state.pageSize) {
+          store.loading = false
+          return loadMore()
+        }
       } else if (newList.length > 0) {
-        // 💡 如果全是重复，递归再取一次（后端会因为已观看排除逻辑最终给出新内容）
+        // 💡 如果全是重复，自动穿透到下一页
+        state.page++
         console.log('[Slide4] 全是重复，尝试获取下一批...')
         store.loading = false
         return loadMore()

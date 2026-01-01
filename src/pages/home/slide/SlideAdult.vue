@@ -45,6 +45,7 @@ const props = defineProps({
 
 const state = reactive({
   list: [] as VideoItem[],
+  page: 0,
   pageSize: 10,
   hasMore: true
 })
@@ -69,8 +70,9 @@ async function loadMore() {
   store.loading = true
 
   try {
-    // 💡 成人流后端会排除已观看历史，所以不需要传 pageNo/start 偏移
+    // 💡 显式传递 start 偏移，利用后端 get_adult_feed 的 OFFSET 逻辑
     const res = await adultVideoFeed({
+      start: state.page * state.pageSize,
       pageSize: state.pageSize
     })
 
@@ -81,9 +83,11 @@ async function loadMore() {
 
       if (uniqueNewList.length > 0) {
         state.list.push(...uniqueNewList)
+        state.page++
         state.hasMore = true
       } else if (newList.length > 0) {
-        // 全是重复，递归再取一批
+        // 全是重复，尝试下一页
+        state.page++
         store.loading = false
         return loadMore()
       } else {
