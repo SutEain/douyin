@@ -26,78 +26,7 @@ export default defineConfig((): Promise<UserConfig> => {
               vue: Vue(),
               vueJsx: VueJsx() // if needed
             }
-            // betterDefine: true,
-            // reactivityTransform: {
-            //   exclude: [/node_modules/, /jQuery\.js/]
-            // }
           })
-          // Vue(),
-          // VueJsx(),
-          // lifecycle === 'report' ? (visualizer({ open: false }) as any as PluginOption) : null,
-          // importToCDN({
-          //   modules: [
-          //     {
-          //       name: 'vue',
-          //       var: 'Vue',
-          //       path: `https://lib.baomitu.com/vue/3.4.21/vue.runtime.global.prod.min.js`
-          //     },
-          //     {
-          //       name: 'vue-router',
-          //       var: 'VueRouter',
-          //       path: 'https://lib.baomitu.com/vue-router/4.3.0/vue-router.global.prod.min.js'
-          //     },
-          //     {
-          //       name: 'vue-demi',
-          //       var: 'VueDemi',
-          //       path: 'https://lib.baomitu.com/vue-demi/0.14.7/index.iife.min.js'
-          //     }
-          //     // ❌ 移除 mockjs CDN 引用，生产环境不应该加载 Mock.js
-          //     // {
-          //     //   name: 'mockjs',
-          //     //   var: 'Mock',
-          //     //   path: 'https://lib.baomitu.com/Mock.js/1.0.1-beta3/mock-min.js'
-          //     // }
-          //   ]
-          // })
-          // viteCompression({
-          //   verbose: false,
-          //   disable: false,
-          //   threshold: 10240,
-          //   algorithm: 'brotliCompress',
-          // }),
-          // viteCompression({
-          //   verbose: false,
-          //   disable: false,
-          //   algorithm: 'gzip',
-          //   threshold: 10240,
-          // }),
-          // viteImagemin({
-          //   gifsicle: {
-          //     optimizationLevel: 7,
-          //     interlaced: false,
-          //   },
-          //   optipng: {
-          //     optimizationLevel: 7,
-          //   },
-          //   mozjpeg: {
-          //     quality: 20,
-          //   },
-          //   pngquant: {
-          //     quality: [0.8, 0.9],
-          //     speed: 4,
-          //   },
-          //   svgo: {
-          //     plugins: [
-          //       {
-          //         name: 'removeViewBox',
-          //       },
-          //       {
-          //         name: 'removeEmptyAttrs',
-          //         active: false,
-          //       },
-          //     ],
-          //   },
-          // }),
         ],
         resolve: {
           alias: {
@@ -108,35 +37,47 @@ export default defineConfig((): Promise<UserConfig> => {
         build: {
           sourcemap: false,
           rollupOptions: {
-            // https://rollupjs.org/guide/en/#outputmanualchunks
             output: {
               manualChunks(id: string, { getModuleInfo }: any) {
-                // 1. 优先提取体积巨大的独立库
-                if (id.includes('node_modules')) {
-                  if (id.includes('@supabase')) return 'supabase'
-                  if (id.includes('@iconify')) return 'icons'
-                  return 'vendor'
-                }
-
-                // 2. 恢复原有的公共组件识别逻辑
                 const reg = /(.*)\/src\/components\/(.*)/
                 if (reg.test(id)) {
                   const importersLen = getModuleInfo(id)?.importers.length ?? 0
+                  // 被多处引用
                   if (importersLen > 1) return 'common'
                 }
+                if (id.includes('node_modules')) return 'vendor'
 
-                // 3. 恢复原有的页面分包逻辑，减少主包体积
-                if (
-                  id.includes('/src/pages/home/Publish.vue') ||
-                  id.includes('/src/pages/home/Music.vue') ||
-                  id.includes('/src/pages/home/LivePage.vue') ||
-                  id.includes('/src/pages/shop/') ||
-                  id.includes('/src/pages/message/') ||
-                  id.includes('/src/pages/me/') ||
-                  id.includes('/src/pages/other/')
-                ) {
-                  return 'other'
-                }
+                if (id.includes('/src/pages/home/Publish.vue')) return 'other'
+
+                if (id.includes('/src/pages/home/Music.vue')) return 'other'
+                if (id.includes('/src/pages/home/MusicRankList.vue')) return 'other'
+                if (id.includes('/src/pages/home/LivePage.vue')) return 'other'
+                if (id.includes('/src/pages/home/SearchPage.vue')) return 'other'
+
+                if (id.includes('/src/pages/shop/Shop.vue')) return 'other'
+                if (id.includes('/src/pages/shop/GoodsDetail.vue')) return 'other'
+
+                if (id.includes('/src/pages/message/Message.vue')) return 'other'
+                if (id.includes('/src/pages/message/Fans.vue')) return 'other'
+                if (id.includes('/src/pages/message/AllMessage.vue')) return 'other'
+                if (id.includes('/src/pages/message/notice/DouyinHelper.vue')) return 'other'
+                if (id.includes('/src/pages/message/notice/SystemNotice.vue')) return 'other'
+                if (id.includes('/src/pages/message/notice/TaskNotice.vue')) return 'other'
+                if (id.includes('/src/pages/message/notice/LiveNotice.vue')) return 'other'
+                if (id.includes('/src/pages/message/notice/MoneyNotice.vue')) return 'other'
+
+                if (id.includes('/src/pages/me/Me.vue')) return 'other'
+                if (id.includes('/src/pages/me/Visitors.vue')) return 'other'
+                if (id.includes('/src/pages/me/RequestUpdate.vue')) return 'other'
+                if (id.includes('/src/pages/me/userinfo/EditUserInfo.vue')) return 'other'
+                if (id.includes('/src/pages/me/userinfo/EditUserInfoItem.vue')) return 'other'
+                if (id.includes('/src/pages/me/MyMusic.vue')) return 'other'
+
+                if (id.includes('/src/pages/other/VideoDetail.vue')) return 'other'
+                if (id.includes('/src/pages/other/AlbumDetail.vue')) return 'other'
+
+                if (id.includes('/src/pages/people/FindAcquaintance.vue')) return 'other'
+                if (id.includes('/src/pages/people/FollowAndFans.vue')) return 'other'
               },
               chunkFileNames: 'js/[name]-[hash].js', // 引入文件名的名称
               entryFileNames: 'js/[name]-[hash].js', // 包的入口文件名称
