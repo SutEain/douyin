@@ -53,8 +53,10 @@ const state = reactive({
 async function loadMore() {
   if (store.loading) return
 
-  // 1. 🎯 核心重构：等待 App Ready
-  if (!store.isAppReady) {
+  // 1. 🎯 并行优化：如果有 Telegram initData，可以直接发起请求
+  const hasTGInitData = !!(window as any).Telegram?.WebApp?.initData
+
+  if (!store.isAppReady && !hasTGInitData) {
     const unwatch = watch(
       () => store.isAppReady,
       (ready) => {

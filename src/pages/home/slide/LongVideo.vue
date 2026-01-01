@@ -50,9 +50,11 @@ const state = reactive({
 async function loadMore() {
   if (state.loading) return
 
-  // 1. 🎯 核心重构：等待 App Ready
+  // 1. 🎯 并行优化：如果有 Telegram initData，可以直接发起请求
   const store = useBaseStore()
-  if (!store.isAppReady) {
+  const hasTGInitData = !!(window as any).Telegram?.WebApp?.initData
+
+  if (!store.isAppReady && !hasTGInitData) {
     console.log('[LongVideo] 等待 App Ready...')
     const unwatch = watch(
       () => store.isAppReady,

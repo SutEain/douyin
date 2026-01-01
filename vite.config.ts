@@ -110,46 +110,13 @@ export default defineConfig((): Promise<UserConfig> => {
           rollupOptions: {
             // https://rollupjs.org/guide/en/#outputmanualchunks
             output: {
-              manualChunks(id: string, { getModuleInfo }: any) {
-                const reg = /(.*)\/src\/components\/(.*)/
-                if (reg.test(id)) {
-                  const importersLen = getModuleInfo(id)?.importers.length ?? 0
-                  // 被多处引用
-                  if (importersLen > 1) return 'common'
+              manualChunks(id: string) {
+                if (id.includes('node_modules')) {
+                  if (id.includes('@supabase')) return 'supabase'
+                  if (id.includes('@iconify')) return 'icons'
+                  if (id.includes('vue-virtual-scroller')) return 'scroller'
+                  return 'vendor'
                 }
-                if (id.includes('node_modules')) return 'vendor'
-
-                if (id.includes('/src/pages/home/Publish.vue')) return 'other'
-
-                if (id.includes('/src/pages/home/Music.vue')) return 'other'
-                if (id.includes('/src/pages/home/MusicRankList.vue')) return 'other'
-                if (id.includes('/src/pages/home/LivePage.vue')) return 'other'
-                if (id.includes('/src/pages/home/SearchPage.vue')) return 'other'
-
-                if (id.includes('/src/pages/shop/Shop.vue')) return 'other'
-                if (id.includes('/src/pages/shop/GoodsDetail.vue')) return 'other'
-
-                if (id.includes('/src/pages/message/Message.vue')) return 'other'
-                if (id.includes('/src/pages/message/Fans.vue')) return 'other'
-                if (id.includes('/src/pages/message/AllMessage.vue')) return 'other'
-                if (id.includes('/src/pages/message/notice/DouyinHelper.vue')) return 'other'
-                if (id.includes('/src/pages/message/notice/SystemNotice.vue')) return 'other'
-                if (id.includes('/src/pages/message/notice/TaskNotice.vue')) return 'other'
-                if (id.includes('/src/pages/message/notice/LiveNotice.vue')) return 'other'
-                if (id.includes('/src/pages/message/notice/MoneyNotice.vue')) return 'other'
-
-                if (id.includes('/src/pages/me/Me.vue')) return 'other'
-                if (id.includes('/src/pages/me/Visitors.vue')) return 'other'
-                if (id.includes('/src/pages/me/RequestUpdate.vue')) return 'other'
-                if (id.includes('/src/pages/me/userinfo/EditUserInfo.vue')) return 'other'
-                if (id.includes('/src/pages/me/userinfo/EditUserInfoItem.vue')) return 'other'
-                if (id.includes('/src/pages/me/MyMusic.vue')) return 'other'
-
-                if (id.includes('/src/pages/other/VideoDetail.vue')) return 'other'
-                if (id.includes('/src/pages/other/AlbumDetail.vue')) return 'other'
-
-                if (id.includes('/src/pages/people/FindAcquaintance.vue')) return 'other'
-                if (id.includes('/src/pages/people/FollowAndFans.vue')) return 'other'
               },
               chunkFileNames: 'js/[name]-[hash].js', // 引入文件名的名称
               entryFileNames: 'js/[name]-[hash].js', // 包的入口文件名称
