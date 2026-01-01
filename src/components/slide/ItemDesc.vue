@@ -231,15 +231,16 @@ const publishDate = computed(() => {
       content: '';
       position: absolute;
       width: 100vw;
-      left: 50%;
-      transform: translateX(-50%);
-      top: -24rem;
-      bottom: -12rem;
+      // 🎯 修复：父级容器有 ml1r (约 10rem)，我们需要向左偏移回来以铺满全屏
+      left: calc(-1 * var(--record-ml, 10rem));
+      top: -60rem; // 向上延伸更多，让渐变极度柔和
+      bottom: -40rem;
       background: linear-gradient(
         to bottom,
         rgba(0, 0, 0, 0) 0%,
-        rgba(0, 0, 0, 0.35) 45%,
-        rgba(0, 0, 0, 0.6) 100%
+        rgba(0, 0, 0, 0.1) 20%,
+        rgba(0, 0, 0, 0.4) 60%,
+        rgba(0, 0, 0, 0.7) 100%
       );
       pointer-events: none;
       z-index: 0;
@@ -270,14 +271,14 @@ const publishDate = computed(() => {
       padding: 8rem 12rem;
       white-space: nowrap;
       user-select: none;
-      background: rgba(0, 0, 0, 0.15);
+      background: transparent; // 🎯 移除背景色，靠底部的渐变层来衬托
       border-radius: 4rem;
       min-width: 64rem;
       text-align: center;
 
       &:active {
         opacity: 0.8;
-        background: rgba(0, 0, 0, 0.3);
+        background: rgba(255, 255, 255, 0.1); // 仅点击时有微弱反馈
       }
     }
 
@@ -289,14 +290,14 @@ const publishDate = computed(() => {
       padding: 8rem 12rem;
       white-space: nowrap;
       user-select: none;
-      background: rgba(0, 0, 0, 0.15);
+      background: transparent; // 🎯 移除背景色
       border-radius: 4rem;
       min-width: 64rem;
       text-align: center;
 
       &:active {
         opacity: 0.8;
-        background: rgba(0, 0, 0, 0.3);
+        background: rgba(255, 255, 255, 0.1);
       }
     }
 
