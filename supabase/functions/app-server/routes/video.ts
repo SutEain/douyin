@@ -140,6 +140,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     }
   } else {
     // 未登录用户：按时间倒序
+    const { from, to } = parsePagination(url)
     const { data } = await supabaseAdmin
       .from('videos')
       .select('*')
@@ -147,7 +148,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
       .eq('is_adult', false)
       .eq('is_sea', false)
       .order('created_at', { ascending: false })
-      .limit(pageSize)
+      .range(from, to)
     rows = data || []
   }
 

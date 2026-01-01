@@ -70,9 +70,10 @@ async function loadMore() {
   store.loading = true
 
   try {
-    // 💡 显式传递 start 偏移，利用后端 get_adult_feed 的 OFFSET 逻辑
+    // 💡 核心策略：如果已登录，后端会排除已观看，此时必须永远传 start: 0 才能不跳过新内容
+    // 💡 如果未登录，后端是简单时间倒序，此时需要正常分页
     const res = await adultVideoFeed({
-      start: state.page * state.pageSize,
+      start: store.userinfo.uid ? 0 : state.page * state.pageSize,
       pageSize: state.pageSize
     })
 

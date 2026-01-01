@@ -90,8 +90,10 @@ async function loadMore() {
         state.hasMore = true
         console.log(`[Slide4] 成功加载 ${uniqueNewList.length} 条新内容，总计 ${state.list.length}`)
 
-        // 💡 策略优化：如果去重后新内容太少（不足5条），且后端还能给数据，则自动多加载一批，确保流畅
-        if (state.list.length < 5 && newList.length >= state.pageSize) {
+        // 💡 强力补货策略：如果列表里的有效视频太少（不足5条），无法支撑流畅滑动
+        // 则不论后端返回了多少，都强制再请求一次，直到攒够 5 条或后端彻底没数据
+        if (state.list.length < 5 && newList.length > 0) {
+          console.log(`[Slide4] 内容不足 ${state.list.length}/5，自动补货...`)
           store.loading = false
           return loadMore()
         }

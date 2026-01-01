@@ -69,9 +69,10 @@ async function loadMore() {
   state.loading = true
 
   try {
-    // 💡 显式传递 pageNo 偏移，利用后端 get_sea_feed 的分页逻辑
+    // 💡 核心策略：已登录用户永远请求 pageNo: 0 (由后端排除已看过的)
+    // 💡 未登录用户则正常按 pageNo 分页
     const res = await recommendedLongVideo({
-      pageNo: state.page,
+      pageNo: store.userinfo.uid ? 0 : state.page,
       pageSize: state.pageSize
     })
 
