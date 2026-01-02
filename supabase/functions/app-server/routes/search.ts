@@ -26,7 +26,7 @@ export async function handleSearchVideos(req: Request): Promise<Response> {
     })
   }
 
-  // 🎯 核心修复：查询专门的搜索视图，避免 PostgREST 解析 ::text 报错
+  // 搜索视频：标题 + 描述 + 标签 模糊匹配 (使用视图加速)
   const {
     data: rows,
     error,
@@ -35,7 +35,8 @@ export async function handleSearchVideos(req: Request): Promise<Response> {
     .from('video_search_view') // 👈 使用新视图
     .select('*', { count: 'exact' })
     .eq('status', 'published')
-    .ilike('search_text', `%${keyword}%`) // 👈 直接对合并后的字段进行模糊匹配
+    // 🎯 取消 is_adult 过滤，实现普通与成人内容全量搜索
+    .ilike('search_text', `%${keyword}%`)
     .order('like_count', { ascending: false })
     .order('created_at', { ascending: false })
     .range(from, to)

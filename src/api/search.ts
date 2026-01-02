@@ -15,9 +15,14 @@ async function getAccessToken(required: boolean = true) {
 }
 
 /**
- * 搜索视频 (统一包含普通和成人视频)
+ * 搜索视频（普通 + 成人）
  */
-export async function searchVideos(keyword: string, pageNo = 0, pageSize = 20) {
+export async function searchVideos(
+  keyword: string,
+  pageNo = 0,
+  pageSize = 20,
+  isAdultSearch = false // 🎯 新增参数
+) {
   const accessToken = await getAccessToken(false) // 可选认证
 
   const headers: Record<string, string> = {
@@ -35,7 +40,7 @@ export async function searchVideos(keyword: string, pageNo = 0, pageSize = 20) {
   const response = await fetch(
     `${APP_SERVER_URL}/search/videos?keyword=${encodeURIComponent(
       keyword
-    )}&pageNo=${pageNo}&pageSize=${pageSize}`,
+    )}&pageNo=${pageNo}&pageSize=${pageSize}&is_adult_search=${isAdultSearch}`, // 🎯 传递 is_adult_search
     { headers }
   )
 

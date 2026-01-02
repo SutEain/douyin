@@ -20,21 +20,22 @@ export function isTelegramFileId(str: string): boolean {
 export function buildCdnUrl(fileIdOrUrl: string): string {
   if (!fileIdOrUrl) return ''
 
-  // 1. 如果已经是完整 URL，直接返回
+  // 1. 🎯 如果已经是完整 URL（包含 R2 域名或直链），直接返回，不再走 Worker 代理
   if (fileIdOrUrl.startsWith('http://') || fileIdOrUrl.startsWith('https://')) {
     return fileIdOrUrl
   }
 
-  // 2. 如果是相对路径 (R2 转存路径，如 /video/xxx.mp4)
+  // 2. 🎯 如果是相对路径 (R2 转存路径，如 /videos/xxx.mp4)
   if (fileIdOrUrl.startsWith('/')) {
-    // 优先使用视频 R2 域名，如果没有则用主域名
-    const baseUrl =
-      import.meta.env.VITE_APP_VIDEO_BASE_URL || import.meta.env.VITE_APP_API_BASE_URL || ''
-    const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-    return `${base}${fileIdOrUrl}`
+    // 优先使用视频 R2 域名 (VITE_APP_VIDEO_BASE_URL)
+    const baseUrl = import.meta.env.VITE_APP_VIDEO_BASE_URL || ''
+    if (baseUrl) {
+      const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+      return `${base}${fileIdOrUrl}`
+    }
   }
 
-  // 3. 如果是 file_id，转换为 CDN 代理 URL
+  // 3. 🎯 只有确实是 file_id 且没有直链时，才走 Worker 代理（用于查看正在处理中或未搬家的老视频）
   if (!CF_WORKER_URL) {
     console.warn('[buildCdnUrl] CF Worker URL not configured')
     return ''

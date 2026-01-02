@@ -39,7 +39,6 @@ import {
 } from './routes/user.ts'
 import {
   handleSearchVideos,
-  handleSearchAdultVideos,
   handleSearchUsers,
   handleHotSearch,
   handleGetSearchHistory,
