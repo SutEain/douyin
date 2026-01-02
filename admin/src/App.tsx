@@ -27,6 +27,7 @@ import { BoundChannelList } from './pages/bound-channels'
 import { Login } from './pages/login'
 import { authProvider } from './authProvider'
 import { Dashboard } from './pages/dashboard'
+import { InheritancePage } from './pages/inheritance'
 
 function AdminGuard() {
   const [checking, setChecking] = useState(true)
@@ -184,6 +185,11 @@ function App() {
                 name: 'bound_channels',
                 list: '/bound-channels',
                 meta: { label: '频道同步管理' }
+              },
+              {
+                name: 'inheritance',
+                list: '/inheritance',
+                meta: { label: '资产继承 (迁移)' }
               }
             ]}
             options={{
@@ -234,6 +240,9 @@ function App() {
                 </Route>
                 <Route path="/bound-channels">
                   <Route index element={<BoundChannelList />} />
+                </Route>
+                <Route path="/inheritance">
+                  <Route index element={<InheritancePage />} />
                 </Route>
               </Route>
               <Route path="*" element={<ErrorComponent />} />

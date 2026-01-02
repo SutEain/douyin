@@ -169,6 +169,8 @@ export const useBaseStore = defineStore('base', {
       },
       friends: resource.users,
       message: '',
+      _isInitializing: false, // 🎯 内部锁，防止重复初始化
+      _authRetryCount: 0, // 🎯 自动登录重试计数，防止死循环
       isAppReady: false // 🎯 应用初始化就绪标志（登录+信息同步完成）
     }
   },
@@ -180,6 +182,15 @@ export const useBaseStore = defineStore('base', {
   },
   actions: {
     async init() {
+      // 🎯 防止重复初始化导致的死循环或资源浪费
+      // @ts-ignore
+      if (this._isInitializing) {
+        console.warn('[Store.init] ⏳ 初始化已在进行中，跳过重复调用')
+        return
+      }
+      // @ts-ignore
+      this._isInitializing = true
+
       // 1. 🎯 并行启动：解析参数、加载 API
       // 提前加载核心 API 模块，避免后续顺序调用导致的等待
       const paramPromise = Promise.resolve().then(() => this.parseStartParam())
@@ -225,10 +236,11 @@ export const useBaseStore = defineStore('base', {
 
         // 🚨 核心漏洞修复：检测 Telegram 当前用户与本地缓存用户是否一致
         if (profile && tgUser) {
-          const cachedTgId = String(profile.tg_user_id)
-          const currentTgId = String(tgUser.id)
+          // 🎯 强制转字符串对比，防止大整数精度丢失导致的误判
+          const cachedTgId = String(profile.tg_user_id || '')
+          const currentTgId = String(tgUser.id || '')
 
-          if (cachedTgId !== currentTgId) {
+          if (cachedTgId && currentTgId && cachedTgId !== currentTgId) {
             console.warn(`[Auth] 📢 检测到账号切换: ${cachedTgId} -> ${currentTgId}，强制重新登录`)
             await logout() // 清除 A 账号本地缓存
             profile = null // 标记为未登录，进入下方的自动登录逻辑
@@ -237,12 +249,18 @@ export const useBaseStore = defineStore('base', {
 
         // 🎯 自动登录：如果在 TG 环境且没登录（或者是刚才因为账号切换被清除了），则自动登录
         if (!profile && tg?.initData) {
-          try {
-            console.log('[Auth] 🚀 正在执行 Telegram 自动登录...')
-            await loginWithTelegram(tg.initData)
-            profile = await getCurrentProfile()
-          } catch (e) {
-            console.error('[Auth] ❌ 自动登录失败:', e)
+          // 🛡️ 防死循环保护：如果单次生命周期内尝试登录超过 3 次，停止尝试
+          if (this._authRetryCount < 3) {
+            try {
+              this._authRetryCount++
+              console.log(`[Auth] 🚀 正在执行 Telegram 自动登录 (第 ${this._authRetryCount} 次)...`)
+              await loginWithTelegram(tg.initData)
+              profile = await getCurrentProfile()
+            } catch (e) {
+              console.error('[Auth] ❌ 自动登录失败:', e)
+            }
+          } else {
+            console.error('[Auth] 🛑 自动登录尝试次数过多，停止重试，防止 WebView 崩溃')
           }
         }
 
@@ -263,6 +281,8 @@ export const useBaseStore = defineStore('base', {
       } finally {
         // ✅ 无论如何都要标记就绪，允许 App 渲染
         this.isAppReady = true
+        // @ts-ignore
+        this._isInitializing = false
       }
     },
 
