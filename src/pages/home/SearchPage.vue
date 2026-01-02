@@ -6,16 +6,9 @@
         <select v-model="searchType" class="search-type-select">
           <option value="video">视频</option>
           <option value="user">用户</option>
-          <option value="adult">成人</option>
         </select>
         <Search
-          :placeholder="
-            searchType === 'video'
-              ? '搜索视频内容'
-              : searchType === 'user'
-                ? '搜索用户名'
-                : '搜索成人内容'
-          "
+          :placeholder="searchType === 'video' ? '搜索视频、描述或标签' : '搜索用户昵称或ID'"
           :isShowRightText="true"
           @notice="handleSearch"
           v-model="searchKeyword"
@@ -30,7 +23,7 @@
           <div class="left" @click="handleSearchHistory(item)">
             <img src="../../assets/img/icon/home/time-white.png" alt="" />
             <span class="history-type">
-              {{ item.type === 'video' ? '📹' : item.type === 'user' ? '👤' : '🔞' }}
+              {{ item.type === 'video' ? '📹' : '👤' }}
             </span>
             <span> {{ item.keyword }}</span>
           </div>
@@ -295,7 +288,7 @@ const nav = useNav()
 
 // 🔍 搜索状态
 const searchKeyword = ref('')
-const searchType = ref<'video' | 'user' | 'adult'>('video') // 默认搜索视频
+const searchType = ref<'video' | 'user'>('video') // 默认搜索视频
 const isLoadingHistory = ref(false)
 const isLoadingHot = ref(false)
 // 🔒 锁定页面高度，防止键盘弹出时挤压页面导致黑屏
@@ -352,7 +345,7 @@ function monitorViewport(duration: number) {
 const data = reactive({
   isExpand: false,
   adIndex: 0,
-  history: [] as Array<{ keyword: string; type: 'video' | 'user' | 'adult' }>, // 从数据库加载，包含搜索类型
+  history: [] as Array<{ keyword: string; type: 'video' | 'user' }>, // 从数据库加载，包含搜索类型
   allHotKeywords: [] as Array<{ text: string; count: number }>, // 所有热门搜索词（30条，只有视频）
   randomGuess: [] as Array<{ name: string; type: number }>, // 当前显示的6条
   hotRankList: [
@@ -899,7 +892,7 @@ function handleSearch(keyword?: string) {
 }
 
 // 🔍 处理搜索历史点击（带类型）
-function handleSearchHistory(item: { keyword: string; type: 'video' | 'user' | 'adult' }) {
+function handleSearchHistory(item: { keyword: string; type: 'video' | 'user' }) {
   // 使用历史记录中的搜索类型
   router.push({
     path: '/home/search/result',

@@ -7,9 +7,7 @@
         <img src="../../assets/img/icon/search-light.png" class="search-icon" />
         <div class="content">
           <span class="keyword">{{ keyword }}</span>
-          <span
-            class="count"
-            v-if="(searchType === 'video' || searchType === 'adult') && videoTotal > 0"
+          <span class="count" v-if="searchType === 'video' && videoTotal > 0"
             >({{ videoTotal }})</span
           >
           <span class="count" v-if="searchType === 'user' && userTotal > 0">({{ userTotal }})</span>
@@ -17,23 +15,9 @@
       </div>
     </div>
 
-    <!-- 视频结果（普通 / 成人 共用一套 UI） -->
-    <div v-if="searchType === 'video' || searchType === 'adult'" class="video-results">
-      <!-- 🔒 成人搜索锁定提示 -->
-      <div v-if="searchType === 'adult' && adultLocked" class="locked-container">
-        <div class="lock-icon">🔞</div>
-        <div class="lock-title">邀请新用户注册</div>
-        <div class="lock-desc">
-          请在 Telegram Bot 中点击「邀请好友解锁🔞」<br />
-          邀请新用户注册后，即可解锁无限刷成人内容。<br />
-          • 成功邀请 1 人 → 解锁 24 小时无限刷<br />
-          • 成功邀请 2 人 → 解锁 3 天无限刷<br />
-          • 累计邀请 3 人 → 永久解锁无限刷
-        </div>
-        <div class="lock-btn" @click="router.push('/home')">去邀请新用户</div>
-      </div>
-
-      <div v-else-if="videoLoading && videoList.length === 0" class="loading-container">
+    <!-- 视频结果 (包含成人内容) -->
+    <div v-if="searchType === 'video'" class="video-results">
+      <div v-if="videoLoading && videoList.length === 0" class="loading-container">
         <Loading :is-full-screen="false" />
       </div>
       <div v-else-if="videoList.length === 0" class="empty">
@@ -116,7 +100,7 @@ import VideoListItem from '../../components/VideoListItem.vue'
 import Loading from '../../components/Loading.vue'
 import { ref, onMounted, onActivated, onDeactivated, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { searchVideos, searchAdultVideos, searchUsers } from '@/api/search'
+import { searchVideos, searchUsers } from '@/api/search'
 import { toggleFollowUser } from '@/api/videos'
 import { _checkImgUrl, _formatNumber, _no } from '@/utils'
 import { useBaseStore } from '@/store/pinia'
@@ -136,12 +120,12 @@ const savedScrollTop = ref(0)
 
 // 搜索关键词和类型
 const keyword = ref('')
-const searchType = ref<'video' | 'user' | 'adult'>('video')
+const searchType = ref<'video' | 'user'>('video')
 
 // 记录上次搜索的参数
 const lastSearchParams = ref<{
   keyword: string
-  type: 'video' | 'user' | 'adult'
+  type: 'video' | 'user'
 }>({
   keyword: '',
   type: 'video'
@@ -157,8 +141,6 @@ const videoPage = ref(0)
 const videoPageSize = ref(20)
 const videoLoading = ref(false)
 const videoHasMore = ref(true)
-// 成人搜索是否锁定
-const adultLocked = ref(false)
 
 // 用户数据
 const userList = ref<any[]>([])
@@ -171,7 +153,7 @@ const userHasMore = ref(true)
 // 检查是否需要重新搜索
 function shouldReload() {
   const newKeyword = (route.query.keyword as string) || ''
-  const newType = (route.query.type as 'video' | 'user' | 'adult') || 'video'
+  const newType = (route.query.type as 'video' | 'user') || 'video'
 
   return newKeyword !== lastSearchParams.value.keyword || newType !== lastSearchParams.value.type
 }
@@ -179,7 +161,7 @@ function shouldReload() {
 // 初始化搜索
 function initSearch() {
   const newKeyword = (route.query.keyword as string) || ''
-  const newType = (route.query.type as 'video' | 'user' | 'adult') || 'video'
+  const newType = (route.query.type as 'video' | 'user') || 'video'
 
   keyword.value = newKeyword
   searchType.value = newType
@@ -192,7 +174,7 @@ function initSearch() {
     }
 
     // 根据类型搜索
-    if (searchType.value === 'video' || searchType.value === 'adult') {
+    if (searchType.value === 'video') {
       loadVideos()
     } else {
       loadUsers()
@@ -224,13 +206,12 @@ onActivated(() => {
   if (shouldReload()) {
     console.log('[SearchResult] 参数变化，重新搜索')
     // 重置数据
-    const newType = (route.query.type as 'video' | 'user' | 'adult') || 'video'
-    if (newType === 'video' || newType === 'adult') {
+    const newType = (route.query.type as 'video' | 'user') || 'video'
+    if (newType === 'video') {
       videoList.value = []
       videoPage.value = 0
       videoTotal.value = 0
       videoHasMore.value = true
-      adultLocked.value = false
     } else {
       userList.value = []
       userPage.value = 0
@@ -262,7 +243,7 @@ watch(
 
     if (hasKeywordChanged || hasTypeChanged) {
       keyword.value = newKeyword as string
-      searchType.value = (newType as 'video' | 'user' | 'adult') || 'video'
+      searchType.value = (newType as 'video' | 'user') || 'video'
 
       // 更新上次搜索参数
       lastSearchParams.value = {
@@ -278,12 +259,11 @@ watch(
 // 重新搜索
 function resetAndSearch() {
   // 根据类型重置对应的状态
-  if (searchType.value === 'video' || searchType.value === 'adult') {
+  if (searchType.value === 'video') {
     videoList.value = []
     videoPage.value = 0
     videoTotal.value = 0
     videoHasMore.value = true
-    adultLocked.value = false
     loadVideos()
   } else {
     userList.value = []
@@ -294,26 +274,13 @@ function resetAndSearch() {
   }
 }
 
-// 加载视频（普通 / 成人）
+// 加载视频 (包含成人内容)
 async function loadVideos() {
   if (videoLoading.value || !videoHasMore.value) return
 
   try {
     videoLoading.value = true
-    const result =
-      searchType.value === 'adult'
-        ? await searchAdultVideos(keyword.value, videoPage.value, videoPageSize.value)
-        : await searchVideos(keyword.value, videoPage.value, videoPageSize.value)
-
-    // 🔒 检查是否被锁定（仅成人搜索）
-    if (searchType.value === 'adult' && result.locked) {
-      adultLocked.value = true
-      videoList.value = []
-      videoHasMore.value = false
-      return
-    } else {
-      adultLocked.value = false
-    }
+    const result = await searchVideos(keyword.value, videoPage.value, videoPageSize.value)
 
     if (result.list) {
       videoList.value.push(...result.list)

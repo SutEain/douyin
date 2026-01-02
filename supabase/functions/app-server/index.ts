@@ -195,9 +195,6 @@ serve(async (req) => {
     if (route === '/search/videos' && method === 'GET') {
       return handleSearchVideos(req)
     }
-    if (route === '/search/adult' && method === 'GET') {
-      return handleSearchAdultVideos(req)
-    }
     if (route === '/search/users' && method === 'GET') {
       return handleSearchUsers(req)
     }
