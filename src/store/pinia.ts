@@ -200,7 +200,7 @@ export const useBaseStore = defineStore('base', {
 
       try {
         const results = await Promise.all(tasks)
-        const { getCurrentProfile, loginWithTelegram } = results[0]
+        const { getCurrentProfile, loginWithTelegram, logout } = results[0]
 
         // 处理深链接视频预加载结果（如果存在）
         if (videoTaskIndex !== -1) {
@@ -214,20 +214,35 @@ export const useBaseStore = defineStore('base', {
         // 3. 处理身份验证逻辑
         let profile = await getCurrentProfile()
 
-        // 🎯 自动登录：如果在 TG 环境且没登录，尝试自动登录
+        // 🎯 自动登录与“防串号”校验逻辑
         // @ts-ignore
         const tg = window.Telegram?.WebApp
         if (tg) {
-          // 🎯 强制全屏显示（针对部分环境默认为半屏的问题）
           tg.expand()
         }
 
+        const tgUser = tg?.initDataUnsafe?.user
+
+        // 🚨 核心漏洞修复：检测 Telegram 当前用户与本地缓存用户是否一致
+        if (profile && tgUser) {
+          const cachedTgId = String(profile.tg_user_id)
+          const currentTgId = String(tgUser.id)
+
+          if (cachedTgId !== currentTgId) {
+            console.warn(`[Auth] 📢 检测到账号切换: ${cachedTgId} -> ${currentTgId}，强制重新登录`)
+            await logout() // 清除 A 账号本地缓存
+            profile = null // 标记为未登录，进入下方的自动登录逻辑
+          }
+        }
+
+        // 🎯 自动登录：如果在 TG 环境且没登录（或者是刚才因为账号切换被清除了），则自动登录
         if (!profile && tg?.initData) {
           try {
+            console.log('[Auth] 🚀 正在执行 Telegram 自动登录...')
             await loginWithTelegram(tg.initData)
             profile = await getCurrentProfile()
           } catch (e) {
-            // ignore
+            console.error('[Auth] ❌ 自动登录失败:', e)
           }
         }
 
