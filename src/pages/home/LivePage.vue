@@ -248,8 +248,10 @@
                   <div
                     class="addr-value"
                     @click="
-                      _copy(rechargeInfo.pending_order.trc20_address)
-                      _notice('地址已复制')
+                      () => {
+                        _copy(rechargeInfo.pending_order.trc20_address)
+                        _notice('地址已复制')
+                      }
                     "
                   >
                     <code>{{ rechargeInfo.pending_order.trc20_address }}</code>
