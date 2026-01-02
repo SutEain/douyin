@@ -85,6 +85,25 @@ async function fixVideos() {
           writer.on('error', reject)
         })
 
+        // 🎯 深度内容校验：防止下载到损坏或伪造的文件
+        try {
+          console.log(`   - 🔍 验证文件真实性...`)
+          const probeResult = execSync(
+            `ffprobe -v error -select_streams v -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${localInput}"`
+          )
+            .toString()
+            .trim()
+
+          if (!probeResult) {
+            throw new Error('不包含有效的视频流')
+          }
+        } catch (err) {
+          console.error(`   ⚠️ [${videoId}] 文件校验失败，跳过优化: ${err.message}`)
+          // 如果校验失败，直接标记为已完成（或者根据业务逻辑决定是否标记），避免下次重复抓取这种坏文件
+          await supabase.from('videos').update({ is_optimized: true }).eq('id', videoId)
+          continue
+        }
+
         // B. 执行 FastStart 优化
         console.log(`   - ⚡ FastStart 优化中...`)
         execSync(`ffmpeg -y -i "${localInput}" -c copy -movflags +faststart "${localOutput}"`, {

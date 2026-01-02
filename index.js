@@ -56,6 +56,25 @@ app.post('/process', async (req, res) => {
       throw new Error(`文件不存在: ${localFilePath}`)
     }
 
+    // 🎯 深度内容校验：防止改后缀的伪造文件
+    try {
+      console.log(`[${video_id}] 正在验证文件真实性...`)
+      // -show_streams 尝试读取轨道信息，-select_streams v 仅看视频轨
+      const probeResult = execSync(
+        `ffprobe -v error -select_streams v -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${localFilePath}"`
+      )
+        .toString()
+        .trim()
+
+      if (!probeResult) {
+        throw new Error('该文件不包含有效的视频流，可能是伪造或损坏的文件')
+      }
+      console.log(`[${video_id}] 验证通过，编码格式: ${probeResult}`)
+    } catch (err) {
+      console.error(`[${video_id}] 文件校验失败:`, err.message)
+      throw new Error(`上传失败：检测到该文件不是有效的视频文件 (详情: ${err.message})`)
+    }
+
     // 🎯 优化：使用 ffmpeg 进行 faststart 处理，解决长视频拖动卡顿问题
     const optimizedPath = `${localFilePath}.opt.mp4`
     try {
