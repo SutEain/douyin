@@ -217,6 +217,11 @@ export const useBaseStore = defineStore('base', {
         // 🎯 自动登录：如果在 TG 环境且没登录，尝试自动登录
         // @ts-ignore
         const tg = window.Telegram?.WebApp
+        if (tg) {
+          // 🎯 强制全屏显示（针对部分环境默认为半屏的问题）
+          tg.expand()
+        }
+
         if (!profile && tg?.initData) {
           try {
             await loginWithTelegram(tg.initData)

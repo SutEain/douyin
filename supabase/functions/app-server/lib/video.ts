@@ -24,123 +24,139 @@ function calculateAge(birthday: string): number {
 }
 
 export async function mapVideoRow(row: any, profile: any) {
-  const coverUrl = await buildCoverUrl(row, profile)
-  const avatar = profile?.avatar_url || DEFAULT_AVATAR
+  try {
+    const coverUrl = await buildCoverUrl(row, profile)
+    const avatar = profile?.avatar_url || DEFAULT_AVATAR
 
-  // 🎯 根据内容类型决定是否需要视频URL
-  const contentType = row.content_type || 'video'
-  const videoUrl = contentType === 'video' ? await buildVideoUrl(row) : null
+    // 🎯 根据内容类型决定是否需要视频URL
+    const contentType = row.content_type || 'video'
+    const videoUrl = contentType === 'video' ? await buildVideoUrl(row) : null
 
-  // 🎯 只有视频类型才需要检查视频URL
-  if (contentType === 'video' && !videoUrl) return null
+    // 🎯 只有纯视频类型才需要检查视频URL，合辑(collection)中视频是动态加载的
+    if (contentType === 'video' && !videoUrl) return null
 
-  const authorCoverList = Array.isArray(profile?.cover_url)
-    ? profile.cover_url
-    : [
-        {
-          url_list: profile?.cover_url ? [profile.cover_url] : []
+    const authorCoverList = Array.isArray(profile?.cover_url)
+      ? profile.cover_url
+      : [
+          {
+            url_list: profile?.cover_url ? [profile.cover_url] : []
+          }
+        ]
+    const authorCardEntries = Array.isArray(profile?.card_entries) ? profile.card_entries : []
+
+    // 🎯 解析媒体列表，兼容 media_list 和 images 字段
+    let mediaList: any[] = []
+    const rawMedia = row.media_list || row.images
+    if (rawMedia) {
+      try {
+        const parsed = typeof rawMedia === 'string' ? JSON.parse(rawMedia) : rawMedia
+        if (Array.isArray(parsed)) {
+          // 转换每个媒体项的 file_id 为完整 URL
+          mediaList = await Promise.all(
+            parsed.map(async (item: any) => {
+              const mappedItem = { ...item }
+              if (item.file_id) {
+                // 如果是视频且没有 play_url，尝试构建
+                if (item.type === 'video' && !item.play_url) {
+                  mappedItem.play_url = await buildTelegramFileUrl(item.file_id)
+                }
+                // 如果是图片，或者作为封面的预览图
+                mappedItem.url = await buildTelegramFileUrl(item.file_id)
+              }
+              // 如果是视频且有封面 file_id，也转换它
+              if (item.type === 'video' && item.cover_url && !item.cover_url.startsWith('http')) {
+                mappedItem.cover_url = await buildTelegramFileUrl(item.cover_url)
+              }
+              return mappedItem
+            })
+          )
         }
-      ]
-  const authorCardEntries = Array.isArray(profile?.card_entries) ? profile.card_entries : []
-
-  // 🎯 解析 images 字段，并转换 file_id 为完整 CDN URL
-  let images: any[] = []
-  if (row.images) {
-    try {
-      const rawImages = typeof row.images === 'string' ? JSON.parse(row.images) : row.images
-      if (Array.isArray(rawImages)) {
-        // 转换每个图片的 file_id 为完整 URL
-        images = await Promise.all(
-          rawImages.map(async (img: any) => ({
-            ...img,
-            url: img.file_id ? await buildTelegramFileUrl(img.file_id) : null
-          }))
-        )
+      } catch (e) {
+        console.error('[mapVideoRow] 解析媒体列表失败:', e)
       }
-    } catch {
-      images = []
     }
-  }
 
-  return {
-    aweme_id: typeof row.id === 'string' ? row.id : String(row.id),
-    is_top: !!row.is_top,
-    status: row.status || 'published', // ✅ 添加视频状态 (draft/ready/published)
-    is_private: !!row.is_private, // ✅ 添加私密标记
-    is_adult: !!row.is_adult, // ✅ 成人内容标记
-    view_count: row.view_count ?? 0, // ✅ 播放量（用于 Me 页面作品列表展示）
-    content_type: contentType, // 🎯 内容类型：video/image/album
-    images: images, // 🎯 图片数组（用于 image/album 类型）
-    desc: row.description || '',
-    tags: row.tags || [],
-    create_time: Math.floor(new Date(row.created_at).getTime() / 1000),
-    city: row.location_city || '',
-    address: row.location_country || '',
-    isLoved: false,
-    isCollect: false,
-    isAttention: false,
-    statistics: {
-      digg_count: row.like_count ?? 0,
-      comment_count: row.comment_count ?? 0,
-      collect_count: row.collect_count ?? 0,
-      share_count: row.share_count ?? 0
-    },
-    video: {
-      duration: row.duration ?? 0,
-      width: row.width ?? 0,
-      height: row.height ?? 0,
-      play_addr: {
-        url_list: [videoUrl]
+    return {
+      aweme_id: typeof row.id === 'string' ? row.id : String(row.id),
+      is_top: !!row.is_top,
+      status: row.status || 'published',
+      is_private: !!row.is_private,
+      is_adult: !!row.is_adult,
+      view_count: row.view_count ?? 0,
+      content_type: contentType,
+      media_list: mediaList, // 🎯 统一返回 media_list
+      images: mediaList, // 兼容旧版前端
+      desc: row.description || '',
+      tags: row.tags || [],
+      create_time: Math.floor(new Date(row.created_at).getTime() / 1000),
+      city: row.location_city || '',
+      address: row.location_country || '',
+      isLoved: false,
+      isCollect: false,
+      isAttention: false,
+      statistics: {
+        digg_count: row.like_count ?? 0,
+        comment_count: row.comment_count ?? 0,
+        collect_count: row.collect_count ?? 0,
+        share_count: row.share_count ?? 0
       },
-      cover: {
-        url_list: coverUrl ? [coverUrl] : [DEFAULT_COVER]
+      video: {
+        duration: row.duration ?? 0,
+        width: row.width ?? 0,
+        height: row.height ?? 0,
+        play_addr: {
+          url_list: [videoUrl]
+        },
+        cover: {
+          url_list: coverUrl ? [coverUrl] : [DEFAULT_COVER]
+        },
+        poster: coverUrl || DEFAULT_COVER
       },
-      poster: coverUrl || DEFAULT_COVER
-    },
-    author: {
-      nickname: profile?.nickname || profile?.username || 'Telegram 用户',
-      unique_id: profile?.username || '',
-      uid: profile?.id || String(row.tg_user_id ?? row.author_id ?? row.id),
-      user_id: profile?.id || row.author_id || null,
-      tg_user_id: profile?.tg_user_id ?? row.tg_user_id ?? null,
-      avatar_thumb: {
-        url_list: [avatar]
-      },
-      avatar_168x168: {
-        url_list: [avatar]
-      },
-      avatar_300x300: {
-        url_list: [avatar]
-      },
-      cover_url: authorCoverList.map((entry: any) => ({
-        url_list: Array.isArray(entry?.url_list)
-          ? entry.url_list
-          : entry?.url_list
-            ? [entry.url_list]
-            : []
-      })),
-      card_entries: authorCardEntries,
-      // ✅ UserPanel 需要的额外字段（使用数据库实际字段名）
-      signature: profile?.bio || '', // bio 就是签名
-      total_favorited: profile?.total_likes || 0,
-      following_count: profile?.following_count || 0,
-      mplatform_followers_count: profile?.follower_count || 0, // 正确字段名：follower_count
-      follower_count: profile?.follower_count || 0, // 正确字段名：follower_count
-      follow_status: 0, // 0=未关注, 1=已关注, 2=互相关注 (由 applyRowFlags 更新)
-      is_follow: false,
-      // ✅ 年龄、性别、地区等信息
-      user_age: profile?.birthday ? calculateAge(profile.birthday) : -1, // 从 birthday 计算年龄
-      gender: profile?.gender || 0, // 0=未知, 1=男, 2=女
-      ip_location: profile?.country || '',
-      province: profile?.province || '',
-      city: profile?.city || '',
-      country: profile?.country || '',
-      // 🎯 数字ID和隐私设置
-      numeric_id: profile?.numeric_id || null,
-      show_collect: profile?.show_collect !== false,
-      show_like: profile?.show_like !== false,
-      show_tg_username: profile?.show_tg_username === true
+      author: {
+        nickname: profile?.nickname || profile?.username || 'Telegram 用户',
+        unique_id: profile?.username || '',
+        uid: profile?.id || String(row.tg_user_id ?? row.author_id ?? row.id),
+        user_id: profile?.id || row.author_id || null,
+        tg_user_id: profile?.tg_user_id ?? row.tg_user_id ?? null,
+        avatar_thumb: {
+          url_list: [avatar]
+        },
+        avatar_168x168: {
+          url_list: [avatar]
+        },
+        avatar_300x300: {
+          url_list: [avatar]
+        },
+        cover_url: authorCoverList.map((entry: any) => ({
+          url_list: Array.isArray(entry?.url_list)
+            ? entry.url_list
+            : entry?.url_list
+              ? [entry.url_list]
+              : []
+        })),
+        card_entries: authorCardEntries,
+        signature: profile?.bio || '',
+        total_favorited: profile?.total_likes || 0,
+        following_count: profile?.following_count || 0,
+        mplatform_followers_count: profile?.follower_count || 0,
+        follower_count: profile?.follower_count || 0,
+        follow_status: 0,
+        is_follow: false,
+        user_age: profile?.birthday ? calculateAge(profile.birthday) : -1,
+        gender: profile?.gender || 0,
+        ip_location: profile?.country || '',
+        province: profile?.province || '',
+        city: profile?.city || '',
+        country: profile?.country || '',
+        numeric_id: profile?.numeric_id || null,
+        show_collect: profile?.show_collect !== false,
+        show_like: profile?.show_like !== false,
+        show_tg_username: profile?.show_tg_username === true
+      }
     }
+  } catch (err) {
+    console.error('[mapVideoRow] 严重错误:', err)
+    return null // 容错：单个视频映射失败不影响整页
   }
 }
 
@@ -153,21 +169,31 @@ export async function buildVideoUrl(row: any): Promise<string | null> {
 }
 
 export async function buildCoverUrl(row: any, profile: any): Promise<string> {
-  // 🎯 对于图片/相册类型，优先使用 images 数组中的第一张图片
+  // 🎯 对于图片/相册/合辑类型，优先使用媒体数组中的第一项
   const contentType = row.content_type || 'video'
-  if (contentType === 'image' || contentType === 'album') {
-    let images: any[] = []
-    if (row.images) {
+  if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
+    let media: any[] = []
+    const rawMedia = row.media_list || row.images
+    if (rawMedia) {
       try {
-        images = typeof row.images === 'string' ? JSON.parse(row.images) : row.images
-        if (!Array.isArray(images)) images = []
+        media = typeof rawMedia === 'string' ? JSON.parse(rawMedia) : rawMedia
+        if (!Array.isArray(media)) media = []
       } catch {
-        images = []
+        media = []
       }
     }
-    if (images.length > 0 && images[0].file_id) {
-      const imgUrl = await buildTelegramFileUrl(images[0].file_id)
-      if (imgUrl) return imgUrl
+    if (media.length > 0) {
+      const first = media[0]
+      // 如果第一项是视频且有封面，用它的封面
+      if (first.type === 'video' && first.cover_url) {
+        const url = await convertMediaReferenceToUrl(first.cover_url)
+        if (url) return url
+      }
+      // 否则用 file_id
+      if (first.file_id) {
+        const url = await buildTelegramFileUrl(first.file_id)
+        if (url) return url
+      }
     }
   }
 

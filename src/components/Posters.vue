@@ -20,6 +20,11 @@
           <Icon icon="solar:album-bold" />
           <span v-if="i.images?.length">{{ i.images.length }}</span>
         </div>
+        <div class="content-type-badge collection" v-if="i.content_type === 'collection'">
+          <Icon icon="solar:box-minimalistic-bold" />
+          <span v-if="i.media_list?.length">{{ i.media_list.length }}</span>
+          <span v-else-if="i.images?.length">{{ i.images.length }}</span>
+        </div>
         <!-- 🎯 只在 showLabels=true 时显示标签 -->
         <template v-if="showLabels">
           <div class="top" v-if="i.is_top">置顶</div>
@@ -209,6 +214,13 @@ function getMonth(time) {
     gap: 3rem;
 
     &.album {
+      span {
+        font-size: 10rem;
+      }
+    }
+
+    &.collection {
+      background: rgba(114, 46, 209, 0.8); // 紫色背景
       span {
         font-size: 10rem;
       }

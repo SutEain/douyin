@@ -20,11 +20,12 @@
             class="slide-video"
             preload="auto"
             loop
+            autoplay
+            muted
             playsinline
             webkit-playsinline
             x5-playsinline
             x5-video-player-type="h5-page"
-            :muted="isMuted"
             :poster="getPosterUrl(media)"
             @loadstart="videoLoadingStates[index] = true"
             @canplay="onVideoCanplay(index)"
@@ -204,34 +205,45 @@ async function playVideo(index: number) {
     })
 
     // 🎯 确保静音状态正确，符合自动播放策略
+    // 如果是第一次自动播放，强制静音通常能提高成功率
     video.muted = isMuted.value
 
-    // 🎯 处理某些环境下的 play() Promise
+    console.log(`[AlbumSwiper] Attempting to play video ${index}, muted: ${video.muted}`)
+
     const playPromise = video.play()
     if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          videoPlayingStates[index] = true
-          videoLoadingStates[index] = false
-          videoErrorStates[index] = false
-        })
-        .catch((e) => {
-          console.warn('[AlbumSwiper] Video play failed:', e)
-          if (e instanceof Error && e.name === 'NotAllowedError') {
-            video.muted = true
-            video.play().catch(() => {})
-          } else {
+      try {
+        await playPromise
+        videoPlayingStates[index] = true
+        videoLoadingStates[index] = false
+        videoErrorStates[index] = false
+      } catch (e) {
+        console.warn('[AlbumSwiper] Video play failed, retrying with mute:', e)
+        // 如果失败且未静音，尝试静音播放
+        if (!video.muted) {
+          video.muted = true
+          try {
+            await video.play()
+            videoPlayingStates[index] = true
+            videoLoadingStates[index] = false
+            videoErrorStates[index] = false
+          } catch (e2) {
+            console.error('[AlbumSwiper] Muted play also failed:', e2)
             videoErrorStates[index] = true
             videoLoadingStates[index] = false
           }
-        })
+        } else {
+          videoErrorStates[index] = true
+          videoLoadingStates[index] = false
+        }
+      }
     } else {
-      // 老旧环境没有 Promise
+      // 老旧环境
       videoPlayingStates[index] = true
       videoLoadingStates[index] = false
     }
   } catch (e) {
-    console.warn('[AlbumSwiper] playVideo failed:', e)
+    console.warn('[AlbumSwiper] playVideo outer error:', e)
     videoErrorStates[index] = true
     videoLoadingStates[index] = false
   }
@@ -282,6 +294,7 @@ watch(currentIndex, (newIdx) => {
 
 // 🎯 响应父级播放/暂停
 watch(isParentPlaying, (playing) => {
+  console.log('[AlbumSwiper] Parent playing state changed:', playing)
   const currentMedia = props.images[currentIndex.value]
   if (currentMedia?.type === 'video') {
     if (playing) {
@@ -293,6 +306,27 @@ watch(isParentPlaying, (playing) => {
     }
   }
 })
+
+// 🎯 监听媒体列表变化（用于处理 Worker 完成后 play_url 从无到有的情况）
+watch(
+  () => props.images,
+  (newImages) => {
+    const currentMedia = newImages[currentIndex.value]
+    if (currentMedia?.type === 'video' && currentMedia.play_url && isParentPlaying.value) {
+      const video = videoRefs.get(currentIndex.value)
+      // 如果当前视频正在加载或失败，且拿到了新链接，强制 reload
+      if (
+        video &&
+        (!video.src || video.src.includes('undefined') || videoErrorStates[currentIndex.value])
+      ) {
+        console.log('[AlbumSwiper] Detected play_url update, reloading video...')
+        video.load()
+        playVideo(currentIndex.value)
+      }
+    }
+  },
+  { deep: true }
+)
 
 onMounted(() => {
   // 初始加载如果是视频，尝试播放
@@ -330,9 +364,10 @@ const swiperStyle = computed(() => {
 })
 
 function getMediaUrl(media: MediaItem) {
-  // 🎯 优先使用后端返回的完整 URL，否则尝试构建
-  if (media.type === 'video' && media.play_url) return media.play_url
-  if (media.url) return media.url
+  // 🎯 优先使用 play_url，并确保补全 CDN 域名
+  if (media.type === 'video' && (media.play_url || media.url)) {
+    return buildCdnUrl(media.play_url || media.url)
+  }
   return buildCdnUrl(media.file_id)
 }
 

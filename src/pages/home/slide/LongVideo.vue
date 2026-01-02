@@ -91,9 +91,15 @@ async function loadMore() {
         // 如果全是重复，尝试下一页
         state.page++
         state.loading = false
-        return loadMore()
+        setTimeout(() => loadMore(), 300)
+        return
       } else {
         state.hasMore = false
+      }
+    } else {
+      console.warn('[LongVideo] 加载失败:', res.message)
+      if (state.list.length === 0) {
+        state.hasMore = true
       }
     }
   } catch (error) {

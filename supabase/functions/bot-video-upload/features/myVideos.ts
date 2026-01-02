@@ -155,22 +155,19 @@ export async function handleMyVideos(
     let totalLikes = 0
     let totalComments = 0
     try {
-      const { data: agg, error: aggErr } = await supabase
-        .from('videos')
-        .select(
-          'sum_view:view_count.sum(), sum_like:like_count.sum(), sum_comment:comment_count.sum()'
-        )
-        .eq('tg_user_id', chatId)
-        .eq('status', 'published')
-        .limit(1)
+      // 🎯 优先使用 RPC 以获得最佳性能和兼容性
+      const { data: stats, error: statsErr } = await supabase.rpc('get_user_video_stats', {
+        p_user_id: chatId
+      })
 
-      if (aggErr) throw aggErr
-      const row: any = Array.isArray(agg) ? agg[0] : null
-      totalPlays = Number(row?.sum_view ?? 0) || 0
-      totalLikes = Number(row?.sum_like ?? 0) || 0
-      totalComments = Number(row?.sum_comment ?? 0) || 0
+      if (statsErr) throw statsErr
+
+      const row = Array.isArray(stats) ? stats[0] : stats
+      totalPlays = Number(row?.total_views ?? 0) || 0
+      totalLikes = Number(row?.total_likes ?? 0) || 0
+      totalComments = Number(row?.total_comments ?? 0) || 0
     } catch (e) {
-      console.warn('[MyVideos] aggregate not available, fallback to paged sum:', e)
+      console.warn('[MyVideos] RPC failed, fallback to paged sum:', e)
       const pageSize = 1000
       let from = 0
       for (;;) {

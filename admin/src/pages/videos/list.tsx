@@ -62,9 +62,11 @@ export const VideoList = () => {
   const invalidate = useInvalidate()
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // 📸 图片/相册预览相关状态
-  const [previewContentType, setPreviewContentType] = useState<'video' | 'image' | 'album'>('video')
-  const [previewImages, setPreviewImages] = useState<string[]>([])
+  // 📸 图片/相册/合集预览相关状态
+  const [previewContentType, setPreviewContentType] = useState<
+    'video' | 'image' | 'album' | 'collection'
+  >('video')
+  const [previewMediaItems, setPreviewMediaItems] = useState<any[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   const { tableProps, searchFormProps } = useTable({
@@ -192,20 +194,20 @@ export const VideoList = () => {
     return parts.length > 0 ? parts.join(' · ') : '-'
   }
 
-  // 预览内容（视频/图片/相册）
+  // 预览内容（视频/图片/相册/合集）
   const handlePreview = (record: any) => {
     const contentType = record.content_type || 'video'
     setPreviewContentType(contentType)
 
     if (contentType === 'video') {
-      // 视频预览
+      // 普通视频预览
       const videoUrl = getVideoPlayUrl(record)
       if (!videoUrl) {
         message.error('视频URL不可用')
         return
       }
       setCurrentVideoUrl(videoUrl)
-      setPreviewImages([])
+      setPreviewMediaItems([])
       setPreviewModalVisible(true)
 
       // 延迟设置视频音频（等待 DOM 渲染）
@@ -217,14 +219,13 @@ export const VideoList = () => {
         }
       }, 100)
     } else {
-      // 图片/相册预览
-      const images = parseImages(record.images)
-      if (images.length === 0) {
-        message.error('图片不可用')
+      // 图片/相册/合集预览
+      const mediaItems = parseImages(record.media_list || record.images)
+      if (mediaItems.length === 0) {
+        message.error('媒体内容不可用')
         return
       }
-      const imageUrls = images.map((img: any) => buildCdnUrl(img.file_id))
-      setPreviewImages(imageUrls)
+      setPreviewMediaItems(mediaItems)
       setCurrentImageIndex(0)
       setCurrentVideoUrl('')
       setPreviewModalVisible(true)
@@ -240,18 +241,18 @@ export const VideoList = () => {
     }
     setPreviewModalVisible(false)
     setCurrentVideoUrl('')
-    setPreviewImages([])
+    setPreviewMediaItems([])
     setCurrentImageIndex(0)
   }
 
-  // 相册上一张
+  // 相册/合集上一张
   const handlePrevImage = () => {
-    setCurrentImageIndex((prev) => (prev > 0 ? prev - 1 : previewImages.length - 1))
+    setCurrentImageIndex((prev) => (prev > 0 ? prev - 1 : previewMediaItems.length - 1))
   }
 
-  // 相册下一张
+  // 相册/合集下一张
   const handleNextImage = () => {
-    setCurrentImageIndex((prev) => (prev < previewImages.length - 1 ? prev + 1 : 0))
+    setCurrentImageIndex((prev) => (prev < previewMediaItems.length - 1 ? prev + 1 : 0))
   }
 
   // 删除视频
@@ -743,7 +744,7 @@ export const VideoList = () => {
             render={(_, record: any) => {
               const coverUrl = getCoverUrl(record)
               const contentType = record.content_type || 'video'
-              const images = parseImages(record.images)
+              const mediaItems = parseImages(record.media_list || record.images)
 
               return coverUrl ? (
                 <div style={{ position: 'relative' }}>
@@ -766,23 +767,28 @@ export const VideoList = () => {
                         'https://via.placeholder.com/80x80?text=No+Image'
                     }}
                   />
-                  {/* 相册显示图片数量角标 */}
-                  {contentType === 'album' && images.length > 1 && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 4,
-                        right: 4,
-                        background: 'rgba(0,0,0,0.6)',
-                        color: 'white',
-                        fontSize: 10,
-                        padding: '2px 6px',
-                        borderRadius: 8
-                      }}
-                    >
-                      {images.length}张
-                    </div>
-                  )}
+                  {/* 相册/合集显示媒体数量角标 */}
+                  {(contentType === 'album' || contentType === 'collection') &&
+                    mediaItems.length > 1 && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 4,
+                          right: 4,
+                          background:
+                            contentType === 'collection'
+                              ? 'rgba(114, 46, 209, 0.8)'
+                              : 'rgba(0,0,0,0.6)',
+                          color: 'white',
+                          fontSize: 10,
+                          padding: '2px 6px',
+                          borderRadius: 8
+                        }}
+                      >
+                        {mediaItems.length}
+                        {contentType === 'collection' ? '集' : '张'}
+                      </div>
+                    )}
                 </div>
               ) : (
                 <div
@@ -1058,14 +1064,16 @@ export const VideoList = () => {
         </Table>
       </List>
 
-      {/* 预览弹窗（视频/图片/相册） */}
+      {/* 预览弹窗（视频/图片/相册/合集） */}
       <Modal
         title={
           previewContentType === 'video'
             ? '视频预览'
             : previewContentType === 'album'
-              ? `相册预览 (${currentImageIndex + 1}/${previewImages.length})`
-              : '图片预览'
+              ? `相册预览 (${currentImageIndex + 1}/${previewMediaItems.length})`
+              : previewContentType === 'collection'
+                ? `合集预览 (${currentImageIndex + 1}/${previewMediaItems.length})`
+                : '图片预览'
         }
         open={previewModalVisible}
         onCancel={handleClosePreview}
@@ -1073,7 +1081,7 @@ export const VideoList = () => {
         width={800}
         centered
       >
-        {/* 视频预览 */}
+        {/* 1. 普通单视频预览 */}
         {previewContentType === 'video' && currentVideoUrl && (
           <div>
             <div style={{ marginBottom: 12 }}>
@@ -1103,22 +1111,46 @@ export const VideoList = () => {
           </div>
         )}
 
-        {/* 图片/相册预览 */}
-        {(previewContentType === 'image' || previewContentType === 'album') &&
-          previewImages.length > 0 && (
-            <div style={{ position: 'relative', textAlign: 'center' }}>
-              <img
-                src={previewImages[currentImageIndex]}
-                alt={`图片 ${currentImageIndex + 1}`}
-                style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
-                onError={(e) => {
-                  ;(e.target as HTMLImageElement).src =
-                    'https://via.placeholder.com/400x400?text=加载失败'
-                }}
-              />
+        {/* 2. 图片/相册/合集 预览 */}
+        {(previewContentType === 'image' ||
+          previewContentType === 'album' ||
+          previewContentType === 'collection') &&
+          previewMediaItems.length > 0 && (
+            <div style={{ position: 'relative', textAlign: 'center', minHeight: '400px' }}>
+              {/* 根据媒体类型渲染 */}
+              {previewMediaItems[currentImageIndex]?.type === 'video' ? (
+                <div key={previewMediaItems[currentImageIndex].file_id}>
+                  <div style={{ marginBottom: 12 }}>
+                    <Tag color="purple">视频内容</Tag>
+                    <small style={{ color: '#999' }}>
+                      {previewMediaItems[currentImageIndex].file_id}
+                    </small>
+                  </div>
+                  <video
+                    src={buildCdnUrl(
+                      previewMediaItems[currentImageIndex].play_url ||
+                        previewMediaItems[currentImageIndex].file_id
+                    )}
+                    controls
+                    autoPlay
+                    style={{ maxWidth: '100%', maxHeight: '60vh' }}
+                    onError={() => message.warning('视频加载失败')}
+                  />
+                </div>
+              ) : (
+                <img
+                  src={buildCdnUrl(previewMediaItems[currentImageIndex].file_id)}
+                  alt={`媒体 ${currentImageIndex + 1}`}
+                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
+                  onError={(e) => {
+                    ;(e.target as HTMLImageElement).src =
+                      'https://via.placeholder.com/400x400?text=加载失败'
+                  }}
+                />
+              )}
 
-              {/* 相册左右切换按钮 */}
-              {previewImages.length > 1 && (
+              {/* 左右切换按钮 */}
+              {previewMediaItems.length > 1 && (
                 <>
                   <Button
                     type="text"
@@ -1134,7 +1166,8 @@ export const VideoList = () => {
                       border: 'none',
                       width: 40,
                       height: 40,
-                      borderRadius: '50%'
+                      borderRadius: '50%',
+                      zIndex: 10
                     }}
                   />
                   <Button
@@ -1151,16 +1184,17 @@ export const VideoList = () => {
                       border: 'none',
                       width: 40,
                       height: 40,
-                      borderRadius: '50%'
+                      borderRadius: '50%',
+                      zIndex: 10
                     }}
                   />
                 </>
               )}
 
-              {/* 图片指示器 */}
-              {previewImages.length > 1 && (
+              {/* 指示器 */}
+              {previewMediaItems.length > 1 && (
                 <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 8 }}>
-                  {previewImages.map((_, index) => (
+                  {previewMediaItems.map((_, index) => (
                     <div
                       key={index}
                       onClick={() => setCurrentImageIndex(index)}

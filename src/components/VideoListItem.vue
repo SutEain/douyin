@@ -41,7 +41,7 @@
         />
         <span
           >{{ video.content_type === 'collection' ? '合辑' : '相册' }}
-          {{ video.images?.length || 0 }}</span
+          {{ video.media_list?.length || video.images?.length || 0 }}</span
         >
       </div>
       <div class="video-info">

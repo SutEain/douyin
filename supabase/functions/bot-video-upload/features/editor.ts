@@ -95,6 +95,10 @@ export function getEditMenuText(video: any): string {
   } else if (contentType === 'album') {
     const images = typeof video.images === 'string' ? JSON.parse(video.images) : video.images || []
     titleText = `✅ <b>相册已就绪</b> (${images.length}张)`
+  } else if (contentType === 'collection') {
+    const media =
+      typeof video.media_list === 'string' ? JSON.parse(video.media_list) : video.media_list || []
+    titleText = `✅ <b>合集已就绪</b> (${media.length}集)`
   }
 
   let descText = '未设置'

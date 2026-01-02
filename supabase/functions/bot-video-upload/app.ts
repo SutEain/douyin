@@ -10,7 +10,7 @@ import { handleInvitation } from './features/invitation.ts'
 import { getOrCreateProfile } from './services/profile.ts'
 import { getEditKeyboard, getEditMenuText } from './features/editor.ts'
 import { handlePhoto, handleVideo, mediaGroupRejectCache } from './features/upload.ts'
-import { deleteTelegramMessage, sendMessage } from './telegram.ts'
+import { deleteTelegramMessage, sendMessage, editMessage } from './telegram.ts'
 import { escapeHTML } from './utils/text.ts'
 import { handleCallback } from './routers/callback.ts'
 import { handleLocation, handleText, handleForward } from './routers/messages.ts'
@@ -43,21 +43,34 @@ export async function handleRequest(req: Request): Promise<Response> {
 
       // ✅ 处理 Worker 完成回调
       if (update.type === 'worker_complete') {
-        console.log('[WorkerCallback] 收到完成通知:', update)
-        const { chatId, messageId, videoId, success, error: workerError } = update
+        const {
+          chatId,
+          messageId,
+          videoId,
+          success,
+          error: workerError,
+          play_url,
+          cover_url,
+          file_id
+        } = update
+        console.log(
+          `[WorkerCallback] 开始处理: videoId=${videoId}, fileId=${file_id}, success=${success}, msgId=${messageId}`
+        )
 
         try {
-          // 1. 删除"处理中"消息
-          if (messageId) {
-            await deleteTelegramMessage(chatId, messageId)
-          }
+          // 1. 获取用户当前状态
+          const userState = await getUserState(chatId)
+          console.log(
+            `[WorkerCallback] 准备处理菜单. messageId=${messageId}, currentMsgId=${userState.current_message_id}`
+          )
 
           if (!success) {
+            if (messageId) await deleteTelegramMessage(chatId, messageId)
             await sendMessage(chatId, `❌ 处理失败\n\n${workerError || '未知错误'}`)
             return new Response('OK', { status: 200 })
           }
 
-          // 2. 获取视频信息
+          // 2. 获取并更新视频信息
           const { data: video } = await supabase
             .from('videos')
             .select('*')
@@ -65,33 +78,149 @@ export async function handleRequest(req: Request): Promise<Response> {
             .single()
 
           if (!video) {
+            console.error(`[WorkerCallback] 找不到视频记录: ${videoId}`)
+            if (messageId) await deleteTelegramMessage(chatId, messageId)
             await sendMessage(chatId, '❌ 视频信息同步失败')
             return new Response('OK', { status: 200 })
           }
 
-          // 🎯 频道同步：如果是自动发布模式（就绪/已发布），则删除处理中消息后直接退出，不显示编辑菜单
+          // 🎯 如果是合集 (collection)，需要更新 media_list 中的对应项
+          if (video.content_type === 'collection' && (play_url || cover_url)) {
+            console.log(`[WorkerCallback] 检测到合集更新，同步 media_list... videoId=${videoId}`)
+            const currentMedia =
+              typeof video.media_list === 'string'
+                ? JSON.parse(video.media_list)
+                : video.media_list || []
+
+            let updated = false
+            // 🎯 优先级：回调带回的 file_id > 数据库主记录的 tg_file_id
+            const targetFileId = file_id || video.tg_file_id
+
+            const newMedia = currentMedia.map((m: any) => {
+              // 🎯 匹配逻辑：
+              // 1. 如果有明确的 file_id 匹配
+              // 2. 如果回调没有 file_id，则匹配第一个还没有 play_url 的视频项（兜底方案）
+              const isMatch =
+                (targetFileId && m.file_id === targetFileId) ||
+                (!file_id && m.type === 'video' && !m.play_url && !updated)
+
+              if (isMatch) {
+                updated = true
+                console.log(`[WorkerCallback] 更新媒体项: type=${m.type}, fileId=${m.file_id}`)
+                return {
+                  ...m,
+                  play_url: play_url || m.play_url,
+                  cover_url: cover_url || m.cover_url
+                }
+              }
+              return m
+            })
+
+            if (updated) {
+              // 🎯 特殊处理：如果是合集的第一个视频完成了，同步更新主记录的 play_url 和 cover_url
+              const isFirstVideoReady =
+                newMedia.findIndex((m: any) => m.type === 'video' && m.play_url) ===
+                newMedia.findIndex((m: any) => m.file_id === targetFileId)
+
+              const updateData: any = {
+                media_list: JSON.stringify(newMedia),
+                images: JSON.stringify(newMedia)
+              }
+
+              if (isFirstVideoReady) {
+                console.log(`[WorkerCallback] 同步主记录播放链接: ${play_url}`)
+                updateData.play_url = play_url
+                if (cover_url) updateData.cover_url = cover_url
+              }
+
+              await supabase.from('videos').update(updateData).eq('id', videoId)
+
+              video.media_list = newMedia
+              video.images = newMedia
+              if (isFirstVideoReady) {
+                video.play_url = play_url
+                video.cover_url = cover_url || video.cover_url
+              }
+            }
+          }
+
+          // 🎯 频道同步：如果是自动发布模式（就绪/已发布），则删除处理中消息后直接退出
           if (video.status === 'ready' || video.status === 'published') {
-            console.log(`[WorkerCallback] 频道同步：自动发布模式，不显示编辑菜单。id=${videoId}`)
-            // 发送自动发布成功的通知
+            console.log(`[WorkerCallback] 频道同步模式，尝试删除处理中消息并退出.`)
+            if (messageId) await deleteTelegramMessage(chatId, messageId)
             const statusText =
               video.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
             await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新视频，${statusText}。`)
             return new Response('OK', { status: 200 })
           }
 
-          // 3. 发送编辑菜单
-          const menuResult = await sendMessage(chatId, getEditMenuText(video), {
-            reply_markup: getEditKeyboard(video)
-          })
+          // 3. 发送或更新编辑菜单
+          let finalMessageId = null
+          const menuText = getEditMenuText(video)
+          const menuKeyboard = getEditKeyboard(video)
 
-          const newMessageId = menuResult.ok ? menuResult.result.message_id : null
+          // 🎯 优先级 1：尝试编辑传入的 messageId (通常是“正在处理”消息)
+          if (messageId && messageId > 0) {
+            console.log(`[WorkerCallback] 尝试编辑处理中消息: ${messageId}`)
+            const editResult = await editMessage(chatId, messageId, menuText, {
+              reply_markup: menuKeyboard
+            })
+            if (editResult?.ok) {
+              console.log(`[WorkerCallback] 编辑处理中消息成功.`)
+              finalMessageId = messageId
+            } else {
+              // 如果编辑失败（可能是消息已被删除或内容相同），尝试判断原因
+              console.log(`[WorkerCallback] 编辑处理中消息失败: ${editResult?.description}`)
+              if (editResult?.description?.includes('not modified')) {
+                finalMessageId = messageId
+              }
+            }
+          }
+
+          // 🎯 优先级 2：如果优先级 1 失败，尝试编辑用户当前活跃的菜单
+          if (
+            !finalMessageId &&
+            userState.draft_video_id === video.id &&
+            userState.current_message_id
+          ) {
+            console.log(`[WorkerCallback] 尝试编辑活跃菜单: ${userState.current_message_id}`)
+            const editResult = await editMessage(
+              chatId,
+              Number(userState.current_message_id),
+              menuText,
+              {
+                reply_markup: menuKeyboard
+              }
+            )
+            if (editResult?.ok || editResult?.description?.includes('not modified')) {
+              finalMessageId = userState.current_message_id
+            }
+          }
+
+          // 🎯 优先级 3：如果都失败了，发送新消息
+          if (!finalMessageId) {
+            console.log(`[WorkerCallback] 发送新菜单消息...`)
+            const menuResult = await sendMessage(chatId, menuText, {
+              reply_markup: menuKeyboard
+            })
+            if (menuResult?.ok) {
+              finalMessageId = menuResult.result.message_id
+              // 如果我们发送了新消息，且之前的 messageId 还在，记得把它删了
+              if (messageId && messageId !== finalMessageId) {
+                await deleteTelegramMessage(chatId, messageId)
+              }
+            }
+          }
 
           // 4. 更新用户状态
-          await updateUserState(chatId, {
-            state: 'idle',
-            draft_video_id: video.id,
-            current_message_id: newMessageId
-          })
+          if (finalMessageId) {
+            await updateUserState(chatId, {
+              state: 'idle',
+              draft_video_id: video.id,
+              current_message_id: finalMessageId
+            })
+          }
+          console.log(`[WorkerCallback] 流程结束. finalMessageId=${finalMessageId}`)
         } catch (e) {
           console.error('[WorkerCallback] 处理异常:', e)
         }
@@ -182,13 +311,13 @@ export async function handleRequest(req: Request): Promise<Response> {
                 reply_markup: welcomeMarkup,
                 disable_web_page_preview: true
               })
-              sentMessage = res.ok ? res.result : null
+              sentMessage = res?.ok ? res.result : null
             } else {
               const res = await sendMessage(chatId, welcomeText, {
                 reply_markup: getPersistentKeyboard(),
                 disable_web_page_preview: true
               })
-              sentMessage = res.ok ? res.result : null
+              sentMessage = res?.ok ? res.result : null
             }
 
             // 初始化 dashboard_message_id 为首页消息
@@ -232,7 +361,7 @@ export async function handleRequest(req: Request): Promise<Response> {
               reply_markup: welcomeMarkup,
               disable_web_page_preview: true
             })
-            sentMessage = res.ok ? res.result : null
+            sentMessage = res?.ok ? res.result : null
           }
           // 更新 dashboard message id
           if (sentMessage) {

@@ -764,10 +764,10 @@ function playCurrent() {
 
   recordEnterCurrent(item, contentType)
 
-  // 🎯 图片/相册类型不需要播放视频元素
-  if (contentType === 'image' || contentType === 'album') {
+  // 🎯 图片/相册/合集类型不需要播放视频元素
+  if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
     console.log(`${DEBUG_PREFIX} playCurrent:skip-non-video`, { contentType })
-    isPlaying.value = true // 图片/相册默认显示为"播放中"状态
+    isPlaying.value = true // 这些类型默认显示为"播放中"状态
     return
   }
 

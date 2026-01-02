@@ -112,13 +112,15 @@ export async function editMessageReplyMarkup(chatId: number, messageId: number, 
 export async function deleteTelegramMessage(chatId: number, messageId: number) {
   const url = `${TG_API_BASE}/bot${BOT_TOKEN}/deleteMessage`
   try {
-    await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, message_id: messageId })
     })
+    return await response.json()
   } catch (e) {
     console.error('[deleteMessage] Error:', e)
+    return { ok: false, error: e }
   }
 }
 

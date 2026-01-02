@@ -2,7 +2,7 @@
   <SlideItem class="slide-item-class">
     <div class="video-container" style="background: black">
       <!-- Loading 状态 -->
-      <div v-if="store.loading && state.list.length === 0" class="loading-state">
+      <div v-if="state.loading && state.list.length === 0" class="loading-state">
         <div class="loading-spinner"></div>
         <p>加载中...</p>
       </div>
@@ -21,6 +21,7 @@
       <!-- 空状态提示 -->
       <div v-else class="empty-state">
         <p>你还没有关注或关注的人还没有发布作品</p>
+        <div class="retry-btn" @click="loadMore">点击刷新</div>
       </div>
     </div>
   </SlideItem>
@@ -46,15 +47,16 @@ const state = reactive({
   list: [] as VideoItem[],
   totalSize: 0,
   pageSize: 10,
-  hasMore: true
+  hasMore: true,
+  loading: false // 🎯 改为局部 loading
 })
 
 async function loadMore() {
-  if (store.loading || !state.hasMore) {
+  if (state.loading || !state.hasMore) {
     return
   }
 
-  store.loading = true
+  state.loading = true
 
   const params = {
     start: state.list.length,
@@ -65,7 +67,7 @@ async function loadMore() {
 
   const res = await followingVideo(params)
 
-  store.loading = false
+  state.loading = false
 
   if (res.success) {
     state.totalSize = res.data.total
@@ -80,6 +82,9 @@ async function loadMore() {
     })
   } else {
     console.error('[SlideFollow] ❌ API 调用失败:', res)
+    if (state.list.length === 0) {
+      state.hasMore = true
+    }
   }
 }
 

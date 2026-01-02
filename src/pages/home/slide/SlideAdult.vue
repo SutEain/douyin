@@ -2,7 +2,7 @@
   <SlideItem class="slide-item-class">
     <div class="video-container" style="background: black">
       <!-- Loading 状态 -->
-      <div v-if="store.loading && state.list.length === 0" class="loading-state">
+      <div v-if="state.loading && state.list.length === 0" class="loading-state">
         <div class="loading-spinner"></div>
         <p>加载中...</p>
       </div>
@@ -47,11 +47,12 @@ const state = reactive({
   list: [] as VideoItem[],
   page: 0,
   pageSize: 10,
-  hasMore: true
+  hasMore: true,
+  loading: false // 🎯 改为局部 loading，避免多个 Tab 竞争 store.loading
 })
 
 async function loadMore() {
-  if (store.loading) return
+  if (state.loading) return
 
   // 1. 🎯 核心重构：等待 App Ready
   if (!store.isAppReady) {
@@ -67,7 +68,7 @@ async function loadMore() {
     return
   }
 
-  store.loading = true
+  state.loading = true
 
   try {
     // 💡 核心策略：如果已登录，后端会排除已观看，此时必须永远传 start: 0 才能不跳过新内容
@@ -89,16 +90,22 @@ async function loadMore() {
       } else if (newList.length > 0) {
         // 全是重复，尝试下一页
         state.page++
-        store.loading = false
-        return loadMore()
+        state.loading = false
+        setTimeout(() => loadMore(), 300)
+        return
       } else {
         state.hasMore = false
+      }
+    } else {
+      console.warn('[SlideAdult] 加载失败:', res.message)
+      if (state.list.length === 0) {
+        state.hasMore = true
       }
     }
   } catch (e) {
     console.error('[SlideAdult] 加载异常:', e)
   } finally {
-    store.loading = false
+    state.loading = false
   }
 }
 

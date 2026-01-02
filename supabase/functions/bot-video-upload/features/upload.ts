@@ -114,183 +114,97 @@ export async function handlePhoto(
       return
     }
 
-    // 🎯 相册模式：使用数据库存储
+    // 🎯 相册/合辑模式：使用数据库原子操作解决并发冲突
     if (mediaGroupId) {
-      const { data: existingPost } = await supabase
-        .from('videos')
-        .select('*')
-        .eq('tg_user_id', chatId)
-        .eq('media_group_id', mediaGroupId)
-        .single()
-
-      if (existingPost) {
-        const currentImages: AlbumPhoto[] =
-          typeof existingPost.images === 'string'
-            ? JSON.parse(existingPost.images)
-            : existingPost.images || []
-
-        const exists = currentImages.some((img) => img.file_id === photo.file_id)
-        if (exists) {
-          console.log('[handlePhoto] 图片已存在，跳过')
-          return
-        }
-
-        currentImages.push({
-          type: 'image',
-          file_id: photo.file_id,
-          width: photo.width,
-          height: photo.height,
-          order: currentImages.length
-        })
-
-        const { error: updateError } = await supabase
-          .from('videos')
-          .update({
-            images: JSON.stringify(currentImages),
-            title: `合集 (${currentImages.length}个内容)`,
-            content_type: 'collection',
-            // 🎯 只要当前没封面，就强制补齐封面
-            ...(!existingPost.cover_url || existingPost.cover_url.length < 5
-              ? { cover_url: photo.file_id }
-              : {})
-          })
-          .eq('id', existingPost.id)
-
-        if (updateError) {
-          console.error('[handlePhoto] 更新相册失败:', updateError)
-          return
-        }
-
-        console.log(`[handlePhoto] 相册已更新，当前 ${currentImages.length} 张图片`)
-
-        // 🎯 频道同步：如果是自动处理模式
-        if (extraData?.status === 'ready' || extraData?.status === 'published') {
-          console.log(`[handlePhoto] 频道同步：自动处理模式，不更新菜单。id=${existingPost.id}`)
-
-          // 🎯 解决重复通知问题：使用数据库 context 记录已通知的 mediaGroupId
-          const userState = await getUserState(chatId)
-          const context = userState.context || {}
-
-          if (context.last_notified_mgid !== mediaGroupId) {
-            // 第一次看到这个组，发送通知
-            const statusText =
-              extraData.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
-            await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新相册，${statusText}。`)
-            // 更新 context 防止重复发送
-            await updateUserState(chatId, {
-              context: { ...context, last_notified_mgid: mediaGroupId }
-            })
-          }
-          return
-        }
-
-        // 尝试更新用户的编辑菜单（如果还在同一条菜单上）
-        try {
-          const userState = await getUserState(chatId)
-          if (userState.current_message_id && userState.draft_video_id === existingPost.id) {
-            const { data: updatedPost } = await supabase
-              .from('videos')
-              .select('*')
-              .eq('id', existingPost.id)
-              .single()
-            if (updatedPost) {
-              await editMessage(
-                chatId,
-                userState.current_message_id,
-                getEditMenuText(updatedPost),
-                {
-                  reply_markup: getEditKeyboard(updatedPost)
-                }
-              )
-            }
-          }
-        } catch (e) {
-          console.warn('[handlePhoto] 更新菜单失败:', e)
-        }
-
-        return
+      const newMediaItem = {
+        type: 'image',
+        file_id: photo.file_id,
+        width: photo.width,
+        height: photo.height,
+        file_size: photo.file_size || 0
       }
-
-      // 没有记录，创建新相册
-      console.log('[handlePhoto] 创建新相册')
 
       let description: string | null = null
       let tags: string[] = []
       if (caption && caption.length > 0) {
-        // ✅ 上传不做字数限制：完整保存 caption（feed 侧再做展示截断）
         description = String(caption).trim()
         tags = extractTags(caption)
       }
 
-      const { data: newPost, error } = await supabase
-        .from('videos')
-        .insert({
-          tg_user_id: chatId,
-          author_id: profile.id,
-          title: '合集 (1个内容)',
-          description: description,
-          tags: tags.length > 0 ? tags : null,
-          content_type: 'collection',
-          media_group_id: mediaGroupId,
-          cover_url: photo.file_id, // 🎯 使用第一张图作为封面
-          images: JSON.stringify([
-            {
-              type: 'image',
-              file_id: photo.file_id,
-              width: photo.width,
-              height: photo.height,
-              order: 0
+      const { data: result, error: rpcError } = await supabase.rpc('append_collection_media', {
+        p_chat_id: chatId,
+        p_media_group_id: mediaGroupId,
+        p_new_item: newMediaItem,
+        p_author_id: profile.id,
+        p_caption: description,
+        p_tags: tags.length > 0 ? tags : null,
+        p_content_type: 'collection'
+      })
+
+      if (rpcError || result?.error) {
+        console.error('[handlePhoto] 原子追加失败:', rpcError || result?.error)
+        await sendMessage(
+          chatId,
+          '❌ 上传失败，请重试\n\n错误: ' + escapeHTML(rpcError?.message || result?.error)
+        )
+        return
+      }
+
+      console.log(`[handlePhoto] 合辑更新成功: id=${result.id}, 当前数量=${result.media_count}`)
+
+      // 🎯 只要是新创建的记录，就显示编辑菜单
+      if (result.is_new) {
+        const { data: newPost } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('id', result.id)
+          .single()
+        if (newPost) {
+          // 🎯 频道同步：如果是自动处理模式
+          if (extraData?.status === 'ready' || extraData?.status === 'published') {
+            const statusText =
+              extraData.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
+            await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新相册，${statusText}。`)
+            return
+          }
+
+          const menuResult = await sendMessage(chatId, getEditMenuText(newPost), {
+            reply_markup: getEditKeyboard(newPost)
+          })
+          const messageId = menuResult.ok ? menuResult.result.message_id : null
+          await updateUserState(chatId, {
+            state: 'idle',
+            draft_video_id: newPost.id,
+            current_message_id: messageId
+          })
+        }
+      } else {
+        // 🎯 如果是已存在的记录且不是自动发布模式，尝试实时更新菜单
+        if (!(extraData?.status === 'ready' || extraData?.status === 'published')) {
+          try {
+            const userState = await getUserState(chatId)
+            if (userState.current_message_id && userState.draft_video_id === result.id) {
+              const { data: updatedPost } = await supabase
+                .from('videos')
+                .select('*')
+                .eq('id', result.id)
+                .single()
+              if (updatedPost) {
+                await editMessage(
+                  chatId,
+                  userState.current_message_id,
+                  getEditMenuText(updatedPost),
+                  {
+                    reply_markup: getEditKeyboard(updatedPost)
+                  }
+                )
+              }
             }
-          ]),
-          width: photo.width,
-          height: photo.height,
-          storage_type: 'telegram',
-          is_private: false,
-          is_adult: extraData?.is_adult || false,
-          is_sea: extraData?.is_sea || false,
-          status: extraData?.status || 'draft',
-          review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
-          published_at: extraData?.status === 'published' ? new Date().toISOString() : null
-        })
-        .select()
-        .single()
-
-      if (error) {
-        console.error('[handlePhoto] 创建相册失败:', error)
-        await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + escapeHTML(error.message))
-        return
+          } catch (e) {
+            console.warn('[handlePhoto] 实时更新菜单失败:', e)
+          }
+        }
       }
-
-      console.log(`[handlePhoto] 相册记录已创建: ${newPost.id}`)
-
-      // 🎯 频道同步：如果是自动处理模式
-      if (extraData?.status === 'ready' || extraData?.status === 'published') {
-        console.log(`[handlePhoto] 频道同步：自动处理模式，不显示编辑菜单。id=${newPost.id}`)
-
-        // 发送第一次通知并记录
-        const statusText =
-          extraData.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
-        await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新相册，${statusText}。`)
-
-        const userState = await getUserState(chatId)
-        await updateUserState(chatId, {
-          context: { ...(userState.context || {}), last_notified_mgid: mediaGroupId }
-        })
-        return
-      }
-
-      const menuResult = await sendMessage(chatId, getEditMenuText(newPost), {
-        reply_markup: getEditKeyboard(newPost)
-      })
-
-      const messageId = menuResult.ok ? menuResult.result.message_id : null
-
-      await updateUserState(chatId, {
-        state: 'idle',
-        draft_video_id: newPost.id,
-        current_message_id: messageId
-      })
-
       return
     }
 
@@ -329,6 +243,15 @@ export async function saveSinglePhoto(
     }
   }
 
+  const mediaItem = {
+    type: 'image',
+    file_id: photo.file_id,
+    width: photo.width,
+    height: photo.height,
+    file_size: photo.file_size || 0,
+    order: 0
+  }
+
   const { data: draftPost, error } = await supabase
     .from('videos')
     .insert({
@@ -338,15 +261,9 @@ export async function saveSinglePhoto(
       description: description,
       tags: tags.length > 0 ? tags : null,
       content_type: 'image',
-      images: JSON.stringify([
-        {
-          type: 'image',
-          file_id: photo.file_id,
-          width: photo.width,
-          height: photo.height,
-          order: 0
-        }
-      ]),
+      media_list: JSON.stringify([mediaItem]),
+      images: JSON.stringify([mediaItem]),
+      cover_url: photo.file_id, // 🎯 封面使用图片 file_id
       width: photo.width,
       height: photo.height,
       file_size: photo.file_size || 0,
@@ -445,77 +362,121 @@ export async function handleVideo(
       return
     }
 
-    // 🎯 相册模式：如果是媒体组的一部分，尝试合并
-    if (mediaGroupId) {
-      const { data: existingPost } = await supabase
-        .from('videos')
-        .select('*')
-        .eq('tg_user_id', chatId)
-        .eq('media_group_id', mediaGroupId)
-        .single()
-
-      if (existingPost) {
-        // 已经有记录了，追加到 images (相册模式)
-        const currentMedia: any[] =
-          typeof existingPost.images === 'string'
-            ? JSON.parse(existingPost.images)
-            : existingPost.images || []
-
-        // 检查是否已存在
-        const exists = currentMedia.some((m) => m.file_id === video.file_id)
-        if (exists) {
-          console.log('[handleVideo] 视频已存在于相册中，跳过')
-          return
-        }
-
-        currentMedia.push({
-          type: 'video',
-          file_id: video.file_id,
-          width: video.width,
-          height: video.height,
-          duration: video.duration,
-          cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '', // 🎯 给单项也存一份封面
-          order: currentMedia.length
-        })
-
-        const { error: updateError } = await supabase
-          .from('videos')
-          .update({
-            images: JSON.stringify(currentMedia),
-            title: `合集 (${currentMedia.length}个内容)`,
-            content_type: 'collection', // 统一标记为 collection，区分纯图文 album
-            // 🎯 只要当前没封面，就强制补齐封面
-            ...(!existingPost.cover_url || existingPost.cover_url.length < 5
-              ? { cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '' }
-              : {})
-          })
-          .eq('id', existingPost.id)
-
-        if (updateError) {
-          console.error('[handleVideo] 更新合集失败:', updateError)
-        }
-
-        console.log(`[handleVideo] 合集已更新，当前 ${currentMedia.length} 个内容`)
-        return
-      }
-    }
-
     const sizeMB = (videoSize / 1024 / 1024).toFixed(1)
 
+    // 🎯 媒体组模式 (合辑)：使用数据库原子操作解决并发冲突
+    if (mediaGroupId) {
+      console.log(`[handleVideo-MG] 进入媒体组处理: mgid=${mediaGroupId}, fileId=${video.file_id}`)
+      const newMediaItem = {
+        type: 'video',
+        file_id: video.file_id,
+        play_url: null,
+        cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '',
+        width: video.width,
+        height: video.height,
+        duration: video.duration,
+        file_size: video.file_size || 0
+      }
+
+      let description: string | null = null
+      let tags: string[] = []
+      if (caption && caption.length > 0) {
+        description = String(caption).trim()
+        tags = extractTags(caption)
+      }
+
+      console.log(`[handleVideo-MG] 准备执行 RPC append_collection_media...`)
+      const { data: result, error: rpcError } = await supabase.rpc('append_collection_media', {
+        p_chat_id: chatId,
+        p_media_group_id: mediaGroupId,
+        p_new_item: newMediaItem,
+        p_author_id: profile.id,
+        p_caption: description,
+        p_tags: tags.length > 0 ? tags : null,
+        p_content_type: 'collection'
+      })
+
+      if (rpcError || result?.error) {
+        console.error('[handleVideo-MG] 原子追加失败:', rpcError || result?.error)
+        await sendMessage(
+          chatId,
+          '❌ 上传失败，请重试\n\n错误: ' + escapeHTML(rpcError?.message || result?.error)
+        )
+        return
+      }
+
+      console.log(
+        `[handleVideo-MG] RPC 结果: id=${result.id}, is_new=${result.is_new}, count=${result.media_count}`
+      )
+
+      // 🎯 获取当前状态，决定是否发送新提示
+      const userState = await getUserState(chatId)
+      console.log(
+        `[handleVideo-MG] 当前用户状态: draft_id=${userState.draft_video_id}, msgId=${userState.current_message_id}`
+      )
+
+      let targetMessageId = 0
+
+      // 如果是新创建的记录，发送“处理中”提示
+      if (result.is_new) {
+        console.log(`[handleVideo-MG] 检测到新记录，发送处理中消息...`)
+        const processingMsg = await sendMessage(
+          chatId,
+          `🔄 <b>正在处理合辑内容...</b>\n\n` +
+            `📦 收到第 ${result.media_count} 个媒体项\n` +
+            `⏳ 正在转码并同步数据...\n` +
+            `💡 处理完成后会自动显示编辑菜单`
+        )
+        targetMessageId = processingMsg.ok ? processingMsg.result.message_id : 0
+        console.log(
+          `[handleVideo-MG] 新消息发送结果: ok=${processingMsg.ok}, msgId=${targetMessageId}`
+        )
+
+        await updateUserState(chatId, {
+          state: 'idle',
+          draft_video_id: result.id,
+          current_message_id: targetMessageId
+        })
+        console.log(`[handleVideo-MG] 用户状态已更新为新记录.`)
+      } else {
+        // 如果合辑已存在，且用户正在看它的菜单，则复用菜单消息 ID，这样 Worker 完成后会直接原地刷新菜单
+        targetMessageId =
+          userState.draft_video_id === result.id ? Number(userState.current_message_id || 0) : 0
+        console.log(`[handleVideo-MG] 合辑已存在，复用 msgId=${targetMessageId}`)
+      }
+
+      // 触发 Worker
+      console.log(
+        `[handleVideo-MG] 触发 Worker: videoId=${result.id}, fileId=${video.file_id}, targetMsgId=${targetMessageId}`
+      )
+      await triggerWorker(result.id, video.file_id, chatId, targetMessageId)
+      return
+    }
+
     console.log(`[handleVideo] 视频大小: ${sizeMB} MB, 准备转存 R2`)
+
+    const videoMediaItem = {
+      type: 'video',
+      file_id: video.file_id,
+      width: video.width,
+      height: video.height,
+      duration: video.duration,
+      cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '',
+      order: 0
+    }
 
     const { data: draftVideo, error } = await supabase
       .from('videos')
       .insert({
         tg_user_id: chatId,
         author_id: profile.id,
-        title: video.file_name || '未命名视频合集',
+        title: mediaGroupId ? '未命名合集' : video.file_name || '未命名视频',
         description: description,
         tags: tags.length > 0 ? tags : null,
         play_url: null,
-        cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '', // 🎯 这里的封面会被用于作品列表展示
+        cover_url: videoMediaItem.cover_url || video.file_id, // 🎯 这里的封面会被用于作品列表展示
         tg_file_id: video.file_id,
-        tg_thumbnail_file_id: video.thumbnail?.file_id || video.thumb?.file_id,
+        tg_thumbnail_file_id: videoMediaItem.cover_url || null,
         tg_unique_id: video.file_unique_id,
         storage_type: 'r2_pending',
         duration: video.duration,
@@ -529,19 +490,8 @@ export async function handleVideo(
         review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
         published_at: extraData?.status === 'published' ? new Date().toISOString() : null,
         media_group_id: mediaGroupId,
-        images: mediaGroupId
-          ? JSON.stringify([
-              {
-                type: 'video',
-                file_id: video.file_id,
-                width: video.width,
-                height: video.height,
-                duration: video.duration,
-                cover_url: video.thumbnail?.file_id || video.thumb?.file_id || '', // 🎯 给单项也存一份封面
-                order: 0
-              }
-            ])
-          : null,
+        media_list: JSON.stringify([videoMediaItem]),
+        images: JSON.stringify([videoMediaItem]),
         content_type: mediaGroupId ? 'collection' : 'video'
       })
       .select()

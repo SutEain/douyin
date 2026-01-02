@@ -339,11 +339,26 @@ export async function sendReward(payload: {
   })
 }
 
+// 🎯 缓存请求状态，防止死循环高频调用
+const requestLock = new Map<string, number>()
+
 async function requestSupabaseVideoList(
   endpoint: string,
   params?: Record<string, any>,
   options: { requireAuth?: boolean; includeAuthIfAvailable?: boolean } = {}
 ) {
+  // 防止死循环请求：同一个接口 200ms 内只能请求一次（从 500ms 下调，提高补货成功率）
+  const lockKey = `${endpoint}-${JSON.stringify(params)}`
+  const now = Date.now()
+  if (requestLock.has(lockKey) && now - requestLock.get(lockKey)! < 200) {
+    console.warn('[API] 拦截到高频重复请求:', lockKey)
+    return {
+      success: false,
+      data: { list: [], total: 0, message: '请求太频繁' }
+    }
+  }
+  requestLock.set(lockKey, now)
+
   const requireAuth = options.requireAuth !== undefined ? options.requireAuth : true
   let accessToken: string | null = null
 

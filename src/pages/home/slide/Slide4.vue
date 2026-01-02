@@ -2,7 +2,7 @@
   <SlideItem class="slide-item-class">
     <div class="video-container" style="background: black">
       <!-- Loading 状态 -->
-      <div v-if="store.loading && state.list.length === 0" class="loading-state">
+      <div v-if="state.loading && state.list.length === 0" class="loading-state">
         <div class="loading-spinner"></div>
         <p>加载中...</p>
       </div>
@@ -47,11 +47,12 @@ const state = reactive({
   list: [] as VideoItem[],
   page: 0, // 🎯 增加页码计数，用于辅助后端逻辑（如跳过深链接首位）
   pageSize: 10,
-  hasMore: true
+  hasMore: true,
+  loading: false // 🎯 改为局部 loading，避免多个 Tab 竞争 store.loading
 })
 
 async function loadMore() {
-  if (store.loading) return
+  if (state.loading) return
 
   // 1. 🎯 核心重构：必须等待应用 Ready
   if (!store.isAppReady) {
@@ -68,7 +69,7 @@ async function loadMore() {
     return
   }
 
-  store.loading = true
+  state.loading = true
 
   try {
     // 💡 即使后端是随机流，传一个变化的 start 也能帮助后端区分请求阶段
@@ -94,23 +95,32 @@ async function loadMore() {
         // 则不论后端返回了多少，都强制再请求一次，直到攒够 5 条或后端彻底没数据
         if (state.list.length < 5 && newList.length > 0) {
           console.log(`[Slide4] 内容不足 ${state.list.length}/5，自动补货...`)
-          store.loading = false
-          return loadMore()
+          state.loading = false
+          // 🎯 延迟一小会儿再补货，避开 API 频率限制锁
+          setTimeout(() => loadMore(), 300)
+          return
         }
       } else if (newList.length > 0) {
         // 💡 如果全是重复，自动穿透到下一页
         state.page++
         console.log('[Slide4] 全是重复，尝试获取下一批...')
-        store.loading = false
-        return loadMore()
+        state.loading = false
+        setTimeout(() => loadMore(), 300)
+        return
       } else {
         state.hasMore = false
+      }
+    } else {
+      console.warn('[Slide4] 加载失败:', res.message)
+      // 如果第一次加载就失败，标记 hasMore 为 true 允许重试
+      if (state.list.length === 0) {
+        state.hasMore = true
       }
     }
   } catch (e) {
     console.error('[Slide4] 加载异常:', e)
   } finally {
-    store.loading = false
+    state.loading = false
   }
 }
 
