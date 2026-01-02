@@ -58,7 +58,12 @@ import {
   handleAdminDouyinRefresh
 } from './routes/douyin.ts'
 import { handleSendReward } from './routes/reward.ts'
-import { handleAdminConfirmRecharge } from './routes/recharge.ts'
+import {
+  handleAdminConfirmRecharge,
+  handleGetRechargeInfo,
+  handleCreateRechargeOrder,
+  handleCancelRechargeOrder
+} from './routes/recharge.ts'
 import { handleAdminProcessWithdraw } from './routes/withdraw.ts'
 import { handleAdminAutoWithdraw } from './routes/adminWithdraw.ts'
 
@@ -167,6 +172,15 @@ serve(async (req) => {
     // 💰 充值确认 (仅 admin)
     if (route === '/recharge/confirm' && method === 'POST') {
       return handleAdminConfirmRecharge(req)
+    }
+    if (route === '/recharge/info' && method === 'GET') {
+      return handleGetRechargeInfo(req)
+    }
+    if (route === '/recharge/create' && method === 'POST') {
+      return handleCreateRechargeOrder(req)
+    }
+    if (route === '/recharge/cancel' && method === 'POST') {
+      return handleCancelRechargeOrder(req)
     }
 
     // 💰 提现处理 (仅 admin)

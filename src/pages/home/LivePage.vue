@@ -144,7 +144,7 @@
             <div class="coin-info">
               <img src="../../assets/img/icon/home/redpack.png" alt="" />
               <span>{{ userCoins }} 抖币</span>
-              <div class="recharge">充值</div>
+              <div class="recharge" @click="handleRecharge">充值</div>
             </div>
           </div>
           <div class="gift-grid">
@@ -193,6 +193,115 @@
             >
               {{ isSendingGift ? '发送中...' : '发送' }}
             </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 充值面板 -->
+    <Transition name="slide-up">
+      <div
+        v-if="showRechargeModal"
+        class="gift-panel-overlay recharge-overlay"
+        @click.self="showRechargeModal = false"
+      >
+        <div class="gift-panel recharge-panel">
+          <div class="panel-header">
+            <span>抖币充值</span>
+            <dy-back
+              class="round close"
+              img="close"
+              mode="light"
+              @click="showRechargeModal = false"
+            />
+          </div>
+
+          <div class="recharge-content" v-if="rechargeInfo">
+            <!-- 如果有待支付订单 -->
+            <template v-if="rechargeInfo.pending_order">
+              <div class="pending-order">
+                <div class="status-tip">⏳ 待支付订单</div>
+                <div class="order-item">
+                  <span class="label">订单编号</span>
+                  <span class="value"
+                    ><code>{{ rechargeInfo.pending_order.order_no }}</code></span
+                  >
+                </div>
+                <div class="order-item highlight">
+                  <span class="label">应付金额</span>
+                  <span class="value"
+                    >{{ Number(rechargeInfo.pending_order.total_amount).toFixed(2) }} USDT</span
+                  >
+                </div>
+                <div class="order-item">
+                  <span class="label">预计到账</span>
+                  <span class="value"
+                    >{{
+                      (rechargeInfo.pending_order.base_amount * 100).toLocaleString()
+                    }}
+                    抖币</span
+                  >
+                </div>
+
+                <div class="payment-address">
+                  <div class="addr-label">📍 收款地址 (TRC20)</div>
+                  <div
+                    class="addr-value"
+                    @click="
+                      _copy(rechargeInfo.pending_order.trc20_address)
+                      _notice('地址已复制')
+                    "
+                  >
+                    <code>{{ rechargeInfo.pending_order.trc20_address }}</code>
+                    <Icon icon="solar:copy-bold" class="copy-icon" />
+                  </div>
+                </div>
+
+                <div class="qr-code">
+                  <img
+                    :src="`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${rechargeInfo.pending_order.trc20_address}`"
+                  />
+                  <p>请扫码或转账至上方地址</p>
+                </div>
+
+                <div class="notice-box">
+                  ⚠️ 请务必支付<b>精确金额 (含尾数)</b
+                  >，否则无法自动到账！支付完成后请等待管理员确认。
+                </div>
+
+                <div class="recharge-footer">
+                  <div
+                    class="cancel-btn"
+                    @click="handleCancelRecharge(rechargeInfo.pending_order.id)"
+                  >
+                    取消订单
+                  </div>
+                  <div class="done-btn" @click="showRechargeModal = false">我已支付</div>
+                </div>
+              </div>
+            </template>
+
+            <!-- 如果没有待支付订单 -->
+            <template v-else>
+              <div class="recharge-intro">
+                <p>💡 汇率：1 USDT = 100 抖币</p>
+                <p>请选择充值金额 (USDT-TRC20)：</p>
+              </div>
+              <div class="amount-grid">
+                <div
+                  v-for="amt in rechargeInfo.amounts"
+                  :key="amt"
+                  class="amount-item"
+                  @click="handleCreateRecharge(amt)"
+                >
+                  <div class="usdt">{{ amt }} USDT</div>
+                  <div class="coins">{{ amt * 100 }} 抖币</div>
+                </div>
+              </div>
+            </template>
+          </div>
+          <div v-else class="loading-box">
+            <Loading />
           </div>
         </div>
       </div>
@@ -332,6 +441,96 @@ const giftList = ref<any[]>([])
 const selectedGiftId = ref<number | null>(null)
 const selectedQty = ref(1)
 const userCoins = ref(0) // 抖币余额
+
+// --- 充值相关 ---
+const showRechargeModal = ref(false)
+const rechargeInfo = ref<any>(null)
+
+async function fetchRechargeInfo() {
+  try {
+    const {
+      data: { session }
+    } = await supabase.auth.getSession()
+    const headers: Record<string, string> = {
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+    }
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`
+    }
+
+    const resp = await fetch(`${getAppServerBase()}/recharge/info`, { headers })
+    const payload = await resp.json()
+    if (payload.code === 0) {
+      rechargeInfo.value = payload.data
+    }
+  } catch (e) {
+    console.error('fetchRechargeInfo error:', e)
+  }
+}
+
+async function handleRecharge() {
+  showRechargeModal.value = true
+  await fetchRechargeInfo()
+}
+
+async function handleCreateRecharge(amount: number) {
+  try {
+    const {
+      data: { session }
+    } = await supabase.auth.getSession()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+    }
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`
+    }
+
+    const resp = await fetch(`${getAppServerBase()}/recharge/create`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ amount })
+    })
+    const payload = await resp.json()
+    if (payload.code === 0) {
+      _notice('订单创建成功')
+      await fetchRechargeInfo()
+    } else {
+      _notice(payload.msg || '创建失败')
+    }
+  } catch (e: any) {
+    _notice(e.message || '系统错误')
+  }
+}
+
+async function handleCancelRecharge(orderId: string) {
+  if (!confirm('确定要取消该充值订单吗？')) return
+  try {
+    const {
+      data: { session }
+    } = await supabase.auth.getSession()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+    }
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`
+    }
+
+    const resp = await fetch(`${getAppServerBase()}/recharge/cancel`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ order_id: orderId })
+    })
+    const payload = await resp.json()
+    if (payload.code === 0) {
+      _notice('订单已取消')
+      await fetchRechargeInfo()
+    }
+  } catch (e) {
+    console.error('handleCancelRecharge error:', e)
+  }
+}
 
 // --- 红包相关 ---
 const showSendPacket = ref(false)
@@ -2041,6 +2240,188 @@ onBeforeUnmount(() => {
           margin-top: 5rem;
         }
       }
+    }
+  }
+
+  .recharge-panel {
+    .recharge-content {
+      padding: 20rem;
+      color: white;
+
+      .recharge-intro {
+        margin-bottom: 20rem;
+        p {
+          margin: 0;
+          font-size: 14rem;
+          line-height: 1.6;
+          &:first-child {
+            color: #face15;
+            font-weight: bold;
+          }
+          &:last-child {
+            color: rgba(255, 255, 255, 0.6);
+          }
+        }
+      }
+
+      .amount-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12rem;
+
+        .amount-item {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 15rem;
+          border-radius: 12rem;
+          text-align: center;
+          transition: all 0.2s;
+
+          &:active {
+            transform: scale(0.95);
+            background: rgba(254, 44, 85, 0.1);
+            border-color: #fe2c55;
+          }
+
+          .usdt {
+            font-size: 18rem;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 4rem;
+          }
+
+          .coins {
+            font-size: 12rem;
+            color: rgba(255, 255, 255, 0.5);
+          }
+        }
+      }
+
+      .pending-order {
+        .status-tip {
+          background: rgba(250, 206, 21, 0.1);
+          color: #face15;
+          padding: 8rem;
+          border-radius: 8rem;
+          text-align: center;
+          margin-bottom: 20rem;
+          font-weight: bold;
+        }
+
+        .order-item {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 12rem;
+          font-size: 14rem;
+
+          .label {
+            color: rgba(255, 255, 255, 0.5);
+          }
+
+          &.highlight {
+            .value {
+              color: #fe2c55;
+              font-weight: bold;
+              font-size: 18rem;
+            }
+          }
+        }
+
+        .payment-address {
+          margin: 20rem 0;
+          background: rgba(255, 255, 255, 0.05);
+          padding: 12rem;
+          border-radius: 10rem;
+
+          .addr-label {
+            font-size: 12rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 8rem;
+          }
+
+          .addr-value {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10rem;
+            word-break: break-all;
+
+            code {
+              font-size: 13rem;
+              color: #a2e9ff;
+            }
+
+            .copy-icon {
+              font-size: 18rem;
+              color: #fe2c55;
+              flex-shrink: 0;
+            }
+          }
+        }
+
+        .qr-code {
+          text-align: center;
+          margin: 20rem 0;
+          img {
+            width: 150rem;
+            height: 150rem;
+            padding: 10rem;
+            background: white;
+            border-radius: 10rem;
+          }
+          p {
+            margin-top: 10rem;
+            font-size: 12rem;
+            color: rgba(255, 255, 255, 0.4);
+          }
+        }
+
+        .notice-box {
+          font-size: 12rem;
+          line-height: 1.6;
+          color: rgba(255, 255, 255, 0.5);
+          padding: 10rem;
+          background: rgba(254, 44, 85, 0.05);
+          border-left: 3rem solid #fe2c55;
+          margin-bottom: 20rem;
+          b {
+            color: #fe2c55;
+          }
+        }
+
+        .recharge-footer {
+          display: flex;
+          gap: 15rem;
+
+          .cancel-btn {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 12rem;
+            border-radius: 25rem;
+            text-align: center;
+            font-size: 14rem;
+          }
+
+          .done-btn {
+            flex: 1;
+            background: var(--primary-btn-color);
+            color: white;
+            padding: 12rem;
+            border-radius: 25rem;
+            text-align: center;
+            font-size: 14rem;
+            font-weight: bold;
+          }
+        }
+      }
+    }
+
+    .loading-box {
+      height: 300rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
   }
 
