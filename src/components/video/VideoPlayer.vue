@@ -22,6 +22,7 @@
       @timeupdate="handleTimeUpdate"
       @waiting="handleWaiting"
       @canplay="handleCanPlay"
+      @seeked="handleSeeked"
       @error="handleError"
     />
     <Icon icon="fluent:play-28-filled" class="pause-icon" v-if="!isPlaying" />
@@ -320,15 +321,22 @@ function handleProgressEnd(e: PointerEvent) {
 
   // 设置视频时间
   if (videoRef.value) {
+    state.loading = true // 开始跳转时显示加载
     videoRef.value.currentTime = state.currentTime
-    // 恢复播放
+    // 立即尝试播放
+    videoRef.value.play().catch(() => {})
+
+    // 兜底：如果 2 秒内没触发 seeked，也强制关闭移动状态
     setTimeout(() => {
       state.isMoving = false
-      if (videoRef.value) {
-        videoRef.value.play().catch(() => {})
-      }
-    }, 1000)
+    }, 2000)
   }
+}
+
+function handleSeeked() {
+  console.log('[VideoPlayer] seeked')
+  state.isMoving = false
+  state.loading = false
 }
 
 // ========== 生命周期 ==========

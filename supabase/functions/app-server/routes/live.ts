@@ -76,16 +76,20 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
         const probed = await probeUrl(externalRoom.stream_url)
         currentStatus = probed.ok ? 'online' : 'offline'
 
-        // 异步更新数据库状态，不阻塞当前请求（或者同步更新也行，取决于延迟容忍度）
-        // 这里选择同步更新一次，确保下次请求能直接拿到
-        await supabaseAdmin
-          .from('live_rooms')
-          .update({
-            status: currentStatus,
-            last_checked_at: new Date().toISOString(),
-            last_error: probed.ok ? null : probed.msg
-          })
-          .eq('id', externalRoom.id)
+        // 🎯 业务逻辑：如果探测到没开播，直接关闭该直播间 (is_active = false)
+        // 这样其他用户在列表里就刷不到这个直播间了
+        const updatePayload: any = {
+          status: currentStatus,
+          last_checked_at: new Date().toISOString(),
+          last_error: probed.ok ? null : probed.msg
+        }
+
+        if (!probed.ok) {
+          updatePayload.is_active = false
+          console.log(`[live_detail] Room ${externalRoom.id} is offline, deactivating.`)
+        }
+
+        await supabaseAdmin.from('live_rooms').update(updatePayload).eq('id', externalRoom.id)
       }
 
       // 🎯 统一关联 ID 为 88888 的用户 (UUID: 11c77e88-545b-4aa3-bbb1-db87e7d637f0)
@@ -122,7 +126,7 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
   }
 }
 
-export async function handleLiveRooms(req: Request): Promise<Response> {
+export async function handleLiveRooms(_req: Request): Promise<Response> {
   try {
     // 1. 获取后台维护的转播直播间 (live_rooms)
     const { data: externalRooms, error: externalError } = await supabaseAdmin
@@ -477,6 +481,7 @@ export async function handleLiveRoomsProbe(req: Request): Promise<Response> {
         .from('live_rooms')
         .update({
           status: nextStatus,
+          is_active: probed.ok, // 🎯 自动一键开关：探测正常则打开，不正常则关闭
           last_checked_at: nowIso,
           check_count: ((r as any).check_count ?? 0) + 1,
           last_error: lastError

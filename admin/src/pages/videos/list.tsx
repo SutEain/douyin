@@ -287,10 +287,19 @@ export const VideoList = () => {
       content: `确定通过「${record.title}」的审核吗？`,
       onOk: async () => {
         try {
+          // 获取当前登录用户的 token
+          const {
+            data: { session }
+          } = await supabaseClient.auth.getSession()
+          const token = session?.access_token
+
           // 🎯 调用后端 API 处理审核通过（包含自动审核逻辑）
           const response = await fetch(`${import.meta.env.VITE_APP_SERVER_URL}/video/approve`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
             body: JSON.stringify({ video_id: record.id })
           })
 
@@ -361,13 +370,20 @@ export const VideoList = () => {
       onOk: async () => {
         setBatchLoading(true)
         try {
+          // 获取当前登录用户的 token
+          const {
+            data: { session }
+          } = await supabaseClient.auth.getSession()
+          const token = session?.access_token
+
           // 🎯 调用批量审核接口
           const response = await fetch(
             `${import.meta.env.VITE_APP_SERVER_URL}/video/batch-review`,
             {
               method: 'POST',
               headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
               },
               body: JSON.stringify({
                 video_ids: selectedRowKeys,

@@ -197,18 +197,15 @@ async function handleRequest(request) {
 }
 
 /**
- * 处理Range请求（从完整缓存文件中提取Range）
+ * 处理Range请求（优化：尽量避免全量内存加载）
  */
 async function handleRangeRequest(response, rangeHeader) {
   try {
-    const match = rangeHeader.match(/bytes=(\d+)-(\d*)/)
-    if (!match) {
-      console.warn(`[Invalid Range] header: ${rangeHeader}`)
-      return response
-    }
+    const totalSize = parseInt(response.headers.get('Content-Length'))
+    const contentType = response.headers.get('Content-Type') || 'video/mp4'
 
-    const buffer = await response.arrayBuffer()
-    const totalSize = buffer.byteLength
+    const match = rangeHeader.match(/bytes=(\d+)-(\d*)/)
+    if (!match) return response
 
     const start = parseInt(match[1])
     const end = match[2] ? parseInt(match[2]) : totalSize - 1
@@ -219,26 +216,84 @@ async function handleRangeRequest(response, rangeHeader) {
           status: 416,
           headers: {
             'Content-Range': `bytes */${totalSize}`,
-            'Content-Type': response.headers.get('Content-Type') || 'video/mp4',
-            'Content-Disposition': 'inline'
+            'Content-Type': contentType,
+            'Access-Control-Allow-Origin': '*'
           }
         })
       )
     }
 
-    const slice = buffer.slice(start, end + 1)
+    // 🎯 优化：如果响应体很大，使用流式读取而不是 arrayBuffer()
+    // 注意：caches API 返回的 response.body 只能读取一次
+    const sliceSize = end - start + 1
 
-    console.log(`[Range Request] bytes ${start}-${end}/${totalSize}`)
+    // 如果切片较小（< 10MB），或者我们不得不加载（因为是缓存对象），我们使用 arrayBuffer
+    // 对于 Cloudflare Worker 缓存对象，目前没有直接 seek 的 API，
+    // 只能通过读取并跳过前面的字节。
+
+    if (totalSize < 5 * 1024 * 1024) {
+      // 小文件继续使用 arrayBuffer，简单可靠
+      const buffer = await response.arrayBuffer()
+      const slice = buffer.slice(start, end + 1)
+      return withHandled(
+        new Response(slice, {
+          status: 206,
+          headers: {
+            'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+            'Content-Length': slice.byteLength.toString(),
+            'Content-Type': contentType,
+            'Accept-Ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*'
+          }
+        })
+      )
+    }
+
+    // 对于大文件，我们从头开始读取流并丢弃前面的部分（虽然不完美，但比 arrayBuffer 节省内存）
+    const { readable, writable } = new TransformStream()
+    const reader = response.body.getReader()
+    const writer = writable.getWriter()
+
+    // 异步处理流
+    ;(async () => {
+      let bytesRead = 0
+      try {
+        let done = false
+        while (!done) {
+          const { done: readerDone, value } = await reader.read()
+          if (readerDone) {
+            done = true
+            break
+          }
+
+          const chunkEnd = bytesRead + value.length
+
+          if (chunkEnd > start && bytesRead <= end) {
+            // 这个 chunk 包含我们需要的数据
+            const chunkStartInValue = Math.max(0, start - bytesRead)
+            const chunkEndInValue = Math.min(value.length, end - bytesRead + 1)
+            await writer.write(value.slice(chunkStartInValue, chunkEndInValue))
+          }
+
+          bytesRead = chunkEnd
+          if (bytesRead > end) break // 读够了，提前结束
+        }
+      } catch (e) {
+        console.error('[Stream Error]', e)
+      } finally {
+        writer.close()
+        reader.releaseLock()
+      }
+    })()
 
     return withHandled(
-      new Response(slice, {
+      new Response(readable, {
         status: 206,
         statusText: 'Partial Content',
         headers: {
           'Content-Range': `bytes ${start}-${end}/${totalSize}`,
-          'Content-Length': slice.byteLength.toString(),
-          'Content-Type': response.headers.get('Content-Type') || 'video/mp4',
-          'Content-Disposition': 'inline', // 🎯 强制浏览器内联显示
+          'Content-Length': sliceSize.toString(),
+          'Content-Type': contentType,
           'Accept-Ranges': 'bytes',
           'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
           'Access-Control-Allow-Origin': '*'
@@ -247,7 +302,7 @@ async function handleRangeRequest(response, rangeHeader) {
     )
   } catch (error) {
     console.error(`[Range Error] ${error.message}`)
-    return withHandled(response)
+    return response
   }
 }
 

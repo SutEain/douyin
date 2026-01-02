@@ -6,6 +6,7 @@ const axios = require('axios')
 const fs = require('fs')
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3')
 const { createClient } = require('@supabase/supabase-js')
+const { execSync } = require('child_process')
 
 const app = express()
 app.use(express.json())
@@ -55,13 +56,31 @@ app.post('/process', async (req, res) => {
       throw new Error(`文件不存在: ${localFilePath}`)
     }
 
+    // 🎯 优化：使用 ffmpeg 进行 faststart 处理，解决长视频拖动卡顿问题
+    const optimizedPath = `${localFilePath}.opt.mp4`
+    try {
+      console.log(`[${video_id}] 正在执行 faststart 优化...`)
+      // -c copy 表示不重编码（极快），-movflags +faststart 将元数据移至文件头
+      execSync(`ffmpeg -y -i "${localFilePath}" -c copy -movflags +faststart "${optimizedPath}"`, {
+        stdio: 'ignore'
+      })
+      console.log(`[${video_id}] faststart 优化完成`)
+    } catch (err) {
+      console.warn(
+        `[${video_id}] ffmpeg 优化失败（可能未安装 ffmpeg），将使用原文件上传:`,
+        err.message
+      )
+    }
+
+    const uploadPath = fs.existsSync(optimizedPath) ? optimizedPath : localFilePath
+
     // 4. 上传到 R2
     const ext = localFilePath.split('.').pop()
     // 🎯 优化：使用 video_id + file_id 确保合辑内每个视频路径唯一，防止覆盖
     const r2Key = `videos/${video_id}/${file_id}.${ext}`
     console.log(`[${video_id}] 正在上传到 R2: ${r2Key}`)
 
-    const fileStream = fs.createReadStream(localFilePath)
+    const fileStream = fs.createReadStream(uploadPath)
     await r2.send(
       new PutObjectCommand({
         Bucket: R2_BUCKET,
@@ -88,6 +107,11 @@ app.post('/process', async (req, res) => {
     fs.unlink(localFilePath, (err) => {
       if (err) console.error(`[${video_id}] 删除本地文件失败:`, err)
     })
+    if (fs.existsSync(optimizedPath)) {
+      fs.unlink(optimizedPath, (err) => {
+        if (err) console.error(`[${video_id}] 删除优化文件失败:`, err)
+      })
+    }
 
     // 7. 通知 Supabase 完成 (触发编辑菜单)
     const webhookUrl = `${process.env.SUPABASE_URL}/functions/v1/bot-video-upload`
