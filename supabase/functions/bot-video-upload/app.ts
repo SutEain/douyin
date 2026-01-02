@@ -1,17 +1,17 @@
-import { BOT_TOKEN } from './env.ts'
+// import { BOT_TOKEN } from './env.ts'
 import { supabase } from './supabaseClient.ts'
 import { getUserState, updateUserState } from './state.ts'
 import { handleSettings } from './features/settings.ts'
 import { handleInlineQuery } from './features/inlineShare.ts'
-import { handleMyVideosEdit, handleViewProcessing } from './features/myVideos.ts'
+// import { handleMyVideosEdit, handleViewProcessing } from './features/myVideos.ts'
 import { getPersistentKeyboard, getWelcomeKeyboard } from './keyboards.ts'
 import { handleUserProfile } from './features/profileCenter.ts'
 import { handleInvitation } from './features/invitation.ts'
 import { getOrCreateProfile } from './services/profile.ts'
 import { getEditKeyboard, getEditMenuText } from './features/editor.ts'
-import { handlePhoto, handleVideo, mediaGroupRejectCache } from './features/upload.ts'
+import { handlePhoto, handleVideo /*, mediaGroupRejectCache*/ } from './features/upload.ts'
 import { deleteTelegramMessage, sendMessage, editMessage } from './telegram.ts'
-import { escapeHTML } from './utils/text.ts'
+// import { escapeHTML } from './utils/text.ts'
 import { handleCallback } from './routers/callback.ts'
 import { handleLocation, handleText, handleForward } from './routers/messages.ts'
 import { handleChannelPost } from './routers/channelPost.ts'
@@ -84,62 +84,42 @@ export async function handleRequest(req: Request): Promise<Response> {
             return new Response('OK', { status: 200 })
           }
 
-          // 🎯 如果是合集 (collection)，需要更新 media_list 中的对应项
-          if (video.content_type === 'collection' && (play_url || cover_url)) {
-            console.log(`[WorkerCallback] 检测到合集更新，同步 media_list... videoId=${videoId}`)
-            const currentMedia =
-              typeof video.media_list === 'string'
-                ? JSON.parse(video.media_list)
-                : video.media_list || []
+          // 🎯 如果是合集 (collection)，进行数据补全
+          if (video.content_type === 'collection') {
+            // 🎯 关键逻辑：即使回调 payload 没带 play_url，我们也尝试从数据库主记录中获取（Worker 刚填进去的）
+            const effectivePlayUrl = play_url || video.play_url
+            const effectiveCoverUrl = cover_url || video.cover_url
 
-            let updated = false
-            // 🎯 优先级：回调带回的 file_id > 数据库主记录的 tg_file_id
-            const targetFileId = file_id || video.tg_file_id
+            if (effectivePlayUrl || effectiveCoverUrl) {
+              const targetFileId = file_id || video.tg_file_id
+              console.log(
+                `[WorkerCallback] 尝试补全合集媒体项: videoId=${videoId}, fileId=${targetFileId}, playUrl=${effectivePlayUrl}`
+              )
 
-            const newMedia = currentMedia.map((m: any) => {
-              // 🎯 匹配逻辑：
-              // 1. 如果有明确的 file_id 匹配
-              // 2. 如果回调没有 file_id，则匹配第一个还没有 play_url 的视频项（兜底方案）
-              const isMatch =
-                (targetFileId && m.file_id === targetFileId) ||
-                (!file_id && m.type === 'video' && !m.play_url && !updated)
+              const { error: rpcError } = await supabase.rpc('update_collection_media_item', {
+                p_video_id: videoId,
+                p_file_id: targetFileId,
+                p_play_url: effectivePlayUrl,
+                p_cover_url: effectiveCoverUrl
+              })
 
-              if (isMatch) {
-                updated = true
-                console.log(`[WorkerCallback] 更新媒体项: type=${m.type}, fileId=${m.file_id}`)
-                return {
-                  ...m,
-                  play_url: play_url || m.play_url,
-                  cover_url: cover_url || m.cover_url
+              if (rpcError) {
+                console.error('[WorkerCallback] RPC 补全失败:', rpcError)
+              } else {
+                // 再次刷新 video 对象，确保后续菜单显示的 media_list 是最新的
+                const { data: latestVideo } = await supabase
+                  .from('videos')
+                  .select('*')
+                  .eq('id', videoId)
+                  .single()
+                if (latestVideo) {
+                  Object.assign(video, latestVideo)
+                  video.media_list =
+                    typeof latestVideo.media_list === 'string'
+                      ? JSON.parse(latestVideo.media_list)
+                      : latestVideo.media_list
+                  video.images = video.media_list
                 }
-              }
-              return m
-            })
-
-            if (updated) {
-              // 🎯 特殊处理：如果是合集的第一个视频完成了，同步更新主记录的 play_url 和 cover_url
-              const isFirstVideoReady =
-                newMedia.findIndex((m: any) => m.type === 'video' && m.play_url) ===
-                newMedia.findIndex((m: any) => m.file_id === targetFileId)
-
-              const updateData: any = {
-                media_list: JSON.stringify(newMedia),
-                images: JSON.stringify(newMedia)
-              }
-
-              if (isFirstVideoReady) {
-                console.log(`[WorkerCallback] 同步主记录播放链接: ${play_url}`)
-                updateData.play_url = play_url
-                if (cover_url) updateData.cover_url = cover_url
-              }
-
-              await supabase.from('videos').update(updateData).eq('id', videoId)
-
-              video.media_list = newMedia
-              video.images = newMedia
-              if (isFirstVideoReady) {
-                video.play_url = play_url
-                video.cover_url = cover_url || video.cover_url
               }
             }
           }

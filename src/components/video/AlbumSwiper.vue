@@ -119,9 +119,14 @@ interface MediaItem {
 
 interface Props {
   images: MediaItem[]
+  isCurrent?: boolean // 🎯 是否是当前显示的 slot
+  contentType?: 'video' | 'image' | 'album' | 'collection' // 🎯 父级内容类型
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  isCurrent: true,
+  contentType: 'album'
+})
 const emit = defineEmits<{
   reachedLast: [] // 🎯 滑到最后一张时触发
 }>()
@@ -274,15 +279,33 @@ function onVideoError(index: number) {
 
 // 🎯 获取标识文本
 function getBadgeText() {
+  // 如果父级明确说是合集，则始终显示合集
+  if (props.contentType === 'collection') return '合辑'
+
   const current = props.images[currentIndex.value]
   if (current?.type === 'video') return '合辑'
   return '相册'
 }
 
+// 🎯 处理 slot 角色切换：如果不是当前 slot，强制停止所有视频
+watch(
+  () => props.isCurrent,
+  (isCurrent) => {
+    if (!isCurrent) {
+      console.log('[AlbumSwiper] Not current anymore, stopping all videos')
+      videoRefs.forEach((v) => v.pause())
+      Object.keys(videoPlayingStates).forEach((k) => (videoPlayingStates[Number(k)] = false))
+    } else if (isParentPlaying.value) {
+      // 重新变回 current 时，如果父级在播放，则恢复
+      playVideo(currentIndex.value)
+    }
+  }
+)
+
 // 🎯 处理当前项切换
 watch(currentIndex, (newIdx) => {
   const media = props.images[newIdx]
-  if (media?.type === 'video' && isParentPlaying.value) {
+  if (media?.type === 'video' && isParentPlaying.value && props.isCurrent) {
     // 延迟一小会儿，等待 swiper 动画完成或 DOM 就绪
     setTimeout(() => playVideo(newIdx), 100)
   } else {
@@ -297,12 +320,25 @@ watch(isParentPlaying, (playing) => {
   console.log('[AlbumSwiper] Parent playing state changed:', playing)
   const currentMedia = props.images[currentIndex.value]
   if (currentMedia?.type === 'video') {
-    if (playing) {
+    if (playing && props.isCurrent) {
       playVideo(currentIndex.value)
     } else {
       const video = videoRefs.get(currentIndex.value)
       video?.pause()
       videoPlayingStates[currentIndex.value] = false
+    }
+  }
+})
+
+// 🎯 响应音量开关（解决打开 App 第一个是合集时点开声音没反应的问题）
+watch(isMuted, (muted) => {
+  console.log('[AlbumSwiper] Muted state changed:', muted)
+  const video = videoRefs.get(currentIndex.value)
+  if (video) {
+    video.muted = muted
+    // 如果解除静音，尝试确保视频在播放
+    if (!muted && isParentPlaying.value && props.isCurrent) {
+      playVideo(currentIndex.value)
     }
   }
 })
@@ -329,9 +365,9 @@ watch(
 )
 
 onMounted(() => {
-  // 初始加载如果是视频，尝试播放
+  // 初始加载如果是视频，尝试播放（仅对当前 slot 生效）
   const currentMedia = props.images[currentIndex.value]
-  if (currentMedia?.type === 'video' && isParentPlaying.value) {
+  if (currentMedia?.type === 'video' && isParentPlaying.value && props.isCurrent) {
     playVideo(currentIndex.value)
   }
 })
