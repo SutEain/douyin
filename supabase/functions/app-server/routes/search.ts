@@ -26,22 +26,17 @@ export async function handleSearchVideos(req: Request): Promise<Response> {
     })
   }
 
-  // 🎯 核心重构：取消 is_adult 过滤，实现全量视频模糊匹配
-  // 匹配范围：标题(title) + 描述(description) + 标签(tags)
+  // 🎯 核心修复：查询专门的搜索视图，避免 PostgREST 解析 ::text 报错
   const {
     data: rows,
     error,
     count
   } = await supabaseAdmin
-    .from('videos')
+    .from('video_search_view') // 👈 使用新视图
     .select('*', { count: 'exact' })
     .eq('status', 'published')
-    .or(
-      `title.ilike.%${keyword}%,` +
-        `description.ilike.%${keyword}%,` +
-        `tags::text.ilike.%${keyword}%`
-    )
-    .order('like_count', { ascending: false }) // 优先展示高热度视频
+    .ilike('search_text', `%${keyword}%`) // 👈 直接对合并后的字段进行模糊匹配
+    .order('like_count', { ascending: false })
     .order('created_at', { ascending: false })
     .range(from, to)
 

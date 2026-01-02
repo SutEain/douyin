@@ -14,7 +14,8 @@ const r2 = new S3Client({
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
+  },
+  maxAttempts: 3 // 增加重试次数
 })
 
 const supabase = createClient(
@@ -27,7 +28,6 @@ async function fixVideos() {
     console.log(`\n🔄 [${new Date().toLocaleString()}] 开始新一轮抓取...`)
 
     try {
-      // 获取未优化的视频列表
       const { data: videos, error } = await supabase
         .from('videos')
         .select('id, play_url, file_size, title')
@@ -81,30 +81,34 @@ async function fixVideos() {
             writer.on('error', reject)
           })
 
-          // B. 分析与修复标签
+          // B. 分析与修复
           const probeJson = execSync(
             `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,codec_tag_string -of json "${localInput}"`
           ).toString()
-          const probeData = JSON.parse(probeJson)
-          const vStream = probeData.streams[0]
+          const vStream = JSON.parse(probeJson).streams[0]
 
-          if (!vStream || !vStream.codec_name) {
-            throw new Error('无效视频文件')
-          }
+          if (!vStream || !vStream.codec_name) throw new Error('无效视频文件')
 
           let ffmpegArgs = `-c copy -movflags +faststart`
-          if (vStream.codec_name === 'hevc' && vStream.codec_tag_string === 'hev1') {
+          const codecName = (vStream.codec_name || '').toLowerCase()
+          const codecTag = (vStream.codec_tag_string || '').toLowerCase()
+
+          if (codecName === 'hevc' && codecTag === 'hev1') {
             console.log(`   - 🛠 修正标签 (hev1 -> hvc1)`)
             ffmpegArgs = `-c copy -tag:v hvc1 -movflags +faststart`
           } else {
-            console.log(`   - ✨ FastStart 优化`)
+            console.log(`   - ✨ FastStart 优化 (${codecTag})`)
           }
 
           execSync(`ffmpeg -y -i "${localInput}" ${ffmpegArgs} "${localOutput}"`, {
             stdio: 'ignore'
           })
 
-          // C. 上传
+          // C. 校验并上传
+          if (!fs.existsSync(localOutput) || fs.statSync(localOutput).size === 0) {
+            throw new Error('FFmpeg 生成的文件为空或不存在')
+          }
+
           await r2.send(
             new PutObjectCommand({
               Bucket: process.env.R2_BUCKET,
@@ -118,8 +122,10 @@ async function fixVideos() {
           console.log(`   ✅ 成功`)
         } catch (err) {
           console.error(`   ❌ 失败: ${err.message}`)
-          // 标记已处理，防止卡在坏文件上
-          await supabase.from('videos').update({ is_optimized: true }).eq('id', videoId)
+          // 如果是 R2 网络问题，可以考虑不打标记下次重试；如果是文件坏了，打标记跳过
+          if (!err.message.includes('streaming request')) {
+            await supabase.from('videos').update({ is_optimized: true }).eq('id', videoId)
+          }
         } finally {
           if (fs.existsSync(localInput)) fs.unlinkSync(localInput)
           if (fs.existsSync(localOutput)) fs.unlinkSync(localOutput)

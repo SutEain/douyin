@@ -50,10 +50,16 @@ app.post('/process', async (req, res) => {
     if (!vStream || !vStream.codec_name) throw new Error('无效视频内容')
 
     let ffmpegArgs = `-c copy -movflags +faststart`
-    // 修复苹果无法播放的 hev1 标签
-    if (vStream.codec_name === 'hevc' && vStream.codec_tag_string === 'hev1') {
-      console.log(`[${video_id}] 检测到 hev1 标签，正在修正为 hvc1...`)
+
+    // 🎯 苹果设备兼容性检查 (hev1 -> hvc1)
+    const codecName = (vStream.codec_name || '').toLowerCase()
+    const codecTag = (vStream.codec_tag_string || '').toLowerCase()
+
+    if (codecName === 'hevc' && codecTag === 'hev1') {
+      console.log(`[${video_id}] 检测到 hev1 标签 (苹果不兼容)，正在极速修正为 hvc1...`)
       ffmpegArgs = `-c copy -tag:v hvc1 -movflags +faststart`
+    } else {
+      console.log(`[${video_id}] 编码标签正常 (${codecTag})，仅执行 FastStart 优化...`)
     }
 
     const optimizedPath = `${localFilePath}.opt.mp4`
@@ -78,37 +84,38 @@ app.post('/process', async (req, res) => {
 
     const playUrl = `${R2_PUBLIC_URL}/${r2Key}`
 
-    // 更新数据库，同时标记为已优化
+    // 🎯 更新数据库：不再强制改 status 为 draft，确保前端能搜到并播放
     await supabase
       .from('videos')
       .update({
         play_url: playUrl,
-        status: 'draft',
         storage_type: 'r2',
-        is_optimized: true // 🎯 以后新上传的直接标记完成
+        is_optimized: true
       })
       .eq('id', video_id)
 
-    // 清理
-    fs.unlinkSync(localFilePath)
+    // 清理临时文件
+    if (fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath)
     if (fs.existsSync(optimizedPath)) fs.unlinkSync(optimizedPath)
 
     // 通知回调
-    await axios.post(
-      `${process.env.SUPABASE_URL}/functions/v1/bot-video-upload`,
-      {
-        type: 'worker_complete',
-        chatId: chat_id,
-        messageId: message_id,
-        videoId: video_id,
-        file_id: file_id,
-        play_url: playUrl,
-        success: true
-      },
-      {
-        headers: { Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` }
-      }
-    )
+    await axios
+      .post(
+        `${process.env.SUPABASE_URL}/functions/v1/bot-video-upload`,
+        {
+          type: 'worker_complete',
+          chatId: chat_id,
+          messageId: message_id,
+          videoId: video_id,
+          file_id: file_id,
+          play_url: playUrl,
+          success: true
+        },
+        {
+          headers: { Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` }
+        }
+      )
+      .catch((e) => console.error('Callback failed:', e.message))
 
     console.log(`[${video_id}] 处理成功！`)
   } catch (error) {
