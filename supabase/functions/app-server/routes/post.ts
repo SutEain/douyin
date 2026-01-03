@@ -9,13 +9,13 @@ export async function handlePostRecommended(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  // 仅取图片/相册，过滤成人与东南亚板块（东南亚板块本身是 video，但这里也显式排除）
+  // 仅取图片/相册，过滤成人
   const { data, error, count } = await supabaseAdmin
     .from('videos')
     .select('*', { count: 'exact' })
     .eq('status', 'published')
     .eq('is_adult', false)
-    .eq('is_sea', false)
+    // 🎯 只要是 image 或 album 都会出现在图文 Tab，不再受 is_sea 限制（因为图文目前没有东南亚分类）
     .in('content_type', ['image', 'album'])
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })

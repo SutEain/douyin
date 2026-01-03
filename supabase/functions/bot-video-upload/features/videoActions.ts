@@ -147,7 +147,7 @@ export async function handleViewVideo(chatId: number, messageId: number, videoId
 
     let descText = '未设置'
     if (video.description) {
-      descText = safeTruncate(video.description, 200)
+      descText = safeTruncate(video.description, 1000)
     }
 
     let tagsText = '未设置'

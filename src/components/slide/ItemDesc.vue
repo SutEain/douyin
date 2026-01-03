@@ -54,8 +54,8 @@ const fullDescription = computed(() => {
     parts.push(normalizedTags.value.join(' '))
   }
   const fullText = parts.filter(Boolean).join(' ').trim()
-  // ✅ 限制最多 300 字
-  return fullText.length > 300 ? fullText.substring(0, 300) + '...' : fullText
+  // ✅ 移除字数限制，允许完整显示
+  return fullText
 })
 
 const showToggle = computed(() => fullDescription.value.length > 100)
@@ -106,7 +106,13 @@ const publishDate = computed(() => {
       </div>
       <div v-if="publishDate" class="publish-date">发布于 {{ publishDate }}</div>
       <div class="description-wrapper" v-if="fullDescription">
-        <div class="description" :class="{ collapsed: !state.expanded && showToggle }">
+        <div
+          class="description"
+          :class="{ collapsed: !state.expanded && showToggle }"
+          @touchstart="state.expanded && $event.stopPropagation()"
+          @touchmove="state.expanded && $event.stopPropagation()"
+          @touchend="state.expanded && $event.stopPropagation()"
+        >
           {{ fullDescription }}
         </div>
         <div class="desc-actions" v-if="showToggle || showViewDetail">
@@ -253,6 +259,17 @@ const publishDate = computed(() => {
       word-break: break-word;
       position: relative;
       z-index: 1;
+      // ✅ 展开后允许在限定高度内滚动，避免过长覆盖屏幕
+      max-height: 50vh;
+      overflow-y: auto;
+      // 🎯 优化滚动条样式（极简）
+      &::-webkit-scrollbar {
+        width: 2px;
+      }
+      &::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 1px;
+      }
 
       &.collapsed {
         display: -webkit-box;
@@ -260,6 +277,7 @@ const publishDate = computed(() => {
         line-clamp: 4;
         -webkit-box-orient: vertical;
         overflow: hidden;
+        max-height: none;
       }
     }
 

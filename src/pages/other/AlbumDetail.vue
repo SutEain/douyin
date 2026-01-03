@@ -48,7 +48,7 @@
               </div>
             </div>
           </header>
-          <div class="desc">
+          <div class="desc" style="white-space: pre-wrap">
             {{ props.detail.note_card?.display_title }}
           </div>
           <div class="date">{{ props.detail.note_card.createTime }}</div>
