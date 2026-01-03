@@ -257,7 +257,7 @@
           <div class="text">{{ _formatNumber(local.collectCount) }}</div>
         </div>
 
-        <div class="option" @click.stop="shareToTelegram">
+        <div class="option" @click.stop="showShareDrawer = true">
           <Icon icon="ph:share-fat-light" />
           <div class="text">{{ _formatNumber(local.shareCount) }}</div>
         </div>
@@ -293,6 +293,32 @@
               </div>
             </div>
             <div class="reward-close" @click="showRewardPanel = false">取消</div>
+          </div>
+        </div>
+      </transition>
+    </teleport>
+
+    <!-- 🎯 分享抽屉 -->
+    <teleport to="body">
+      <transition name="slide-up">
+        <div v-if="showShareDrawer" class="reward-overlay" @click.self="showShareDrawer = false">
+          <div class="reward-panel share-drawer">
+            <div class="reward-title" style="color: white; font-size: 16rem">分享给好友</div>
+            <div class="share-grid">
+              <div class="share-item" @click="shareAlbumDirect">
+                <div class="icon-wrap tg">
+                  <Icon icon="logos:telegram" />
+                </div>
+                <span>TG 分享</span>
+              </div>
+              <div class="share-item" @click="copyAlbumLink">
+                <div class="icon-wrap link">
+                  <Icon icon="solar:link-bold" />
+                </div>
+                <span>复制链接</span>
+              </div>
+            </div>
+            <div class="reward-close" @click="showShareDrawer = false">取消</div>
           </div>
         </div>
       </transition>
@@ -828,22 +854,51 @@ async function toggleCollect() {
   }
 }
 
-function shareToTelegram() {
-  const desc = props.detail?.note_card?.display_title || ''
+// --- 分享相关 ---
+const showShareDrawer = ref(false)
+const rawBotUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot'
+const botUsername = rawBotUsername.replace('@', '')
+const appName = import.meta.env.VITE_TG_APP_NAME || 'tgdouyin'
 
-  // 🎯 只要描述前 10 个字
-  let searchText = desc.substring(0, 10).trim()
-
-  // 如果还是空，就用默认词
-  if (!searchText) {
-    searchText = '精彩内容'
+const albumDeepLink = computed(() => {
+  const id = String(currentId.value || '')
+  if (!id) return ''
+  let link = `https://t.me/${botUsername}/${appName}?startapp=video_${id}`
+  if (baseStore.userinfo?.numeric_id) {
+    link += `_i${baseStore.userinfo.numeric_id}`
   }
+  return link
+})
 
-  const botUsername = 'tg_douyin_bot'
-  const shareText = `@${botUsername} ${searchText}`
+function copyAlbumLink() {
+  const link = albumDeepLink.value
+  if (!link) return
+  _copy(link)
+  _notice('内容链接已复制')
+  showShareDrawer.value = false
+}
 
-  _copy(shareText)
-  _notice('分享指令已复制，去聊天框粘贴即可生成卡片～')
+function shareAlbumDirect() {
+  const id = String(currentId.value || '')
+  if (!id) return
+
+  // 🎯 使用 switchInlineQuery 模式
+  const desc = props.detail?.note_card?.display_title || '精彩内容'
+  const searchText = desc.substring(0, 15).trim() || '精品推荐'
+
+  // @ts-ignore
+  if (window.Telegram?.WebApp) {
+    // @ts-ignore
+    window.Telegram.WebApp.switchInlineQuery(searchText, ['users', 'chats', 'groups', 'channels'])
+  } else {
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(albumDeepLink.value)}`
+    window.open(shareUrl, '_blank')
+  }
+  showShareDrawer.value = false
+}
+
+function shareToTelegram() {
+  showShareDrawer.value = true
 }
 
 function close() {
@@ -1415,6 +1470,54 @@ function close() {
     text-align: center;
     color: rgba(255, 255, 255, 0.5);
     font-size: 14rem;
+  }
+}
+
+.share-drawer {
+  background: rgba(22, 24, 35, 0.98) !important;
+  backdrop-filter: blur(20px);
+
+  .share-grid {
+    display: flex;
+    justify-content: center;
+    gap: 40rem;
+    padding: 20rem 0;
+
+    .share-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10rem;
+
+      .icon-wrap {
+        width: 56rem;
+        height: 56rem;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 14rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28rem;
+
+        &.tg {
+          background: rgba(36, 161, 222, 0.2);
+          color: #24a1de;
+        }
+        &.link {
+          background: rgba(255, 255, 255, 0.1);
+          color: white;
+        }
+      }
+
+      span {
+        font-size: 13rem;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      &:active {
+        opacity: 0.7;
+      }
+    }
   }
 }
 

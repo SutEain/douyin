@@ -58,6 +58,7 @@ interface UploadExtraData {
   is_adult?: boolean
   is_sea?: boolean
   status?: string // 可选，例如直接设为 'published'
+  is_auto_sync?: boolean // 🎯 标记是否为频道自动同步
 }
 
 // 🎯 触发 Worker 处理视频 (转存 R2)
@@ -272,6 +273,7 @@ export async function saveSinglePhoto(
       is_adult: extraData?.is_adult || false,
       is_sea: extraData?.is_sea || false,
       status: extraData?.status || 'draft',
+      is_auto_sync: extraData?.is_auto_sync || false, // 🎯 标记自动同步
       review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
       published_at: extraData?.status === 'published' ? new Date().toISOString() : null
     })
@@ -286,8 +288,8 @@ export async function saveSinglePhoto(
 
   console.log(`[saveSinglePhoto] 图片记录已保存: ${draftPost.id}`)
 
-  // 🎯 如果是频道同步（自动就绪/发布），则跳过编辑菜单
-  if (extraData?.status === 'ready' || extraData?.status === 'published') {
+  // 🎯 如果是频道同步（自动就绪/发布），则发送同步成功提示并退出
+  if (extraData?.is_auto_sync) {
     console.log(`[saveSinglePhoto] 频道同步：自动处理模式，不显示编辑菜单。id=${draftPost.id}`)
     const statusText =
       extraData.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
@@ -487,6 +489,7 @@ export async function handleVideo(
         is_adult: extraData?.is_adult || false,
         is_sea: extraData?.is_sea || false,
         status: extraData?.status || 'processing',
+        is_auto_sync: extraData?.is_auto_sync || false, // 🎯 标记自动同步
         review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
         published_at: extraData?.status === 'published' ? new Date().toISOString() : null,
         media_group_id: mediaGroupId,
@@ -505,20 +508,27 @@ export async function handleVideo(
 
     console.log(`[handleVideo] 视频记录已保存: ${draftVideo.id}, 状态: ${draftVideo.status}`)
 
-    const processingMsg = await sendMessage(
-      chatId,
-      `🔄 <b>正在处理视频...</b>\n\n` +
-        `📦 文件大小：${sizeMB} MB\n` +
-        `⏳ 正在转码并同步数据...\n` +
-        `💡 处理完成后会自动显示编辑菜单`
-    )
+    // 🎯 只有非自动同步时，才向用户发送提示消息
+    if (!extraData?.is_auto_sync) {
+      const processingMsg = await sendMessage(
+        chatId,
+        `🔄 <b>正在处理视频...</b>\n\n` +
+          `📦 文件大小：${sizeMB} MB\n` +
+          `⏳ 正在转码并同步数据...\n` +
+          `💡 处理完成后会自动显示编辑菜单`
+      )
 
-    const processingMessageId = processingMsg.ok ? processingMsg.result.message_id : 0
+      const processingMessageId = processingMsg.ok ? processingMsg.result.message_id : 0
 
-    if (processingMessageId) {
-      await triggerWorker(draftVideo.id, video.file_id, chatId, processingMessageId)
+      if (processingMessageId) {
+        await triggerWorker(draftVideo.id, video.file_id, chatId, processingMessageId)
+      } else {
+        console.error('[handleVideo] 发送处理消息失败，无法触发 Worker')
+      }
     } else {
-      console.error('[handleVideo] 发送处理消息失败，无法触发 Worker')
+      console.log(`[handleVideo] 自动同步模式，静默启动 Worker.`)
+      // 自动同步不需要给用户发“正在处理”消息，传 0 即可
+      await triggerWorker(draftVideo.id, video.file_id, chatId, 0)
     }
   } catch (error) {
     console.error('[handleVideo] 处理视频失败:', error)

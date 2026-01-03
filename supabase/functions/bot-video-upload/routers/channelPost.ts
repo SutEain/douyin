@@ -36,7 +36,8 @@ export async function handleChannelPost(post: any) {
     const extraData = {
       is_adult: channel.is_adult,
       is_sea: channel.is_sea,
-      status: initialStatus
+      status: initialStatus,
+      is_auto_sync: true // 🎯 明确标记为自动同步
     }
 
     // 2. 识别内容类型并调用上传逻辑

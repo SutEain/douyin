@@ -217,12 +217,19 @@ function showComments() {
 }
 
 // 🎯 分享到 Telegram
-const botUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot'
+// 🎯 修正 Bot 用户名（自动去掉 @）
+const rawBotUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot'
+const botUsername = rawBotUsername.replace('@', '')
 const appName = import.meta.env.VITE_TG_APP_NAME || 'tgdouyin'
 
 const videoDeepLink = computed(() => {
   const videoId = props.item?.aweme_id || ''
-  return `https://t.me/${botUsername}/${appName}?startapp=video_${videoId}`
+  let link = `https://t.me/${botUsername}/${appName}?startapp=video_${videoId}`
+  // 🎯 加上邀请码后缀
+  if (baseStore.userinfo?.numeric_id) {
+    link += `_i${baseStore.userinfo.numeric_id}`
+  }
+  return link
 })
 
 // 1. 复制链接
@@ -232,26 +239,30 @@ async function copyVideoLink() {
   showMoreDrawer.value = false
 }
 
-// 2. Telegram 直接分享 (调起联系人选择器)
+// 2. Telegram 直接分享 (调起内联查询卡片)
 function shareToTelegramDirect() {
+  // 🎯 使用 switchInlineQuery 模式
+  // 格式：@bot 搜索词
   const desc = props.item?.desc || '精彩视频'
-  const text = `🎬 我在 [TG 抖音] 发现了一个精彩内容：\n\n"${desc}"\n\n👇 点击下方按钮立即查看`
-
-  // 使用 Telegram WebApp 原生分享接口
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(videoDeepLink.value)}&text=${encodeURIComponent(text)}`
+  // 截取前 15 个字作为搜索词，触发 inline query
+  const searchText = desc.substring(0, 15).trim() || '精品推荐'
 
   // @ts-ignore
   if (window.Telegram?.WebApp) {
+    // 🎯 核心改变：调起内联查询，这会自动触发后台的 inline_query 处理逻辑
+    // 这样发出去的消息才会有“立即播放”按钮和漂亮的封面
     // @ts-ignore
-    window.Telegram.WebApp.openTelegramLink(shareUrl)
+    window.Telegram.WebApp.switchInlineQuery(searchText, ['users', 'chats', 'groups', 'channels'])
   } else {
+    // Web 端降级方案
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(videoDeepLink.value)}`
     window.open(shareUrl, '_blank')
   }
   showMoreDrawer.value = false
 }
 
 function shareToTelegram() {
-  // ... (保留原有逻辑作为备份或移除)
+  // 旧方法不再使用，由 shareToTelegramDirect 代替
 }
 
 // 🎯 更多选项抽屉

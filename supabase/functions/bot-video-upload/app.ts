@@ -124,8 +124,8 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
           }
 
-          // 🎯 频道同步：如果是自动发布模式（就绪/已发布），则删除处理中消息后直接退出
-          if (video.status === 'ready' || video.status === 'published') {
+          // 🎯 频道同步：只有明确标记为 is_auto_sync 的视频，且处于自动发布模式（就绪/已发布），才发送通知并直接退出
+          if (video.is_auto_sync && (video.status === 'ready' || video.status === 'published')) {
             console.log(`[WorkerCallback] 频道同步模式，尝试删除处理中消息并退出.`)
             if (messageId) await deleteTelegramMessage(chatId, messageId)
             const statusText =

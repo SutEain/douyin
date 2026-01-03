@@ -97,7 +97,7 @@
             <div class="input" @click="showInput = true">
               <span>说点什么...</span>
             </div>
-            <div class="option-item share" @click="shareRoom">
+            <div class="option-item share" @click="showShareDrawer = true">
               <Icon icon="solar:share-bold" />
             </div>
             <div
@@ -394,6 +394,37 @@
               @click="handleSendPacket"
             >
               {{ isSendingPacket ? '发放中...' : `立即发放 (${packetForm.total_coins || 0} 抖币)` }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 🎯 分享抽屉 -->
+    <Transition name="slide-up">
+      <div v-if="showShareDrawer" class="gift-panel-overlay" @click.self="showShareDrawer = false">
+        <div class="gift-panel share-drawer">
+          <div class="panel-header">
+            <span>分享直播间</span>
+            <Icon
+              icon="solar:close-circle-bold"
+              class="close-btn"
+              style="font-size: 24rem; opacity: 0.5"
+              @click="showShareDrawer = false"
+            />
+          </div>
+          <div class="share-grid">
+            <div class="share-item" @click="shareRoomDirect">
+              <div class="icon-wrap tg">
+                <Icon icon="logos:telegram" />
+              </div>
+              <span>TG 分享</span>
+            </div>
+            <div class="share-item" @click="copyRoomLink">
+              <div class="icon-wrap link">
+                <Icon icon="solar:link-bold" />
+              </div>
+              <span>复制链接</span>
             </div>
           </div>
         </div>
@@ -760,23 +791,52 @@ function showViewerList() {
   _notice(`在线观众：${names}${viewerCount.value > 5 ? ` 等共 ${viewerCount.value} 人` : ''}`)
 }
 
-// 分享直播间
-function shareRoom() {
-  const roomId = route.query.id as string
-  if (!roomId) return
+// --- 分享相关 ---
+const showShareDrawer = ref(false)
+const rawBotUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot'
+const botUsername = rawBotUsername.replace('@', '')
+const appName = import.meta.env.VITE_TG_APP_NAME || 'tgdouyin'
 
-  // 🎯 生成参数格式：live_<roomId>[_i<inviterId>]
-  let startParam = `live_${roomId}`
-  if (baseStore.userinfo.numeric_id) {
-    startParam += `_i${baseStore.userinfo.numeric_id}`
+const roomDeepLink = computed(() => {
+  const rid = roomId.value
+  if (!rid) return ''
+  let link = `https://t.me/${botUsername}/${appName}?startapp=live_${rid}`
+  if (baseStore.userinfo?.numeric_id) {
+    link += `_i${baseStore.userinfo.numeric_id}`
   }
+  return link
+})
 
-  // 🎯 按照用户要求，生成 @bot 参数 格式，触发卡片搜索
-  const botUsername = 'tg_douyin_bot'
-  const shareText = `@${botUsername} ${startParam}`
+function copyRoomLink() {
+  const link = roomDeepLink.value
+  if (!link) return
+  _copy(link)
+  _notice('直播间链接已复制')
+  showShareDrawer.value = false
+}
 
-  _copy(shareText)
-  _notice('分享指令已复制，去聊天框粘贴即可生成卡片～')
+function shareRoomDirect() {
+  const rid = roomId.value
+  if (!rid) return
+
+  // 🎯 使用 switchInlineQuery 模式
+  // 直播间搜索词用 live_<id> 确保精准匹配
+  const searchText = `live_${rid}`
+
+  // @ts-ignore
+  if (window.Telegram?.WebApp) {
+    // @ts-ignore
+    window.Telegram.WebApp.switchInlineQuery(searchText, ['users', 'chats', 'groups', 'channels'])
+  } else {
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(roomDeepLink.value)}`
+    window.open(shareUrl, '_blank')
+  }
+  showShareDrawer.value = false
+}
+
+// 分享直播间 (旧逻辑保留兼容)
+function shareRoom() {
+  showShareDrawer.value = true
 }
 
 // --- 动画通知模板 ---
@@ -2240,6 +2300,55 @@ onBeforeUnmount(() => {
 
         .keyword-input {
           margin-top: 5rem;
+        }
+      }
+    }
+  }
+
+  .share-drawer {
+    background: rgba(22, 24, 35, 0.98);
+    backdrop-filter: blur(20px);
+    padding: 20rem 20rem calc(20rem + env(safe-area-inset-bottom));
+
+    .share-grid {
+      display: flex;
+      justify-content: center;
+      gap: 40rem;
+      padding: 20rem 0;
+
+      .share-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10rem;
+
+        .icon-wrap {
+          width: 56rem;
+          height: 56rem;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 14rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 28rem;
+
+          &.tg {
+            background: rgba(36, 161, 222, 0.2);
+            color: #24a1de;
+          }
+          &.link {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+          }
+        }
+
+        span {
+          font-size: 13rem;
+          color: rgba(255, 255, 255, 0.7);
+        }
+
+        &:active {
+          opacity: 0.7;
         }
       }
     }
