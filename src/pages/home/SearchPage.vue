@@ -3,12 +3,8 @@
     <div class="header">
       <dy-back mode="light" @click="router.back" class="mr1r"></dy-back>
       <div class="search-container">
-        <select v-model="searchType" class="search-type-select">
-          <option value="video">视频</option>
-          <option value="user">用户</option>
-        </select>
         <Search
-          :placeholder="searchType === 'video' ? '搜索视频、描述或标签' : '搜索用户昵称或ID'"
+          placeholder="搜索作品、用户或标签"
           :isShowRightText="true"
           @notice="handleSearch"
           v-model="searchKeyword"
@@ -22,9 +18,6 @@
         <div class="row" :key="index" v-for="(item, index) in lHistory">
           <div class="left" @click="handleSearchHistory(item)">
             <img src="../../assets/img/icon/home/time-white.png" alt="" />
-            <span class="history-type">
-              {{ item.type === 'video' ? '📹' : '👤' }}
-            </span>
             <span> {{ item.keyword }}</span>
           </div>
           <dy-back
@@ -881,24 +874,21 @@ function handleSearch(keyword?: string) {
   const searchText = (keyword || searchKeyword.value)?.trim()
   if (!searchText) return
 
-  // 跳转到搜索结果页，带上搜索类型
+  // 跳转到搜索结果页
   router.push({
     path: '/home/search/result',
     query: {
-      keyword: searchText,
-      type: searchType.value // 传递搜索类型
+      keyword: searchText
     }
   })
 }
 
-// 🔍 处理搜索历史点击（带类型）
+// 🔍 处理搜索历史点击
 function handleSearchHistory(item: { keyword: string; type: 'video' | 'user' }) {
-  // 使用历史记录中的搜索类型
   router.push({
     path: '/home/search/result',
     query: {
-      keyword: item.keyword,
-      type: item.type
+      keyword: item.keyword
     }
   })
 }

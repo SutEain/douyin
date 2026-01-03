@@ -15,6 +15,44 @@ async function getAccessToken(required: boolean = true) {
 }
 
 /**
+ * 综合搜索（用户 + 视频）
+ */
+export async function searchCombined(keyword: string, pageNo = 0, pageSize = 20) {
+  const accessToken = await getAccessToken(false)
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  }
+
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  if (window.Telegram?.WebApp?.initData) {
+    headers['X-Telegram-Init-Data'] = window.Telegram.WebApp.initData
+  }
+
+  const response = await fetch(
+    `${APP_SERVER_URL}/search/combined?keyword=${encodeURIComponent(
+      keyword
+    )}&pageNo=${pageNo}&pageSize=${pageSize}`,
+    { headers }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Search combined failed: ${response.status}`)
+  }
+
+  const result = await response.json()
+
+  if (result.code !== 0) {
+    throw new Error(result.msg || 'Search combined failed')
+  }
+
+  return result.data
+}
+
+/**
  * 搜索视频（普通 + 成人）
  */
 export async function searchVideos(
@@ -97,10 +135,22 @@ export async function searchUsers(keyword: string, pageNo = 0, pageSize = 20) {
  * 获取热门搜索词
  */
 export async function getHotKeywords(limit = 30) {
+  const accessToken = await getAccessToken(false) // 🎯 可选认证
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  }
+
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  if (window.Telegram?.WebApp?.initData) {
+    headers['X-Telegram-Init-Data'] = window.Telegram.WebApp.initData
+  }
+
   const response = await fetch(`${APP_SERVER_URL}/search/hot?limit=${limit}`, {
-    headers: {
-      'Content-Type': 'application/json'
-    }
+    headers
   })
 
   if (!response.ok) {

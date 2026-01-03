@@ -7,89 +7,81 @@
         <img src="../../assets/img/icon/search-light.png" class="search-icon" />
         <div class="content">
           <span class="keyword">{{ keyword }}</span>
-          <span class="count" v-if="searchType === 'video' && videoTotal > 0"
-            >({{ videoTotal }})</span
-          >
-          <span class="count" v-if="searchType === 'user' && userTotal > 0">({{ userTotal }})</span>
         </div>
       </div>
     </div>
 
-    <!-- 视频结果 (包含成人内容) -->
-    <div v-if="searchType === 'video'" class="video-results">
-      <div v-if="videoLoading && videoList.length === 0" class="loading-container">
-        <Loading :is-full-screen="false" />
-      </div>
-      <div v-else-if="videoList.length === 0" class="empty">
-        <img src="../../assets/img/icon/no-result.png" alt="" class="empty-icon" />
-        <div class="empty-text">暂无相关视频</div>
-      </div>
-      <div v-else class="video-list">
-        <VideoListItem
-          v-for="video in videoList"
-          :key="video.aweme_id"
-          :video="video"
-          @click="handleVideoClick"
-          @follow="handleFollow"
-          @goUserPanel="goUserPanel"
-        />
-      </div>
-      <div
-        v-if="videoHasMore && !videoLoading && videoList.length > 0"
-        class="load-more"
-        @click="loadMoreVideos"
-      >
-        加载更多
-      </div>
-      <div v-if="videoLoading && videoList.length > 0" class="loading-more">加载中...</div>
-      <div v-if="!videoHasMore && videoList.length > 0" class="no-more">没有更多了</div>
-    </div>
-
-    <!-- 用户结果 -->
-    <div v-if="searchType === 'user'" class="user-results">
-      <div v-if="userLoading && userList.length === 0" class="loading-container">
-        <Loading :is-full-screen="false" />
-      </div>
-      <div v-else-if="userList.length === 0" class="empty">
-        <img src="../../assets/img/icon/no-result.png" alt="" class="empty-icon" />
-        <div class="empty-text">暂无相关用户</div>
-      </div>
-      <div v-else class="user-list">
-        <div
-          class="user-item"
-          v-for="user in userList"
-          :key="user.id"
-          @click="goUserPanel(user.id)"
-        >
-          <img
-            :src="_checkImgUrl(user.avatar_url)"
-            alt=""
-            class="avatar"
-            @error="handleAvatarError"
-          />
-          <div class="info">
-            <div class="nickname">{{ user.nickname || user.username }}</div>
-            <div class="username" v-if="user.numeric_id">ID: {{ user.numeric_id }}</div>
-            <div class="stats">
-              <span>{{ _formatNumber(user.follower_count) }} 粉丝</span>
-              <span class="divider">·</span>
-              <span>{{ _formatNumber(user.video_count) }} 作品</span>
+    <!-- 综合搜索结果 -->
+    <div class="search-results">
+      <!-- 1. 用户部分 -->
+      <div v-if="userList.length > 0" class="user-results-section">
+        <div class="section-title">相关用户</div>
+        <div class="user-list">
+          <div
+            class="user-item"
+            v-for="user in userList"
+            :key="user.id"
+            @click="goUserPanel(user.id)"
+          >
+            <img
+              :src="_checkImgUrl(user.avatar_url)"
+              alt=""
+              class="avatar"
+              @error="handleAvatarError"
+            />
+            <div class="info">
+              <div class="nickname">{{ user.nickname || user.username }}</div>
+              <div class="username" v-if="user.numeric_id">ID: {{ user.numeric_id }}</div>
+              <div class="stats">
+                <span>{{ _formatNumber(user.follower_count) }} 粉丝</span>
+                <span class="divider">·</span>
+                <span>{{ _formatNumber(user.video_count) }} 作品</span>
+              </div>
             </div>
+            <button
+              class="follow-btn"
+              :class="{ followed: user.is_following }"
+              @click.stop="handleFollowUser(user)"
+            >
+              {{ user.is_following ? '已关注' : '关注' }}
+            </button>
           </div>
-          <button
-            class="follow-btn"
-            :class="{ followed: user.is_following }"
-            @click.stop="handleFollowUser(user)"
-          >
-            {{ user.is_following ? '已关注' : '关注' }}
-          </button>
+        </div>
+        <div v-if="userHasMore && !userLoading" class="view-more-users" @click="loadMoreUsers">
+          查看更多用户 >
         </div>
       </div>
-      <div v-if="userHasMore && !userLoading" class="load-more" @click="loadMoreUsers">
-        加载更多
+
+      <!-- 2. 视频部分 -->
+      <div class="video-results-section">
+        <div class="section-title" v-if="videoList.length > 0">相关视频</div>
+        <div v-if="videoLoading && videoList.length === 0" class="loading-container">
+          <Loading :is-full-screen="false" />
+        </div>
+        <div v-else-if="videoList.length === 0 && userList.length === 0" class="empty">
+          <img src="../../assets/img/icon/no-result.png" alt="" class="empty-icon" />
+          <div class="empty-text">暂无相关结果</div>
+        </div>
+        <div v-else class="video-list">
+          <VideoListItem
+            v-for="video in videoList"
+            :key="video.aweme_id"
+            :video="video"
+            @click="handleVideoClick"
+            @follow="handleFollow"
+            @goUserPanel="goUserPanel"
+          />
+        </div>
+        <div
+          v-if="videoHasMore && !videoLoading && videoList.length > 0"
+          class="load-more"
+          @click="loadMoreVideos"
+        >
+          加载更多视频
+        </div>
+        <div v-if="videoLoading && videoList.length > 0" class="loading-more">加载中...</div>
+        <div v-if="!videoHasMore && videoList.length > 0" class="no-more">没有更多了</div>
       </div>
-      <div v-if="userLoading && userList.length > 0" class="loading-more">加载中...</div>
-      <div v-if="!userHasMore && userList.length > 0" class="no-more">没有更多了</div>
     </div>
   </div>
 </template>
@@ -100,7 +92,7 @@ import VideoListItem from '../../components/VideoListItem.vue'
 import Loading from '../../components/Loading.vue'
 import { ref, onMounted, onActivated, onDeactivated, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { searchVideos, searchUsers } from '@/api/search'
+import { searchCombined, searchUsers } from '@/api/search'
 import { toggleFollowUser } from '@/api/videos'
 import { _checkImgUrl, _formatNumber, _no } from '@/utils'
 import { useBaseStore } from '@/store/pinia'
@@ -118,17 +110,14 @@ const scrollContainer = ref<HTMLElement | null>(null)
 // 保存滚动位置
 const savedScrollTop = ref(0)
 
-// 搜索关键词和类型
+// 搜索关键词
 const keyword = ref('')
-const searchType = ref<'video' | 'user'>('video')
 
 // 记录上次搜索的参数
 const lastSearchParams = ref<{
   keyword: string
-  type: 'video' | 'user'
 }>({
-  keyword: '',
-  type: 'video'
+  keyword: ''
 })
 
 // 标记是否是首次挂载
@@ -145,40 +134,55 @@ const videoHasMore = ref(true)
 // 用户数据
 const userList = ref<any[]>([])
 const userTotal = ref(0)
-const userPage = ref(0)
-const userPageSize = ref(20)
 const userLoading = ref(false)
-const userHasMore = ref(true)
+const userHasMore = ref(false)
 
 // 检查是否需要重新搜索
 function shouldReload() {
   const newKeyword = (route.query.keyword as string) || ''
-  const newType = (route.query.type as 'video' | 'user') || 'video'
-
-  return newKeyword !== lastSearchParams.value.keyword || newType !== lastSearchParams.value.type
+  return newKeyword !== lastSearchParams.value.keyword
 }
 
 // 初始化搜索
 function initSearch() {
   const newKeyword = (route.query.keyword as string) || ''
-  const newType = (route.query.type as 'video' | 'user') || 'video'
-
   keyword.value = newKeyword
-  searchType.value = newType
 
   if (keyword.value) {
     // 更新上次搜索参数
     lastSearchParams.value = {
-      keyword: keyword.value,
-      type: searchType.value
+      keyword: keyword.value
     }
 
-    // 根据类型搜索
-    if (searchType.value === 'video') {
-      loadVideos()
-    } else {
-      loadUsers()
+    // 加载综合搜索结果
+    loadCombinedResults()
+  }
+}
+
+// 加载综合搜索结果
+async function loadCombinedResults() {
+  if (videoLoading.value || !videoHasMore.value) return
+
+  try {
+    videoLoading.value = true
+    const result = await searchCombined(keyword.value, videoPage.value, videoPageSize.value)
+
+    if (videoPage.value === 0) {
+      userList.value = result.users || []
+      userTotal.value = result.userTotal || 0
+      userHasMore.value = userTotal.value > userList.value.length
     }
+
+    if (result.videos) {
+      videoList.value.push(...result.videos)
+      videoTotal.value = result.videoTotal
+      videoHasMore.value = result.hasMoreVideos
+      videoPage.value++
+    }
+  } catch (error) {
+    console.error('[SearchResult] 综合搜索失败:', error)
+  } finally {
+    videoLoading.value = false
   }
 }
 
@@ -187,45 +191,31 @@ onMounted(() => {
   isMounted.value = true
 })
 
-// ✅ 离开时保存滚动位置（作为备份，如果不是点击视频跳转的情况）
+// ✅ 离开时保存滚动位置
 onDeactivated(() => {
   if (scrollContainer.value && scrollContainer.value.scrollTop > 0) {
     savedScrollTop.value = scrollContainer.value.scrollTop
-    console.log('[SearchResult] onDeactivated 保存滚动位置:', savedScrollTop.value)
   }
 })
 
 // ✅ keep-alive 激活时
 onActivated(() => {
-  // 首次挂载时跳过（onMounted 已经处理）
-  if (!isMounted.value) {
-    return
-  }
+  if (!isMounted.value) return
 
-  // 检查搜索参数是否变化
   if (shouldReload()) {
-    console.log('[SearchResult] 参数变化，重新搜索')
-    // 重置数据
-    const newType = (route.query.type as 'video' | 'user') || 'video'
-    if (newType === 'video') {
-      videoList.value = []
-      videoPage.value = 0
-      videoTotal.value = 0
-      videoHasMore.value = true
-    } else {
-      userList.value = []
-      userPage.value = 0
-      userTotal.value = 0
-      userHasMore.value = true
-    }
-    savedScrollTop.value = 0 // 重置滚动位置
+    videoList.value = []
+    videoPage.value = 0
+    videoTotal.value = 0
+    videoHasMore.value = true
+
+    userList.value = []
+    userTotal.value = 0
+    userHasMore.value = false
+
+    savedScrollTop.value = 0
     initSearch()
   } else {
-    // 参数未变化，使用缓存，并恢复滚动位置
-    console.log('[SearchResult] 使用缓存，恢复滚动位置:', savedScrollTop.value)
     keyword.value = lastSearchParams.value.keyword
-    searchType.value = lastSearchParams.value.type
-
     nextTick(() => {
       if (scrollContainer.value) {
         scrollContainer.value.scrollTop = savedScrollTop.value
@@ -234,23 +224,13 @@ onActivated(() => {
   }
 })
 
-// 监听路由参数变化（仅在当前页面活动时）
+// 监听路由参数变化
 watch(
-  () => [route.query.keyword, route.query.type],
-  ([newKeyword, newType]) => {
-    const hasKeywordChanged = newKeyword && newKeyword !== keyword.value
-    const hasTypeChanged = newType && newType !== searchType.value
-
-    if (hasKeywordChanged || hasTypeChanged) {
+  () => route.query.keyword,
+  (newKeyword) => {
+    if (newKeyword && newKeyword !== keyword.value) {
       keyword.value = newKeyword as string
-      searchType.value = (newType as 'video' | 'user') || 'video'
-
-      // 更新上次搜索参数
-      lastSearchParams.value = {
-        keyword: keyword.value,
-        type: searchType.value
-      }
-
+      lastSearchParams.value = { keyword: keyword.value }
       resetAndSearch()
     }
   }
@@ -258,85 +238,38 @@ watch(
 
 // 重新搜索
 function resetAndSearch() {
-  // 根据类型重置对应的状态
-  if (searchType.value === 'video') {
-    videoList.value = []
-    videoPage.value = 0
-    videoTotal.value = 0
-    videoHasMore.value = true
-    loadVideos()
-  } else {
-    userList.value = []
-    userPage.value = 0
-    userTotal.value = 0
-    userHasMore.value = true
-    loadUsers()
-  }
-}
+  videoList.value = []
+  videoPage.value = 0
+  videoTotal.value = 0
+  videoHasMore.value = true
 
-// 加载视频 (包含成人内容)
-async function loadVideos() {
-  if (videoLoading.value || !videoHasMore.value) return
+  userList.value = []
+  userTotal.value = 0
+  userHasMore.value = false
 
-  try {
-    videoLoading.value = true
-    const result = await searchVideos(keyword.value, videoPage.value, videoPageSize.value)
-
-    if (result.list) {
-      videoList.value.push(...result.list)
-      videoTotal.value = result.total
-      videoHasMore.value = videoList.value.length < result.total
-      videoPage.value++
-    }
-  } catch (error) {
-    console.error('[SearchResult] 搜索视频失败:', error)
-  } finally {
-    videoLoading.value = false
-  }
-}
-
-// 加载用户
-async function loadUsers() {
-  if (userLoading.value || !userHasMore.value) return
-
-  try {
-    userLoading.value = true
-    const result = await searchUsers(keyword.value, userPage.value, userPageSize.value)
-
-    if (result.list) {
-      userList.value.push(...result.list)
-      userTotal.value = result.total
-      userHasMore.value = userList.value.length < result.total
-      userPage.value++
-    }
-  } catch (error) {
-    console.error('[SearchResult] 搜索用户失败:', error)
-  } finally {
-    userLoading.value = false
-  }
+  loadCombinedResults()
 }
 
 // 加载更多视频
 function loadMoreVideos() {
-  loadVideos()
+  loadCombinedResults()
 }
 
 // 加载更多用户
-function loadMoreUsers() {
-  loadUsers()
-}
-
-// 重新搜索（保留当前搜索类型）
-function handleReSearch(newKeyword: string) {
-  if (!newKeyword.trim()) return
-
-  // 更新路由参数，保留搜索类型
-  router.replace({
-    query: {
-      keyword: newKeyword.trim(),
-      type: searchType.value
+async function loadMoreUsers() {
+  if (userLoading.value) return
+  try {
+    userLoading.value = true
+    const result = await searchUsers(keyword.value, 1, 20)
+    if (result.list) {
+      userList.value.push(...result.list)
+      userHasMore.value = userList.value.length < result.total
     }
-  })
+  } catch (error) {
+    console.error('[SearchResult] 加载更多用户失败:', error)
+  } finally {
+    userLoading.value = false
+  }
 }
 
 // 跳转到用户主页
@@ -346,45 +279,28 @@ function goUserPanel(userId: string) {
 
 // 处理视频点击
 function handleVideoClick(video: any) {
-  // ✅ 1. 点击时立即保存滚动位置
   if (scrollContainer.value) {
     savedScrollTop.value = scrollContainer.value.scrollTop
-    console.log('[SearchResult] 点击视频，手动保存滚动位置:', savedScrollTop.value)
   }
-
-  // 找到当前点击的视频在列表中的索引
   const clickedIndex = videoList.value.findIndex((v) => v.aweme_id === video.aweme_id)
-
-  // 使用 baseStore 传递数据到 VideoDetail 页面
   baseStore.routeData = {
-    items: videoList.value, // 传递整个搜索结果列表
-    index: clickedIndex >= 0 ? clickedIndex : 0 // 传递当前点击的视频索引
+    items: videoList.value,
+    index: clickedIndex >= 0 ? clickedIndex : 0
   }
-
-  // 跳转到视频详情页
-  router.push({
-    name: 'video-detail'
-  })
+  router.push({ name: 'video-detail' })
 }
 
-// 点击顶部搜索条：返回搜索页
+// 返回搜索页
 function handleSearchBarClick() {
   router.back()
 }
 
 // 处理视频列表关注
 async function handleFollow(userId: string) {
-  // 注意：子组件传递的是 userId，但我们需要更新 videoList 中的状态
-  // 这里可能需要 VideoListItem 传递 video 对象或者我们遍历更新
-  // 由于列表可能包含同一个作者的多个视频，我们应该更新所有匹配的视频
-
-  // 查找任意一个匹配该作者的视频来获取当前状态（假设列表状态一致）
   const targetVideo = videoList.value.find((v) => (v.author?.user_id || v.author?.uid) === userId)
   if (!targetVideo) return
 
   const newStatus = !targetVideo.is_following
-
-  // 乐观更新所有该作者的视频状态
   videoList.value.forEach((v) => {
     if ((v.author?.user_id || v.author?.uid) === userId) {
       v.is_following = newStatus
@@ -394,8 +310,6 @@ async function handleFollow(userId: string) {
   try {
     await toggleFollowUser(userId, newStatus)
   } catch (error) {
-    // 回滚
-    console.error('关注失败:', error)
     videoList.value.forEach((v) => {
       if ((v.author?.user_id || v.author?.uid) === userId) {
         v.is_following = !newStatus
@@ -408,12 +322,10 @@ async function handleFollow(userId: string) {
 async function handleFollowUser(user: any) {
   const originalStatus = user.is_following
   user.is_following = !originalStatus
-
   try {
     await toggleFollowUser(user.id, user.is_following)
   } catch (error) {
     user.is_following = originalStatus
-    console.error('关注失败:', error)
   }
 }
 
@@ -440,7 +352,6 @@ function handleAvatarError(e: Event) {
     z-index: 4;
     background: var(--main-bg);
     height: 60rem;
-    // ✅ 适配安全区域
     height: calc(60rem + constant(safe-area-inset-top));
     height: calc(60rem + env(safe-area-inset-top));
     padding: 0 var(--page-padding);
@@ -489,70 +400,36 @@ function handleAvatarError(e: Event) {
           overflow: hidden;
           text-overflow: ellipsis;
         }
-
-        .count {
-          color: var(--second-text-color);
-          font-size: 12rem;
-          white-space: nowrap;
-        }
       }
     }
   }
 
-  // 移除旧的 result-title 样式，或者保留它但不再使用
-  .result-title {
-    display: none;
-  }
-
-  .video-results,
-  .user-results {
-    padding-top: 60rem; // 调整顶部间距
+  .search-results {
+    padding-top: 60rem;
     padding-top: calc(60rem + constant(safe-area-inset-top));
     padding-top: calc(60rem + env(safe-area-inset-top));
-
-    min-height: calc(100vh - 60rem);
-    min-height: calc(100vh - (60rem + constant(safe-area-inset-top)));
-    min-height: calc(100vh - (60rem + env(safe-area-inset-top)));
+    min-height: 100vh;
   }
 
-  .locked-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 60rem 30rem;
+  .section-title {
+    padding: 15rem var(--page-padding);
+    font-size: 15rem;
+    font-weight: bold;
+    color: white;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .view-more-users {
     text-align: center;
+    padding: 12rem;
+    color: var(--second-text-color);
+    font-size: 13rem;
+    background: rgba(255, 255, 255, 0.02);
+    cursor: pointer;
 
-    .lock-icon {
-      font-size: 60rem;
-      margin-bottom: 20rem;
-    }
-
-    .lock-title {
-      font-size: 18rem;
-      font-weight: bold;
-      margin-bottom: 12rem;
-      color: var(--main-text-color);
-    }
-
-    .lock-desc {
-      font-size: 14rem;
-      color: var(--second-text-color);
-      line-height: 1.6;
-      margin-bottom: 30rem;
-    }
-
-    .lock-btn {
-      padding: 10rem 30rem;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 20rem;
-      font-size: 14rem;
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-
-      &:active {
-        background: rgba(255, 255, 255, 0.2);
-      }
+    &:active {
+      background: rgba(255, 255, 255, 0.05);
     }
   }
 

@@ -39,6 +39,7 @@ import {
 } from './routes/user.ts'
 import {
   handleSearchVideos,
+  handleCombinedSearch,
   handleSearchUsers,
   handleHotSearch,
   handleGetSearchHistory,
@@ -191,6 +192,9 @@ serve(async (req) => {
     }
 
     // 🔍 搜索相关路由
+    if (route === '/search/combined' && method === 'GET') {
+      return handleCombinedSearch(req)
+    }
     if (route === '/search/videos' && method === 'GET') {
       return handleSearchVideos(req)
     }

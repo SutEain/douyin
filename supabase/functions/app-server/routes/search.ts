@@ -4,6 +4,121 @@ import { mapVideoRow, getProfileById } from '../lib/video.ts'
 import { HttpError, parsePagination, requireAuth, tryGetAuth } from '../lib/auth.ts'
 
 /**
+ * 综合搜索 (用户 + 视频)
+ * GET /search/combined?keyword=xxx&pageNo=0&pageSize=20
+ */
+export async function handleCombinedSearch(req: Request): Promise<Response> {
+  const url = new URL(req.url)
+  const keyword = url.searchParams.get('keyword')?.trim()
+  const { pageNo, pageSize, from, to } = parsePagination(url)
+
+  if (!keyword) {
+    return errorResponse('Keyword is required', 1, 400)
+  }
+
+  const { user } = await tryGetAuth(req)
+
+  // 1. 保存综合搜索历史
+  if (user && pageNo === 0) {
+    await saveSearchHistory(user.id, keyword, 'general').catch(() => {})
+  }
+
+  let users: any[] = []
+  let userCount = 0
+
+  // 2. 如果是第一页，尝试搜索匹配的用户 (前 5 个)
+  if (pageNo === 0) {
+    let userOrQuery = `nickname.ilike.%${keyword}%`
+    if (/^\d+$/.test(keyword)) {
+      userOrQuery += `,numeric_id.eq.${keyword}`
+    }
+
+    const { data: userRows, count: totalUsers } = await supabaseAdmin
+      .from('profiles')
+      .select('*', { count: 'exact' })
+      .or(userOrQuery)
+      .order('total_likes', { ascending: false })
+      .limit(5)
+
+    userCount = totalUsers ?? 0
+
+    if (userRows?.length) {
+      let followingSet = new Set<string>()
+      if (user) {
+        followingSet = await batchCheckFollowStatus(
+          user.id,
+          userRows.map((r) => r.id)
+        )
+      }
+      users = userRows.map((row) => ({
+        id: row.id,
+        nickname: row.nickname,
+        avatar_url: row.avatar_url,
+        numeric_id: row.numeric_id,
+        follower_count: row.follower_count || 0,
+        video_count: row.video_count || 0,
+        is_following: followingSet.has(row.id)
+      }))
+    }
+  }
+
+  // 3. 搜索视频 (分页)
+  const {
+    data: videoRows,
+    error: videoError,
+    count: videoCount
+  } = await supabaseAdmin
+    .from('video_search_view')
+    .select('*', { count: 'exact' })
+    .eq('status', 'published')
+    .ilike('search_text', `%${keyword}%`)
+    .order('like_count', { ascending: false })
+    .order('created_at', { ascending: false })
+    .range(from, to)
+
+  if (videoError) {
+    console.error('[search] 综合搜索视频失败:', videoError)
+    return errorResponse('Search videos failed', 1, 500)
+  }
+
+  const videoList = []
+  if (videoRows?.length) {
+    const videoIds = videoRows.map((r) => r.id)
+    const topCommentsMap = await batchGetTopComments(videoIds)
+    let videoFollowingSet = new Set<string>()
+    if (user) {
+      videoFollowingSet = await batchCheckFollowStatus(
+        user.id,
+        videoRows.map((r) => r.author_id)
+      )
+    }
+
+    for (const row of videoRows) {
+      const profile = await getProfileById(row.author_id)
+      if (profile) {
+        const mapped = await mapVideoRow(row, profile)
+        if (mapped) {
+          const topComment = topCommentsMap.get(row.id)
+          if (topComment) mapped.top_comment = topComment
+          mapped.is_following = videoFollowingSet.has(row.author_id)
+          videoList.push(mapped)
+        }
+      }
+    }
+  }
+
+  return successResponse({
+    users,
+    userTotal: userCount,
+    videos: videoList,
+    videoTotal: videoCount ?? 0,
+    pageNo,
+    pageSize,
+    hasMoreVideos: (videoCount ?? 0) > to + 1
+  })
+}
+
+/**
  * 视频搜索 (统一包含普通和成人视频)
  * GET /search/videos?keyword=xxx&pageNo=0&pageSize=20
  */
@@ -142,6 +257,9 @@ export async function handleSearchUsers(req: Request): Promise<Response> {
 export async function handleHotSearch(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const limit = parseInt(url.searchParams.get('limit') || '30')
+
+  // 🎯 尝试获取用户信息（但不强制），确保认证头被正确处理
+  await tryGetAuth(req)
 
   const { data: rows, error } = await supabaseAdmin
     .from('search_history')
