@@ -1,4 +1,4 @@
-import { supabaseAdmin, TG_BOT_TOKEN } from './env.ts'
+import { supabaseAdmin, TG_BOT_TOKEN, TG_BOT_USERNAME, TG_APP_NAME } from './env.ts'
 
 export type NotificationType =
   | 'like'
@@ -16,13 +16,39 @@ export async function checkAndSendNotification(
   targetUserId: string,
   type: NotificationType,
   message: string,
-  startParam?: string
+  startParam?: string,
+  senderUserId?: string // 🎯 新增发送者 ID，用于防骚扰去重
 ) {
-  console.log(`[DEBUG-NOTIF] checkAndSendNotification: type=${type}, target=${targetUserId}`)
+  console.log(
+    `[DEBUG-NOTIF] checkAndSendNotification: type=${type}, target=${targetUserId}, sender=${senderUserId}`
+  )
   try {
     if (!TG_BOT_TOKEN) {
       console.warn('[DEBUG-NOTIF] ❌ TG_BOT_TOKEN not configured')
       return
+    }
+
+    // 🎯 0. 防骚扰去重检查 (点赞、关注、收藏、主页访问)
+    // 如果 1 小时内已经发过同类型的通知，就不再骚扰
+    if (senderUserId && ['like', 'follow', 'collect', 'visit'].includes(type)) {
+      const cooldownHours = 1
+      const cutoff = new Date(Date.now() - cooldownHours * 3600 * 1000).toISOString()
+
+      const { data: recentNotif } = await supabaseAdmin
+        .from('notification_history')
+        .select('id')
+        .eq('sender_id', senderUserId)
+        .eq('receiver_id', targetUserId)
+        .eq('type', type)
+        .gte('created_at', cutoff)
+        .maybeSingle()
+
+      if (recentNotif) {
+        console.log(
+          `[DEBUG-NOTIF] 🎯 命中冷却 (1h)，跳过通知: ${type} from ${senderUserId} to ${targetUserId}`
+        )
+        return
+      }
     }
 
     // 1. 获取目标用户信息
@@ -68,9 +94,8 @@ export async function checkAndSendNotification(
     console.log(`[DEBUG-NOTIF] Sending message to ${url}`)
 
     // 构造按钮
-    // TODO: 从环境变量获取 Bot Username 和 App Name
-    const botUsername = 'tg_douyin_bot'
-    const appName = 'tgdouyin'
+    const botUsername = TG_BOT_USERNAME
+    const appName = TG_APP_NAME
 
     const payload: any = {
       chat_id: profile.tg_user_id,
@@ -100,6 +125,20 @@ export async function checkAndSendNotification(
           console.log(
             `[DEBUG-NOTIF] ✅ Sent ${type} to ${profile.tg_user_id}, msg_id: ${res.result?.message_id}`
           )
+          // 🎯 成功后记录历史，用于去重检查
+          if (senderUserId) {
+            supabaseAdmin
+              .from('notification_history')
+              .insert({
+                sender_id: senderUserId,
+                receiver_id: targetUserId,
+                type: type,
+                related_id: startParam
+              })
+              .then(({ error: logErr }) => {
+                if (logErr) console.error('[DEBUG-NOTIF] Log history failed:', logErr)
+              })
+          }
         }
       })
       .catch((e) => console.error('[DEBUG-NOTIF] Error:', e))
@@ -168,8 +207,8 @@ export async function notifyFollowersNewPost(
     const startParam = `video_${videoId}`
 
     // 3. 批量发送通知（并行但限制并发）
-    const botUsername = 'tg_douyin_bot'
-    const appName = 'tgdouyin'
+    const botUsername = TG_BOT_USERNAME
+    const appName = TG_APP_NAME
     const deepLink = `https://t.me/${botUsername}/${appName}?startapp=${startParam}`
 
     let sentCount = 0

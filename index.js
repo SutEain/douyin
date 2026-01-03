@@ -83,16 +83,29 @@ app.post('/process', async (req, res) => {
     )
 
     const playUrl = `${R2_PUBLIC_URL}/${r2Key}`
+    console.log(`[${video_id}] 上传完成: ${playUrl}`)
 
-    // 🎯 更新数据库：不再强制改 status 为 draft，确保前端能搜到并播放
-    await supabase
+    // 🎯 获取当前视频状态
+    const { data: vInfo } = await supabase
       .from('videos')
-      .update({
-        play_url: playUrl,
-        storage_type: 'r2',
-        is_optimized: true
-      })
+      .select('status')
       .eq('id', video_id)
+      .single()
+
+    const updatePayload = {
+      play_url: playUrl,
+      storage_type: 'r2',
+      is_optimized: true
+    }
+
+    // 🎯 如果当前是“处理中”状态，则自动转为“就绪”
+    if (vInfo && vInfo.status === 'processing') {
+      console.log(`[${video_id}] 状态转换: processing -> ready`)
+      updatePayload.status = 'ready'
+    }
+
+    // 🎯 更新数据库
+    await supabase.from('videos').update(updatePayload).eq('id', video_id)
 
     // 清理临时文件
     if (fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath)

@@ -80,7 +80,13 @@ export async function handleVisitUserProfile(req: Request): Promise<Response> {
   }
 
   // 尊重 notification_settings.visit
-  checkAndSendNotification(visitedId, 'visit', `👀 <b>${nickname}</b>查看了你的主页`, undefined)
+  checkAndSendNotification(
+    visitedId,
+    'visit',
+    `👀 <b>${nickname}</b>查看了你的主页`,
+    undefined,
+    visitorId
+  )
 
   return successResponse({ recorded: true, notified: true })
 }
@@ -254,7 +260,8 @@ export async function handleRequestUpdate(req: Request): Promise<Response> {
     targetId,
     'request_update',
     `🫵 <b>${nickname}</b>希望你快点更新作品`,
-    undefined
+    undefined,
+    requesterId
   )
 
   return successResponse({ sent: true })
@@ -279,6 +286,17 @@ export async function handleFollowUser(req: Request): Promise<Response> {
     }
 
     if (body.follow) {
+      // 🎯 频率限制：1分钟关注不能超过 10 次
+      const { count: recentFollows } = await supabaseAdmin
+        .from('follows')
+        .select('id', { count: 'exact', head: true })
+        .eq('follower_id', user.id)
+        .gte('created_at', new Date(Date.now() - 60000).toISOString())
+
+      if (recentFollows !== null && recentFollows >= 10) {
+        throw new HttpError('关注太频繁了，先休息下吧', 429)
+      }
+
       // 关注用户
       const { error } = await supabaseAdmin.from('follows').upsert(
         { follower_id: user.id, followee_id: body.target_id },
@@ -298,7 +316,8 @@ export async function handleFollowUser(req: Request): Promise<Response> {
         body.target_id,
         'follow',
         `➕ 用户 <b>${nickname}</b> 关注了你`,
-        undefined // 不带 startParam 或者 user_${user.id} 如果前端支持
+        undefined, // 不带 startParam 或者 user_${user.id} 如果前端支持
+        user.id
       )
     } else {
       // 取消关注

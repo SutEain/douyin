@@ -145,6 +145,24 @@ export async function handleVideoCreateComment(req: Request): Promise<Response> 
     throw new HttpError('Missing video_id or content', 400)
   }
 
+  // 🎯 1. 频率限制检查：1分钟最多评论 3 条
+  const { count: recentCount, error: countErr } = await supabaseAdmin
+    .from('video_comments')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', new Date(Date.now() - 60000).toISOString())
+
+  if (countErr) {
+    console.error('[app-server] Check comment rate limit failed:', countErr)
+  } else if (recentCount !== null && recentCount >= 3) {
+    throw new HttpError('评论太频繁了，休息一分钟吧 ☕️', 429)
+  }
+
+  // 🎯 2. 内容安全检查：禁止发送带链接的评论（简单防广告）
+  if (content.toLowerCase().includes('http') || content.toLowerCase().includes('t.me')) {
+    throw new HttpError('评论内容不合法（禁止发送链接）', 400)
+  }
+
   const { data, error } = await supabaseAdmin
     .from('video_comments')
     .insert({
@@ -182,7 +200,8 @@ export async function handleVideoCreateComment(req: Request): Promise<Response> 
               parent.user_id,
               'comment',
               `💬 用户 <b>${nickname}</b> 回复了你的评论：${shortContent}`,
-              `video_${body.video_id}`
+              `video_${body.video_id}`,
+              user.id
             )
           }
         } else {
@@ -198,7 +217,8 @@ export async function handleVideoCreateComment(req: Request): Promise<Response> 
               video.author_id,
               'comment',
               `💬 用户 <b>${nickname}</b> 评论了你的作品：${shortContent}`,
-              `video_${body.video_id}`
+              `video_${body.video_id}`,
+              user.id
             )
           }
         }

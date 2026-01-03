@@ -118,7 +118,19 @@ async function fixVideos() {
             })
           )
 
-          await supabase.from('videos').update({ is_optimized: true }).eq('id', videoId)
+          // 🎯 更新状态：如果之前是 processing，由于现在已经完成了优化并上传，可以转为 ready
+          const { data: vInfo } = await supabase
+            .from('videos')
+            .select('status')
+            .eq('id', videoId)
+            .single()
+          const updatePayload = { is_optimized: true }
+          if (vInfo && vInfo.status === 'processing') {
+            console.log(`   - 🔄 状态转换: processing -> ready`)
+            updatePayload.status = 'ready'
+          }
+
+          await supabase.from('videos').update(updatePayload).eq('id', videoId)
           console.log(`   ✅ 成功`)
         } catch (err) {
           console.error(`   ❌ 失败: ${err.message}`)

@@ -1,4 +1,4 @@
-import { BOT_TOKEN, TG_API_BASE } from '../env.ts'
+import { BOT_TOKEN, TG_API_BASE, TG_BOT_USERNAME, TG_APP_NAME } from '../env.ts'
 import { supabase } from '../supabaseClient.ts'
 import { updateUserState } from '../state.ts'
 import { safeTruncate } from '../utils/text.ts'
@@ -55,8 +55,8 @@ export async function notifyFollowersNewPost(
 
     const inviteSuffix = authorProfile?.numeric_id ? `_i${authorProfile.numeric_id}` : ''
 
-    const botUsername = 'tg_douyin_bot'
-    const appName = 'tgdouyin'
+    const botUsername = TG_BOT_USERNAME
+    const appName = TG_APP_NAME
     const deepLink = `https://t.me/${botUsername}/${appName}?startapp=video_${videoId}${inviteSuffix}`
 
     let sentCount = 0

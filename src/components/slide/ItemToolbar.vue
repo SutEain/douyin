@@ -217,25 +217,48 @@ function showComments() {
 }
 
 // 🎯 分享到 Telegram
-function shareToTelegram() {
-  // 🎯 前端使用的字段名是 desc 而不是 description
-  const desc = props.item?.desc || ''
+const botUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot'
+const appName = import.meta.env.VITE_TG_APP_NAME || 'tgdouyin'
 
-  // 🎯 用户要求：只要描述前 10 个字
-  let searchText = desc.substring(0, 10).trim()
+const videoDeepLink = computed(() => {
+  const videoId = props.item?.aweme_id || ''
+  return `https://t.me/${botUsername}/${appName}?startapp=video_${videoId}`
+})
 
-  // 如果还是空，就用默认词
-  if (!searchText) {
-    searchText = '精彩视频'
+// 1. 复制链接
+async function copyVideoLink() {
+  _copy(videoDeepLink.value)
+  _notice('视频链接已复制，可直接发送给好友')
+  showMoreDrawer.value = false
+}
+
+// 2. Telegram 直接分享 (调起联系人选择器)
+function shareToTelegramDirect() {
+  const desc = props.item?.desc || '精彩视频'
+  const text = `🎬 我在 [TG 抖音] 发现了一个精彩内容：\n\n"${desc}"\n\n👇 点击下方按钮立即查看`
+
+  // 使用 Telegram WebApp 原生分享接口
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(videoDeepLink.value)}&text=${encodeURIComponent(text)}`
+
+  // @ts-ignore
+  if (window.Telegram?.WebApp) {
+    // @ts-ignore
+    window.Telegram.WebApp.openTelegramLink(shareUrl)
+  } else {
+    window.open(shareUrl, '_blank')
   }
+  showMoreDrawer.value = false
+}
 
-  const botUsername = 'tg_douyin_bot'
-  // 🎯 用户要求的格式：@bot 搜索词
-  const shareText = `@${botUsername} ${searchText}`
+function shareToTelegram() {
+  // ... (保留原有逻辑作为备份或移除)
+}
 
-  // 🎯 直接复制指令
-  _copy(shareText)
-  _notice('分享指令已复制，去聊天框粘贴即可生成卡片～')
+// 🎯 更多选项抽屉
+const showMoreDrawer = ref(false)
+
+function openMoreDrawer() {
+  showMoreDrawer.value = true
 }
 
 // 🎯 视频打赏
@@ -243,9 +266,6 @@ const showRewardPanel = ref(false)
 const rewardAmount = ref('')
 const rewardPresets = [10, 50, 100, 500]
 const isRewarding = ref(false)
-
-// 🎯 更多选项抽屉
-const showMoreDrawer = ref(false)
 
 async function handleReward() {
   if (isRewarding.value) return
@@ -339,7 +359,7 @@ const vClick = useClick()
     </div>
 
     <!-- 更多选项按钮 -->
-    <div class="more-toggle mb2r" v-click="() => (showMoreDrawer = true)">
+    <div class="more-toggle mb2r" v-click="openMoreDrawer" @click.stop="openMoreDrawer">
       <Icon icon="solar:menu-dots-bold" class="icon" style="color: white" />
       <span>更多</span>
     </div>
@@ -364,12 +384,20 @@ const vClick = useClick()
           </div>
 
           <div class="action-grid">
-            <!-- 转发分享 -->
-            <div class="action-item" v-click="shareToTelegram">
-              <div class="icon-wrap">
-                <Icon icon="solar:share-bold" />
+            <!-- TG 直接分享 -->
+            <div class="action-item" v-click="shareToTelegramDirect">
+              <div class="icon-wrap" style="background: rgba(36, 161, 222, 0.2); color: #24a1de">
+                <Icon icon="logos:telegram" />
               </div>
-              <span>转发分享</span>
+              <span>TG 分享</span>
+            </div>
+
+            <!-- 复制链接 -->
+            <div class="action-item" v-click="copyVideoLink">
+              <div class="icon-wrap">
+                <Icon icon="solar:link-bold" />
+              </div>
+              <span>复制链接</span>
             </div>
 
             <!-- 收藏视频 -->

@@ -846,6 +846,17 @@ export async function handleVideoLike(req: Request): Promise<Response> {
   }
 
   if (body.liked) {
+    // 🎯 频率限制：1分钟点赞不能超过 15 次
+    const { count: recentLikes } = await supabaseAdmin
+      .from('video_likes')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', new Date(Date.now() - 60000).toISOString())
+
+    if (recentLikes !== null && recentLikes >= 15) {
+      throw new HttpError('点赞太频繁了，先休息下吧', 429)
+    }
+
     const { error } = await supabaseAdmin
       .from('video_likes')
       .upsert({ user_id: user.id, video_id: body.video_id }, { onConflict: 'user_id,video_id' })
@@ -888,7 +899,8 @@ export async function handleVideoLike(req: Request): Promise<Response> {
       video.author_id,
       'like',
       `❤️ 用户 <b>${nickname}</b> 赞了你的作品`,
-      `video_${body.video_id}`
+      `video_${body.video_id}`,
+      user.id
     )
   }
 
@@ -997,6 +1009,17 @@ export async function handleVideoCollect(req: Request): Promise<Response> {
   }
 
   if (body.collected) {
+    // 🎯 频率限制：1分钟收藏不能超过 10 次
+    const { count: recentCollects } = await supabaseAdmin
+      .from('video_collections')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', new Date(Date.now() - 60000).toISOString())
+
+    if (recentCollects !== null && recentCollects >= 10) {
+      throw new HttpError('收藏太频繁了，先休息下吧', 429)
+    }
+
     const { error } = await supabaseAdmin
       .from('video_collections')
       .upsert({ user_id: user.id, video_id: body.video_id }, { onConflict: 'user_id,video_id' })
@@ -1029,7 +1052,8 @@ export async function handleVideoCollect(req: Request): Promise<Response> {
       video.author_id,
       'collect',
       `⭐ 用户 <b>${nickname}</b> 收藏了你的作品`,
-      `video_${body.video_id}`
+      `video_${body.video_id}`,
+      user.id
     )
   }
 
