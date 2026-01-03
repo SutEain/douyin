@@ -882,16 +882,18 @@ function shareAlbumDirect() {
   const id = String(currentId.value || '')
   if (!id) return
 
-  // 🎯 使用 switchInlineQuery 模式
-  const desc = props.detail?.note_card?.display_title || '精彩内容'
-  const searchText = desc.substring(0, 15).trim() || '精品推荐'
+  // 🎯 优化文案
+  const title = props.detail?.note_card?.display_title || '精彩内容'
+  const text = `📸 ${title}\n\n来自 #TG抖音`
+
+  // 🎯 使用 share/url 直接分享
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(albumDeepLink.value)}&text=${encodeURIComponent(text)}`
 
   // @ts-ignore
   if (window.Telegram?.WebApp) {
     // @ts-ignore
-    window.Telegram.WebApp.switchInlineQuery(searchText, ['users', 'chats', 'groups', 'channels'])
+    window.Telegram.WebApp.openTelegramLink(shareUrl)
   } else {
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(albumDeepLink.value)}`
     window.open(shareUrl, '_blank')
   }
   showShareDrawer.value = false

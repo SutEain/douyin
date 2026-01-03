@@ -239,23 +239,22 @@ async function copyVideoLink() {
   showMoreDrawer.value = false
 }
 
-// 2. Telegram 直接分享 (调起内联查询卡片)
+// 2. Telegram 直接分享 (直接跳转并预填文字)
 function shareToTelegramDirect() {
-  // 🎯 使用 switchInlineQuery 模式
-  // 格式：@bot 搜索词
   const desc = props.item?.desc || '精彩视频'
-  // 截取前 15 个字作为搜索词，触发 inline query
-  const searchText = desc.substring(0, 15).trim() || '精品推荐'
+  // 🎯 优化文案：简洁有力
+  const text = `🎬 ${desc}\n\n来自 #TG抖音`
+
+  // 🎯 构造标准的直接分享链接 (使用 share/url)
+  // 这种方式在点击发送后，Telegram 会自动识别链接并生成精美的预览卡片
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(videoDeepLink.value)}&text=${encodeURIComponent(text)}`
 
   // @ts-ignore
   if (window.Telegram?.WebApp) {
-    // 🎯 核心改变：调起内联查询，这会自动触发后台的 inline_query 处理逻辑
-    // 这样发出去的消息才会有“立即播放”按钮和漂亮的封面
     // @ts-ignore
-    window.Telegram.WebApp.switchInlineQuery(searchText, ['users', 'chats', 'groups', 'channels'])
+    window.Telegram.WebApp.openTelegramLink(shareUrl)
   } else {
     // Web 端降级方案
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(videoDeepLink.value)}`
     window.open(shareUrl, '_blank')
   }
   showMoreDrawer.value = false
