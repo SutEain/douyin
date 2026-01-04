@@ -35,17 +35,21 @@ export async function getTelegramUserInfo(userId: number) {
 export async function getOrCreateProfile(
   tgUserId: number,
   tgUserInfo?: { first_name: string; last_name?: string; username?: string; language_code?: string }
-): Promise<{ id: string; numeric_id?: number } | null> {
+): Promise<{ id: string; numeric_id?: number; auto_approve?: boolean } | null> {
   try {
     const { data: existingProfile } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, numeric_id, auto_approve')
       .eq('tg_user_id', tgUserId)
       .maybeSingle()
 
     if (existingProfile) {
       console.log('找到已存在的 profile:', existingProfile.id)
-      return { id: existingProfile.id, numeric_id: existingProfile.numeric_id }
+      return {
+        id: existingProfile.id,
+        numeric_id: existingProfile.numeric_id,
+        auto_approve: existingProfile.auto_approve
+      }
     }
 
     console.log('Profile 不存在，开始创建...')
@@ -121,7 +125,7 @@ export async function getOrCreateProfile(
         },
         { onConflict: 'id' }
       )
-      .select('id, numeric_id')
+      .select('id, numeric_id, auto_approve')
       .single()
 
     if (upsertError) {
