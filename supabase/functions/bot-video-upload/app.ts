@@ -221,6 +221,13 @@ export async function handleRequest(req: Request): Promise<Response> {
         const message = update.message
         const chatId = message.chat.id
 
+        // 🎯 严格权限控制：仅接受私聊消息（作品上传和指令）
+        // 频道同步由 update.channel_post 独立处理，不受此影响
+        if (message.chat.type !== 'private') {
+          console.log(`[MAIN] 忽略非私聊消息: chatId=${chatId}, type=${message.chat.type}`)
+          return new Response('OK', { status: 200 })
+        }
+
         // 🎯 处理转发消息 (用于绑定频道)
         if (
           (message.forward_origin || message.forward_from_chat) &&
@@ -391,17 +398,24 @@ export async function handleRequest(req: Request): Promise<Response> {
       // 处理回调查询
       else if (update.callback_query) {
         const callback = update.callback_query
-        const chatId = callback.message.chat.id
-        const messageId = callback.message.message_id
+        const chatId = callback.message?.chat?.id
+        const messageId = callback.message?.message_id
         const data = callback.data
 
-        console.log('[DEBUG] 收到回调查询:', {
-          chatId,
-          messageId,
-          data
-        })
+        // 🎯 严格权限控制：仅接受私聊的回调
+        if (callback.message?.chat?.type !== 'private') {
+          return new Response('OK', { status: 200 })
+        }
 
-        await handleCallback(chatId, messageId, data, callback.id)
+        if (chatId && messageId && data) {
+          console.log('[DEBUG] 收到回调查询:', {
+            chatId,
+            messageId,
+            data
+          })
+
+          await handleCallback(chatId, messageId, data, callback.id)
+        }
       }
       // 🎯 处理 inline query（分享功能）
       else if (update.inline_query) {
