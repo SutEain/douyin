@@ -40,8 +40,8 @@ export const CoinTransactionList = () => {
     resource: 'coin_transactions',
     syncWithLocation: true,
     meta: {
-      // 🎯 使用 !inner 强制内联连接，这是在 PostgREST 中过滤关联表并获取正确 count 的关键
-      select: '*, profiles:user_id!inner(nickname,numeric_id)'
+      // 🎯 使用 !inner 强制内联连接 profiles，并可选连接 counterparty
+      select: '*, profiles:user_id!inner(nickname,numeric_id), counterparty:counterparty_id(nickname,numeric_id)'
     },
     sorters: {
       initial: [{ field: 'created_at', order: 'desc' }]
@@ -197,7 +197,21 @@ export const CoinTransactionList = () => {
           width={120}
           render={(v) => <span style={{ fontFamily: 'monospace' }}>{v}</span>}
         />
-        <Table.Column dataIndex="description" title="备注" render={(v) => v || '-'} />
+        <Table.Column 
+          dataIndex="description" 
+          title="备注" 
+          render={(v, record: any) => (
+            <Space direction="vertical" size={0}>
+              <span>{v || '-'}</span>
+              {record.counterparty && (
+                <small style={{ color: '#8c8c8c' }}>
+                  {record.type === 'gift_in' ? '来自: ' : '打赏给: '}
+                  {record.counterparty.nickname} (ID: {record.counterparty.numeric_id})
+                </small>
+              )}
+            </Space>
+          )} 
+        />
         <Table.Column
           dataIndex="created_at"
           title="时间"

@@ -454,7 +454,7 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
       // 查找邀请人
       const { data: inviterProfile } = await supabaseAdmin
         .from('profiles')
-        .select('id, invite_success_count, adult_permanent_unlock, adult_unlock_until')
+        .select('id, invite_success_count, adult_permanent_unlock, adult_unlock_until, balance_coins')
         .eq('numeric_id', numericId)
         .maybeSingle()
 
@@ -474,6 +474,15 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
           const now = new Date()
           const currentCount = inviterProfile.invite_success_count ?? 0
           const newCount = currentCount + 1
+
+          // 从 system_settings 获取奖励金额
+          const { data: setting } = await supabaseAdmin
+            .from('system_settings')
+            .select('value_int')
+            .eq('id', 'invitation_reward_coins')
+            .maybeSingle()
+
+          const rewardCoins = setting?.value_int ?? 20 // 默认 20 抖币
 
           let adultPermanentUnlock = inviterProfile.adult_permanent_unlock === true
           let adultUnlockUntil = inviterProfile.adult_unlock_until
@@ -500,16 +509,30 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
             }
           }
 
-          await supabaseAdmin
+          // 执行更新：增加邀请人数 + 解锁时长 + 增加余额
+          const { data: updatedInviter } = await supabaseAdmin
             .from('profiles')
             .update({
               invite_success_count: newCount,
               adult_permanent_unlock: adultPermanentUnlock,
-              adult_unlock_until: adultUnlockUntil
+              adult_unlock_until: adultUnlockUntil,
+              balance_coins: (inviterProfile.balance_coins || 0) + rewardCoins
             })
             .eq('id', inviterId)
+            .select('balance_coins')
+            .single()
 
-          console.log('[Invite] 邀请处理成功，邀请人新人数:', newCount)
+          // 记录流水
+          await supabaseAdmin.from('coin_transactions').insert({
+            user_id: inviterId,
+            amount: rewardCoins,
+            balance_after: updatedInviter?.balance_coins || 0,
+            type: 'reward',
+            description: `成功邀请新用户奖励`,
+            related_id: userId
+          })
+
+          console.log('[Invite] 邀请处理成功，邀请人新人数:', newCount, '获得奖励:', rewardCoins)
 
           // 3. 发送通知给邀请人 (通过 Bot API)
           if (TG_BOT_TOKEN) {
@@ -528,7 +551,8 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
               const msg =
                 `🎉 <b>邀请成功！</b>\n\n` +
                 `您已成功邀请 ${newCount} 人\n` +
-                `🎁 ${rewardText}\n\n` +
+                `🎁 ${rewardText}\n` +
+                `💰 获得 ${rewardCoins} 抖币奖励！\n\n` +
                 `继续邀请可获得更多奖励！`
 
               await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
