@@ -62,7 +62,7 @@ const showToggle = computed(() => fullDescription.value.length > 100)
 
 const isGraphic = computed(() => {
   const t = String(currentItem.value?.content_type || 'video')
-  return t === 'image' || t === 'album'
+  return t === 'image' || t === 'album' || t === 'collection'
 })
 
 const showViewDetail = computed(() => showToggle.value && state.expanded && isGraphic.value)
@@ -105,13 +105,18 @@ const publishDate = computed(() => {
         @{{ _truncate(item?.author?.nickname, 15) }}
       </div>
       <div v-if="publishDate" class="publish-date">发布于 {{ publishDate }}</div>
-      <div class="description-wrapper" v-if="fullDescription">
+      <div
+        class="description-wrapper"
+        v-if="fullDescription"
+        @touchstart.stop="state.expanded && $event.stopPropagation()"
+        @touchmove.stop="state.expanded && $event.stopPropagation()"
+        @touchend.stop="state.expanded && $event.stopPropagation()"
+      >
         <div
           class="description"
           :class="{ collapsed: !state.expanded && showToggle }"
-          @touchstart="state.expanded && $event.stopPropagation()"
-          @touchmove="state.expanded && $event.stopPropagation()"
-          @touchend="state.expanded && $event.stopPropagation()"
+          @touchstart.stop="state.expanded && $event.stopPropagation()"
+          @touchmove.stop="state.expanded && $event.stopPropagation()"
         >
           {{ fullDescription }}
         </div>
