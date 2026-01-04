@@ -334,10 +334,15 @@ const isCheckedInToday = computed(() => {
   const lastCheckin = new Date(userinfo.value.last_checkin_at)
   const now = new Date()
 
-  // 转换为北京时间日期字符串对比 (YYYY-MM-DD)
+  // 🎯 修复：统一使用 Intl 接口获取北京时间日期字符串 (YYYY-MM-DD)
+  // 避免手动加 8 小时导致的跨时区计算错误
   const toBeijingDate = (date: Date) => {
-    const bj = new Date(date.getTime() + 8 * 3600 * 1000)
-    return bj.getUTCFullYear() + '-' + (bj.getUTCMonth() + 1) + '-' + bj.getUTCDate()
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(date)
   }
 
   return toBeijingDate(lastCheckin) === toBeijingDate(now)
@@ -405,9 +410,19 @@ async function handleCheckInClick() {
   // 如果今天已经签过到了，直接提示剩余时间，不再请求后端
   if (isCheckedInToday.value) {
     const now = new Date()
-    const bjNow = new Date(now.getTime() + 8 * 3600 * 1000)
-    const hours = 23 - bjNow.getUTCHours()
-    const minutes = 59 - bjNow.getUTCMinutes()
+    // 🎯 修复：使用 Intl 获取准确的北京时间分量
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Shanghai',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false
+    })
+    const parts = formatter.formatToParts(now)
+    const bjHour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0')
+    const bjMinute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0')
+
+    const hours = 23 - bjHour
+    const minutes = 59 - bjMinute
     _no(`您今天已经签到过了\n距离下次签到还需 ${hours} 小时 ${minutes} 分钟`)
     return
   }
