@@ -400,7 +400,18 @@ function copyNumericId() {
 
 // 🎯 点击签到
 async function handleCheckInClick() {
-  if (baseStore.loading || isCheckedInToday.value) return
+  if (baseStore.loading) return
+
+  // 如果今天已经签过到了，直接提示剩余时间，不再请求后端
+  if (isCheckedInToday.value) {
+    const now = new Date()
+    const bjNow = new Date(now.getTime() + 8 * 3600 * 1000)
+    const hours = 23 - bjNow.getUTCHours()
+    const minutes = 59 - bjNow.getUTCMinutes()
+    _no(`您今天已经签到过了\n距离下次签到还需 ${hours} 小时 ${minutes} 分钟`)
+    return
+  }
+
   baseStore.loading = true
   try {
     const res = await checkIn()
