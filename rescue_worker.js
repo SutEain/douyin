@@ -9,7 +9,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
 )
 
-const BOT_TOKEN = process.env.TG_BOT_TOKEN
+const BOT_TOKEN = process.env.TG_BOT_TOKEN ? process.env.TG_BOT_TOKEN.trim() : null
 const WORKER_URL = 'http://localhost:3000/process'
 
 async function rescue() {

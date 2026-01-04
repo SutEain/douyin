@@ -253,6 +253,8 @@ export async function saveSinglePhoto(
     order: 0
   }
 
+  const isAutoApprove = profile?.auto_approve || extraData?.status === 'published'
+
   const { data: draftPost, error } = await supabase
     .from('videos')
     .insert({
@@ -272,10 +274,10 @@ export async function saveSinglePhoto(
       is_private: false,
       is_adult: extraData?.is_adult || false,
       is_sea: extraData?.is_sea || false,
-      status: extraData?.status || 'draft',
+      status: extraData?.status || (isAutoApprove ? 'published' : 'draft'),
       is_auto_sync: extraData?.is_auto_sync || false, // 🎯 标记自动同步
-      review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
-      published_at: extraData?.status === 'published' ? new Date().toISOString() : null
+      review_status: isAutoApprove ? 'auto_approved' : 'pending',
+      published_at: isAutoApprove ? new Date().toISOString() : null
     })
     .select()
     .single()
@@ -467,6 +469,8 @@ export async function handleVideo(
       order: 0
     }
 
+    const isAutoApprove = profile?.auto_approve || extraData?.status === 'published'
+
     const { data: draftVideo, error } = await supabase
       .from('videos')
       .insert({
@@ -490,8 +494,8 @@ export async function handleVideo(
         is_sea: extraData?.is_sea || false,
         status: extraData?.status || 'processing',
         is_auto_sync: extraData?.is_auto_sync || false, // 🎯 标记自动同步
-        review_status: extraData?.status === 'published' ? 'auto_approved' : 'pending',
-        published_at: extraData?.status === 'published' ? new Date().toISOString() : null,
+        review_status: isAutoApprove ? 'auto_approved' : 'pending',
+        published_at: isAutoApprove ? new Date().toISOString() : null,
         media_group_id: mediaGroupId,
         media_list: JSON.stringify([videoMediaItem]),
         images: JSON.stringify([videoMediaItem]),

@@ -28,8 +28,11 @@ const r2 = new S3Client({
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
 
 app.post('/process', async (req, res) => {
-  const { file_id, video_id, bot_token, chat_id, message_id } = req.body
+  let { file_id, video_id, bot_token, chat_id, message_id } = req.body
   if (!file_id || !video_id) return res.status(400).json({ error: 'Missing params' })
+
+  file_id = file_id.trim()
+  if (bot_token) bot_token = bot_token.trim()
 
   res.json({ status: 'processing', video_id })
   console.log(`[${video_id}] 任务启动...`)
@@ -88,7 +91,7 @@ app.post('/process', async (req, res) => {
     // 🎯 获取当前视频状态
     const { data: vInfo } = await supabase
       .from('videos')
-      .select('status')
+      .select('status, review_status')
       .eq('id', video_id)
       .single()
 
@@ -98,10 +101,11 @@ app.post('/process', async (req, res) => {
       is_optimized: true
     }
 
-    // 🎯 如果当前是“处理中”状态，则自动转为“就绪”
+    // 🎯 如果当前是“处理中”状态，且已审核通过，则直接转为“发布”；否则转为“就绪”
     if (vInfo && vInfo.status === 'processing') {
-      console.log(`[${video_id}] 状态转换: processing -> ready`)
-      updatePayload.status = 'ready'
+      const isApproved = vInfo.review_status === 'approved' || vInfo.review_status === 'auto_approved'
+      console.log(`[${video_id}] 状态转换: processing -> ${isApproved ? 'published' : 'ready'}`)
+      updatePayload.status = isApproved ? 'published' : 'ready'
     }
 
     // 🎯 更新数据库
@@ -132,7 +136,11 @@ app.post('/process', async (req, res) => {
 
     console.log(`[${video_id}] 处理成功！`)
   } catch (error) {
-    console.error(`[${video_id}] 失败:`, error.message)
+    if (error.response) {
+      console.error(`[${video_id}] 失败 (HTTP ${error.response.status}):`, JSON.stringify(error.response.data))
+    } else {
+      console.error(`[${video_id}] 失败:`, error.message)
+    }
     // 失败回调
     await axios
       .post(
