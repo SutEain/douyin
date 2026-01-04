@@ -20,7 +20,7 @@ serve(async (req) => {
     // 获取用户信息确认直播权限
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('live_status, numeric_id')
+      .select('live_status, numeric_id, nickname, username')
       .eq('id', userId)
       .single()
 
@@ -43,47 +43,73 @@ serve(async (req) => {
         .maybeSingle()
 
       if (existingRoom) {
-        let streamKey = existingRoom.stream_key
+        const oldStreamKey = existingRoom.stream_key;
+        let finalStreamKey = oldStreamKey; // 最终要使用的 Key
+        const newTitle = title || existingRoom.title;
 
-        // 如果是刷新操作，生成新 Key 并在服务器更新
+        // 1. 如果是刷新操作，【必须先删除】AMS 上的旧记录
         if (action === 'refresh') {
-          streamKey = generateKey()
+          try {
+            const deleteUrl = `http://${existingRoom.node.ip_address}:5080/LiveApp/rest/v2/broadcasts/${oldStreamKey}`
+            await fetch(deleteUrl, { method: 'DELETE' })
+            console.log(`[live-handler] 1. Deleted old AMS broadcast: ${oldStreamKey}`)
+          } catch (err) {
+            console.warn('[live-handler] Delete old AMS failed:', err)
+          }
+          
+          // 删除旧的后，再生成新的
+          finalStreamKey = generateKey();
+        }
 
+        // 2. 无论刷新（新建）还是单纯改名（同步），都通知 AMS
+        // 注意：AMS 的 /create 接口，ID 不存在则创建，存在则更新
+        if (action === 'refresh' || (title && title !== existingRoom.title)) {
           try {
             const amApiUrl = `http://${existingRoom.node.ip_address}:5080/LiveApp/rest/v2/broadcasts/create`
             await fetch(amApiUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                streamId: streamKey,
-                name: title || existingRoom.title,
+                streamId: finalStreamKey,
+                name: newTitle,
                 type: 'liveStream',
                 publish: true
               })
             })
+            console.log(`[live-handler] 2. Created/Synced on AMS: ${finalStreamKey} (${newTitle})`)
           } catch (err) {
-            console.error('[live-handler] Refresh AM failed:', err)
+            console.error('[live-handler] AMS Sync failed:', err)
           }
+        }
 
-          await supabase
-            .from('live_broadcast_rooms')
-            .update({ stream_key: streamKey, status: 'pending' }) // 刷新后变为待播
-            .eq('id', existingRoom.id)
-        } else {
-          // 普通获取，不改变现状，如果是 ended 则改为 pending
-          if (existingRoom.status !== 'live') {
-            await supabase
-              .from('live_broadcast_rooms')
-              .update({ status: 'pending' })
-              .eq('id', existingRoom.id)
-          }
+        // 3. 最后一步：更新本地数据库
+        await supabase
+          .from('live_broadcast_rooms')
+          .update({ 
+            stream_key: finalStreamKey, 
+            status: 'pending',
+            title: newTitle
+          })
+          .eq('id', existingRoom.id)
+
+        // 🎯 发送开播通知 (增加 1 小时冷却)
+        const lastNotified = existingRoom.last_notified_at ? new Date(existingRoom.last_notified_at).getTime() : 0
+        if (action === 'start' && Date.now() - lastNotified > 60 * 60 * 1000) {
+          edgeNotifyFollowersLive(
+            supabase,
+            userId,
+            profile.nickname || profile.username || String(profile.numeric_id),
+            newTitle
+          ).then(async () => {
+            await supabase.from('live_broadcast_rooms').update({ last_notified_at: new Date().toISOString() }).eq('id', existingRoom.id)
+          }).catch(err => console.error('[live-handler] Notify followers failed:', err))
         }
 
         return new Response(
           JSON.stringify({
             rtmp_url: `rtmp://${existingRoom.node.ip_address}/LiveApp`,
-            stream_key: streamKey,
-            playback_url: `https://${existingRoom.node.domain_name}/LiveApp/streams/${streamKey}.m3u8`,
+            stream_key: finalStreamKey,
+            playback_url: `https://${existingRoom.node.domain_name}/LiveApp/streams/${finalStreamKey}.m3u8`,
             room_id: existingRoom.id
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -135,6 +161,16 @@ serve(async (req) => {
       if (roomError) throw roomError
       await supabase.rpc('increment_node_streams', { node_id: node.id })
 
+      // 🎯 发送开播通知
+      edgeNotifyFollowersLive(
+        supabase,
+        userId,
+        profile.nickname || profile.username || String(profile.numeric_id),
+        title || '精彩直播'
+      ).then(async () => {
+        await supabase.from('live_broadcast_rooms').update({ last_notified_at: new Date().toISOString() }).eq('id', room.id)
+      }).catch(err => console.error('[live-handler] Notify followers failed:', err))
+
       return new Response(
         JSON.stringify({
           rtmp_url: `rtmp://${node.ip_address}/LiveApp`,
@@ -150,15 +186,33 @@ serve(async (req) => {
     if (action === 'end') {
       const { roomId } = await req.json()
 
+      // 🎯 获取房间信息以便同步删除 AMS 上的记录
       const { data: room } = await supabase
         .from('live_broadcast_rooms')
-        .update({ status: 'ended', ended_at: new Date().toISOString() })
+        .select('*, node:live_broadcast_nodes(ip_address)')
         .eq('id', roomId)
-        .select('node_id')
         .single()
 
-      if (room?.node_id) {
-        await supabase.rpc('decrement_node_streams', { node_id: room.node_id })
+      if (room) {
+        // 1. 删除 AMS 上的直播间记录
+        try {
+          const deleteUrl = `http://${room.node.ip_address}:5080/LiveApp/rest/v2/broadcasts/${room.stream_key}`
+          await fetch(deleteUrl, { method: 'DELETE' })
+          console.log(`[live-handler] Deleted AMS broadcast on end: ${room.stream_key}`)
+        } catch (err) {
+          console.warn('[live-handler] Delete AMS broadcast failed on end:', err)
+        }
+
+        // 2. 更新数据库状态
+        await supabase
+          .from('live_broadcast_rooms')
+          .update({ status: 'ended', ended_at: new Date().toISOString() })
+          .eq('id', roomId)
+
+        // 3. 减少节点流计数
+        if (room.node_id) {
+          await supabase.rpc('decrement_node_streams', { node_id: room.node_id })
+        }
       }
 
       return new Response(JSON.stringify({ success: true }), {
@@ -172,3 +226,63 @@ serve(async (req) => {
     })
   }
 })
+
+/**
+ * 🎯 通知粉丝开播 (Edge Function 内部版本)
+ */
+async function edgeNotifyFollowersLive(
+  supabase: any,
+  authorId: string,
+  authorNickname: string,
+  liveTitle: string
+) {
+  const TG_BOT_TOKEN = Deno.env.get('TG_BOT_TOKEN')
+  const TG_BOT_USERNAME = Deno.env.get('TG_BOT_USERNAME') || 'tg_douyin_bot'
+  const TG_APP_NAME = Deno.env.get('TG_APP_NAME') || 'tgdouyin'
+
+  if (!TG_BOT_TOKEN) return
+
+  // 1. 查询粉丝
+  const { data: followers } = await supabase
+    .from('follows')
+    .select(`
+      follower:profiles!follows_follower_id_fkey(
+        tg_user_id,
+        notification_settings
+      )
+    `)
+    .eq('followee_id', authorId)
+
+  if (!followers || followers.length === 0) return
+
+  const message = `🔴 <b>${authorNickname}</b> 正在直播：\n\n${liveTitle}`
+  const deepLink = `https://t.me/${TG_BOT_USERNAME}/${TG_APP_NAME}?startapp=live_${authorId}`
+
+  // 2. 批量发送
+  const promises = followers.map(async (f: any) => {
+    const p = f.follower
+    if (!p?.tg_user_id) return
+
+    // 检查设置
+    const settings = p.notification_settings || {}
+    const typeSetting = settings['new_live'] || { mute_until: 0 }
+    if (typeSetting.mute_until === -1 || typeSetting.mute_until > Date.now()) return
+
+    try {
+      await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: p.tg_user_id,
+          text: message,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [[{ text: '👉 立即进入直播间', url: deepLink }]]
+          }
+        })
+      })
+    } catch { /* ignore */ }
+  })
+
+  await Promise.allSettled(promises)
+}

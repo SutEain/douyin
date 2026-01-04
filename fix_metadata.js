@@ -15,17 +15,18 @@ const r2 = new S3Client({
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
   },
-  maxAttempts: 3 // 增加重试次数
+  maxAttempts: 3
 })
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 )
 
 async function fixVideos() {
   while (true) {
-    console.log(`\n🔄 [${new Date().toLocaleString()}] 开始新一轮抓取...`)
+    const startTime = Date.now()
+    console.log(`\n🔄 [${new Date().toLocaleString()}] 开始新一轮抓取优化任务...`)
 
     try {
       const { data: videos, error } = await supabase
@@ -35,29 +36,28 @@ async function fixVideos() {
         .eq('is_optimized', false)
         .gt('file_size', 1024 * 1024)
         .order('created_at', { ascending: true })
-        .limit(100)
+        .limit(50) // 每次处理 50 个
 
       if (error) {
         console.error(`❌ 查询失败: ${error.message}`)
-        await new Promise((resolve) => setTimeout(resolve, 5000))
+        await new Promise((resolve) => setTimeout(resolve, 10000))
         continue
       }
 
-      const total = videos.length
-      if (total === 0) {
-        console.log('✨ 所有视频已处理完毕。休眠 1 分钟后检查新视频...')
-        await new Promise((resolve) => setTimeout(resolve, 60000))
+      if (!videos || videos.length === 0) {
+        console.log('✨ 所有视频已优化。进入 5 分钟检查周期...')
+        await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000))
         continue
       }
 
-      console.log(`📊 本轮任务：${total} 个视频\n`)
+      console.log(`📊 本轮任务：${videos.length} 个视频\n`)
 
-      for (let i = 0; i < total; i++) {
+      for (let i = 0; i < videos.length; i++) {
         const video = videos[i]
         const videoId = video.id
         const playUrl = video.play_url
 
-        console.log(`[${i + 1}/${total}] 处理: ${video.title || videoId}`)
+        console.log(`[${i + 1}/${videos.length}] 处理: ${video.title || videoId}`)
 
         let r2Key = ''
         try {
@@ -83,7 +83,7 @@ async function fixVideos() {
 
           // B. 分析与修复
           const probeJson = execSync(
-            `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,codec_tag_string -of json "${localInput}"`
+            `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,codec_tag_string,pix_fmt -of json "${localInput}"`
           ).toString()
           const vStream = JSON.parse(probeJson).streams[0]
 
@@ -92,23 +92,25 @@ async function fixVideos() {
           let ffmpegArgs = `-c copy -movflags +faststart`
           const codecName = (vStream.codec_name || '').toLowerCase()
           const codecTag = (vStream.codec_tag_string || '').toLowerCase()
+          const pixFmt = (vStream.pix_fmt || '').toLowerCase()
 
           if (codecName === 'hevc' && codecTag === 'hev1') {
             console.log(`   - 🛠 修正标签 (hev1 -> hvc1)`)
             ffmpegArgs = `-c copy -tag:v hvc1 -movflags +faststart`
-          } else {
-            console.log(`   - ✨ FastStart 优化 (${codecTag})`)
+          } else if (codecName === 'h264' && pixFmt === 'yuvj420p') {
+            console.log(`   - ⚡ 转码修复 (yuvj420p -> yuv420p)`)
+            ffmpegArgs = `-c:v libx264 -preset superfast -pix_fmt yuv420p -c:a copy -movflags +faststart`
           }
 
-          execSync(`ffmpeg -y -i "${localInput}" ${ffmpegArgs} "${localOutput}"`, {
+          execSync(`ffmpeg -y -i "${localInput}" ${ffmpegArgs} -map_metadata -1 "${localOutput}"`, {
             stdio: 'ignore'
           })
 
-          // C. 校验并上传
           if (!fs.existsSync(localOutput) || fs.statSync(localOutput).size === 0) {
-            throw new Error('FFmpeg 生成的文件为空或不存在')
+            throw new Error('FFmpeg 生成文件失败')
           }
 
+          // C. 上传
           await r2.send(
             new PutObjectCommand({
               Bucket: process.env.R2_BUCKET,
@@ -118,23 +120,16 @@ async function fixVideos() {
             })
           )
 
-          // 🎯 更新状态：如果之前是 processing，由于现在已经完成了优化并上传，可以转为 ready
-          const { data: vInfo } = await supabase
-            .from('videos')
-            .select('status')
-            .eq('id', videoId)
-            .single()
+          // D. 更新状态
+          const { data: vInfo } = await supabase.from('videos').select('status').eq('id', videoId).single()
           const updatePayload = { is_optimized: true }
           if (vInfo && vInfo.status === 'processing') {
-            console.log(`   - 🔄 状态转换: processing -> ready`)
             updatePayload.status = 'ready'
           }
-
           await supabase.from('videos').update(updatePayload).eq('id', videoId)
-          console.log(`   ✅ 成功`)
+          console.log(`   ✅ 优化成功`)
         } catch (err) {
           console.error(`   ❌ 失败: ${err.message}`)
-          // 如果是 R2 网络问题，可以考虑不打标记下次重试；如果是文件坏了，打标记跳过
           if (!err.message.includes('streaming request')) {
             await supabase.from('videos').update({ is_optimized: true }).eq('id', videoId)
           }
@@ -143,9 +138,13 @@ async function fixVideos() {
           if (fs.existsSync(localOutput)) fs.unlinkSync(localOutput)
         }
       }
+
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1)
+      console.log(`\n✨ 本轮优化任务耗时 ${duration}s。进入 5 分钟冷却期...`)
+      await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000))
     } catch (err) {
       console.error('😱 循环崩溃:', err.message)
-      await new Promise((resolve) => setTimeout(resolve, 5000))
+      await new Promise((resolve) => setTimeout(resolve, 10000))
     }
   }
 }

@@ -6,6 +6,7 @@ export type NotificationType =
   | 'collect'
   | 'follow'
   | 'new_post'
+  | 'new_live'
   | 'request_update'
   | 'visit'
   | 'gift'
@@ -272,5 +273,108 @@ export async function notifyFollowersNewPost(
     console.log(`[NOTIFY-NEW-POST] ✅ 完成: 发送 ${sentCount} 条, 跳过 ${skippedCount} 条`)
   } catch (error) {
     console.error('[NOTIFY-NEW-POST] Error:', error)
+  }
+}
+
+/**
+ * 🎯 通知用户的所有粉丝：开播了
+ * @param authorId 主播的 user_id (profiles.id)
+ * @param authorNickname 主播昵称
+ * @param roomId 直播间 ID
+ * @param liveTitle 直播标题（可选）
+ */
+export async function notifyFollowersLiveStart(
+  authorId: string,
+  authorNickname: string,
+  roomId: string,
+  liveTitle?: string
+) {
+  console.log(`[NOTIFY-LIVE-START] 开始通知粉丝: author=${authorId}, room=${roomId}`)
+
+  try {
+    if (!TG_BOT_TOKEN) {
+      console.warn('[NOTIFY-LIVE-START] ❌ TG_BOT_TOKEN not configured')
+      return
+    }
+
+    // 1. 查询该用户的所有粉丝（包含通知设置）
+    const { data: followers, error } = await supabaseAdmin
+      .from('follows')
+      .select(
+        `
+        follower_id,
+        follower:profiles!follows_follower_id_fkey(
+          id,
+          tg_user_id,
+          notification_settings
+        )
+      `
+      )
+      .eq('followee_id', authorId)
+
+    if (error) {
+      console.error('[NOTIFY-LIVE-START] ❌ 查询粉丝失败:', error)
+      return
+    }
+
+    if (!followers || followers.length === 0) {
+      console.log('[NOTIFY-LIVE-START] 没有粉丝需要通知')
+      return
+    }
+
+    // 2. 构造消息
+    const titleLine = liveTitle ? `\n📺 <b>直播标题：</b>${liveTitle}` : ''
+    const message = `🔴 <b>${authorNickname}</b> 正在直播中！${titleLine}`
+    const startParam = `live_${authorId}` // 使用主播 ID 作为 live 标识
+
+    // 3. 批量发送通知
+    const botUsername = TG_BOT_USERNAME
+    const appName = TG_APP_NAME
+    const deepLink = `https://t.me/${botUsername}/${appName}?startapp=${startParam}`
+
+    let sentCount = 0
+    let skippedCount = 0
+
+    const sendPromises = followers.map(async (follow: any) => {
+      const followerProfile = follow.follower
+      if (!followerProfile || !followerProfile.tg_user_id) {
+        skippedCount++
+        return
+      }
+
+      const settings = followerProfile.notification_settings || {}
+      const typeSetting = settings['new_live'] || { mute_until: 0 }
+      const muteUntil = typeSetting.mute_until || 0
+
+      if (muteUntil === -1 || muteUntil > Date.now()) {
+        skippedCount++
+        return
+      }
+
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: followerProfile.tg_user_id,
+            text: message,
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [[{ text: '👉 立即进入直播间', url: deepLink }]]
+            }
+          })
+        })
+        const data = await res.json()
+        if (data.ok) sentCount++
+        else skippedCount++
+      } catch {
+        skippedCount++
+      }
+    })
+
+    await Promise.allSettled(sendPromises)
+    console.log(`[NOTIFY-LIVE-START] ✅ 完成: 发送 ${sentCount} 条, 跳过 ${skippedCount} 条`)
+  } catch (error) {
+    console.error('[NOTIFY-LIVE-START] Error:', error)
   }
 }

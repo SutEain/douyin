@@ -356,11 +356,11 @@ export async function handleStartLive(chatId: number, messageId?: number, title?
     const text =
       `🎥 <b>直播准备就绪！</b>\n\n` +
       `<b>直播标题：</b> ${title || profile.nickname || profile.username || profile.numeric_id}\n\n` +
-      `请将以下参数填入您的推流软件（如 OBS 或 Larix）：\n\n` +
-      `📍 <b>服务器地址 (URL)：</b>\n<code>${data.rtmp_url}</code>\n\n` +
+      `请将以下参数填入您的推流软件：\n\n` +
+      `📍 <b>服务器地址 (URL)：</b>\n<code>${data.rtmp_url}/</code>\n\n` +
       `🔑 <b>推流密钥 (Stream Key)：</b>\n<code>${data.stream_key}</code>\n\n` +
       `⛔ <b>安全警告：</b>\n请勿将您的<b>服务器地址</b>和<b>推流密钥</b>泄露给任何人！\n一旦泄露，他人即可冒充您进行直播，造成账号风险。\n\n` +
-      `<i>💡 建议使用 Larix Broadcaster 手机开播，体验更佳。</i>`
+      `<i>💡 电脑建议使用 OBS 。苹果手机建议使用免费推流软件KC RTMP STREAM。</i>`
 
     const keyboard = {
       inline_keyboard: [
