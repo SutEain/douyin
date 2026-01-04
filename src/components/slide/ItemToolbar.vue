@@ -232,14 +232,14 @@ const videoDeepLink = computed(() => {
   return link
 })
 
-// 1. 复制链接
+// 1. 复制链接 (修改为 Inline Query 触发格式)
 async function copyVideoLink() {
-  const desc = props.item?.desc || '精彩视频'
-  // 🎯 恢复旧版样式：@tg_douyin_bot + 描述前15个字 + 链接
-  const truncatedDesc = _truncate(desc, 15)
-  const copyText = `@tg_douyin_bot ${truncatedDesc} ${videoDeepLink.value}`
+  const desc = (props.item?.desc || '精彩视频').trim()
+  // 🎯 严格要求：前 15 个字，不要链接，不要省略号，用于触发 Inline Mode
+  const queryText = desc.substring(0, 15)
+  const copyText = `@tg_douyin_bot ${queryText}`
   _copy(copyText)
-  _notice('视频链接已复制，可直接发送给好友')
+  _notice('搜索指令已复制，在聊天框粘贴即可搜索')
   showMoreDrawer.value = false
 }
 

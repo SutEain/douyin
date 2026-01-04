@@ -871,14 +871,12 @@ const albumDeepLink = computed(() => {
 })
 
 function copyAlbumLink() {
-  const link = albumDeepLink.value
-  if (!link) return
-  // 🎯 恢复旧版样式：@tg_douyin_bot + 标题前15个字 + 链接
-  const title = props.detail?.note_card?.display_title || '精彩内容'
-  const truncatedTitle = _truncate(title, 15)
-  const copyText = `@tg_douyin_bot ${truncatedTitle} ${link}`
+  // 🎯 严格要求：前 15 个字，不要链接，不要省略号，用于触发 Inline Mode
+  const title = (props.detail?.note_card?.display_title || '精彩内容').trim()
+  const queryText = title.substring(0, 15)
+  const copyText = `@tg_douyin_bot ${queryText}`
   _copy(copyText)
-  _notice('内容链接已复制')
+  _notice('搜索指令已复制，在聊天框粘贴即可搜索')
   showShareDrawer.value = false
 }
 
