@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { _formatNumber, cloneDeep, _notice, _copy } from '@/utils'
+import { _formatNumber, cloneDeep, _notice, _copy, _truncate } from '@/utils'
 import bus, { EVENT_KEY } from '@/utils/bus'
 import { useClick } from '@/utils/hooks/useClick'
 import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -234,7 +234,11 @@ const videoDeepLink = computed(() => {
 
 // 1. 复制链接
 async function copyVideoLink() {
-  _copy(videoDeepLink.value)
+  const desc = props.item?.desc || '精彩视频'
+  // 🎯 恢复旧版样式：@tg_douyin_bot + 描述前15个字 + 链接
+  const truncatedDesc = _truncate(desc, 15)
+  const copyText = `@tg_douyin_bot ${truncatedDesc} ${videoDeepLink.value}`
+  _copy(copyText)
   _notice('视频链接已复制，可直接发送给好友')
   showMoreDrawer.value = false
 }

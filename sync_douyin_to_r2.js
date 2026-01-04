@@ -69,6 +69,8 @@ async function main() {
             console.log(`[Batch] 发现 ${videos.length} 个视频，开始搬运...`);
             for (const video of videos) {
               await processVideo(video);
+              // 🎯 优化：每处理完一个视频，休息 3 秒，防止 CPU 持续满载
+              await new Promise(r => setTimeout(r, 3000));
             }
           } else {
             console.log('✅ 暂无需要同步的视频。');
@@ -170,11 +172,13 @@ async function processVideo(video) {
       ffmpegArgs = `-c copy -tag:v hvc1 -movflags +faststart`;
     } else if (codecName === 'h264' && pixFmt === 'yuvj420p') {
       action = '⚡ 重新编码修复兼容性 (yuvj420p -> yuv420p)';
-      ffmpegArgs = `-c:v libx264 -preset superfast -pix_fmt yuv420p -c:a copy -movflags +faststart`;
+      // 🎯 优化：限制 ffmpeg 只使用 1 个线程，降低 CPU 峰值
+      ffmpegArgs = `-c:v libx264 -preset superfast -threads 1 -pix_fmt yuv420p -c:a copy -movflags +faststart`;
     }
 
     console.log(`   - ${action}...`);
-    execSync(`ffmpeg -y -i "${tempInput}" ${ffmpegArgs} -map_metadata -1 "${tempOutput}"`, {
+    // 🎯 优化：增加全局 -threads 1 确保即使是 copy 模式也尽量低功耗
+    execSync(`ffmpeg -y -threads 1 -i "${tempInput}" ${ffmpegArgs} -map_metadata -1 "${tempOutput}"`, {
       stdio: 'ignore'
     });
 
@@ -186,12 +190,14 @@ async function processVideo(video) {
       throw new Error('FFmpeg 生成的文件为空');
     }
 
+    const fileSize = fs.statSync(tempOutput).size;
     await r2.send(
       new PutObjectCommand({
         Bucket: process.env.R2_BUCKET,
         Key: fileKey,
         Body: fs.createReadStream(tempOutput),
-        ContentType: 'video/mp4'
+        ContentType: 'video/mp4',
+        ContentLength: fileSize // 🎯 修复：显式提供文件大小，解决 "exceeds maximum allowed size" 报错
       })
     );
 

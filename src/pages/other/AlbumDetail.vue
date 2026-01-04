@@ -873,7 +873,11 @@ const albumDeepLink = computed(() => {
 function copyAlbumLink() {
   const link = albumDeepLink.value
   if (!link) return
-  _copy(link)
+  // 🎯 恢复旧版样式：@tg_douyin_bot + 标题前15个字 + 链接
+  const title = props.detail?.note_card?.display_title || '精彩内容'
+  const truncatedTitle = _truncate(title, 15)
+  const copyText = `@tg_douyin_bot ${truncatedTitle} ${link}`
+  _copy(copyText)
   _notice('内容链接已复制')
   showShareDrawer.value = false
 }

@@ -810,7 +810,10 @@ const roomDeepLink = computed(() => {
 function copyRoomLink() {
   const link = roomDeepLink.value
   if (!link) return
-  _copy(link)
+  // 🎯 恢复旧版样式：@tg_douyin_bot + 提示 + 链接
+  const anchorName = roomInfo.value.anchor_info?.nickname || '主播'
+  const copyText = `@tg_douyin_bot 快来围观 ${anchorName} 的直播间 ${link}`
+  _copy(copyText)
   _notice('直播间链接已复制')
   showShareDrawer.value = false
 }

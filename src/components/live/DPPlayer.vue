@@ -316,12 +316,17 @@ onMounted(() => {
 
   const onEvent = (type: string) => () => {
     let extra: any = undefined
-    if (type === 'loadedmetadata') {
+    if (type === 'loadedmetadata' || type === 'playing' || type === 'resize') {
       if (video.videoWidth && video.videoHeight) {
         // 如果是横屏视频 (宽 > 高)，使用 contain 以免剪掉太多内容，上下留黑边是正常的
         // 如果是竖屏视频 (高 >= 宽)，使用 cover 以填充全屏，消除左右黑边
         videoFit.value = video.videoWidth > video.videoHeight ? 'contain' : 'cover'
-        pushDebug('video.fit', { width: video.videoWidth, height: video.videoHeight, fit: videoFit.value })
+        pushDebug('video.fit', { 
+          event: type, 
+          width: video.videoWidth, 
+          height: video.videoHeight, 
+          fit: videoFit.value 
+        })
       }
     }
     if (type === 'error') {
@@ -355,6 +360,7 @@ onMounted(() => {
     'canplay',
     'canplaythrough',
     'playing',
+    'resize',
     'pause',
     'waiting',
     'stalled',
