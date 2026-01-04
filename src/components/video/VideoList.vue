@@ -46,6 +46,7 @@
             x5-playsinline
             x5-video-player-type="h5-page"
             :muted="slot.muted"
+            :style="{ objectFit: getSlotVideoFit(slot) }"
             @play="onPlay(slot)"
             @playing="onPlaying(slot)"
             @pause="onPause(slot)"
@@ -57,7 +58,10 @@
           <div
             v-if="slot.posterUrl && !slot.isPlaying"
             class="video-poster"
-            :style="{ backgroundImage: `url(${slot.posterUrl})` }"
+            :style="{ 
+              backgroundImage: `url(${slot.posterUrl})`,
+              backgroundSize: getSlotVideoFit(slot) === 'cover' ? 'cover' : 'contain'
+            }"
           ></div>
 
           <!-- 暂停图标 -->
@@ -531,6 +535,19 @@ function getSlotContentType(slot: SlotState): 'video' | 'image' | 'album' {
   const item = props.items[slot.videoIndex]
   // 🎯 如果 images 数组中包含视频，且类型是 album，则统一交由 AlbumSwiper 处理
   return getContentType(item)
+}
+
+// 🎯 获取视频填充模式
+function getSlotVideoFit(slot: SlotState): 'contain' | 'cover' {
+  if (slot.videoIndex == null) return 'contain'
+  const item = props.items[slot.videoIndex]
+  const { width, height } = item?.video || {}
+  // 如果是横屏视频 (宽 > 高)，使用 contain 以免剪掉太多内容，上下留黑边是正常的
+  // 如果是竖屏视频 (高 >= 宽)，使用 cover 以填充全屏，消除左右黑边
+  if (width && height && width > height) {
+    return 'contain'
+  }
+  return 'cover'
 }
 
 // 🎯 获取 slot 对应的图片数组
@@ -1717,7 +1734,6 @@ defineExpose({
     left: 0;
     width: 100%;
     height: 100%;
-    background-size: contain; // 🎯 改为 contain，保持原始比例
     background-position: center;
     background-repeat: no-repeat;
     background-color: #000;

@@ -6,6 +6,7 @@
       :poster="poster"
       :muted="muted"
       :controls="controls"
+      :style="{ objectFit: videoFit }"
       playsinline
       webkit-playsinline
       x5-playsinline
@@ -43,6 +44,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const videoRef = ref<HTMLVideoElement>()
+const videoFit = ref<'contain' | 'cover'>('contain')
 
 let hls: any = null
 let hlsReadyPromise: Promise<any> | null = null
@@ -314,6 +316,14 @@ onMounted(() => {
 
   const onEvent = (type: string) => () => {
     let extra: any = undefined
+    if (type === 'loadedmetadata') {
+      if (video.videoWidth && video.videoHeight) {
+        // 如果是横屏视频 (宽 > 高)，使用 contain 以免剪掉太多内容，上下留黑边是正常的
+        // 如果是竖屏视频 (高 >= 宽)，使用 cover 以填充全屏，消除左右黑边
+        videoFit.value = video.videoWidth > video.videoHeight ? 'contain' : 'cover'
+        pushDebug('video.fit', { width: video.videoWidth, height: video.videoHeight, fit: videoFit.value })
+      }
+    }
     if (type === 'error') {
       const err = (video as any).error
       extra = {

@@ -18,7 +18,7 @@
       :playsinline="true"
       :fullscreen="false"
       :autoplay="isPlay"
-      style="object-fit: contain; background: black"
+      :style="{ objectFit: videoFit, background: 'black' }"
     >
       <source
         v-for="(urlItem, index) in item.video.play_addr.url_list"
@@ -262,6 +262,17 @@ const durationStyle = $computed(() => {
 const isPlaying = $computed(() => {
   return state.status === SlideItemPlayStatus.Play
 })
+
+const videoFit = computed(() => {
+  const { width, height } = props.item.video || {}
+  // 如果是横屏视频 (宽 > 高)，使用 contain 以免剪掉太多内容，上下留黑边是正常的
+  // 如果是竖屏视频 (高 >= 宽)，使用 cover 以填充全屏，消除左右黑边
+  if (width && height && width > height) {
+    return 'contain'
+  }
+  return 'cover'
+})
+
 const positionName = $computed(() => {
   return 'item-' + Object.values(props.position).join('-')
 })
