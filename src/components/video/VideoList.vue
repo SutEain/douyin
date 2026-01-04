@@ -198,20 +198,20 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
   }
 
   // 根据内容类型计算完播时长
-  let completionTime: number
   if (contentType === 'image' || contentType === 'album') {
-    // 🎯 图片/相册：立即记录完播，不使用计时器
+    // 🎯 图片/相册：立即记录完播，且由于 RPC v2 支持，我们只需确保一次性标记
     if (!completedViews.has(item.aweme_id)) {
+      recordedViews.add(item.aweme_id)
       completedViews.add(item.aweme_id)
       recordVideoView(item.aweme_id, { progress: 100, completed: true })
       console.log(`[ViewHistory] 图片/相册立即完播: ${item.aweme_id.substring(0, 8)}`)
     }
     return // 退出，不设置计时器
-  } else {
-    // 视频：时长的 70%，最少 2 秒，最多 30 秒
-    const duration = item.video?.duration || 10
-    completionTime = Math.max(2000, Math.min(30000, duration * 0.7 * 1000))
   }
+
+  // 视频：时长的 70%，最少 2 秒，最多 30 秒
+  const duration = item.video?.duration || 10
+  const completionTime = Math.max(2000, Math.min(30000, duration * 0.7 * 1000))
 
   console.log(`[ViewHistory] 设置完播计时器: ${item.aweme_id.substring(0, 8)}, ${completionTime}ms`)
 

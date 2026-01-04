@@ -808,12 +808,10 @@ const roomDeepLink = computed(() => {
 })
 
 function copyRoomLink() {
-  // 🎯 严格要求：前 15 个字，不要链接，不要省略号，用于触发 Inline Mode
-  const anchorName = (roomInfo.value.anchor_info?.nickname || '主播').trim()
-  const queryText = anchorName.substring(0, 15)
-  const copyText = `@tg_douyin_bot ${queryText}`
-  _copy(copyText)
-  _notice('搜索指令已复制，在聊天框粘贴即可搜索')
+  const link = roomDeepLink.value
+  if (!link) return
+  _copy(link)
+  _notice('链接已复制，去分享给好友吧')
   showShareDrawer.value = false
 }
 

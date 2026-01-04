@@ -1286,71 +1286,24 @@ export async function handleRecordView(req: Request): Promise<Response> {
   }
 
   try {
-    // 先查询是否已存在记录
-    const { data: existing } = await supabaseAdmin
-      .from('watch_history')
-      .select('id, progress, completed')
-      .eq('user_id', user.id)
-      .eq('video_id', video_id)
-      .maybeSingle()
-
-    if (existing) {
-      // 已存在，更新记录（只更新更大的进度，完播状态只能从 false -> true）
-      const updateData: Record<string, any> = {
-        updated_at: new Date().toISOString()
-      }
-      // 只更新更大的进度值
-      if (progress !== undefined && (existing.progress === null || progress > existing.progress)) {
-        updateData.progress = Math.min(100, Math.max(0, progress))
-      }
-
-      let justCompleted = false
-      // 完播状态只能设为 true，不能撤销
-      if (completed === true && !existing.completed) {
-        updateData.completed = true
-        justCompleted = true
-      }
-
-      await supabaseAdmin.from('watch_history').update(updateData).eq('id', existing.id)
-
-      // 🎯 任务系统：如果是刚刚完成（从 false -> true），增加进度
-      if (justCompleted) {
-        await supabaseAdmin.rpc('increment_task_progress', {
+    // 🎯 使用原子 RPC v2 处理：
+    // 1. 自动处理并发冲突 (FOR UPDATE 锁定)
+    // 2. 自动增加视频 view_count (首次观看时)
+    // 3. 自动更新 watch_history
+    // 4. 自动触发任务进度 increment_task_progress (完播时)
+    const { data, error } = await supabaseAdmin.rpc('record_video_view_v2', {
           p_user_id: user.id,
-          p_task_code: 'total_views_reward'
-        })
-      }
-    } else {
-      // 不存在，插入新记录
-      const { error: insertError } = await supabaseAdmin.from('watch_history').insert({
-        user_id: user.id,
-        video_id: video_id,
-        progress: progress !== undefined ? Math.min(100, Math.max(0, progress)) : 0,
-        completed: completed === true
+      p_video_id: video_id,
+      p_progress: progress ?? 0,
+      p_completed: completed === true
       })
 
-      // 🎯 首次观看，view_count + 1，同时标记用户为有过观看记录
-      if (!insertError) {
-        const tasks = [
-          supabaseAdmin.rpc('increment_view_count', { p_video_id: video_id }),
-          supabaseAdmin.from('profiles').update({ has_watched: true }).eq('id', user.id)
-        ]
-
-        // 🎯 如果首屏就直接完播了，也要增加进度
-        if (completed === true) {
-          tasks.push(
-            supabaseAdmin.rpc('increment_task_progress', {
-              p_user_id: user.id,
-              p_task_code: 'total_views_reward'
-            })
-          )
-        }
-
-        await Promise.all(tasks)
-      }
+    if (error) {
+      console.error('[view] RPC record_video_view_v2 failed:', error)
+      return errorResponse('Failed to record view', 1, 500)
     }
 
-    return successResponse({ success: true })
+    return successResponse(data)
   } catch (error) {
     console.error('[view] Unexpected error:', error)
     return successResponse({ success: true }) // 即使失败也返回成功，不影响用户体验

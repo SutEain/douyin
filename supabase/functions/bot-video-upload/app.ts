@@ -91,7 +91,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             const effectiveCoverUrl = cover_url || video.cover_url
 
             if (effectivePlayUrl || effectiveCoverUrl) {
-              const targetFileId = file_id || video.tg_file_id
+            const targetFileId = file_id || video.tg_file_id
               console.log(
                 `[WorkerCallback] 尝试补全合集媒体项: videoId=${videoId}, fileId=${targetFileId}, playUrl=${effectivePlayUrl}`
               )
