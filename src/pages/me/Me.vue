@@ -156,12 +156,12 @@
                 :key="day"
                 class="day-item"
                 :class="{ 
-                  active: day <= (userinfo.checkin_streak % 7 || (userinfo.checkin_streak > 0 ? 7 : 0)), 
-                  today: !isCheckedInToday && day === ((userinfo.checkin_streak % 7) + 1)
+                  active: day <= currentCycleDay, 
+                  today: !isCheckedInToday && day === (currentCycleDay + 1)
                 }"
               >
                 <div class="coin">
-                  <Icon v-if="day <= (userinfo.checkin_streak % 7 || (userinfo.checkin_streak > 0 ? 7 : 0))" icon="mdi:check-circle" />
+                  <Icon v-if="day <= currentCycleDay" icon="mdi:check-circle" />
                   <span v-else>+{{ day === 7 ? 10 : 3 + day }}</span>
                 </div>
                 <div class="label">{{ day }}天</div>
@@ -331,9 +331,25 @@ const userinfo = computed(() => baseStore.userinfo || ({} as any))
 
 const isCheckedInToday = computed(() => {
   if (!userinfo.value.last_checkin_at) return false
-  const lastCheckin = dayjs(userinfo.value.last_checkin_at).utcOffset(8)
-  const now = dayjs().utcOffset(8)
-  return lastCheckin.isSame(now, 'day')
+  const lastCheckin = new Date(userinfo.value.last_checkin_at)
+  const now = new Date()
+
+  // 转换为北京时间日期字符串对比 (YYYY-MM-DD)
+  const toBeijingDate = (date: Date) => {
+    const bj = new Date(date.getTime() + 8 * 3600 * 1000)
+    return bj.getUTCFullYear() + '-' + (bj.getUTCMonth() + 1) + '-' + bj.getUTCDate()
+  }
+
+  return toBeijingDate(lastCheckin) === toBeijingDate(now)
+})
+
+// 计算当前 7 天周期内点亮到第几天
+const currentCycleDay = computed(() => {
+  const streak = userinfo.value.checkin_streak || 0
+  if (isCheckedInToday.value) {
+    return streak % 7 || 7
+  }
+  return streak % 7
 })
 
 const headerBackgroundStyle = computed(() => {
@@ -384,32 +400,20 @@ function copyNumericId() {
 
 // 🎯 点击签到
 async function handleCheckInClick() {
-  if (baseStore.loading) return
+  if (baseStore.loading || isCheckedInToday.value) return
   baseStore.loading = true
   try {
     const res = await checkIn()
     if (res.success) {
       const { reward, streak, next_reward } = res.data
-      window.Telegram.WebApp.showPopup({
-        title: '签到成功',
-        message: `获得 ${reward} 抖币\n您已连续签到 ${streak} 天，下次签到可获得 ${next_reward} 抖币。`,
-        buttons: [{ type: 'ok' }]
-      })
-      // 刷新用户信息
+      _no(`✅ 签到成功！获得 ${reward} 抖币\n已连续签到 ${streak} 天，明天可领 ${next_reward} 抖币`)
+      // 刷新用户信息以立即点亮
       await baseStore.init()
     } else {
-      window.Telegram.WebApp.showPopup({
-        title: '签到信息',
-        message: res.message,
-        buttons: [{ type: 'ok' }]
-      })
+      _no(res.message)
     }
   } catch (e: any) {
-    window.Telegram.WebApp.showPopup({
-      title: '错误',
-      message: e.message || '签到失败，请稍后重试',
-      buttons: [{ type: 'ok' }]
-    })
+    _no(e.message || '签到失败，请稍后重试')
   } finally {
     baseStore.loading = false
   }

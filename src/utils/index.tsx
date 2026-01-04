@@ -365,8 +365,8 @@ export function _notice(val, duration = 1000) {
   }, duration)
 }
 
-export function _no() {
-  _notice('未实现')
+export function _no(val = '未实现') {
+  _notice(val)
 }
 
 /**

@@ -27,6 +27,8 @@ type SupabaseProfile = {
   show_tg_username?: boolean | null
   balance_coins?: number | null
   is_admin?: boolean | null
+  checkin_streak?: number | null
+  last_checkin_at?: string | null
 }
 
 function normalizeLang(lang?: string | null) {
@@ -89,6 +91,8 @@ function mapProfileToUserinfo(profile: SupabaseProfile, current: any) {
     show_collect: profile.show_collect !== false,
     show_like: profile.show_like !== false,
     show_tg_username: profile.show_tg_username === true,
+    checkin_streak: profile.checkin_streak ?? current.checkin_streak ?? 0,
+    last_checkin_at: profile.last_checkin_at ?? current.last_checkin_at ?? null,
     avatar_168x168: {
       url_list: [avatar]
     },
@@ -143,6 +147,8 @@ export const useBaseStore = defineStore('base', {
         show_collect: true,
         show_like: true,
         show_tg_username: false,
+        checkin_streak: 0,
+        last_checkin_at: null,
         school: {
           name: '',
           department: null,

@@ -385,7 +385,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         }
         // 文本消息
         else if (message.text) {
-          await handleText(chatId, message.text, message.message_id, message.from, message.chat)
+          await handleText(chatId, message.text, message.message_id)
         }
       }
       // 处理回调查询
