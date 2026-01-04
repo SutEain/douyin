@@ -111,12 +111,19 @@ const publishDate = computed(() => {
         @touchstart.stop="state.expanded && $event.stopPropagation()"
         @touchmove.stop="state.expanded && $event.stopPropagation()"
         @touchend.stop="state.expanded && $event.stopPropagation()"
+        @mousedown.stop="state.expanded && $event.stopPropagation()"
+        @mousemove.stop="state.expanded && $event.stopPropagation()"
+        @mouseup.stop="state.expanded && $event.stopPropagation()"
+        @wheel.stop="state.expanded && $event.stopPropagation()"
       >
         <div
           class="description"
           :class="{ collapsed: !state.expanded && showToggle }"
           @touchstart.stop="state.expanded && $event.stopPropagation()"
           @touchmove.stop="state.expanded && $event.stopPropagation()"
+          @mousedown.stop="state.expanded && $event.stopPropagation()"
+          @mousemove.stop="state.expanded && $event.stopPropagation()"
+          @wheel.stop="state.expanded && $event.stopPropagation()"
         >
           {{ fullDescription }}
         </div>
