@@ -109,46 +109,29 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
 
   // 🎯 计算需要获取的数量
   const targetCount = startVideo ? pageSize - 1 : pageSize
-  const recommendCount = Math.ceil(targetCount * 0.7)
-  const normalCount = targetCount - recommendCount
 
   let rows: any[] = []
 
-  if (user?.id) {
-    // 已登录用户：使用 get_feed_mix（严格排除观看历史）
-    const { data, error } = await supabaseAdmin.rpc('get_feed_mix', {
-      p_user_id: user.id,
-      p_recommend_count: recommendCount,
-      p_normal_count: normalCount,
-      p_history_limit: 500 // 增加历史限制
-    })
+  // 使用优化的 RPC 获取混合流（排除历史，随机推荐）
+  const { data, error } = await supabaseAdmin.rpc('get_optimized_video_feed', {
+    p_user_id: user?.id || null,
+    p_type: 'recommend',
+    p_limit: targetCount
+  })
 
-    if (error) {
-      console.error('[Feed] get_feed_mix 失败:', error)
-      const { data: fallbackData } = await supabaseAdmin
-        .from('videos')
-        .select('*')
-        .eq('status', 'published')
-        .eq('is_adult', false)
-        // .eq('is_sea', false) // 🎯 允许东南亚内容
-        .order('created_at', { ascending: false })
-        .limit(pageSize)
-      rows = fallbackData || []
-    } else {
-      // 🎯 强制过滤：仅成人内容不进入推荐 feed
-      rows = (data || []).filter((r: any) => !r.is_adult)
-    }
-  } else {
-    // 未登录用户：按时间倒序
+  if (error) {
+    console.error('[Feed] get_optimized_video_feed 失败:', error)
+    // 降级：按时间倒序
     const { from, to } = parsePagination(url)
-    const { data } = await supabaseAdmin
+    const { data: fallbackData } = await supabaseAdmin
       .from('videos')
       .select('*')
       .eq('status', 'published')
       .eq('is_adult', false)
-      // .eq('is_sea', false) // 🎯 允许东南亚内容
       .order('created_at', { ascending: false })
       .range(from, to)
+    rows = fallbackData || []
+  } else {
     rows = data || []
   }
 
@@ -354,71 +337,18 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  // 未登录用户：不做次数限制，只按发布时间返回成人内容
-  if (!user?.id) {
-    const { data, error, count } = await supabaseAdmin
-      .from('videos')
-      .select('*', { count: 'exact' })
-      .eq('status', 'published')
-      .eq('is_adult', true)
-      .order('created_at', { ascending: false })
-      .range(from, to)
-
-    if (error) {
-      console.error('[AdultFeed] 查询视频失败:', error)
-      return errorResponse('Failed to load adult feed', 1, 500)
-    }
-
-    await attachUserFlags(data ?? [], null)
-
-    const profileCache = new Map<string, any>()
-    const list: any[] = []
-    for (const row of data ?? []) {
-      const authorProfile = await getVideoAuthorProfile(row, profileCache)
-      const mapped = await mapVideoRow(row, authorProfile)
-      if (mapped) {
-        applyRowFlags(mapped, row)
-        list.push(mapped)
-      }
-    }
-
-    return successResponse({
-      list,
-      total: count ?? 0,
-      pageNo,
-      pageSize,
-      hasMore: list.length >= pageSize
-    })
-  }
-
-  // 已登录用户：不再检查成人观看配额，全部开放
-  // const quota = await getAdultQuota(user.id)
-  /*
-  if (!quota.unlimited && quota.remaining <= 0) {
-    return successResponse({
-      list: [],
-      total: 0,
-      pageNo,
-      pageSize,
-      hasMore: false,
-      reason: 'quota_exceeded',
-      quota
-    })
-  }
-  */
-
-  // 使用 get_adult_feed，排除 watch_history 里的视频
+  // 使用优化的 RPC 获取成人流（排除历史，时间倒序）
   let rows: any[] = []
   let total: number | null = null
 
-  const { data, error } = await supabaseAdmin.rpc('get_adult_feed', {
-    p_user_id: user.id,
-    p_page_no: pageNo,
-    p_page_size: pageSize
+  const { data, error } = await supabaseAdmin.rpc('get_optimized_video_feed', {
+    p_user_id: user?.id || null,
+    p_type: 'adult',
+    p_limit: pageSize
   })
 
   if (error) {
-    console.error('[AdultFeed] get_adult_feed 失败，降级为简单查询:', error)
+    console.error('[AdultFeed] get_optimized_video_feed 失败，降级为简单查询:', error)
     const fallback = await supabaseAdmin
       .from('videos')
       .select('*', { count: 'exact' })
@@ -438,7 +368,7 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
     rows = data || []
   }
 
-  await attachUserFlags(rows ?? [], user.id)
+  await attachUserFlags(rows ?? [], user?.id || null)
 
   const profileCache = new Map<string, any>()
   const list: any[] = []
@@ -453,7 +383,7 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
 
   return successResponse({
     list,
-    total: total ?? list.length,
+    total: total ?? (list.length >= pageSize ? (pageNo + 2) * pageSize : (pageNo + 1) * list.length),
     pageNo,
     pageSize,
     hasMore: list.length >= pageSize

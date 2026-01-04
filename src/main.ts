@@ -19,23 +19,6 @@ declare global {
 }
 
 if (typeof window !== 'undefined') {
-  // ✅ 禁用所有日志输出，但保留原始引用在 __rawConsole__ 中供紧急排查
-  if (window.console) {
-    const rawConsole = window.console
-    window.__rawConsole__ = rawConsole
-
-    const noop = () => {}
-    window.console.log = noop
-    window.console.info = noop
-    window.console.warn = noop
-    window.console.error = noop
-    window.console.debug = noop
-    window.console.table = noop
-    window.console.group = noop
-    window.console.groupEnd = noop
-    window.console.groupCollapsed = noop
-  }
-
   window.TelegramGameProxy = window.TelegramGameProxy || {}
   if (typeof window.TelegramGameProxy.receiveEvent !== 'function') {
     window.TelegramGameProxy.receiveEvent = () => {}
@@ -161,3 +144,23 @@ bus.on(EVENT_KEY.REMOVE_MUTED, () => {
 
 // ✅ Telegram WebApp 初始化已经在 index.html 中提前处理
 // 避免重复调用导致问题
+
+// 🚫 全局禁用 Console 输出 (生产环境或应用户要求)
+if (typeof window !== 'undefined') {
+  const methods: (keyof Console)[] = [
+    'log',
+    'info',
+    'warn',
+    'error',
+    'debug',
+    'table',
+    'group',
+    'groupEnd',
+    'groupCollapsed'
+  ]
+  window.__rawConsole__ = { ...window.console }
+  methods.forEach((method) => {
+    // @ts-ignore
+    window.console[method] = () => {}
+  })
+}
