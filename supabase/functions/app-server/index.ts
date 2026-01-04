@@ -35,7 +35,8 @@ import {
   handleAutoInit,
   handleRequestUpdate,
   handleVisitUserProfile,
-  handleGetMyVisitors
+  handleGetMyVisitors,
+  handleCheckIn
 } from './routes/user.ts'
 import {
   handleSearchVideos,
@@ -147,6 +148,9 @@ serve(async (req) => {
     }
     if (route === '/user/follow' && method === 'POST') {
       return handleFollowUser(req)
+    }
+    if (route === '/user/checkin' && method === 'POST') {
+      return handleCheckIn(req)
     }
     if (route === '/user/request-update' && method === 'POST') {
       return handleRequestUpdate(req)

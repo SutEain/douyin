@@ -104,6 +104,51 @@ export async function handleForward(chatId: number, message: any) {
 export async function handleText(chatId: number, text: string, userMessageId: number) {
   const userState = await getUserState(chatId)
 
+  // 🎯 处理“签到”文本消息
+  if (text.trim() === '签到') {
+    try {
+      // 1. 获取用户信息
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('tg_user_id', chatId)
+        .single()
+
+      if (!profile) {
+        await sendMessage(chatId, '❌ 账号尚未同步，请先进入应用后再试')
+        return
+      }
+
+      // 2. 执行签到 RPC
+      const { data: res, error } = await supabase.rpc('execute_user_checkin', {
+        p_user_id: profile.id
+      })
+
+      if (error) {
+        console.error('[CheckIn] RPC error:', error)
+        await sendMessage(chatId, `❌ 签到失败: ${error.message}`)
+        return
+      }
+
+      if (res.success) {
+        await sendMessage(
+          chatId,
+          `✅ <b>签到成功！获得 ${res.reward} 抖币</b>\n\n` +
+            `📅 您已连续签到 ${res.streak} 天\n` +
+            `🎁 明日签到可获得 ${res.next_reward} 抖币\n\n` +
+            `🚀 继续保持哦！`,
+          { parse_mode: 'HTML' }
+        )
+      } else {
+        await sendMessage(chatId, `ℹ️ ${res.message}`)
+      }
+    } catch (e) {
+      console.error('[CheckIn] Error:', e)
+      await sendMessage(chatId, '❌ 系统繁忙，请稍后重试')
+    }
+    return
+  }
+
   // ✅ 已发布搜索：不依赖 draft_video_id
   if (userState.state === 'waiting_published_search') {
     await deleteTelegramMessage(chatId, userMessageId)

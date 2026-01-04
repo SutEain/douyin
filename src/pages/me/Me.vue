@@ -135,6 +135,43 @@
             </div>
           </div>
         </div>
+
+        <!-- 🎯 签到日历区域 -->
+        <div class="checkin-section">
+          <div class="checkin-card" @click="handleCheckInClick">
+            <div class="title-row">
+              <div class="left">
+                <Icon icon="lucide:calendar-check" class="icon" />
+                <span class="text">每日签到</span>
+              </div>
+              <div class="right">
+                <span v-if="isCheckedInToday" class="status checked">今日已签到</span>
+                <span v-else class="status">点击签到领抖币</span>
+                <Icon icon="mdi:chevron-right" />
+              </div>
+            </div>
+            <div class="days-row">
+              <div
+                v-for="day in 7"
+                :key="day"
+                class="day-item"
+                :class="{ 
+                  active: day <= (userinfo.checkin_streak % 7 || (userinfo.checkin_streak > 0 ? 7 : 0)), 
+                  today: !isCheckedInToday && day === ((userinfo.checkin_streak % 7) + 1)
+                }"
+              >
+                <div class="coin">
+                  <Icon v-if="day <= (userinfo.checkin_streak % 7 || (userinfo.checkin_streak > 0 ? 7 : 0))" icon="mdi:check-circle" />
+                  <span v-else>+{{ day === 7 ? 10 : 3 + day }}</span>
+                </div>
+                <div class="label">{{ day }}天</div>
+              </div>
+            </div>
+            <div class="streak-text" v-if="userinfo.checkin_streak > 0">
+              已连续签到 <span>{{ userinfo.checkin_streak }}</span> 天
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Tab 指示器 -->
@@ -255,6 +292,7 @@ import Loading from '@/components/Loading.vue'
 import NoMore from '@/components/NoMore.vue'
 import { _checkImgUrl, _formatNumber, _no, _copy } from '@/utils'
 import { likeVideo, myVideo, collectedVideo } from '@/api/videos'
+import { checkIn } from '@/api/user'
 import { useBaseStore } from '@/store/pinia'
 import { useNav } from '@/utils/hooks/useNav'
 
@@ -290,6 +328,13 @@ const state = reactive({
 
 // ========== Computed ==========
 const userinfo = computed(() => baseStore.userinfo || ({} as any))
+
+const isCheckedInToday = computed(() => {
+  if (!userinfo.value.last_checkin_at) return false
+  const lastCheckin = dayjs(userinfo.value.last_checkin_at).utcOffset(8)
+  const now = dayjs().utcOffset(8)
+  return lastCheckin.isSame(now, 'day')
+})
 
 const headerBackgroundStyle = computed(() => {
   const userCoverUrl = userinfo.value.cover_url?.[0]?.url_list?.[0]
@@ -330,10 +375,43 @@ async function handleRetryLogin() {
   }
 }
 
-// 🎯 复制数字ID
+// 🎯 点击复制数字ID
 function copyNumericId() {
   if (userinfo.value.numeric_id) {
     _copy(String(userinfo.value.numeric_id))
+  }
+}
+
+// 🎯 点击签到
+async function handleCheckInClick() {
+  if (baseStore.loading) return
+  baseStore.loading = true
+  try {
+    const res = await checkIn()
+    if (res.success) {
+      const { reward, streak, next_reward } = res.data
+      window.Telegram.WebApp.showPopup({
+        title: '签到成功',
+        message: `获得 ${reward} 抖币\n您已连续签到 ${streak} 天，下次签到可获得 ${next_reward} 抖币。`,
+        buttons: [{ type: 'ok' }]
+      })
+      // 刷新用户信息
+      await baseStore.init()
+    } else {
+      window.Telegram.WebApp.showPopup({
+        title: '签到信息',
+        message: res.message,
+        buttons: [{ type: 'ok' }]
+      })
+    }
+  } catch (e: any) {
+    window.Telegram.WebApp.showPopup({
+      title: '错误',
+      message: e.message || '签到失败，请稍后重试',
+      buttons: [{ type: 'ok' }]
+    })
+  } finally {
+    baseStore.loading = false
   }
 }
 
@@ -753,6 +831,112 @@ onMounted(() => {
       }
     }
 
+    // 🎯 签到区域样式
+    .checkin-section {
+      padding: 0 15px 15px;
+
+      .checkin-card {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+
+        .title-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+
+          .left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #fff;
+            font-weight: bold;
+
+            .icon {
+              color: #face15;
+              font-size: 18px;
+            }
+          }
+
+          .right {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 13px;
+
+            .status.checked {
+              color: #face15;
+            }
+          }
+        }
+
+        .days-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 12px;
+
+          .day-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+
+            .coin {
+              width: 36px;
+              height: 36px;
+              background: rgba(255, 255, 255, 0.1);
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: #face15;
+              font-size: 12px;
+              font-weight: bold;
+              transition: all 0.3s;
+            }
+
+            .label {
+              font-size: 11px;
+              color: rgba(255, 255, 255, 0.4);
+            }
+
+            &.active {
+              .coin {
+                background: #face15;
+                color: #000;
+                box-shadow: 0 0 10px rgba(250, 206, 21, 0.3);
+              }
+              .label {
+                color: #face15;
+              }
+            }
+
+            &.today:not(.active) {
+              .coin {
+                border: 1px solid #face15;
+                animation: pulse 2s infinite;
+              }
+            }
+          }
+        }
+
+        .streak-text {
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.4);
+          text-align: center;
+
+          span {
+            color: #face15;
+            font-weight: bold;
+          }
+        }
+      }
+    }
+
     // Tab 区域
     .tab-section {
       position: sticky;
@@ -931,6 +1115,21 @@ onMounted(() => {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(250, 206, 21, 0.4);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(250, 206, 21, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(250, 206, 21, 0);
   }
 }
 </style>

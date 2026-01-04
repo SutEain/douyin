@@ -31,6 +31,13 @@ export function recommendedShop(params?: any, data?: any) {
   return request({ url: '/shop/recommended', method: 'get', params, data })
 }
 
+/**
+ * 🎯 用户签到
+ */
+export async function checkIn() {
+  return requestAppServer('/user/checkin', 'POST')
+}
+
 // ===== app-server 调用（与 videos.ts 保持一致的最小实现）=====
 function getAppServerBase() {
   const explicit = import.meta.env.VITE_APP_SERVER_URL
@@ -49,6 +56,39 @@ async function resolveAccessToken(required: boolean) {
   const token = session?.access_token ?? null
   if (!token && required) throw new Error('请先在 Telegram 中登录')
   return token
+}
+
+async function requestAppServer(path: string, method: string = 'GET', body?: any) {
+  const url = `${getAppServerBase()}${path}`
+  const accessToken = await resolveAccessToken(true)
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${accessToken}`
+  }
+
+  // Telegram initData
+  try {
+    // @ts-ignore
+    const tgWebApp = window.Telegram?.WebApp
+    if (tgWebApp && tgWebApp.initData) {
+      headers['X-Telegram-Init-Data'] = tgWebApp.initData
+    }
+  } catch {
+    // ignore
+  }
+
+  const resp = await fetch(url, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined
+  })
+
+  const payload = await resp.json()
+  if (resp.ok && payload?.code === 0) {
+    return { success: true, data: payload.data }
+  }
+  return { success: false, message: payload?.msg || '操作失败' }
 }
 
 async function requestAppServerList(path: string, params?: any) {

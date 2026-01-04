@@ -463,8 +463,34 @@ export async function handleGetUserProfile(req: Request): Promise<Response> {
     aweme_count: awemeCount || 0,
 
     // 关系状态
-    follow_status: followStatus
+    follow_status: followStatus,
+    
+    // 🎯 签到信息
+    checkin_streak: profile.checkin_streak || 0,
+    last_checkin_at: profile.last_checkin_at || null
   })
+}
+
+/**
+ * 🎯 用户签到
+ */
+export async function handleCheckIn(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+  
+  const { data, error } = await supabaseAdmin.rpc('execute_user_checkin', {
+    p_user_id: user.id
+  })
+
+  if (error) {
+    console.error('[CheckIn] RPC error:', error)
+    return errorResponse(error.message, 1, 500)
+  }
+
+  if (data.success) {
+    return successResponse(data)
+  } else {
+    return errorResponse(data.message, 1, 400)
+  }
 }
 
 // 🎯 自动初始化用户（用于深链接等场景）
