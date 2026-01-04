@@ -19,10 +19,21 @@ declare global {
 }
 
 if (typeof window !== 'undefined') {
-  // ✅ 强制开启所有日志
-  if (window.console && (window.console as any).log) {
+  // ✅ 禁用所有日志输出，但保留原始引用在 __rawConsole__ 中供紧急排查
+  if (window.console) {
     const rawConsole = window.console
     window.__rawConsole__ = rawConsole
+
+    const noop = () => {}
+    window.console.log = noop
+    window.console.info = noop
+    window.console.warn = noop
+    window.console.error = noop
+    window.console.debug = noop
+    window.console.table = noop
+    window.console.group = noop
+    window.console.groupEnd = noop
+    window.console.groupCollapsed = noop
   }
 
   window.TelegramGameProxy = window.TelegramGameProxy || {}
