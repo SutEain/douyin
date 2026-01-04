@@ -23,7 +23,7 @@ const typeColors: Record<string, string> = {
 
 const typeLabels: Record<string, string> = {
   recharge: '充值',
-  reward: '奖励',
+  reward: '签到奖励',
   gift_out: '打赏支出',
   gift_in: '打赏收入',
   withdraw: '提现',
@@ -69,6 +69,15 @@ export const CoinTransactionList = () => {
 
       if (params.type) {
         filters.push({ field: 'type', operator: 'eq', value: params.type })
+      }
+
+      // 🎯 搜索备注 (description)
+      if (params.description_q) {
+        filters.push({
+          field: 'description',
+          operator: 'contains',
+          value: params.description_q.trim()
+        })
       }
 
       // 🎯 关联 ID 搜索
@@ -117,6 +126,9 @@ export const CoinTransactionList = () => {
               </Select.Option>
             ))}
           </Select>
+        </Form.Item>
+        <Form.Item name="description_q" label="备注/关键词">
+          <Input placeholder="搜索备注内容" style={{ width: 160 }} allowClear />
         </Form.Item>
         <Form.Item name="date_range" label="日期时间范围">
           <RangePicker
