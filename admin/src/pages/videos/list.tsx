@@ -357,26 +357,22 @@ export const VideoList = () => {
     })
   }
 
-  // 批量通过审核
-  const handleBatchApprove = () => {
+  // 批量执行操作
+  const handleBatchAction = (action: 'approve' | 'set_adult' | 'unset_adult' | 'set_sea' | 'unset_sea', label: string) => {
     if (selectedRowKeys.length === 0) {
-      message.warning('请先选择要审核的视频')
+      message.warning('请先选择要操作的视频')
       return
     }
 
     Modal.confirm({
-      title: '批量通过审核',
-      content: `确定通过选中的 ${selectedRowKeys.length} 个视频的审核吗？`,
+      title: `批量${label}`,
+      content: `确定对选中的 ${selectedRowKeys.length} 个视频执行“${label}”操作吗？`,
       onOk: async () => {
         setBatchLoading(true)
         try {
-          // 获取当前登录用户的 token
-          const {
-            data: { session }
-          } = await supabaseClient.auth.getSession()
+          const { data: { session } } = await supabaseClient.auth.getSession()
           const token = session?.access_token
 
-          // 🎯 调用批量审核接口
           const response = await fetch(
             `${import.meta.env.VITE_APP_SERVER_URL}/video/batch-review`,
             {
@@ -387,7 +383,7 @@ export const VideoList = () => {
               },
               body: JSON.stringify({
                 video_ids: selectedRowKeys,
-                action: 'approve'
+                action: action
               })
             }
           )
@@ -395,22 +391,24 @@ export const VideoList = () => {
           const result = await response.json()
 
           if (result.code === 0) {
-            message.success(`成功通过 ${selectedRowKeys.length} 个视频的审核`)
+            message.success(`成功执行批量${label}`)
             setSelectedRowKeys([])
-            // 刷新列表
-            window.location.reload()
+            invalidate({ resource: 'admin_videos_list', invalidates: ['list'] })
           } else {
-            message.error(result.msg || '批量审核失败')
+            message.error(result.msg || '批量操作失败')
           }
         } catch (error) {
-          console.error('Batch approve error:', error)
-          message.error('批量审核失败，请重试')
+          console.error(`Batch ${action} error:`, error)
+          message.error('批量操作失败，请重试')
         } finally {
           setBatchLoading(false)
         }
       }
     })
   }
+
+  // 批量通过审核 (保留原函数名，内部调用通用函数)
+  const handleBatchApprove = () => handleBatchAction('approve', '通过审核')
 
   // 行选择配置
   const rowSelection = {
@@ -729,12 +727,45 @@ export const VideoList = () => {
         {/* 批量操作按钮 */}
         {selectedRowKeys.length > 0 && (
           <div style={{ marginBottom: 16 }}>
-            <Button type="primary" onClick={handleBatchApprove} loading={batchLoading}>
-              批量通过审核 ({selectedRowKeys.length})
-            </Button>
-            <Button style={{ marginLeft: 8 }} onClick={() => setSelectedRowKeys([])}>
-              取消选择
-            </Button>
+            <Space size="middle">
+              <Button type="primary" onClick={handleBatchApprove} loading={batchLoading}>
+                批量通过审核 ({selectedRowKeys.length})
+              </Button>
+              <Button.Group>
+                <Button 
+                  danger 
+                  onClick={() => handleBatchAction('set_adult', '设为成人')} 
+                  loading={batchLoading}
+                >
+                  批量成人
+                </Button>
+                <Button 
+                  onClick={() => handleBatchAction('unset_adult', '取消成人')} 
+                  loading={batchLoading}
+                >
+                  取消
+                </Button>
+              </Button.Group>
+              <Button.Group>
+                <Button 
+                  type="primary" 
+                  style={{ background: '#722ed1', borderColor: '#722ed1' }}
+                  onClick={() => handleBatchAction('set_sea', '设为东南亚')} 
+                  loading={batchLoading}
+                >
+                  批量东南亚
+                </Button>
+                <Button 
+                  onClick={() => handleBatchAction('unset_sea', '取消东南亚')} 
+                  loading={batchLoading}
+                >
+                  取消
+                </Button>
+              </Button.Group>
+              <Button onClick={() => setSelectedRowKeys([])}>
+                取消选择
+              </Button>
+            </Space>
           </div>
         )}
 

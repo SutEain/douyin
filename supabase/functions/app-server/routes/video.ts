@@ -1075,8 +1075,8 @@ export async function handleBatchReview(req: Request): Promise<Response> {
     return errorResponse('video_ids is required and must be a non-empty array', 1, 400)
   }
 
-  if (!action || !['approve', 'reject'].includes(action)) {
-    return errorResponse('action must be either "approve" or "reject"', 1, 400)
+  if (!action || !['approve', 'reject', 'set_adult', 'unset_adult', 'set_sea', 'unset_sea'].includes(action)) {
+    return errorResponse('action must be one of: approve, reject, set_adult, unset_adult, set_sea, unset_sea', 1, 400)
   }
 
   if (action === 'reject' && !reject_reason) {
@@ -1124,7 +1124,7 @@ export async function handleBatchReview(req: Request): Promise<Response> {
         success: true,
         updated: video_ids.length
       })
-    } else {
+    } else if (action === 'reject') {
       // 批量拒绝
       const { error } = await supabaseAdmin
         .from('videos')
@@ -1140,6 +1140,29 @@ export async function handleBatchReview(req: Request): Promise<Response> {
       }
 
       console.log(`[batch-review] Successfully rejected ${video_ids.length} videos`)
+      return successResponse({
+        success: true,
+        updated: video_ids.length
+      })
+    } else {
+      // 批量设置标记：set_adult, unset_adult, set_sea, unset_sea
+      const updatePayload: Record<string, any> = {}
+      if (action === 'set_adult') updatePayload.is_adult = true
+      if (action === 'unset_adult') updatePayload.is_adult = false
+      if (action === 'set_sea') updatePayload.is_sea = true
+      if (action === 'unset_sea') updatePayload.is_sea = false
+
+      const { error } = await supabaseAdmin
+        .from('videos')
+        .update(updatePayload)
+        .in('id', video_ids)
+
+      if (error) {
+        console.error(`[batch-review] Batch ${action} error:`, error)
+        return errorResponse(`Failed to perform batch action ${action}`, 1, 500)
+      }
+
+      console.log(`[batch-review] Successfully performed ${action} on ${video_ids.length} videos`)
       return successResponse({
         success: true,
         updated: video_ids.length
