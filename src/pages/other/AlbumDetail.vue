@@ -884,18 +884,18 @@ function shareAlbumDirect() {
   const id = String(currentId.value || '')
   if (!id) return
 
-  // 🎯 使用 switchInlineQuery 以支持 HTML 文字超链接
-  const query = `video_${id}`
+  const title = props.detail?.note_card?.display_title || '精彩内容'
+  const link = albumDeepLink.value
+  const text = `📸 ${title}\n\n来自 #TG抖音`
+
+  // 🎯 改回标准分享协议，避免关闭 Mini App
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
 
   // @ts-ignore
   if (window.Telegram?.WebApp) {
     // @ts-ignore
-    window.Telegram.WebApp.switchInlineQuery(query, ['users', 'groups', 'channels'])
+    window.Telegram.WebApp.openTelegramLink(shareUrl)
   } else {
-    const link = albumDeepLink.value
-    const title = props.detail?.note_card?.display_title || '精彩内容'
-    const text = `📸 ${title}\n\n来自 #TG抖音`
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
     window.open(shareUrl, '_blank')
   }
   showShareDrawer.value = false

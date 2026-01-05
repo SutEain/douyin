@@ -243,25 +243,23 @@ async function copyVideoLink() {
   showMoreDrawer.value = false
 }
 
-// 2. Telegram 直接分享 (切换到 Inline 模式以支持富文本超链接)
+// 2. Telegram 直接分享
 function shareToTelegramDirect() {
   const rid = props.item.aweme_id || props.item.id
   if (!rid) return
 
-  // 🎯 构造搜索指令，触发机器人的 Inline Query
-  const query = `video_${rid}`
+  const desc = props.item?.desc || '精彩视频'
+  const link = videoDeepLink.value
+  const text = `🎬 ${desc}\n\n来自 #TG抖音`
+
+  // 🎯 改回标准分享协议，避免关闭 Mini App
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
 
   // @ts-ignore
   if (window.Telegram?.WebApp) {
-    // 🎯 switchInlineQuery 会让用户选择聊天，然后自动输入指令，弹出带超链接的卡片
     // @ts-ignore
-    window.Telegram.WebApp.switchInlineQuery(query, ['users', 'groups', 'channels'])
+    window.Telegram.WebApp.openTelegramLink(shareUrl)
   } else {
-    // Web 端降级方案：由于 Web 环境无法触发 switchInlineQuery，使用普通链接
-    const link = videoDeepLink.value
-    const desc = props.item?.desc || '精彩视频'
-    const text = `🎬 ${desc}\n\n来自 #TG抖音`
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
     window.open(shareUrl, '_blank')
   }
   showMoreDrawer.value = false

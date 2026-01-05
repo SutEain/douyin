@@ -58,7 +58,7 @@
           <div
             v-if="slot.posterUrl && !slot.isPlaying"
             class="video-poster"
-            :style="{ 
+            :style="{
               backgroundImage: `url(${slot.posterUrl})`,
               backgroundSize: getSlotVideoFit(slot) === 'cover' ? 'cover' : 'contain'
             }"
@@ -603,6 +603,18 @@ provide(
 provide('playbackRate', playbackRate)
 provide('setPlaybackRate', setPlaybackRate)
 
+// 🎯 监听播放权限变化：当失去播放权限时（如切换 Tab），立即暂停
+watch(
+  () => props.autoplay,
+  (newVal) => {
+    if (!newVal) {
+      console.log(`${DEBUG_PREFIX} autoplay changed to false, pausing current video.`)
+      const slot = getSlotByRole('current')
+      if (slot) stopVideo(slot)
+    }
+  }
+)
+
 // 🎯 切换到新视频时，重置倍速为 1.0（仅对当前视频生效）
 watch(
   () => currentItem.value?.aweme_id,
@@ -759,6 +771,14 @@ function playCurrent() {
   const slot = getSlotByRole('current')
   if (!slot) {
     console.warn(`${DEBUG_PREFIX} playCurrent:no-slot`)
+    return
+  }
+
+  // 🎯 核心修复：如果 autoplay 为 false，严禁执行 play()
+  // 这通常发生在页面已切换到其他 Tab（如个人中心），或者数据在后台加载完成后
+  if (!props.autoplay) {
+    console.log(`${DEBUG_PREFIX} playCurrent: autoplay is false, skip play.`, { page: props.page })
+    isPlaying.value = false
     return
   }
 
