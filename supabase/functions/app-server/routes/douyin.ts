@@ -439,8 +439,9 @@ export async function handleAdminDouyinPublish(req: Request): Promise<Response> 
     }
     const authorTgUserId = (authorProfile as any)?.tg_user_id ?? null
 
-    // ✅ 直接发布：status=published + review_status=approved
-    const insertRow: any = {
+    // ✅ 显式构建插入对象（安全白名单字段）
+    // 严禁透传 body，防止黑客通过 body 注入 is_admin 或其他敏感权限字段
+    const insertRow = {
       author_id: SYSTEM_AUTHOR_ID,
       tg_user_id: authorTgUserId,
       title: '抖音精选',
@@ -450,7 +451,7 @@ export async function handleAdminDouyinPublish(req: Request): Promise<Response> 
       duration: duration,
       width,
       height,
-      tg_file_id: sourceUrl, // ✅ 你要求“源链接存到 tg_file_id”
+      tg_file_id: sourceUrl,
       storage_type: 'douyin',
       content_type: 'video',
       status: 'published',

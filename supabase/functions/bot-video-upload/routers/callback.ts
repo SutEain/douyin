@@ -53,7 +53,8 @@ export async function handleCallback(
   chatId: number,
   messageId: number,
   data: string,
-  callbackQueryId: string
+  callbackQueryId: string,
+  tgUserId: number
 ) {
   console.log('[handleCallback] 开始处理回调')
   console.log('[handleCallback] chatId:', chatId, 'messageId:', messageId, 'data:', data)
@@ -248,6 +249,29 @@ export async function handleCallback(
       const amount = parseInt(data.split(':')[1])
       await answerCallbackQuery(callbackQueryId, '🚀 正在为您准备订单...')
       await handleCreateRechargeOrder(chatId, messageId, amount)
+      return
+    }
+
+    // 🎯 红包领取处理
+    if (data.startsWith('hb_claim_')) {
+      const packetId = data.replace('hb_claim_', '')
+      const { handleClaimRedPacket } = await import('../features/redPacket.ts')
+      await handleClaimRedPacket(chatId, messageId, callbackQueryId, packetId, tgUserId)
+      return
+    }
+
+    // 🎯 骰子游戏处理
+    if (data.startsWith('dice_join_')) {
+      const roomId = data.replace('dice_join_', '')
+      const { handleJoinDiceGame } = await import('../features/diceGame.ts')
+      await handleJoinDiceGame(chatId, messageId, callbackQueryId, roomId, tgUserId)
+      return
+    }
+
+    if (data.startsWith('dice_cancel_')) {
+      const roomId = data.replace('dice_cancel_', '')
+      const { handleCancelDiceGame } = await import('../features/diceGame.ts')
+      await handleCancelDiceGame(chatId, messageId, callbackQueryId, roomId, tgUserId)
       return
     }
 

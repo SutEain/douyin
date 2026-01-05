@@ -233,8 +233,11 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         // 🎯 严格权限控制：仅接受私聊消息（作品上传和指令）
         // 频道同步由 update.channel_post 独立处理，不受此影响
-        if (message.chat.type !== 'private') {
-          console.log(`[MAIN] 忽略非私聊消息: chatId=${chatId}, type=${message.chat.type}`)
+        const officialGroupId = Deno.env.get('OFFICIAL_GROUP_ID')
+        if (message.chat.type !== 'private' && String(chatId) !== String(officialGroupId)) {
+          console.log(
+            `[MAIN] 忽略非私聊且非官方群消息: chatId=${chatId}, type=${message.chat.type}`
+          )
           return new Response('OK', { status: 200 })
         }
 
@@ -273,14 +276,16 @@ export async function handleRequest(req: Request): Promise<Response> {
               }
             }
 
-            // 1. 先发送底部菜单（Persistent Keyboard）
-            await sendMessage(
-              chatId,
-              '👋 欢迎加入 [TG 抖音]  🔥\n 接受一切资源合作洽谈。成为股东，请联系 @Edison521',
-              {
-                reply_markup: getPersistentKeyboard()
-              }
-            )
+            // 1. 先发送底部菜单（Persistent Keyboard） - 仅限私聊
+            if (message.chat.type === 'private') {
+              await sendMessage(
+                chatId,
+                '👋 欢迎加入 [TG 抖音]  🔥\n 接受一切资源合作洽谈。成为股东，请联系 @Edison521',
+                {
+                  reply_markup: getPersistentKeyboard()
+                }
+              )
+            }
 
             // 2. 后发送欢迎消息（Inline Keyboard）
             const welcomeText =
@@ -402,7 +407,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         }
         // 文本消息
         else if (message.text) {
-          await handleText(chatId, message.text, message.message_id)
+          await handleText(chatId, message.text, message.message_id, message)
         }
       }
       // 处理回调查询
@@ -412,8 +417,12 @@ export async function handleRequest(req: Request): Promise<Response> {
         const messageId = callback.message?.message_id
         const data = callback.data
 
-        // 🎯 严格权限控制：仅接受私聊的回调
-        if (callback.message?.chat?.type !== 'private') {
+        // 🎯 严格权限控制：仅接受私聊或官方群的回调
+        const officialGroupId = Deno.env.get('OFFICIAL_GROUP_ID')
+        if (
+          callback.message?.chat?.type !== 'private' &&
+          String(chatId) !== String(officialGroupId)
+        ) {
           return new Response('OK', { status: 200 })
         }
 
@@ -424,7 +433,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             data
           })
 
-          await handleCallback(chatId, messageId, data, callback.id)
+          await handleCallback(chatId, messageId, data, callback.id, callback.from.id)
         }
       }
       // 🎯 处理 inline query（分享功能）

@@ -124,6 +124,24 @@ export async function deleteTelegramMessage(chatId: number, messageId: number) {
   }
 }
 
+export async function sendDice(chatId: number, options: any = {}) {
+  const url = `${TG_API_BASE}/bot${BOT_TOKEN}/sendDice`
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        ...options
+      })
+    })
+    return await response.json()
+  } catch (error) {
+    console.error('[sendDice] 异常:', error)
+    throw error
+  }
+}
+
 export async function answerCallbackQuery(
   callbackQueryId: string,
   text?: string,

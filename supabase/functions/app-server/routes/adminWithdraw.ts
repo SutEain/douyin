@@ -131,7 +131,7 @@ export async function handleAdminAutoWithdraw(req: Request): Promise<Response> {
             tx_hash: tx,
             remark: `[重新打款] 自动出款成功, Hash: ${tx}`,
             processed_at: new Date().toISOString(),
-            processed_by: admin_id
+            processed_by: adminUser.id // ✅ 修正变量名: 使用 adminUser.id
           })
           .eq('id', order_id)
       }

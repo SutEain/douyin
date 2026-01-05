@@ -7,7 +7,6 @@ import { handleViewVideo } from '../features/videoActions.ts'
 import { handleMyPublished, setPublishedCtx } from '../features/myVideos.ts'
 import { getLocationFromCoords } from '../utils/geo.ts'
 import { sendSelfDestructMessage } from '../utils/telegramExtras.ts'
-import { getPersistentKeyboard } from '../keyboards.ts'
 
 // 处理转发消息 (用于绑定频道)
 export async function handleForward(chatId: number, message: any) {
@@ -63,9 +62,6 @@ export async function handleForward(chatId: number, message: any) {
 
     // 3. 验证机器人权限 (尝试发送 getChatMember)
     // 注意：这里需要调用 Telegram API
-    const botToken = Deno.env.get('BOT_TOKEN')
-    const checkUrl = `https://api.telegram.org/bot${botToken}/getChatMember?chat_id=${channelId}&user_id=${Deno.env.get('BOT_ID') || ''}`
-    // 如果没有配置 BOT_ID，先尝试获取
     // 简单起见，我们也可以尝试发送一个测试动作
 
     // 4. 保存绑定关系
@@ -88,7 +84,7 @@ export async function handleForward(chatId: number, message: any) {
       `💡 您在该频道发布的视频/图片，机器人将自动同步到平台。\n` +
       `💡 请确保机器人拥有「发布消息」权限以获取内容。`
 
-    const { handleListChannels } = await import('../features/profileCenter.ts')
+    await import('../features/profileCenter.ts')
     await sendMessage(chatId, successText, {
       reply_markup: {
         inline_keyboard: [[{ text: '查看我的频道', callback_data: 'profile_channels' }]]
@@ -101,8 +97,86 @@ export async function handleForward(chatId: number, message: any) {
 }
 
 // 处理文本消息（编辑流程 + 已发布搜索 + 提现流程）
-export async function handleText(chatId: number, text: string, userMessageId: number) {
+export async function handleText(
+  chatId: number,
+  text: string,
+  userMessageId: number,
+  rawMessage: any
+) {
   const userState = await getUserState(chatId)
+
+  // ✅ 指令匹配
+  const lowerText = text.trim().toLowerCase()
+  const isRedPacketCmd =
+    lowerText === 'hb' ||
+    lowerText.startsWith('hb ') ||
+    lowerText === '/hb' ||
+    lowerText.startsWith('/hb ')
+  const isDiceCmd =
+    lowerText === 'tz' ||
+    lowerText.startsWith('tz ') ||
+    lowerText === '/tz' ||
+    lowerText.startsWith('/tz ')
+  const isBalanceCmd = lowerText === 'ye' || lowerText === '/ye' || lowerText === '余额'
+  const isCleanCmd = lowerText === '/clean_keyboard'
+
+  // 🎯 严格控制：群组中仅允许指定指令，其他文本直接忽略
+  if (chatId < 0 && !isRedPacketCmd && !isDiceCmd && !isBalanceCmd && !isCleanCmd) {
+    return
+  }
+
+  // 1. 处理清除键盘
+  if (chatId < 0 && isCleanCmd) {
+    await sendMessage(chatId, '🧹 正在清理群组菜单...', {
+      reply_markup: { remove_keyboard: true }
+    })
+    return
+  }
+
+  // 2. 处理查询余额
+  if (isBalanceCmd) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('balance_coins, nickname, numeric_id')
+      .eq('tg_user_id', rawMessage.from.id)
+      .single()
+
+    if (profile) {
+      const balance = Math.floor(profile.balance_coins || 0)
+      const nickname = profile.nickname || '未设置'
+      const numericId = profile.numeric_id || '未知'
+
+      const msg =
+        `👤 <b>昵称:</b> ${escapeHTML(nickname)}\n` +
+        `🆔 <b>ID:</b> <code>${numericId}</code>\n\n` +
+        `💰 <b>抖币余额：</b> <code>${balance}</code> 抖币\n` +
+        `——————————————\n` +
+        `💎 <b>TG抖音官方频道 :</b> @avdy`
+
+      await sendMessage(chatId, msg, { reply_to_message_id: userMessageId })
+    } else {
+      await sendMessage(chatId, '❌ 未找到您的账号信息，请先私聊机器人发送 /start', {
+        reply_to_message_id: userMessageId
+      })
+    }
+    return
+  }
+
+  // 3. 处理骰子游戏
+  if (isDiceCmd) {
+    console.log(`[Dice] 匹配到骰子指令，准备执行...`)
+    const { handleDiceCommand } = await import('../features/diceGame.ts')
+    await handleDiceCommand(chatId, text, rawMessage)
+    return
+  }
+
+  // 4. 处理红包指令
+  if (isRedPacketCmd) {
+    console.log(`[RedPacket] 匹配到红包指令，准备执行...`)
+    const { handleRedPacketCommand } = await import('../features/redPacket.ts')
+    await handleRedPacketCommand(chatId, text, rawMessage)
+    return
+  }
 
   // ✅ 已发布搜索：不依赖 draft_video_id
   if (userState.state === 'waiting_published_search') {

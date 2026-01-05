@@ -212,7 +212,6 @@ export async function handleRequestUpdate(req: Request): Promise<Response> {
   const now = new Date()
   const nowIso = now.toISOString()
   const cooldownMs = 24 * 3600 * 1000
-  const cutoff = new Date(now.getTime() - cooldownMs).toISOString()
 
   const { data: lastRow, error: lastErr } = await supabaseAdmin
     .from('request_update_limits')
@@ -464,7 +463,7 @@ export async function handleGetUserProfile(req: Request): Promise<Response> {
 
     // 关系状态
     follow_status: followStatus,
-    
+
     // 🎯 签到信息
     checkin_streak: profile.checkin_streak || 0,
     last_checkin_at: profile.last_checkin_at || null
@@ -476,7 +475,7 @@ export async function handleGetUserProfile(req: Request): Promise<Response> {
  */
 export async function handleCheckIn(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
-  
+
   const { data, error } = await supabaseAdmin.rpc('execute_user_checkin', {
     p_user_id: user.id
   })
@@ -493,27 +492,29 @@ export async function handleCheckIn(req: Request): Promise<Response> {
   }
 }
 
+import { validateTelegramInitData } from '../../_shared/telegram.ts'
+import { TG_BOT_TOKEN } from '../lib/env.ts'
+
 // 🎯 自动初始化用户（用于深链接等场景）
 export async function handleAutoInit(req: Request): Promise<Response> {
   console.log('[AutoInit] 开始自动初始化用户')
 
   try {
-    // 解析 Telegram initData
+    // 1. 验证 Telegram 数据合法性（核心安全加固）
     const initData = req.headers.get('X-Telegram-Init-Data')
-    if (!initData) {
-      return errorResponse('缺少 Telegram 用户信息', 400)
+    if (!initData || !TG_BOT_TOKEN) {
+      return errorResponse('缺少 Telegram 用户认证信息', 401)
     }
 
-    const params = new URLSearchParams(initData)
-    const userStr = params.get('user')
-    if (!userStr) {
-      return errorResponse('无法解析用户信息', 400)
+    const validated = await validateTelegramInitData(initData, TG_BOT_TOKEN)
+    if (!validated) {
+      return errorResponse('Telegram 认证校验失败，请重试', 401)
     }
 
-    const tgUser = JSON.parse(userStr)
-    console.log('[AutoInit] Telegram 用户ID:', tgUser.id)
+    const { user: tgUser } = validated
+    console.log('[AutoInit] Telegram 用户验证成功:', tgUser.id)
 
-    // 查询用户是否已存在
+    // 2. 查询用户是否已存在
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('*')
@@ -532,7 +533,7 @@ export async function handleAutoInit(req: Request): Promise<Response> {
       })
     }
 
-    // 用户不存在，创建新用户
+    // 3. 用户不存在，开始创建（白名单字段，防止 MASS ASSIGNMENT）
     console.log('[AutoInit] 用户不存在，开始创建')
 
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -541,9 +542,9 @@ export async function handleAutoInit(req: Request): Promise<Response> {
       email_confirm: true,
       user_metadata: {
         tg_user_id: tgUser.id,
-        username: tgUser.username || '',
-        first_name: tgUser.first_name || '',
-        last_name: tgUser.last_name || ''
+        tg_username: tgUser.username || '',
+        tg_first_name: tgUser.first_name || '',
+        tg_last_name: tgUser.last_name || ''
       }
     })
 
@@ -552,15 +553,15 @@ export async function handleAutoInit(req: Request): Promise<Response> {
       return errorResponse('创建用户失败', 500)
     }
 
-    // 创建 profile
-    const nickname = tgUser.first_name || tgUser.username || 'Telegram 用户'
+    // 4. 创建 profile（显式指定字段，严禁透传 body）
+    const nickname = tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : '')
     const { data: newProfile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert({
         id: authUser.user.id,
         tg_user_id: tgUser.id,
-        username: tgUser.username || '',
-        nickname: nickname,
+        username: tgUser.username || `user_${tgUser.id}`,
+        nickname: nickname || 'Telegram 用户',
         avatar_url: DEFAULT_AVATAR
       })
       .select()
@@ -573,7 +574,7 @@ export async function handleAutoInit(req: Request): Promise<Response> {
 
     console.log('[AutoInit] ✅ 用户创建成功:', newProfile.id)
 
-    // 🎯 步骤3: 新用户默认关注官方账号 88888 (抖音精选)
+    // 🎯 步骤5: 新用户默认关注官方账号 88888 (抖音精选)
     try {
       const { data: officialUser } = await supabaseAdmin
         .from('profiles')
@@ -605,6 +606,6 @@ export async function handleAutoInit(req: Request): Promise<Response> {
     })
   } catch (error) {
     console.error('[AutoInit] ❌ 初始化失败:', error)
-    return errorResponse('初始化失败', 500)
+    return errorResponse('系统初始化异常', 500)
   }
 }

@@ -1,23 +1,37 @@
-/* eslint-disable */
+/* eslint-disable no-undef */
 require('dotenv').config()
+/* eslint-disable */
 const axios = require('axios')
 const { createClient } = require('@supabase/supabase-js')
 
-// 1. 初始化 Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
-)
+// 1. 初始化 Supabase (参考 index.js)
+const SUPABASE_URL = process.env.SUPABASE_URL
+const SUPABASE_SERVICE_KEY =
+  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
 
-const BOT_TOKEN = process.env.TG_BOT_TOKEN ? process.env.TG_BOT_TOKEN.trim() : null
-const WORKER_URL = 'http://localhost:3000/process'
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+// 2. 环境配置
+const BOT_TOKEN = (process.env.TG_BOT_TOKEN || process.env.BOT_TOKEN || '').trim()
+const WORKER_URL = process.env.BOT_WORKER_URL || 'http://localhost:3000/process'
 
 async function rescueAll() {
   if (!BOT_TOKEN) {
-    console.error('❌ 错误: 请在环境变量或 .env 中设置 TG_BOT_TOKEN')
+    console.error('❌ 错误: 未找到机器人 Token。请在环境变量或 .env 中设置 TG_BOT_TOKEN')
+    console.log('当前尝试读取的变量:', {
+      TG_BOT_TOKEN: process.env.TG_BOT_TOKEN ? '已设置' : '未设置',
+      BOT_TOKEN: process.env.BOT_TOKEN ? '已设置' : '未设置'
+    })
     process.exit(1)
   }
 
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+    console.error('❌ 错误: 未找到 Supabase 配置。')
+    process.exit(1)
+  }
+
+  console.log(`🤖 准备使用 Token: ${BOT_TOKEN.substring(0, 6)}... 进行补救`)
+  console.log(`🔗 Worker 地址: ${WORKER_URL}`)
   console.log('🔍 正在扫描所有卡在 processing 状态的作品...')
 
   // 查询所有 processing 的视频/相册/合集

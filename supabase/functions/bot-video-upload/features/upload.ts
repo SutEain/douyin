@@ -2,7 +2,7 @@ import { BOT_TOKEN, BOT_WORKER_URL } from '../env.ts'
 import { supabase } from '../supabaseClient.ts'
 import { getUserState, updateUserState } from '../state.ts'
 import { getOrCreateProfile } from '../services/profile.ts'
-import { extractTags, safeTruncate, escapeHTML } from '../utils/text.ts'
+import { extractTags, escapeHTML } from '../utils/text.ts'
 import { editMessage, sendMessage } from '../telegram.ts'
 import { getEditKeyboard, getEditMenuText } from './editor.ts'
 
@@ -46,14 +46,6 @@ async function getBotMaxVideoSizeMB(): Promise<number> {
 }
 
 // 📸 图片信息接口
-interface AlbumPhoto {
-  file_id: string
-  width: number
-  height: number
-  file_size?: number
-  order?: number
-}
-
 interface UploadExtraData {
   is_adult?: boolean
   is_sea?: boolean
@@ -106,6 +98,12 @@ export async function handlePhoto(
   console.log('[handlePhoto] mediaGroupId:', mediaGroupId)
 
   try {
+    // 🎯 严格控制：禁止在群组中直接上传图片（仅允许私聊上传）
+    if (chatId < 0) {
+      console.log(`[handlePhoto] 忽略群组中的图片消息: chatId=${chatId}`)
+      return
+    }
+
     const photo = photoSizes[photoSizes.length - 1]
     console.log('[handlePhoto] 最大尺寸图片:', photo)
 
@@ -329,11 +327,14 @@ export async function handleVideo(
 ) {
   console.log('[handleVideo] 开始处理视频')
   console.log('[handleVideo] chatId:', chatId)
-  console.log('[handleVideo] video:', JSON.stringify(video).substring(0, 200))
-  console.log('[handleVideo] caption:', caption)
-  console.log('[handleVideo] mediaGroupId:', mediaGroupId)
 
   try {
+    // 🎯 严格控制：禁止在群组中直接上传视频（仅允许私聊上传）
+    if (chatId < 0) {
+      console.log(`[handleVideo] 忽略群组中的视频消息: chatId=${chatId}`)
+      return
+    }
+
     let description: string | null = null
     let tags: string[] = []
 

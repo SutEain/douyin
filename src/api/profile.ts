@@ -21,12 +21,40 @@ export async function updateProfile(payload: ProfileUpdatePayload) {
     throw new Error('请先登录后再编辑资料')
   }
 
+  // ✅ 安全加固：显式指定允许修改的字段（白名单机制）
+  // 杜绝 payload 中包含 is_admin, balance_coins 等敏感字段的参数攻击
+  const {
+    nickname,
+    username,
+    bio,
+    avatar_url,
+    cover_url,
+    gender,
+    birthday,
+    country,
+    province,
+    city,
+    lang
+  } = payload
+
+  const safePayload = {
+    nickname,
+    username,
+    bio,
+    avatar_url,
+    cover_url,
+    gender,
+    birthday,
+    country,
+    province,
+    city,
+    lang,
+    updated_at: new Date().toISOString()
+  }
+
   const { data, error } = await supabase
     .from('profiles')
-    .update({
-      ...payload,
-      updated_at: new Date().toISOString()
-    })
+    .update(safePayload)
     .eq('id', user.id)
     .select('*')
     .single()
@@ -37,4 +65,3 @@ export async function updateProfile(payload: ProfileUpdatePayload) {
 
   return data
 }
-
