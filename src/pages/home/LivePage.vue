@@ -826,19 +826,18 @@ function shareRoomDirect() {
   const rid = roomId.value
   if (!rid) return
 
-  // 🎯 优化文案：使用 HTML 超链接格式
-  const anchorName = roomInfo.value.anchor_info?.nickname || '主播'
-  const link = roomDeepLink.value
-  const text = `📺 快来围观 <a href="${link}">${anchorName}</a> 的直播间！\n\n来自 #TG抖音`
-
-  // 🎯 使用 share/url 直接分享
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
+  // 🎯 使用 switchInlineQuery 以支持 HTML 文字超链接
+  const query = `live_${rid}`
 
   // @ts-ignore
   if (window.Telegram?.WebApp) {
     // @ts-ignore
-    window.Telegram.WebApp.openTelegramLink(shareUrl)
+    window.Telegram.WebApp.switchInlineQuery(query, ['users', 'groups', 'channels'])
   } else {
+    const link = roomDeepLink.value
+    const anchorName = roomInfo.value.anchor_info?.nickname || '主播'
+    const text = `📺 快来围观 ${anchorName} 的直播间！\n\n来自 #TG抖音`
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
     window.open(shareUrl, '_blank')
   }
   showShareDrawer.value = false

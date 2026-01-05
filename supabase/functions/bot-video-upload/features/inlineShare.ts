@@ -171,7 +171,7 @@ export async function handleInlineQuery(inlineQuery: any) {
           ? `主播: ${selfRoom.anchor?.nickname || '匿名'}`
           : '点击发送直播间卡片',
         input_message_content: {
-          message_text: `<b>📺 正在直播: ${escapeHTML(room.title || '精彩内容')}</b>\n\n主播：${escapeHTML(selfRoom?.anchor?.nickname || '抖音精选')}\n\n快进入直播间一起互动吧！🚀`,
+          message_text: `📺 <b><a href="${deepLink}">${escapeHTML(room.title || '精彩内容')}</a></b>\n\n主播：${escapeHTML(selfRoom?.anchor?.nickname || '抖音精选')}\n\n来自 #TG抖音 🚀`,
           parse_mode: 'HTML',
           disable_web_page_preview: false
         },
@@ -224,12 +224,12 @@ export async function handleInlineQuery(inlineQuery: any) {
         title: video.title || '🎬 精彩视频分享',
         description: video.description || '点击打开观看',
         input_message_content: {
-          message_text: `<b>🎬 ${escapeHTML(video.title || '视频分享')}</b>\n\n${escapeHTML(video.description || '这段视频太精彩了，不容错过！')}\n\n👇 点击下方按钮立即观看`,
+          message_text: `🎬 <b><a href="${deepLink}">${escapeHTML(video.title || '视频分享')}</a></b>\n\n${escapeHTML(video.description || '这段视频太精彩了，不容错过！')}\n\n来自 #TG抖音 🚀`,
           parse_mode: 'HTML',
           disable_web_page_preview: false
         },
         reply_markup: {
-          inline_keyboard: [[{ text: '👉 立即播放', url: deepLink }]]
+          inline_keyboard: [[{ text: '👉 立即观看', url: deepLink }]]
         }
       }
 
@@ -299,12 +299,12 @@ export async function handleInlineQuery(inlineQuery: any) {
       title: videoTitle,
       description: desc,
       input_message_content: {
-        message_text: `<b>🎬 ${escapedTitle}</b>\n\n${escapedDesc || '这段视频太精彩了，不容错过！'}\n\n👇 点击下方按钮立即观看`,
+        message_text: `🎬 <b><a href="${deepLink}">${escapedTitle}</a></b>\n\n${escapedDesc || '这段视频太精彩了，不容错过！'}\n\n来自 #TG抖音 🚀`,
         parse_mode: 'HTML',
         disable_web_page_preview: false
       },
       reply_markup: {
-        inline_keyboard: [[{ text: '👉 立即查看', url: deepLink }]]
+        inline_keyboard: [[{ text: '👉 立即观看', url: deepLink }]]
       }
     }
 

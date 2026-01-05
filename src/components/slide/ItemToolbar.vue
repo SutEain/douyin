@@ -243,24 +243,25 @@ async function copyVideoLink() {
   showMoreDrawer.value = false
 }
 
-// 2. Telegram 直接分享 (直接跳转并预填文字)
+// 2. Telegram 直接分享 (切换到 Inline 模式以支持富文本超链接)
 function shareToTelegramDirect() {
-  const desc = props.item?.desc || '精彩视频'
-  const link = videoDeepLink.value
+  const rid = props.item.aweme_id || props.item.id
+  if (!rid) return
 
-  // 🎯 尝试使用 HTML 超链接格式 (部分 Telegram 客户端支持解析 share 参数中的 HTML)
-  // 即使不支持，显示为 <a> 标签也比直接丢一个长链接稍微好一点点，或者被某些转发机器人解析
-  const text = `🎬 <a href="${link}">${desc}</a>\n\n来自 #TG抖音`
-
-  // 🎯 使用 share/url 直接分享
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
+  // 🎯 构造搜索指令，触发机器人的 Inline Query
+  const query = `video_${rid}`
 
   // @ts-ignore
   if (window.Telegram?.WebApp) {
+    // 🎯 switchInlineQuery 会让用户选择聊天，然后自动输入指令，弹出带超链接的卡片
     // @ts-ignore
-    window.Telegram.WebApp.openTelegramLink(shareUrl)
+    window.Telegram.WebApp.switchInlineQuery(query, ['users', 'groups', 'channels'])
   } else {
-    // Web 端降级方案
+    // Web 端降级方案：由于 Web 环境无法触发 switchInlineQuery，使用普通链接
+    const link = videoDeepLink.value
+    const desc = props.item?.desc || '精彩视频'
+    const text = `🎬 ${desc}\n\n来自 #TG抖音`
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
     window.open(shareUrl, '_blank')
   }
   showMoreDrawer.value = false
