@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../lib/env.ts'
 import { successResponse, errorResponse } from '../../_shared/response.ts'
-import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
+import { requireAuth, requireAdminAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
 
 export async function handleLiveRoomDetail(req: Request): Promise<Response> {
   console.log('[live_detail] Request received:', req.url)
@@ -194,10 +194,6 @@ export async function handleLiveRooms(_req: Request): Promise<Response> {
 type ProbeReqBody = {
   ids?: string[]
   id?: string
-}
-
-function isAdminUser(user: any): boolean {
-  return user?.app_metadata?.role === 'admin'
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
@@ -426,10 +422,8 @@ async function probeUrl(
 
 export async function handleLiveRoomsProbe(req: Request): Promise<Response> {
   try {
-    const { user } = await requireAuth(req)
-    if (!isAdminUser(user)) {
-      throw new HttpError('Forbidden', 403)
-    }
+    // 强制管理员认证 (含 IP 校验)
+    await requireAdminAuth(req)
 
     const body = await parseJsonBody<ProbeReqBody>(req)
     const ids = Array.isArray(body?.ids) ? body.ids : body?.id ? [body.id] : []

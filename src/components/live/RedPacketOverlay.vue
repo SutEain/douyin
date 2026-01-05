@@ -36,6 +36,13 @@
               <div class="cond-item" :class="{ ok: condStatus.chat }">
                 <Icon :icon="condStatus.chat ? 'ion:checkmark-circle' : 'ion:ellipse-outline'" />
                 发送指定弹幕: "{{ currentPacket.claim_conditions?.keyword }}"
+                <div
+                  class="copy-keyword-btn"
+                  @click.stop="copyKeyword(currentPacket.claim_conditions?.keyword)"
+                >
+                  <Icon icon="ion:copy-outline" />
+                  复制
+                </div>
               </div>
             </div>
 
@@ -71,7 +78,7 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { getActiveRedPackets, claimRedPacket } from '@/api/videos'
-import { _notice } from '@/utils'
+import { _notice, _copy } from '@/utils'
 import { supabase } from '@/utils/supabase'
 
 const props = defineProps<{
@@ -160,6 +167,12 @@ async function fetchPackets() {
 function handlePacketClick(p: any) {
   currentPacket.value = p
   showModal.value = true
+}
+
+function copyKeyword(text: string) {
+  if (!text) return
+  _copy(text)
+  _notice('口令已复制')
 }
 
 async function onClaim() {
@@ -369,6 +382,24 @@ onBeforeUnmount(() => {
 
           &.ok {
             color: #ffd700;
+          }
+
+          .copy-keyword-btn {
+            margin-left: auto;
+            padding: 2rem 8rem;
+            background: rgba(255, 215, 0, 0.2);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 4rem;
+            font-size: 10rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            color: #ffd700;
+            cursor: pointer;
+
+            &:active {
+              opacity: 0.7;
+            }
           }
         }
       }

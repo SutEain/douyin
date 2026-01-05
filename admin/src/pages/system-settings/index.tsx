@@ -10,7 +10,16 @@ export const SystemSettings = () => {
   async function load() {
     setLoading(true)
     try {
-      const { data, error } = await supabaseClient.from('system_settings').select('*')
+      // 🎯 安全优化：仅查询前端需要的公开设置，不查询私钥等敏感信息
+      const { data, error } = await supabaseClient
+        .from('system_settings')
+        .select('id, value_int, value_text')
+        .in('id', [
+          'bot_max_video_size_mb',
+          'invitation_reward_coins',
+          'gift_split_percentage',
+          'recharge_trc20_address'
+        ])
 
       if (error) {
         console.error('[SystemSettings] load error:', error)

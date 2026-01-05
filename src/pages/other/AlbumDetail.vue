@@ -884,12 +884,13 @@ function shareAlbumDirect() {
   const id = String(currentId.value || '')
   if (!id) return
 
-  // 🎯 优化文案
+  // 🎯 优化文案：使用 HTML 超链接格式
   const title = props.detail?.note_card?.display_title || '精彩内容'
-  const text = `📸 ${title}\n\n来自 #TG抖音`
+  const link = albumDeepLink.value
+  const text = `📸 <a href="${link}">${title}</a>\n\n来自 #TG抖音`
 
   // 🎯 使用 share/url 直接分享
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(albumDeepLink.value)}&text=${encodeURIComponent(text)}`
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
 
   // @ts-ignore
   if (window.Telegram?.WebApp) {

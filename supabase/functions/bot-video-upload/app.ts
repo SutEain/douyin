@@ -84,16 +84,16 @@ export async function handleRequest(req: Request): Promise<Response> {
             return new Response('OK', { status: 200 })
           }
 
-          // 🎯 如果是合集 (collection)，进行数据补全
-          if (video.content_type === 'collection') {
+          // 🎯 如果是合集 (collection) 或相册 (album)，进行数据补全
+          if (video.content_type === 'collection' || video.content_type === 'album') {
             // 🎯 关键逻辑：即使回调 payload 没带 play_url，我们也尝试从数据库主记录中获取（Worker 刚填进去的）
             const effectivePlayUrl = play_url || video.play_url
             const effectiveCoverUrl = cover_url || video.cover_url
 
             if (effectivePlayUrl || effectiveCoverUrl) {
-            const targetFileId = file_id || video.tg_file_id
+              const targetFileId = file_id || video.tg_file_id
               console.log(
-                `[WorkerCallback] 尝试补全合集媒体项: videoId=${videoId}, fileId=${targetFileId}, playUrl=${effectivePlayUrl}`
+                `[WorkerCallback] 尝试补全合集/相册媒体项: videoId=${videoId}, fileId=${targetFileId}, playUrl=${effectivePlayUrl}`
               )
 
               const { error: rpcError } = await supabase.rpc('update_collection_media_item', {
@@ -121,6 +121,16 @@ export async function handleRequest(req: Request): Promise<Response> {
                   video.images = video.media_list
                 }
               }
+            }
+
+            // 🎯 如果目前还是 processing 状态，强制检查并转换（对于相册，只要有图片成功了就可以展示）
+            if (video.status === 'processing') {
+              const isApproved =
+                video.review_status === 'approved' || video.review_status === 'auto_approved'
+              const newStatus = isApproved ? 'published' : 'ready'
+              console.log(`[WorkerCallback] 转换相册状态: processing -> ${newStatus}`)
+              await supabase.from('videos').update({ status: newStatus }).eq('id', videoId)
+              video.status = newStatus
             }
           }
 

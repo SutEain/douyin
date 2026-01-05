@@ -11,7 +11,13 @@ export async function uploadImage(
   bucket: string = 'user-content',
   folder: string = 'avatars'
 ): Promise<string> {
-  const ext = file.name.split('.').pop()
+  // 🎯 安全优化：禁止上传 SVG 等可能包含恶意脚本的文件
+  const forbiddenExts = ['svg', 'html', 'htm', 'xml']
+  const ext = file.name.split('.').pop()?.toLowerCase() || ''
+  if (forbiddenExts.includes(ext) || file.type.includes('svg') || file.type.includes('html')) {
+    throw new Error('不支持的文件格式，严禁上传 SVG 或 HTML 文件')
+  }
+
   const fileName = `${folder}/${crypto.randomUUID()}.${ext}`
 
   const { data, error } = await supabase.storage.from(bucket).upload(fileName, file, {

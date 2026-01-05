@@ -1,38 +1,30 @@
 import { supabaseAdmin } from '../lib/env.ts'
 import { successResponse, errorResponse } from '../../_shared/response.ts'
-import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
+import { requireAdminAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
 import { checkAndSendNotification } from '../lib/notification.ts'
 import { TronWeb } from 'npm:tronweb'
 
 // USDT TRC20 Contract Address
 const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
 
-function isAdminUser(user: any): boolean {
-  return user?.app_metadata?.role === 'admin' || user?.email?.endsWith('@admin.user')
-}
-
 /**
  * 🎯 后台自动出款逻辑 (USDT-TRC20)
  */
 export async function handleAdminAutoWithdraw(req: Request): Promise<Response> {
   try {
-    const { user } = await requireAuth(req)
-
-    if (!isAdminUser(user)) {
-      throw new HttpError('Forbidden', 403)
-    }
+    // 1. 强制管理员认证 (含 IP 校验)
+    const { user: adminUser } = await requireAdminAuth(req)
 
     const body = await parseJsonBody<{
       order_id: string
-      admin_id: string
     }>(req)
 
-    const { order_id, admin_id } = body
-    if (!order_id || !admin_id) {
+    const { order_id } = body
+    if (!order_id) {
       throw new HttpError('Missing parameters', 400)
     }
 
-    // 1. 获取订单详情
+    // 2. 获取订单详情
     const { data: order, error: orderError } = await supabaseAdmin
       .from('withdraw_orders')
       .select('*')
@@ -49,28 +41,39 @@ export async function handleAdminAutoWithdraw(req: Request): Promise<Response> {
       return errorResponse('订单状态不支持自动出款（已完成且已有Hash，或已取消/拒绝）', 1, 400)
     }
 
-    // 2. 获取提现配置 (私钥需要保密)
-    const { data: settings } = await supabaseAdmin
-      .from('system_settings')
-      .select('id, value_text')
-      .in('id', ['withdraw_trc20_address', 'withdraw_trc20_private_key'])
-
+    // 3. 获取提现配置 (安全升级：优先从环境变量读取 Secrets)
     const config = {
-      address: settings?.find((s) => s.id === 'withdraw_trc20_address')?.value_text,
-      privateKey: settings?.find((s) => s.id === 'withdraw_trc20_private_key')?.value_text
+      address: Deno.env.get('WITHDRAW_TRC20_ADDRESS'),
+      privateKey: Deno.env.get('WITHDRAW_TRC20_PRIVATE_KEY')
+    }
+
+    // 🎯 兼容性兜底：如果环境变量未设置，尝试从数据库读取 (不建议长期使用)
+    if (!config.address || !config.privateKey) {
+      console.warn('[AutoWithdraw] 环境变量未配置，尝试从数据库获取敏感信息...')
+      const { data: settings } = await supabaseAdmin
+        .from('system_settings')
+        .select('id, value_text')
+        .in('id', ['withdraw_trc20_address', 'withdraw_trc20_private_key'])
+
+      if (!config.address) {
+        config.address = settings?.find((s) => s.id === 'withdraw_trc20_address')?.value_text
+      }
+      if (!config.privateKey) {
+        config.privateKey = settings?.find((s) => s.id === 'withdraw_trc20_private_key')?.value_text
+      }
     }
 
     if (!config.address || !config.privateKey) {
-      return errorResponse('自动提现未配置（系统设置中地址或私钥为空）', 1, 400)
+      return errorResponse('自动提现未配置（Secrets 或数据库配置缺失）', 1, 400)
     }
 
-    // 3. 初始化 TronWeb
+    // 4. 初始化 TronWeb
     const tronWeb = new TronWeb({
       fullHost: 'https://api.trongrid.io',
       privateKey: config.privateKey
     })
 
-    // 4. 执行转账 (USDT TRC20)
+    // 5. 执行转账 (USDT TRC20)
     // 汇率：100 抖币 = 1 USDT
     const amountCoins = parseFloat(order.amount)
     if (isNaN(amountCoins) || amountCoins <= 0) {
@@ -98,12 +101,12 @@ export async function handleAdminAutoWithdraw(req: Request): Promise<Response> {
 
       console.log(`[AutoWithdraw] Success! TxHash: ${tx}`)
 
-      // 5. 更新订单状态
+      // 6. 更新订单状态
       if (order.status === 'pending') {
         // 如果是待处理订单，调用 RPC 扣减冻结金额并标记完成
         const { error: rpcError } = await supabaseAdmin.rpc('admin_process_withdraw', {
           p_order_id: order_id,
-          p_admin_id: admin_id,
+          p_admin_id: adminUser.id, // ✅ 使用 adminUser.id
           p_action: 'approve',
           p_remark: `自动出款成功, Hash: ${tx}`,
           p_tx_hash: tx // ✅ 传入交易哈希供 RPC 更新

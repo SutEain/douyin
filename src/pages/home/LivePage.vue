@@ -808,10 +808,17 @@ const roomDeepLink = computed(() => {
 })
 
 function copyRoomLink() {
-  const link = roomDeepLink.value
-  if (!link) return
-  _copy(link)
-  _notice('链接已复制，去分享给好友吧')
+  const rid = roomId.value
+  if (!rid) return
+
+  // 🎯 恢复为“分享口令”格式，以便在 Telegram 中弹出卡片
+  let shareCommand = `@${botUsername} live_${rid}`
+  if (baseStore.userinfo?.numeric_id) {
+    shareCommand += `_i${baseStore.userinfo.numeric_id}`
+  }
+
+  _copy(shareCommand)
+  _notice('分享口令已复制，去聊天框粘贴即可弹出卡片')
   showShareDrawer.value = false
 }
 
@@ -819,12 +826,13 @@ function shareRoomDirect() {
   const rid = roomId.value
   if (!rid) return
 
-  // 🎯 优化文案
+  // 🎯 优化文案：使用 HTML 超链接格式
   const anchorName = roomInfo.value.anchor_info?.nickname || '主播'
-  const text = `📺 快来围观 ${anchorName} 的直播间！\n\n来自 #TG抖音`
+  const link = roomDeepLink.value
+  const text = `📺 快来围观 <a href="${link}">${anchorName}</a> 的直播间！\n\n来自 #TG抖音`
 
   // 🎯 使用 share/url 直接分享
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(roomDeepLink.value)}&text=${encodeURIComponent(text)}`
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
 
   // @ts-ignore
   if (window.Telegram?.WebApp) {

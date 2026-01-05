@@ -1,14 +1,10 @@
 import { successResponse, errorResponse } from '../../_shared/response.ts'
 import { supabaseAdmin } from '../lib/env.ts'
-import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
+import { requireAdminAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
 import { TIKHUB_API_TOKEN } from '../lib/env.ts'
 
 // ✅ Admin 上传/抖音发布固定作者
 const SYSTEM_AUTHOR_ID = '11c77e88-545b-4aa3-bbb1-db87e7d637f0'
-
-function isAdminUser(user: any): boolean {
-  return user?.app_metadata?.role === 'admin'
-}
 
 function extractDouyinUrl(text: string): string | null {
   if (!text) return null
@@ -169,8 +165,8 @@ async function resolveAwemeIdFromShareUrl(shareUrl: string): Promise<string | nu
 
 export async function handleAdminDouyinParse(req: Request): Promise<Response> {
   try {
-    const { user } = await requireAuth(req)
-    if (!isAdminUser(user)) throw new HttpError('Forbidden', 403)
+    // 强制管理员认证 (含 IP 校验)
+    await requireAdminAuth(req)
 
     const body = await parseJsonBody<ParseReq>(req)
     const rawText = safeText(body?.text).trim()
@@ -412,8 +408,8 @@ type PublishReq = {
 
 export async function handleAdminDouyinPublish(req: Request): Promise<Response> {
   try {
-    const { user } = await requireAuth(req)
-    if (!isAdminUser(user)) throw new HttpError('Forbidden', 403)
+    // 强制管理员认证 (含 IP 校验)
+    await requireAdminAuth(req)
 
     const body = await parseJsonBody<PublishReq>(req)
     const sourceUrl = safeText(body?.source_url).trim()
@@ -490,8 +486,8 @@ export async function handleAdminDouyinPublish(req: Request): Promise<Response> 
  */
 export async function handleAdminDouyinRefresh(req: Request): Promise<Response> {
   try {
-    const { user } = await requireAuth(req)
-    if (!isAdminUser(user)) throw new HttpError('Forbidden', 403)
+    // 强制管理员认证 (含 IP 校验)
+    await requireAdminAuth(req)
 
     const body = await parseJsonBody<{ ids?: string[]; limit?: number }>(req)
     const { ids, limit = 20 } = body

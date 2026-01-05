@@ -246,12 +246,14 @@ async function copyVideoLink() {
 // 2. Telegram 直接分享 (直接跳转并预填文字)
 function shareToTelegramDirect() {
   const desc = props.item?.desc || '精彩视频'
-  // 🎯 优化文案：简洁有力
-  const text = `🎬 ${desc}\n\n来自 #TG抖音`
+  const link = videoDeepLink.value
 
-  // 🎯 构造标准的直接分享链接 (使用 share/url)
-  // 这种方式在点击发送后，Telegram 会自动识别链接并生成精美的预览卡片
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(videoDeepLink.value)}&text=${encodeURIComponent(text)}`
+  // 🎯 尝试使用 HTML 超链接格式 (部分 Telegram 客户端支持解析 share 参数中的 HTML)
+  // 即使不支持，显示为 <a> 标签也比直接丢一个长链接稍微好一点点，或者被某些转发机器人解析
+  const text = `🎬 <a href="${link}">${desc}</a>\n\n来自 #TG抖音`
+
+  // 🎯 使用 share/url 直接分享
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
 
   // @ts-ignore
   if (window.Telegram?.WebApp) {

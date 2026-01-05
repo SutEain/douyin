@@ -19,6 +19,17 @@ export const LiveRoomCreate = () => {
     beforeUpload: async (file) => {
       try {
         const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+        // 🎯 安全优化：禁止上传 SVG 等可能包含恶意脚本的文件
+        const forbiddenExts = ['svg', 'html', 'htm', 'xml']
+        if (
+          forbiddenExts.includes(ext) ||
+          file.type.includes('svg') ||
+          file.type.includes('html')
+        ) {
+          message.error('不支持的文件格式，严禁上传 SVG 或 HTML 文件')
+          return Upload.LIST_IGNORE
+        }
+
         const key = `covers/${crypto.randomUUID()}.${ext}`
 
         const { error } = await supabaseClient.storage.from(BUCKET).upload(key, file, {

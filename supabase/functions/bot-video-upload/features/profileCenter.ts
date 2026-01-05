@@ -93,12 +93,17 @@ export async function handleClaimGenericReward(
     if (rpcError) throw rpcError
 
     if (res.success) {
+      const rewardCoins = Number(res.reward_coins || 0)
+      const claimsCount = Number(res.claims_count || 0)
+      const currentTotal = Number(res.current_total || 0)
+      const balanceAfter = Number(res.balance_after || 0)
+
       const successText =
         `✅ <b>领取成功！</b>\n\n` +
-        `💰 <b>获得奖励：</b> <code>${res.reward_coins}</code> 抖币\n` +
-        `📋 <b>领取份数：</b> ${res.claims_count} 份\n` +
-        `📊 <b>当前指标：</b> ${res.current_total}\n` +
-        `💵 <b>最新余额：</b> <code>${Math.floor(res.balance_after)}</code> 抖币\n\n` +
+        `💰 <b>获得奖励：</b> <code>${rewardCoins}</code> 抖币\n` +
+        `📋 <b>领取份数：</b> ${claimsCount} 份\n` +
+        `📊 <b>当前指标：</b> ${currentTotal}\n` +
+        `💵 <b>最新余额：</b> <code>${Math.floor(balanceAfter)}</code> 抖币\n\n` +
         `奖励已自动发放，感谢您的优质内容创作！`
 
       await editMessage(chatId, messageId, successText, {
@@ -710,14 +715,19 @@ export async function handleCreateRechargeOrder(chatId: number, messageId: numbe
 
     if (!profile) throw new Error('User not found')
 
-    // 2. 获取收款地址
-    const { data: setting } = await supabase
-      .from('system_settings')
-      .select('value_text')
-      .eq('id', 'recharge_trc20_address')
-      .single()
+    // 2. 获取收款地址 (安全升级：优先从环境变量读取 Secrets)
+    let trcAddress = Deno.env.get('RECHARGE_TRC20_ADDRESS')
 
-    const trcAddress = setting?.value_text
+    if (!trcAddress) {
+      // 🎯 兼容性兜底：如果环境变量未配置，尝试从数据库读取 (过渡期)
+      const { data: setting } = await supabase
+        .from('system_settings')
+        .select('value_text')
+        .eq('id', 'recharge_trc20_address')
+        .single()
+      trcAddress = setting?.value_text
+    }
+
     if (!trcAddress) {
       throw new Error('未配置充值收款地址，请联系客服')
     }
@@ -1138,10 +1148,16 @@ export async function handleToggleChannelAttr(
       .single()
 
     if (channel) {
-      await supabase
-        .from('bound_channels')
-        .update({ [attr]: !channel[attr] })
-        .eq('id', channelId)
+      const newValue = !channel[attr]
+      const updatePayload: any = { [attr]: newValue }
+
+      // 🎯 互斥逻辑：设为成人时自动取消东南亚，反之亦然
+      if (newValue) {
+        if (attr === 'is_adult') updatePayload.is_sea = false
+        if (attr === 'is_sea') updatePayload.is_adult = false
+      }
+
+      await supabase.from('bound_channels').update(updatePayload).eq('id', channelId)
     }
 
     await handleListChannels(chatId, messageId)

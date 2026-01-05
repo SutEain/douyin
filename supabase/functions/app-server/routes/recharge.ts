@@ -1,11 +1,7 @@
 import { supabaseAdmin } from '../lib/env.ts'
 import { successResponse, errorResponse } from '../../_shared/response.ts'
-import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
+import { requireAuth, requireAdminAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
 import { checkAndSendNotification } from '../lib/notification.ts'
-
-function isAdminUser(user: any): boolean {
-  return user?.app_metadata?.role === 'admin' || user?.email?.endsWith('@admin.user')
-}
 
 /**
  * 获取充值信息 (小程序端调用)
@@ -26,14 +22,22 @@ export async function handleGetRechargeInfo(req: Request): Promise<Response> {
       .limit(1)
       .maybeSingle()
 
-    // 2. 获取收款地址
-    const { data: setting } = await supabaseAdmin
-      .from('system_settings')
-      .select('value_text')
-      .eq('id', 'recharge_trc20_address')
-      .single()
+    // 2. 获取收款地址 (安全升级：优先从环境变量读取 Secrets)
+    let trcAddress = Deno.env.get('RECHARGE_TRC20_ADDRESS')
 
-    const trcAddress = setting?.value_text
+    if (!trcAddress) {
+      // 🎯 兼容性兜底：如果环境变量未配置，尝试从数据库读取 (过渡期)
+      const { data: setting } = await supabaseAdmin
+        .from('system_settings')
+        .select('value_text')
+        .eq('id', 'recharge_trc20_address')
+        .single()
+      trcAddress = setting?.value_text
+    }
+
+    if (!trcAddress) {
+      throw new HttpError('充值通道暂时关闭，请稍后再试', 500)
+    }
 
     return successResponse({
       pending_order: pendingOrder,
@@ -60,14 +64,18 @@ export async function handleCreateRechargeOrder(req: Request): Promise<Response>
       throw new HttpError('Invalid amount', 400)
     }
 
-    // 1. 获取收款地址
-    const { data: setting } = await supabaseAdmin
-      .from('system_settings')
-      .select('value_text')
-      .eq('id', 'recharge_trc20_address')
-      .single()
+    // 1. 获取收款地址 (优先从环境变量读取)
+    let trcAddress = Deno.env.get('RECHARGE_TRC20_ADDRESS')
 
-    const trcAddress = setting?.value_text
+    if (!trcAddress) {
+      const { data: setting } = await supabaseAdmin
+        .from('system_settings')
+        .select('value_text')
+        .eq('id', 'recharge_trc20_address')
+        .single()
+      trcAddress = setting?.value_text
+    }
+
     if (!trcAddress) {
       throw new HttpError('充值通道暂时关闭，请稍后再试', 500)
     }
@@ -148,27 +156,22 @@ export async function handleCancelRechargeOrder(req: Request): Promise<Response>
 
 export async function handleAdminConfirmRecharge(req: Request): Promise<Response> {
   try {
-    const { user } = await requireAuth(req)
-
-    // 权限检查：只有管理员可以确认充值
-    if (!isAdminUser(user)) {
-      throw new HttpError('Forbidden', 403)
-    }
+    // 1. 强制管理员认证 (含 IP 校验)
+    const { user: adminUser } = await requireAdminAuth(req)
 
     const body = await parseJsonBody<{
       order_id: string
-      admin_id: string
     }>(req)
 
-    const { order_id, admin_id } = body
-    if (!order_id || !admin_id) {
-      throw new HttpError('Missing order_id or admin_id', 400)
+    const { order_id } = body
+    if (!order_id) {
+      throw new HttpError('Missing order_id', 400)
     }
 
-    // 1. 调用 RPC 处理充值逻辑
+    // 2. 调用 RPC 处理充值逻辑
     const { data: res, error: rpcError } = await supabaseAdmin.rpc('admin_confirm_recharge', {
       p_order_id: order_id,
-      p_admin_id: admin_id
+      p_admin_id: adminUser.id // ✅ 使用经过校验的 adminUser.id，防止伪造
     })
 
     if (rpcError) {

@@ -209,9 +209,16 @@ async function copyLink() {
   _showLoading()
   await _sleep(500)
   _hideLoading()
-  _copy(props.item.share_info.share_link_desc + props.item.share_info.share_url)
-  //TODO 抖音样式改了
-  _notice('复制成功')
+
+  // 🎯 恢复为“分享口令”格式，以便在 Telegram 中弹出卡片
+  const botUsername = (import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot').replace('@', '')
+  let shareCommand = `@${botUsername} video_${props.videoId || props.item?.id}`
+  if (store.userinfo?.numeric_id) {
+    shareCommand += `_i${store.userinfo.numeric_id}`
+  }
+
+  _copy(shareCommand)
+  _notice('分享口令已复制，去聊天框粘贴即可弹出卡片')
 }
 
 function toggleCall(item) {

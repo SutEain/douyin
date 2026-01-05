@@ -153,6 +153,9 @@ export async function handlePhoto(
 
       console.log(`[handlePhoto] 合辑更新成功: id=${result.id}, 当前数量=${result.media_count}`)
 
+      // 🎯 触发 Worker 处理图片 (转存 R2)
+      await triggerWorker(result.id, photo.file_id, chatId, 0)
+
       // 🎯 只要是新创建的记录，就显示编辑菜单
       if (result.is_new) {
         const { data: newPost } = await supabase
@@ -266,15 +269,15 @@ export async function saveSinglePhoto(
       content_type: 'image',
       media_list: JSON.stringify([mediaItem]),
       images: JSON.stringify([mediaItem]),
-      cover_url: photo.file_id, // 🎯 封面使用图片 file_id
+      cover_url: photo.file_id, // 🎯 封面暂时使用图片 file_id
       width: photo.width,
       height: photo.height,
       file_size: photo.file_size || 0,
-      storage_type: 'telegram',
+      storage_type: 'r2_pending',
       is_private: false,
       is_adult: extraData?.is_adult || false,
       is_sea: extraData?.is_sea || false,
-      status: extraData?.status || (isAutoApprove ? 'published' : 'draft'),
+      status: extraData?.status || 'processing',
       is_auto_sync: extraData?.is_auto_sync || false, // 🎯 标记自动同步
       review_status: isAutoApprove ? 'auto_approved' : 'pending',
       published_at: isAutoApprove ? new Date().toISOString() : null
@@ -289,6 +292,9 @@ export async function saveSinglePhoto(
   }
 
   console.log(`[saveSinglePhoto] 图片记录已保存: ${draftPost.id}`)
+
+  // 🎯 触发 Worker 处理图片 (转存 R2)
+  await triggerWorker(draftPost.id, photo.file_id, chatId, 0)
 
   // 🎯 如果是频道同步（自动就绪/发布），则发送同步成功提示并退出
   if (extraData?.is_auto_sync) {

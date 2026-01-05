@@ -876,10 +876,16 @@ export async function handleCallback(
           return
         }
         case 'toggle_adult': {
-          await supabase.from('videos').update({ is_adult: !video.is_adult }).eq('id', video.id)
+          const newIsAdult = !video.is_adult
+          const updatePayload: any = { is_adult: newIsAdult }
+          // 🎯 互斥逻辑：设为成人时，自动取消东南亚标记
+          if (newIsAdult) {
+            updatePayload.is_sea = false
+          }
+          await supabase.from('videos').update(updatePayload).eq('id', video.id)
           await answerCallbackQuery(
             callbackQueryId,
-            !video.is_adult ? '已标记为成人内容，请确保未涉及任何未成年人。' : '已取消成人内容标记'
+            newIsAdult ? '已标记为成人内容，并自动取消东南亚标记。' : '已取消成人内容标记'
           )
           const { data: updatedVideo } = await supabase
             .from('videos')
@@ -892,10 +898,16 @@ export async function handleCallback(
           return
         }
         case 'toggle_sea': {
-          await supabase.from('videos').update({ is_sea: !video.is_sea }).eq('id', video.id)
+          const newIsSea = !video.is_sea
+          const updatePayload: any = { is_sea: newIsSea }
+          // 🎯 互斥逻辑：设为东南亚时，自动取消成人标记
+          if (newIsSea) {
+            updatePayload.is_adult = false
+          }
+          await supabase.from('videos').update(updatePayload).eq('id', video.id)
           await answerCallbackQuery(
             callbackQueryId,
-            !video.is_sea ? '已标记为东南亚板块' : '已取消东南亚板块标记'
+            newIsSea ? '已标记为东南亚板块，并自动取消成人标记。' : '已取消东南亚板块标记'
           )
           const { data: updatedVideo } = await supabase
             .from('videos')

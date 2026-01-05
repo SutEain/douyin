@@ -1,36 +1,28 @@
 import { supabaseAdmin } from '../lib/env.ts'
 import { successResponse, errorResponse } from '../../_shared/response.ts'
-import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
+import { requireAdminAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
 import { checkAndSendNotification } from '../lib/notification.ts'
-
-function isAdminUser(user: any): boolean {
-  return user?.app_metadata?.role === 'admin' || user?.email?.endsWith('@admin.user')
-}
 
 export async function handleAdminProcessWithdraw(req: Request): Promise<Response> {
   try {
-    const { user } = await requireAuth(req)
-
-    if (!isAdminUser(user)) {
-      throw new HttpError('Forbidden', 403)
-    }
+    // 1. 强制管理员认证 (含 IP 校验)
+    const { user: adminUser } = await requireAdminAuth(req)
 
     const body = await parseJsonBody<{
       order_id: string
-      admin_id: string
       action: 'approve' | 'reject'
       remark?: string
     }>(req)
 
-    const { order_id, admin_id, action, remark } = body
-    if (!order_id || !admin_id || !action) {
+    const { order_id, action, remark } = body
+    if (!order_id || !action) {
       throw new HttpError('Missing parameters', 400)
     }
 
-    // 1. 调用 RPC 处理提现逻辑
+    // 2. 调用 RPC 处理提现逻辑
     const { data: res, error: rpcError } = await supabaseAdmin.rpc('admin_process_withdraw', {
       p_order_id: order_id,
-      p_admin_id: admin_id,
+      p_admin_id: adminUser.id, // ✅ 使用 adminUser.id
       p_action: action,
       p_remark: remark
     })
