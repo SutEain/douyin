@@ -41,26 +41,37 @@ export async function handleRequest(req: Request): Promise<Response> {
 
       console.log('[BOT-APP] Update received:', JSON.stringify(update).substring(0, 500))
 
-      // 🎯 1. 提取 chatId 进行黑名单检查
-      const extractedChatId = 
-        update.message?.chat?.id || 
-        update.callback_query?.message?.chat?.id || 
+      // 🎯 1. 提取用户 ID 进行黑名单检查 (注意：在群组中 chat.id 是群 ID，from.id 才是用户 ID)
+      const userIdToCheck = 
+        update.message?.from?.id || 
+        update.edited_message?.from?.id || 
+        update.callback_query?.from?.id || 
         update.inline_query?.from?.id;
 
-      if (extractedChatId && update.type !== 'worker_complete') {
+      if (userIdToCheck && update.type !== 'worker_complete') {
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_banned, ban_reason')
-          .eq('tg_user_id', extractedChatId)
+          .eq('tg_user_id', userIdToCheck)
           .maybeSingle();
 
         if (profile?.is_banned) {
-          console.log(`[BOT-BAN] 用户被拦截: ${extractedChatId}`);
+          console.log(`[BOT-BAN] 拦截到封禁用户操作: userId=${userIdToCheck}, updateType=${Object.keys(update).find(k => k !== 'update_id')}`);
           const banReason = profile.ban_reason || '由于违反社区规范，您的账号已被封禁。';
           const banNotice = `🚫 <b>您的账号已被封禁</b>\n\n原因: ${banReason}\n\n如有疑问，请联系管理员。`;
 
-          if (update.message) {
-            await sendMessage(extractedChatId, banNotice);
+          // 确定发送通知的目标
+          const targetChatId = 
+            update.message?.chat?.id || 
+            update.edited_message?.chat?.id || 
+            update.callback_query?.message?.chat?.id;
+
+          if ((update.message || update.edited_message) && targetChatId) {
+            const msg = update.message || update.edited_message;
+            const replyOptions = msg.chat.type !== 'private' 
+              ? { reply_to_message_id: msg.message_id } 
+              : {};
+            await sendMessage(targetChatId, banNotice, replyOptions);
           } else if (update.callback_query) {
              // 弹出警告提示框
              const { answerCallbackQuery } = await import('./telegram.ts');
@@ -82,7 +93,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                    title: '🚫 您的账号已被封禁',
                    description: banReason,
                    input_message_content: {
-                     message_text: '🚫 抱歉，由于违反规范，我暂时无法使用分享功能。'
+                     message_text: '🚫 抱歉，由于违反规范，我暂时无法使用机器人功能。'
                    }
                  }],
                  cache_time: 0

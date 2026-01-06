@@ -33,12 +33,20 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
     // 2. 获取发送者信息
     const { data: sender } = await supabase
       .from('profiles')
-      .select('id, nickname, balance_coins')
+      .select('id, nickname, balance_coins, is_banned, ban_reason')
       .eq('tg_user_id', message.from.id)
       .single()
 
     if (!sender) {
       await sendMessage(chatId, '❌ 您尚未在系统中注册，请先在私聊中激活机器人。')
+      return
+    }
+
+    if (sender.is_banned) {
+      const reason = sender.ban_reason || '由于违反社区规范，您的账号已被封禁。'
+      await sendMessage(chatId, `🚫 <b>您的账号已被封禁</b>\n\n原因: ${reason}`, {
+        reply_to_message_id: message.message_id
+      })
       return
     }
 
@@ -153,12 +161,18 @@ export async function handleClaimRedPacket(
     // 1. 获取抢红包者信息
     const { data: user } = await supabase
       .from('profiles')
-      .select('id, nickname')
+      .select('id, nickname, is_banned, ban_reason')
       .eq('tg_user_id', tgUserId)
       .single()
 
     if (!user) {
       await answerCallbackQuery(callbackQueryId, '❌ 请先在私聊中激活机器人再抢红包哦', true)
+      return
+    }
+
+    if (user.is_banned) {
+      const reason = user.ban_reason || '由于违反社区规范，您的账号已被封禁。'
+      await answerCallbackQuery(callbackQueryId, `🚫 账号已封禁\n原因: ${reason}`, true)
       return
     }
 
