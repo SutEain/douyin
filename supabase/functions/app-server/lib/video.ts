@@ -230,36 +230,9 @@ export async function buildCoverUrl(row: any, profile: any): Promise<string> {
 export async function buildTelegramFileUrl(fileId?: string): Promise<string | null> {
   if (!fileId) return null
 
-  if (TG_FILE_PROXY_URL) {
-    const base = String(TG_FILE_PROXY_URL).replace(/\/$/, '')
-
-    // 🎯 兼容旧的 ?file_id= 模式，但优先使用直链路径模式 /tg/file_id
-    if (base.includes('?')) {
-      const sep = base.includes('file_id=') ? '' : base.includes('?') ? '&' : '?'
-      return `${base}${sep}file_id=${encodeURIComponent(fileId)}`
-    }
-
-    // 🎯 统一使用路径模式，这样可以直接指向 R2 (需 R2 开启 /tg/ 路径访问)
-    if (base.endsWith('/tg')) {
-      return `${base}/${encodeURIComponent(fileId)}`
-    }
-    return `${base}/tg/${encodeURIComponent(fileId)}`
-  }
-
-  if (!TG_BOT_TOKEN) {
-    console.warn('[app-server] Missing TG_BOT_TOKEN, cannot build Telegram URL')
-    return null
-  }
-
-  const apiUrl = `https://api.telegram.org/bot${TG_BOT_TOKEN}/getFile?file_id=${fileId}`
-  const resp = await fetch(apiUrl)
-  const data = await resp.json()
-  if (!data.ok) {
-    console.error('[app-server] getFile failed:', data)
-    return null
-  }
-  const filePath = data.result.file_path
-  return `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${filePath}`
+  // 🎯 纯 R2 架构：不再生成指向失效 CDN 代理的链接
+  // 直接返回 null，防止前端发起无效请求
+  return null
 }
 
 export async function convertMediaReferenceToUrl(value?: string): Promise<string | null> {
