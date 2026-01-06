@@ -19,6 +19,7 @@ export function isTelegramFileId(str: string): boolean {
 
 /**
  * 将 Telegram file_id 或相对路径转换为 CDN URL
+ * 🎯 纯 R2 架构版本：不再使用 Telegram CDN 代理
  */
 export function buildCdnUrl(fileIdOrUrl: string): string {
   if (!fileIdOrUrl) return ''
@@ -36,40 +37,22 @@ export function buildCdnUrl(fileIdOrUrl: string): string {
     return `${base}${fileIdOrUrl}`
   }
 
-  // 3. 如果是 file_id，转换为 CDN 代理 URL
-  if (!CF_WORKER_URL) {
-    console.warn('[buildCdnUrl] CF Worker URL not configured')
-    return ''
-  }
-
-  const base = String(CF_WORKER_URL).replace(/\/$/, '')
-  // ... (保留原有的 query 和 /tg 逻辑)
-  if (base.includes('?')) {
-    const join = base.endsWith('?') || base.endsWith('&') ? '' : base.includes('=') ? '' : ''
-    const sep = base.includes('file_id=') ? '' : base.includes('?') ? '&' : '?'
-    return `${base}${join}${sep}file_id=${encodeURIComponent(fileIdOrUrl)}`
-  }
-
-  if (base.endsWith('/tg')) {
-    return `${base}/${encodeURIComponent(fileIdOrUrl)}`
-  }
-  return `${base}/tg/${encodeURIComponent(fileIdOrUrl)}`
+  // 3. 🎯 如果是 file_id，在纯 R2 架构下不再代理
+  // 后台预览也强制走 R2，如果没有搬家则显示为空，提示需要补救
+  console.warn('[buildCdnUrl] 检测到未搬家的 Telegram file_id:', fileIdOrUrl)
+  return ''
 }
 
 /**
  * 获取视频播放URL
  */
 export function getVideoPlayUrl(record: any): string {
-  // 优先使用 play_url（大文件OSS方案）
+  // 1. 优先使用 play_url（R2 方案）
   if (record.play_url) {
     return buildCdnUrl(record.play_url)
   }
 
-  // 其次使用 tg_file_id（Telegram小文件）
-  if (record.tg_file_id) {
-    return buildCdnUrl(record.tg_file_id)
-  }
-
+  // 🎯 纯 R2 架构不再支持 tg_file_id 播放
   return ''
 }
 
@@ -77,36 +60,26 @@ export function getVideoPlayUrl(record: any): string {
  * 获取封面URL
  */
 export function getCoverUrl(record: any): string {
-  // 1. 优先使用记录自带的 cover_url
+  // 1. 优先使用记录自带的 cover_url (R2)
   if (record.cover_url) {
     return buildCdnUrl(record.cover_url)
   }
 
-  // 2. 其次使用缩略图 file_id
-  if (record.tg_thumbnail_file_id) {
-    return buildCdnUrl(record.tg_thumbnail_file_id)
-  }
-
-  // 3. 📸 对于图片/相册/合集：提取媒体列表中的第一项
+  // 2. 📸 对于图片/相册/合集：提取媒体列表中的第一项
   const contentType = record.content_type || 'video'
   if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
     const mediaList = parseImages(record.media_list || record.images)
     if (mediaList.length > 0) {
       const first = mediaList[0]
-      // 如果第一项是视频，优先用视频封面
-      if (first.type === 'video' && first.cover_url) {
-        return buildCdnUrl(first.cover_url)
+      // 优先使用已经生成的 R2 地址 (play_url, cover_url, url)
+      const target = first.cover_url || first.play_url || first.url
+      if (target && (target.startsWith('/') || target.startsWith('http'))) {
+        return buildCdnUrl(target)
       }
-      // 否则用 file_id (图片或视频原文件，buildCdnUrl 会处理)
-      return buildCdnUrl(first.file_id)
     }
   }
 
-  // 4. 最后兜底：如果是视频且有 tg_file_id
-  if (record.tg_file_id) {
-    return buildCdnUrl(record.tg_file_id)
-  }
-
+  // 🎯 彻底废弃 tg_thumbnail_file_id 和 tg_file_id 兜底
   return ''
 }
 

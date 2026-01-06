@@ -358,7 +358,10 @@ export const VideoList = () => {
   }
 
   // 批量执行操作
-  const handleBatchAction = (action: 'approve' | 'set_adult' | 'unset_adult' | 'set_sea' | 'unset_sea', label: string) => {
+  const handleBatchAction = (
+    action: 'approve' | 'set_adult' | 'unset_adult' | 'set_sea' | 'unset_sea',
+    label: string
+  ) => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先选择要操作的视频')
       return
@@ -370,7 +373,9 @@ export const VideoList = () => {
       onOk: async () => {
         setBatchLoading(true)
         try {
-          const { data: { session } } = await supabaseClient.auth.getSession()
+          const {
+            data: { session }
+          } = await supabaseClient.auth.getSession()
           const token = session?.access_token
 
           const response = await fetch(
@@ -732,39 +737,37 @@ export const VideoList = () => {
                 批量通过审核 ({selectedRowKeys.length})
               </Button>
               <Button.Group>
-                <Button 
-                  danger 
-                  onClick={() => handleBatchAction('set_adult', '设为成人')} 
+                <Button
+                  danger
+                  onClick={() => handleBatchAction('set_adult', '设为成人')}
                   loading={batchLoading}
                 >
                   批量成人
                 </Button>
-                <Button 
-                  onClick={() => handleBatchAction('unset_adult', '取消成人')} 
+                <Button
+                  onClick={() => handleBatchAction('unset_adult', '取消成人')}
                   loading={batchLoading}
                 >
                   取消
                 </Button>
               </Button.Group>
               <Button.Group>
-                <Button 
-                  type="primary" 
+                <Button
+                  type="primary"
                   style={{ background: '#722ed1', borderColor: '#722ed1' }}
-                  onClick={() => handleBatchAction('set_sea', '设为东南亚')} 
+                  onClick={() => handleBatchAction('set_sea', '设为东南亚')}
                   loading={batchLoading}
                 >
                   批量东南亚
                 </Button>
-                <Button 
-                  onClick={() => handleBatchAction('unset_sea', '取消东南亚')} 
+                <Button
+                  onClick={() => handleBatchAction('unset_sea', '取消东南亚')}
                   loading={batchLoading}
                 >
                   取消
                 </Button>
               </Button.Group>
-              <Button onClick={() => setSelectedRowKeys([])}>
-                取消选择
-              </Button>
+              <Button onClick={() => setSelectedRowKeys([])}>取消选择</Button>
             </Space>
           </div>
         )}
@@ -1176,6 +1179,7 @@ export const VideoList = () => {
                   <video
                     src={buildCdnUrl(
                       previewMediaItems[currentImageIndex].play_url ||
+                        previewMediaItems[currentImageIndex].url ||
                         previewMediaItems[currentImageIndex].file_id
                     )}
                     controls
@@ -1186,7 +1190,11 @@ export const VideoList = () => {
                 </div>
               ) : (
                 <img
-                  src={buildCdnUrl(previewMediaItems[currentImageIndex].file_id)}
+                  src={buildCdnUrl(
+                    previewMediaItems[currentImageIndex].play_url ||
+                      previewMediaItems[currentImageIndex].url ||
+                      previewMediaItems[currentImageIndex].file_id
+                  )}
                   alt={`媒体 ${currentImageIndex + 1}`}
                   style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
                   onError={(e) => {
