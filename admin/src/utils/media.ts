@@ -4,9 +4,8 @@
 
 // 期望配置为：
 // - https://douyin-videos.xxx.com            (推荐，会自动拼 /tg/<file_id>)
-// - https://douyin-videos.xxx.com/tg         (也支持)
-// - https://douyin-videos.xxx.com/?file_id=  (历史兼容)
-const CF_WORKER_URL = import.meta.env.VITE_TG_CDN_PROXY_URL || ''
+// 🎯 纯 R2 架构版本：不再使用 Telegram CDN 代理
+// const CF_WORKER_URL = import.meta.env.VITE_TG_CDN_PROXY_URL || ''
 
 /**
  * 判断是否是 Telegram file_id
