@@ -1,3 +1,4 @@
+/* global Deno */
 // 文本工具（仅重构，不改行为）
 
 // 安全截断字符串（避免在emoji中间截断）
@@ -30,4 +31,21 @@ export function escapeHTML(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;')
+}
+
+/**
+ * 脱敏错误消息，防止 Token 泄漏
+ */
+export function sanitizeError(message: string): string {
+  if (!message) return message
+  // 从环境变量获取 Token (如果可用)
+  const token = Deno.env.get('TG_BOT_TOKEN')
+  let sanitized = message
+  if (token) {
+    sanitized = sanitized.replaceAll(token, '****:****')
+  }
+  // 使用正则匹配可能的 Telegram Token 格式 (10位左右数字:40位左右字符)
+  // 格式如: 1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ1234567890
+  sanitized = sanitized.replace(/\d{8,13}:[a-zA-Z0-9_-]{32,45}/g, '****:****')
+  return sanitized
 }

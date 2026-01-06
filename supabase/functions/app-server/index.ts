@@ -417,162 +417,163 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
 
   // 🎯 处理邀请逻辑
   try {
-    let inviterCode: string | null = null
+    // 1. 获取当前用户的邀请状态
+    const { data: myProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, invited_by, invite_rewarded, created_at')
+      .eq('id', userId)
+      .single()
 
-    // 解析邀请码
-    if (isNewUser && start_param) {
-      if (start_param.startsWith('invite_')) {
-        // 兼容旧逻辑
-        const code = start_param.replace('invite_', '')
-        if (/^\d+$/.test(code)) {
-          inviterCode = code
-        } else if (code.includes('-')) {
-          // UUID 格式，直接当作 inviterId 使用
-          const inviterId = code
-          if (inviterId !== userId) {
-            console.log('[Invite] 新用户通过旧邀请链接进入, inviterId =', inviterId)
-            // 仅记录邀请关系，不做奖励计算（旧逻辑暂时这样处理，或可统一调用奖励逻辑）
-            await supabaseAdmin.from('profiles').update({ invited_by: inviterId }).eq('id', userId)
+    if (myProfile && !myProfile.invite_rewarded) {
+      let inviterId = myProfile.invited_by
+      let inviterCode: string | null = null
+
+      // 如果当前没有邀请人，尝试从 start_param 解析
+      if (!inviterId && start_param) {
+        if (start_param.startsWith('invite_')) {
+          const code = start_param.replace('invite_', '')
+          if (/^\d+$/.test(code)) {
+            inviterCode = code
+          } else if (code.includes('-')) {
+            inviterId = code
           }
+        } else if (start_param.startsWith('video_') && start_param.includes('_i')) {
+          const parts = start_param.split('_i')
+          if (parts.length > 1) inviterCode = parts[1]
+        } else if (start_param.startsWith('live_') && start_param.includes('_i')) {
+          const parts = start_param.split('_i')
+          if (parts.length > 1) inviterCode = parts[1]
         }
-      } else if (start_param.startsWith('video_') && start_param.includes('_i')) {
-        // 新格式：video_xxx_i12345
-        const parts = start_param.split('_i')
-        if (parts.length > 1) {
-          inviterCode = parts[1]
-        }
-      } else if (start_param.startsWith('live_') && start_param.includes('_i')) {
-        // 🎯 直播链接也支持带邀请码：live_xxx_i12345
-        const parts = start_param.split('_i')
-        if (parts.length > 1) {
-          inviterCode = parts[1]
+
+        if (inviterCode && /^\d+$/.test(inviterCode)) {
+          const { data: invProfile } = await supabaseAdmin
+            .from('profiles')
+            .select('id')
+            .eq('numeric_id', parseInt(inviterCode))
+            .maybeSingle()
+          if (invProfile) inviterId = invProfile.id
         }
       }
-    }
 
-    // 处理数字邀请码 (numeric_id)
-    if (inviterCode && /^\d+$/.test(inviterCode)) {
-      const numericId = parseInt(inviterCode)
-      console.log('[Invite] 检测到数字邀请码:', numericId)
+      // 如果找到了合法的邀请人（且不是自己）
+      if (inviterId && inviterId !== userId) {
+        console.log('[Invite] 准备为邀请人发放奖励:', inviterId)
 
-      // 查找邀请人
-      const { data: inviterProfile } = await supabaseAdmin
-        .from('profiles')
-        .select('id, invite_success_count, adult_permanent_unlock, adult_unlock_until, balance_coins')
-        .eq('numeric_id', numericId)
-        .maybeSingle()
-
-      if (inviterProfile && inviterProfile.id !== userId) {
-        const inviterId = inviterProfile.id
-        console.log('[Invite] 找到邀请人:', inviterId)
-
-        // 再次确认是否是新用户 (虽然外面有 isNewUser 标记，但双重保险)
-        // isNewUser 变量是在 handleTelegramLogin 内部根据是否执行了 createUser 逻辑判断的，非常准确
-        if (!isNewUser) {
-          console.log('[Invite] 用户不是新注册，跳过邀请统计')
+        // 🎯 核心安全检查：只有注册时间在 24 小时内的用户才算有效“转化”
+        const createdAt = new Date(myProfile.created_at).getTime()
+        const nowTime = Date.now()
+        if (nowTime - createdAt > 24 * 3600 * 1000) {
+          console.log('[Invite] 用户注册超过 24 小时，不计入奖励转化')
         } else {
-          // 1. 标记被邀请人
-          await supabaseAdmin.from('profiles').update({ invited_by: inviterId }).eq('id', userId)
-
-          // 2. 更新邀请人奖励
-          const now = new Date()
-          const currentCount = inviterProfile.invite_success_count ?? 0
-          const newCount = currentCount + 1
-
-          // 从 system_settings 获取奖励金额
-          const { data: setting } = await supabaseAdmin
-            .from('system_settings')
-            .select('value_int')
-            .eq('id', 'invitation_reward_coins')
+          // 查找邀请人详细信息并锁定
+          const { data: inviterProfile } = await supabaseAdmin
+            .from('profiles')
+            .select(
+              'id, invite_success_count, adult_permanent_unlock, adult_unlock_until, balance_coins'
+            )
+            .eq('id', inviterId)
             .maybeSingle()
 
-          const rewardCoins = setting?.value_int ?? 20 // 默认 20 抖币
+          if (inviterProfile) {
+            // 标记当前用户已完成转化（防止重复奖励）
+            await supabaseAdmin
+              .from('profiles')
+              .update({
+                invited_by: inviterId,
+                invite_rewarded: true
+              })
+              .eq('id', userId)
 
-          let adultPermanentUnlock = inviterProfile.adult_permanent_unlock === true
-          let adultUnlockUntil = inviterProfile.adult_unlock_until
+            // 发放奖励逻辑
+            const now = new Date()
+            const currentCount = inviterProfile.invite_success_count ?? 0
+            const newCount = currentCount + 1
 
-          if (!adultPermanentUnlock) {
-            if (newCount >= 3) {
-              adultPermanentUnlock = true
-              adultUnlockUntil = null
-            } else {
-              // 如果当前有解锁时间，在当前时间基础上增加
-              const currentUnlock = adultUnlockUntil
-                ? new Date(adultUnlockUntil).getTime()
-                : now.getTime()
-              // 确保不早于现在
-              const baseTime = Math.max(currentUnlock, now.getTime())
+            const { data: setting } = await supabaseAdmin
+              .from('system_settings')
+              .select('value_int')
+              .eq('id', 'invitation_reward_coins')
+              .maybeSingle()
+            const rewardCoins = setting?.value_int ?? 20
 
-              let addHours = 0
-              if (newCount === 1) addHours = 24
-              if (newCount === 2) addHours = 72 // 3天
+            let adultPermanentUnlock = inviterProfile.adult_permanent_unlock === true
+            let adultUnlockUntil = inviterProfile.adult_unlock_until
 
-              if (addHours > 0) {
-                adultUnlockUntil = new Date(baseTime + addHours * 3600 * 1000).toISOString()
+            if (!adultPermanentUnlock) {
+              if (newCount >= 3) {
+                adultPermanentUnlock = true
+                adultUnlockUntil = null
+              } else {
+                const currentUnlock = adultUnlockUntil
+                  ? new Date(adultUnlockUntil).getTime()
+                  : now.getTime()
+                const baseTime = Math.max(currentUnlock, now.getTime())
+                let addHours = 0
+                if (newCount === 1) addHours = 24
+                if (newCount === 2) addHours = 72
+                if (addHours > 0) {
+                  adultUnlockUntil = new Date(baseTime + addHours * 3600 * 1000).toISOString()
+                }
+              }
+            }
+
+            // 更新邀请人
+            const { data: updatedInviter } = await supabaseAdmin
+              .from('profiles')
+              .update({
+                invite_success_count: newCount,
+                adult_permanent_unlock: adultPermanentUnlock,
+                adult_unlock_until: adultUnlockUntil,
+                balance_coins: (inviterProfile.balance_coins || 0) + rewardCoins
+              })
+              .eq('id', inviterId)
+              .select('balance_coins')
+              .single()
+
+            // 交易流水
+            await supabaseAdmin.from('coin_transactions').insert({
+              user_id: inviterId,
+              amount: rewardCoins,
+              balance_after: updatedInviter?.balance_coins || 0,
+              type: 'reward',
+              description: `成功邀请新用户(进入App)奖励`,
+              related_id: userId
+            })
+
+            // 发送通知
+            if (TG_BOT_TOKEN) {
+              const { data: inviterUser } = await supabaseAdmin
+                .from('profiles')
+                .select('tg_user_id')
+                .eq('id', inviterId)
+                .single()
+
+              if (inviterUser?.tg_user_id) {
+                let rewardText = ''
+                if (newCount === 1) rewardText = '获得 24小时 🔞专区无限刷'
+                else if (newCount === 2) rewardText = '获得 3天 🔞专区无限刷'
+                else if (newCount >= 3) rewardText = '获得 永久 🔞专区无限刷'
+
+                const msg =
+                  `🎉 <b>邀请转化成功！</b>\n\n` +
+                  `新用户已进入 Mini App，您当前已累计邀请 ${newCount} 人\n` +
+                  `🎁 ${rewardText}\n` +
+                  `💰 获得 ${rewardCoins} 抖币奖励！\n\n` +
+                  `继续邀请可获得更多奖励！`
+
+                fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    chat_id: inviterUser.tg_user_id,
+                    text: msg,
+                    parse_mode: 'HTML'
+                  })
+                }).catch((e) => console.error('[Invite] 发送通知失败:', e))
               }
             }
           }
-
-          // 执行更新：增加邀请人数 + 解锁时长 + 增加余额
-          const { data: updatedInviter } = await supabaseAdmin
-            .from('profiles')
-            .update({
-              invite_success_count: newCount,
-              adult_permanent_unlock: adultPermanentUnlock,
-              adult_unlock_until: adultUnlockUntil,
-              balance_coins: (inviterProfile.balance_coins || 0) + rewardCoins
-            })
-            .eq('id', inviterId)
-            .select('balance_coins')
-            .single()
-
-          // 记录流水
-          await supabaseAdmin.from('coin_transactions').insert({
-            user_id: inviterId,
-            amount: rewardCoins,
-            balance_after: updatedInviter?.balance_coins || 0,
-            type: 'reward',
-            description: `成功邀请新用户奖励`,
-            related_id: userId
-          })
-
-          console.log('[Invite] 邀请处理成功，邀请人新人数:', newCount, '获得奖励:', rewardCoins)
-
-          // 3. 发送通知给邀请人 (通过 Bot API)
-          if (TG_BOT_TOKEN) {
-            const { data: inviterUser } = await supabaseAdmin
-              .from('profiles')
-              .select('tg_user_id')
-              .eq('id', inviterId)
-              .single()
-
-            if (inviterUser?.tg_user_id) {
-              let rewardText = ''
-              if (newCount === 1) rewardText = '获得 24小时 🔞专区无限刷'
-              else if (newCount === 2) rewardText = '获得 3天 🔞专区无限刷'
-              else if (newCount >= 3) rewardText = '获得 永久 🔞专区无限刷'
-
-              const msg =
-                `🎉 <b>邀请成功！</b>\n\n` +
-                `您已成功邀请 ${newCount} 人\n` +
-                `🎁 ${rewardText}\n` +
-                `💰 获得 ${rewardCoins} 抖币奖励！\n\n` +
-                `继续邀请可获得更多奖励！`
-
-              await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  chat_id: inviterUser.tg_user_id,
-                  text: msg,
-                  parse_mode: 'HTML'
-                })
-              }).catch((e) => console.error('[Invite] 发送通知失败:', e))
-            }
-          }
         }
-      } else {
-        console.warn('[Invite] 未找到邀请人或不能邀请自己, code =', numericId)
       }
     }
   } catch (inviteError) {

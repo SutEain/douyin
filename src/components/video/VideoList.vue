@@ -777,13 +777,13 @@ function playCurrent() {
   })
 
   // 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
-  // console.log(`${DEBUG_PREFIX} 准备记录观看历史`, {
-  //   id: item?.aweme_id,
-  //   type: contentType,
-  //   hasRecorded: item?.aweme_id ? recordedViews.has(item.aweme_id) : false
-  // })
+  console.log(`${DEBUG_PREFIX} 准备记录观看历史`, {
+    id: item?.aweme_id,
+    type: contentType,
+    hasRecorded: item?.aweme_id ? recordedViews.has(item.aweme_id) : false
+  })
 
-  // recordEnterCurrent(item, contentType)
+  recordEnterCurrent(item, contentType)
 
   // 🎯 图片/相册/合集类型不需要播放视频元素
   if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {

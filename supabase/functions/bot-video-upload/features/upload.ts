@@ -2,7 +2,7 @@ import { BOT_TOKEN, BOT_WORKER_URL } from '../env.ts'
 import { supabase } from '../supabaseClient.ts'
 import { getUserState, updateUserState } from '../state.ts'
 import { getOrCreateProfile } from '../services/profile.ts'
-import { extractTags, escapeHTML } from '../utils/text.ts'
+import { extractTags, escapeHTML, sanitizeError } from '../utils/text.ts'
 import { editMessage, sendMessage } from '../telegram.ts'
 import { getEditKeyboard, getEditMenuText } from './editor.ts'
 
@@ -144,7 +144,8 @@ export async function handlePhoto(
         console.error('[handlePhoto] 原子追加失败:', rpcError || result?.error)
         await sendMessage(
           chatId,
-          '❌ 上传失败，请重试\n\n错误: ' + escapeHTML(rpcError?.message || result?.error)
+          '❌ 上传失败，请重试\n\n错误: ' +
+            sanitizeError(escapeHTML(rpcError?.message || result?.error))
         )
         return
       }
@@ -285,7 +286,10 @@ export async function saveSinglePhoto(
 
   if (error) {
     console.error('保存图片记录失败:', error)
-    await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + escapeHTML(error.message))
+    await sendMessage(
+      chatId,
+      '❌ 上传失败，请重试\n\n错误: ' + sanitizeError(escapeHTML(error.message))
+    )
     return
   }
 
@@ -411,7 +415,8 @@ export async function handleVideo(
         console.error('[handleVideo-MG] 原子追加失败:', rpcError || result?.error)
         await sendMessage(
           chatId,
-          '❌ 上传失败，请重试\n\n错误: ' + escapeHTML(rpcError?.message || result?.error)
+          '❌ 上传失败，请重试\n\n错误: ' +
+            sanitizeError(escapeHTML(rpcError?.message || result?.error))
         )
         return
       }
@@ -513,7 +518,10 @@ export async function handleVideo(
 
     if (error) {
       console.error('保存视频记录失败:', error)
-      await sendMessage(chatId, '❌ 上传失败，请重试\n\n错误: ' + escapeHTML(error.message))
+      await sendMessage(
+        chatId,
+        '❌ 上传失败，请重试\n\n错误: ' + sanitizeError(escapeHTML(error.message))
+      )
       return
     }
 
@@ -548,7 +556,7 @@ export async function handleVideo(
       await sendMessage(
         chatId,
         '❌ 处理失败，请重试\n\n错误: ' +
-          escapeHTML(error instanceof Error ? error.message : String(error))
+          sanitizeError(escapeHTML(error instanceof Error ? error.message : String(error)))
       )
     } catch (sendError) {
       console.error('[handleVideo] 发送错误消息也失败了:', sendError)

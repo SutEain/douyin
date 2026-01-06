@@ -11,7 +11,7 @@ import { getOrCreateProfile } from './services/profile.ts'
 import { getEditKeyboard, getEditMenuText } from './features/editor.ts'
 import { handlePhoto, handleVideo /*, mediaGroupRejectCache*/ } from './features/upload.ts'
 import { deleteTelegramMessage, sendMessage, editMessage } from './telegram.ts'
-// import { escapeHTML } from './utils/text.ts'
+import { sanitizeError } from './utils/text.ts'
 import { handleCallback } from './routers/callback.ts'
 import { handleLocation, handleText, handleForward } from './routers/messages.ts'
 import { handleChannelPost } from './routers/channelPost.ts'
@@ -66,7 +66,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
           if (!success) {
             if (messageId) await deleteTelegramMessage(chatId, messageId)
-            await sendMessage(chatId, `❌ 处理失败\n\n${workerError || '未知错误'}`)
+            await sendMessage(chatId, `❌ 处理失败\n\n${sanitizeError(workerError || '未知错误')}`)
             return new Response('OK', { status: 200 })
           }
 

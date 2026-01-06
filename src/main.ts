@@ -145,8 +145,8 @@ bus.on(EVENT_KEY.REMOVE_MUTED, () => {
 // ✅ Telegram WebApp 初始化已经在 index.html 中提前处理
 // 避免重复调用导致问题
 
-// 🚫 全局禁用 Console 输出 (生产环境或应用户要求)
-if (typeof window !== 'undefined') {
+// 🚫 全局禁用 Console 输出 (生产环境启用)
+if (typeof window !== 'undefined' && import.meta.env.PROD) {
   const methods: (keyof Console)[] = [
     'log',
     'info',

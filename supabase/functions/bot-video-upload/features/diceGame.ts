@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient.ts'
 import { sendMessage, answerCallbackQuery, editMessage, sendDice } from '../telegram.ts'
-import { escapeHTML } from '../utils/text.ts'
+import { escapeHTML, sanitizeError } from '../utils/text.ts'
 
 /**
  * 处理骰子比大小指令: tz [金额] [人数]
@@ -71,6 +71,11 @@ export async function handleDiceCommand(chatId: number, text: string, message: a
       `💰 赌注：<b>${amount}</b> 抖币\n` +
       `👥 目标人数：<b>${targetCount}</b> 人\n` +
       `⏳ 状态：等待加入 (1/${targetCount})\n\n` +
+      `📜 <b>游戏规则：</b>\n` +
+      `• 金额范围：5 - 10000 抖币\n` +
+      `• 人数范围：2 - 5 人\n` +
+      `• 抽水：系统自动抽取赢家总奖金的 5%\n` +
+      `• 限制：本群同时只能存在 1 局游戏\n\n` +
       `1. ${escapeHTML(sender.nickname)} (房主)`
 
     await sendMessage(chatId, diceText, {
@@ -83,7 +88,7 @@ export async function handleDiceCommand(chatId: number, text: string, message: a
     })
   } catch (err: any) {
     console.error('Dice Command Error:', err)
-    await sendMessage(chatId, `❌ 游戏发起失败: ${err.message}`)
+    await sendMessage(chatId, `❌ 游戏发起失败: ${sanitizeError(err.message)}`)
   }
 }
 
@@ -152,6 +157,8 @@ export async function handleJoinDiceGame(
         `💰 赌注：<b>${room.bet_amount}</b> 抖币\n` +
         `👥 人数：<b>${room.current_count}/${room.target_count}</b>\n` +
         `⏳ 状态：🔥 <b>满员，正在依次开奖...</b>\n\n` +
+        `📜 <b>游戏规则：</b>\n` +
+        `• 限制：本群同时只能存在 1 局游戏\n\n` +
         `${playerList}`
 
       // 移除加入按钮并更新状态
@@ -184,6 +191,8 @@ export async function handleJoinDiceGame(
         `💰 赌注：<b>${room.bet_amount}</b> 抖币\n` +
         `👥 人数：<b>${room.current_count}/${room.target_count}</b>\n` +
         `⏳ 状态：等待加入\n\n` +
+        `📜 <b>游戏规则：</b>\n` +
+        `• 限制：本群同时只能存在 1 局游戏\n\n` +
         `${playerList}`
 
       await editMessage(chatId, messageId, diceText, {
@@ -197,7 +206,7 @@ export async function handleJoinDiceGame(
     }
   } catch (err: any) {
     console.error('Join Dice Error:', err)
-    await answerCallbackQuery(callbackQueryId, `❌ 加入异常: ${err.message}`, true)
+    await answerCallbackQuery(callbackQueryId, `❌ 加入异常: ${sanitizeError(err.message)}`, true)
   }
 }
 
@@ -237,7 +246,7 @@ export async function handleCancelDiceGame(
     await editMessage(chatId, messageId, '❌ <b>本局游戏已被房主取消。</b>')
   } catch (err: any) {
     console.error('Cancel Dice Error:', err)
-    await answerCallbackQuery(callbackQueryId, `❌ 操作失败: ${err.message}`, true)
+    await answerCallbackQuery(callbackQueryId, `❌ 操作失败: ${sanitizeError(err.message)}`, true)
   }
 }
 
@@ -341,6 +350,6 @@ async function startRolling(chatId: number, roomId: string) {
     }
   } catch (err: any) {
     console.error('Rolling Error:', err)
-    await sendMessage(chatId, `❌ 结算过程发生异常: ${err.message}`)
+    await sendMessage(chatId, `❌ 结算过程发生异常: ${sanitizeError(err.message)}`)
   }
 }

@@ -47,6 +47,7 @@ import {
   editMessageReplyMarkup,
   sendMessage
 } from '../telegram.ts'
+import { sanitizeError } from '../utils/text.ts'
 
 // 处理回调按钮
 export async function handleCallback(
@@ -1134,7 +1135,7 @@ export async function handleCallback(
     try {
       await answerCallbackQuery(
         callbackQueryId,
-        '操作失败: ' + (error instanceof Error ? error.message : String(error))
+        '操作失败: ' + sanitizeError(error instanceof Error ? error.message : String(error))
       )
     } catch (answerError) {
       console.error('[handleCallback] 回复callback也失败了:', answerError)

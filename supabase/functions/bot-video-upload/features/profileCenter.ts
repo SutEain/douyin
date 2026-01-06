@@ -1,5 +1,6 @@
+/* global Deno */
 import { supabase } from '../supabaseClient.ts'
-import { escapeHTML } from '../utils/text.ts'
+import { escapeHTML, sanitizeError } from '../utils/text.ts'
 import { editMessage, sendMessage } from '../telegram.ts'
 import { getPersistentKeyboard } from '../keyboards.ts'
 
@@ -120,7 +121,7 @@ export async function handleClaimGenericReward(
     }
   } catch (error: any) {
     console.error('handleClaimReward error:', error)
-    await editMessage(chatId, messageId, `❌ 领取异常: ${error.message}`, {
+    await editMessage(chatId, messageId, `❌ 领取异常: ${sanitizeError(error.message)}`, {
       reply_markup: {
         inline_keyboard: [[{ text: '⬅️ 返回奖励中心', callback_data: 'profile_task_reward' }]]
       }
@@ -379,9 +380,9 @@ export async function handleStartLive(chatId: number, messageId?: number, title?
     } else {
       await sendMessage(chatId, text, { reply_markup: keyboard })
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('handleStartLive error:', error)
-    await sendMessage(chatId, `❌ 开启直播失败: ${error.message}`)
+    await sendMessage(chatId, `❌ 开启直播失败: ${sanitizeError(error.message)}`)
   }
 }
 
@@ -803,7 +804,7 @@ export async function handleCreateRechargeOrder(chatId: number, messageId: numbe
     })
   } catch (error: any) {
     console.error('handleCreateRechargeOrder error:', error)
-    await editMessage(chatId, messageId, `❌ 创建订单失败: ${error.message}`, {
+    await editMessage(chatId, messageId, `❌ 创建订单失败: ${sanitizeError(error.message)}`, {
       reply_markup: {
         inline_keyboard: [[{ text: '⬅️ 返回重试', callback_data: 'profile_recharge' }]]
       }
@@ -833,7 +834,7 @@ export async function handleCancelRechargeOrder(
     })
   } catch (error: any) {
     console.error('handleCancelRechargeOrder error:', error)
-    await editMessage(chatId, messageId, `❌ 取消失败: ${error.message}`, {
+    await editMessage(chatId, messageId, `❌ 取消失败: ${sanitizeError(error.message)}`, {
       reply_markup: {
         inline_keyboard: [[{ text: '⬅️ 返回充值', callback_data: 'profile_recharge' }]]
       }
@@ -990,7 +991,7 @@ export async function handleWithdrawSubmit(chatId: number, messageId: number) {
     await editMessage(chatId, messageId, successText, { reply_markup: keyboard })
   } catch (error: any) {
     console.error('handleWithdrawSubmit error:', error)
-    await editMessage(chatId, messageId, `❌ 提交失败: ${error.message}`, {
+    await editMessage(chatId, messageId, `❌ 提交失败: ${sanitizeError(error.message)}`, {
       reply_markup: {
         inline_keyboard: [[{ text: '⬅️ 返回重试', callback_data: 'profile_withdraw' }]]
       }
@@ -1025,7 +1026,7 @@ export async function handleListChannels(chatId: number, messageId?: number) {
       text += `<i>目前暂未绑定任何频道</i>`
     } else {
       channels.forEach((c: any) => {
-        const attrs = []
+        const attrs: string[] = []
         if (c.is_adult) attrs.push('🔞 成人')
         if (c.is_sea) attrs.push('🌏 东南亚')
         const attrText = attrs.length > 0 ? ` [${attrs.join(' | ')}]` : ''

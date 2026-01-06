@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient.ts'
 import { getUserState, updateUserState } from '../state.ts'
 import { deleteTelegramMessage, editMessage, sendMessage } from '../telegram.ts'
-import { escapeHTML } from '../utils/text.ts'
+import { escapeHTML, sanitizeError } from '../utils/text.ts'
 import { getEditKeyboard, getEditMenuText } from '../features/editor.ts'
 import { handleViewVideo } from '../features/videoActions.ts'
 import { handleMyPublished, setPublishedCtx } from '../features/myVideos.ts'
@@ -92,7 +92,7 @@ export async function handleForward(chatId: number, message: any) {
     })
   } catch (error: any) {
     console.error('handleForward error:', error)
-    await sendMessage(chatId, `❌ 绑定失败: ${error.message}`)
+    await sendMessage(chatId, `❌ 绑定失败: ${sanitizeError(error.message)}`)
   }
 }
 

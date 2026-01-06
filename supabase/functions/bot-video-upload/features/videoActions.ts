@@ -1,7 +1,7 @@
 import { BOT_TOKEN, TG_API_BASE, TG_BOT_USERNAME, TG_APP_NAME } from '../env.ts'
 import { supabase } from '../supabaseClient.ts'
 import { updateUserState } from '../state.ts'
-import { safeTruncate } from '../utils/text.ts'
+import { safeTruncate, sanitizeError } from '../utils/text.ts'
 import { getFlag } from '../utils/geo.ts'
 import { answerCallbackQuery, editMessage } from '../telegram.ts'
 import { handleMyDrafts, handleMyProcessing, handleMyPublished } from './myVideos.ts'
@@ -131,7 +131,7 @@ export async function handleViewVideo(chatId: number, messageId: number, videoId
 
     if (error) {
       console.error('[handleViewVideo] 查询失败:', error)
-      await editMessage(chatId, messageId, '❌ 获取视频失败\n\n' + error.message, {
+      await editMessage(chatId, messageId, '❌ 获取视频失败\n\n' + sanitizeError(error.message), {
         reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'my_published' }]] }
       })
       return
@@ -219,7 +219,7 @@ export async function handleViewVideo(chatId: number, messageId: number, videoId
     })
 
     console.log('[handleViewVideo] 完成')
-  } catch (error) {
+  } catch (error: any) {
     console.error('[handleViewVideo] 发生错误:', error)
     console.error(
       '[handleViewVideo] 错误堆栈:',
@@ -229,7 +229,7 @@ export async function handleViewVideo(chatId: number, messageId: number, videoId
       await editMessage(
         chatId,
         messageId,
-        '❌ 发生错误\n\n' + (error instanceof Error ? error.message : String(error)),
+        '❌ 发生错误\n\n' + sanitizeError(error instanceof Error ? error.message : String(error)),
         {
           reply_markup: { inline_keyboard: [[{ text: '← 返回', callback_data: 'my_published' }]] }
         }
@@ -292,7 +292,11 @@ export async function publishVideo(
 
     if (error) {
       console.error('发布失败:', error)
-      await editMessage(chatId, messageId, '❌ 发布失败\n\n' + '错误: ' + error.message)
+      await editMessage(
+        chatId,
+        messageId,
+        '❌ 发布失败\n\n' + '错误: ' + sanitizeError(error.message)
+      )
       return
     }
 

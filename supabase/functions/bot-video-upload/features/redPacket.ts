@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient.ts'
 import { sendMessage, answerCallbackQuery, editMessage } from '../telegram.ts'
-import { escapeHTML } from '../utils/text.ts'
+import { escapeHTML, sanitizeError } from '../utils/text.ts'
 
 /**
  * 处理红包指令: hb 100 [份数] [sq]
@@ -123,6 +123,9 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
       `${hbTitle}\n` +
       `💰 总金额：<b>${amount}</b> 抖币\n` +
       `⏳ 剩余 <b>${count}</b>/${count} 份\n\n` +
+      `📜 <b>红包规则：</b>\n` +
+      `• 最小限制：平均每份至少 1 抖币\n` +
+      `• 退款：24小时内未领完将自动退回余额\n\n` +
       `📢 祝大家：好运连连，万事如意！`
 
     await sendMessage(chatId, hbText, {
@@ -132,7 +135,7 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
     })
   } catch (err: any) {
     console.error('RedPacket Error:', err)
-    await sendMessage(chatId, `❌ 红包发送异常: ${err.message}`)
+    await sendMessage(chatId, `❌ 红包发送异常: ${sanitizeError(err.message)}`)
   }
 }
 
@@ -240,6 +243,6 @@ export async function handleClaimRedPacket(
     await editMessage(chatId, messageId, hbText, options)
   } catch (err: any) {
     console.error('Claim RedPacket Error:', err)
-    await answerCallbackQuery(callbackQueryId, `❌ 抢红包异常: ${err.message}`, true)
+    await answerCallbackQuery(callbackQueryId, `❌ 抢红包异常: ${sanitizeError(err.message)}`, true)
   }
 }
