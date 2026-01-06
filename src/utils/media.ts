@@ -1,78 +1,61 @@
 /**
  * 前端媒体文件 URL 处理工具
+ * 🎯 纯 R2 架构版本：不再使用 Telegram CDN 代理
  */
 
-// CF Worker CDN URL（从环境变量获取）
-const CF_WORKER_URL = import.meta.env.VITE_TG_CDN_PROXY_URL || ''
+// 1. 获取视频/图片的 R2 基础域名
+const VIDEO_BASE_URL = import.meta.env.VITE_APP_VIDEO_BASE_URL || ''
 
 /**
- * 判断是否是 Telegram file_id
+ * 将路径或 ID 转换为最终的可访问 URL
+ * 🎯 逻辑：只处理 R2 直链和相对路径，不再代理 Telegram file_id
  */
-export function isTelegramFileId(str: string): boolean {
-  if (!str) return false
-  // Telegram file_id 通常不包含 http/https 且长度较长
-  return !str.startsWith('http://') && !str.startsWith('https://') && str.length > 20
-}
+export function buildCdnUrl(pathOrUrl: string): string {
+  if (!pathOrUrl) return ''
 
-/**
- * 将 Telegram file_id 或相对路径转换为 CDN URL
- */
-export function buildCdnUrl(fileIdOrUrl: string): string {
-  if (!fileIdOrUrl) return ''
-
-  // 1. 🎯 如果已经是完整 URL（包含 R2 域名或直链），直接返回，不再走 Worker 代理
-  if (fileIdOrUrl.startsWith('http://') || fileIdOrUrl.startsWith('https://')) {
-    return fileIdOrUrl
+  // 1. 如果是完整 URL (http/https)，直接返回
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+    return pathOrUrl
   }
 
-  // 2. 🎯 如果是相对路径 (R2 转存路径，如 /videos/xxx.mp4)
-  if (fileIdOrUrl.startsWith('/')) {
-    // 优先使用视频 R2 域名 (VITE_APP_VIDEO_BASE_URL)
-    const baseUrl = import.meta.env.VITE_APP_VIDEO_BASE_URL || ''
-    if (baseUrl) {
-      const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-      return `${base}${fileIdOrUrl}`
-    }
+  // 2. 如果是相对路径 (R2 存储路径，如 /videos/xxx.mp4)
+  if (pathOrUrl.startsWith('/')) {
+    const base = VIDEO_BASE_URL.endsWith('/') ? VIDEO_BASE_URL.slice(0, -1) : VIDEO_BASE_URL
+    return `${base}${pathOrUrl}`
   }
 
-  // 3. 🎯 只有确实是 file_id 且没有直链时，才走 Worker 代理（用于查看正在处理中或未搬家的老视频）
-  if (!CF_WORKER_URL) {
-    console.warn('[buildCdnUrl] CF Worker URL not configured')
-    return ''
-  }
-
-  const base = CF_WORKER_URL.endsWith('/') ? CF_WORKER_URL.slice(0, -1) : CF_WORKER_URL
-  return `${base}?file_id=${encodeURIComponent(fileIdOrUrl)}`
+  // 3. 🎯 如果是 Telegram file_id (不以 / 或 http 开头)
+  // 在纯 R2 架构下，前端不应该再通过代理去请求这些 ID
+  // 我们返回空，强制用户等待 Worker 处理完成后的 R2 地址
+  console.warn('[buildCdnUrl] 检测到未搬家的 Telegram file_id，请等待 Worker 处理:', pathOrUrl)
+  return ''
 }
 
 /**
  * 获取封面URL
  */
 export function getCoverUrl(record: any): string {
-  // 1. 优先使用记录自带的 cover_url
+  // 1. 优先使用记录自带的 cover_url (Worker 处理后会填入 R2 地址)
   if (record.cover_url) {
     return buildCdnUrl(record.cover_url)
   }
 
-  // 2. 其次使用缩略图 file_id
-  if (record.tg_thumbnail_file_id) {
-    return buildCdnUrl(record.tg_thumbnail_file_id)
-  }
-
-  // 3. 📸 对于图片/相册/合集：提取媒体列表中的第一项
+  // 2. 📸 对于图片/相册/合集：尝试从媒体列表中提取第一项的 R2 地址
   const contentType = record.content_type || 'video'
   if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
     const mediaList = parseImages(record.media_list || record.images)
     if (mediaList.length > 0) {
       const first = mediaList[0]
-      // 如果第一项是视频，优先用视频封面
-      if (first.type === 'video' && (first.cover_url || first.url)) {
-        return buildCdnUrl(first.cover_url || first.url)
+      // 优先使用子项已经生成的 play_url 或 cover_url
+      const target = first.cover_url || first.play_url || first.url
+      if (target && (target.startsWith('/') || target.startsWith('http'))) {
+        return buildCdnUrl(target)
       }
-      return buildCdnUrl(first.file_id)
     }
   }
 
+  // 3. 🎯 彻底废弃 tg_thumbnail_file_id 回退
+  // 因为那个地址是临时的，Token 一换就废了，我们只信任 R2
   return ''
 }
 
