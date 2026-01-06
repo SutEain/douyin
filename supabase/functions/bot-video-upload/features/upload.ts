@@ -58,13 +58,14 @@ export async function triggerWorker(
   videoId: string,
   fileId: string,
   chatId: number,
-  messageId: number
+  messageId: number,
+  thumbnailFileId?: string // 🎯 新增缩略图 ID
 ) {
   if (!BOT_WORKER_URL) {
     console.error('❌ BOT_WORKER_URL 未配置')
     return
   }
-  console.log(`[triggerWorker] 触发 Worker: video=${videoId}`)
+  console.log(`[triggerWorker] 触发 Worker: video=${videoId}, hasThumb=${!!thumbnailFileId}`)
   try {
     // Fire and forget (Worker 会异步处理)
     fetch(`${BOT_WORKER_URL}/process`, {
@@ -73,6 +74,7 @@ export async function triggerWorker(
       body: JSON.stringify({
         video_id: videoId,
         file_id: fileId,
+        thumbnail_file_id: thumbnailFileId, // 🎯 传递给 Worker
         bot_token: BOT_TOKEN,
         chat_id: chatId,
         message_id: messageId
@@ -268,7 +270,7 @@ export async function saveSinglePhoto(
       content_type: 'image',
       media_list: JSON.stringify([mediaItem]),
       images: JSON.stringify([mediaItem]),
-      cover_url: photo.file_id, // 🎯 封面暂时使用图片 file_id
+      cover_url: null, // 🎯 初始设为 NULL，不再传入 file_id，避免前端产生搬家提示
       width: photo.width,
       height: photo.height,
       file_size: photo.file_size || 0,
@@ -465,7 +467,13 @@ export async function handleVideo(
       console.log(
         `[handleVideo-MG] 触发 Worker: videoId=${result.id}, fileId=${video.file_id}, targetMsgId=${targetMessageId}`
       )
-      await triggerWorker(result.id, video.file_id, chatId, targetMessageId)
+      await triggerWorker(
+        result.id,
+        video.file_id,
+        chatId,
+        targetMessageId,
+        video.thumbnail?.file_id || video.thumb?.file_id // 🎯 传递视频缩略图
+      )
       return
     }
 
@@ -540,14 +548,26 @@ export async function handleVideo(
       const processingMessageId = processingMsg.ok ? processingMsg.result.message_id : 0
 
       if (processingMessageId) {
-        await triggerWorker(draftVideo.id, video.file_id, chatId, processingMessageId)
+        await triggerWorker(
+          draftVideo.id,
+          video.file_id,
+          chatId,
+          processingMessageId,
+          video.thumbnail?.file_id || video.thumb?.file_id
+        )
       } else {
         console.error('[handleVideo] 发送处理消息失败，无法触发 Worker')
       }
     } else {
       console.log(`[handleVideo] 自动同步模式，静默启动 Worker.`)
       // 自动同步不需要给用户发“正在处理”消息，传 0 即可
-      await triggerWorker(draftVideo.id, video.file_id, chatId, 0)
+      await triggerWorker(
+        draftVideo.id,
+        video.file_id,
+        chatId,
+        0,
+        video.thumbnail?.file_id || video.thumb?.file_id
+      )
     }
   } catch (error) {
     console.error('[handleVideo] 处理视频失败:', error)
