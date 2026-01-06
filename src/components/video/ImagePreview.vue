@@ -93,6 +93,7 @@ import { buildCdnUrl } from '@/utils/media'
 interface ImageItem {
   file_id: string
   url?: string
+  play_url?: string // 🎯 增加 play_url
   width?: number
   height?: number
 }
@@ -179,7 +180,8 @@ const imageWrapperStyle = computed(() => {
 })
 
 function getImageUrl(image: ImageItem) {
-  if (image.url) return image.url
+  // 🎯 优先使用 play_url 或 url (R2)
+  if (image.play_url || image.url) return image.play_url || image.url
   return buildCdnUrl(image.file_id)
 }
 

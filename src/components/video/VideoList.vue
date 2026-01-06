@@ -293,7 +293,8 @@ function buildNoteCardDetailFromItem(item: VideoItem) {
         .map((img: any) => ({
           info_list: [
             {
-              url: img?.url || buildCdnUrl(String(img?.file_id || ''))
+              // 🎯 优先使用 play_url (R2)，然后是 url，最后才是 file_id
+              url: img?.play_url || img?.url || buildCdnUrl(String(img?.file_id || ''))
             }
           ]
         }))

@@ -400,10 +400,11 @@ const swiperStyle = computed(() => {
 })
 
 function getMediaUrl(media: MediaItem) {
-  // 🎯 优先使用 play_url，并确保补全 CDN 域名
-  if (media.type === 'video' && (media.play_url || media.url)) {
+  // 🎯 优先使用 play_url 或 url (R2)，并确保补全 CDN 域名
+  if (media.play_url || media.url) {
     return buildCdnUrl(media.play_url || media.url)
   }
+  // 只有在没搬家的情况下才回退到 file_id (目前 buildCdnUrl 对 file_id 会返回空)
   return buildCdnUrl(media.file_id)
 }
 
