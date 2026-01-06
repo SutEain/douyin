@@ -85,6 +85,64 @@ export async function triggerWorker(
   }
 }
 
+// 🎯 检查发布限制：新用户首个作品通过前限发 1 个
+async function checkUploadLimit(
+  chatId: number,
+  profile: any,
+  mediaGroupId?: string
+): Promise<boolean> {
+  // 1. 如果用户已经是免审核状态，直接放行
+  if (profile.auto_approve) return true
+
+  // 2. 如果是媒体组上传，先检查这个组是否已经存在
+  if (mediaGroupId) {
+    const { data: existingGroup } = await supabase
+      .from('videos')
+      .select('id')
+      .eq('author_id', profile.id)
+      .eq('media_group_id', mediaGroupId)
+      .maybeSingle()
+
+    if (existingGroup) return true // 正在往现有的组里加内容，放行
+  }
+
+  // 3. 查询该用户正在审核中或已通过的作品
+  const { data: videos, error } = await supabase
+    .from('videos')
+    .select('id, review_status')
+    .eq('author_id', profile.id)
+    .in('review_status', ['pending', 'manual_review', 'approved', 'auto_approved'])
+
+  if (error) {
+    console.error('[checkUploadLimit] 查询作品失败:', error)
+    return true // 容错
+  }
+
+  if (!videos || videos.length === 0) return true // 没作品或作品都被拒绝了，允许发
+
+  // 4. 检查是否有任何一个作品已经审核通过
+  const hasApproved = videos.some(
+    (v) => v.review_status === 'approved' || v.review_status === 'auto_approved'
+  )
+
+  if (hasApproved) return true // 已经有过成功的作品，或者是老用户，放行
+
+  // 5. 如果没有通过的作品，且有正在审核中的作品，则拦截
+  const hasPending = videos.some(
+    (v) => v.review_status === 'pending' || v.review_status === 'manual_review'
+  )
+
+  if (hasPending) {
+    await sendMessage(
+      chatId,
+      '⚠️ <b>发布受限</b>\n\n为了维护社区环境，新用户在首个作品通过审核前，仅限发布一个作品。\n\n您的作品正在排队审核中，请耐心等待管理员审核通过后再继续发布。感谢您的理解！'
+    )
+    return false
+  }
+
+  return true
+}
+
 // 📸 处理图片上传（单图或相册）
 // 使用数据库存储相册状态，解决 Edge Function 无状态问题
 export async function handlePhoto(
@@ -96,9 +154,7 @@ export async function handlePhoto(
   extraData?: UploadExtraData
 ) {
   console.log('[handlePhoto] 开始处理图片')
-  console.log('[handlePhoto] chatId:', chatId)
-  console.log('[handlePhoto] mediaGroupId:', mediaGroupId)
-
+  // ...
   try {
     // 🎯 严格控制：禁止在群组中直接上传图片（仅允许私聊上传）
     if (chatId < 0) {
@@ -112,6 +168,11 @@ export async function handlePhoto(
     const profile = await getOrCreateProfile(chatId, from)
     if (!profile) {
       await sendMessage(chatId, '❌ 账号初始化失败\n\n请先发送 /start 命令初始化账号')
+      return
+    }
+
+    // 🎯 发布限制检查
+    if (!(await checkUploadLimit(chatId, profile, mediaGroupId))) {
       return
     }
 
@@ -355,6 +416,11 @@ export async function handleVideo(
     if (!profile) {
       console.error('无法创建或获取用户 profile')
       await sendMessage(chatId, '❌ 账号初始化失败\n\n' + '请先发送 /start 命令初始化账号')
+      return
+    }
+
+    // 🎯 发布限制检查
+    if (!(await checkUploadLimit(chatId, profile, mediaGroupId))) {
       return
     }
 

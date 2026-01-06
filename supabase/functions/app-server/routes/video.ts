@@ -383,7 +383,8 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
 
   return successResponse({
     list,
-    total: total ?? (list.length >= pageSize ? (pageNo + 2) * pageSize : (pageNo + 1) * list.length),
+    total:
+      total ?? (list.length >= pageSize ? (pageNo + 2) * pageSize : (pageNo + 1) * list.length),
     pageNo,
     pageSize,
     hasMore: list.length >= pageSize
@@ -1005,8 +1006,15 @@ export async function handleBatchReview(req: Request): Promise<Response> {
     return errorResponse('video_ids is required and must be a non-empty array', 1, 400)
   }
 
-  if (!action || !['approve', 'reject', 'set_adult', 'unset_adult', 'set_sea', 'unset_sea'].includes(action)) {
-    return errorResponse('action must be one of: approve, reject, set_adult, unset_adult, set_sea, unset_sea', 1, 400)
+  if (
+    !action ||
+    !['approve', 'reject', 'set_adult', 'unset_adult', 'set_sea', 'unset_sea'].includes(action)
+  ) {
+    return errorResponse(
+      'action must be one of: approve, reject, set_adult, unset_adult, set_sea, unset_sea',
+      1,
+      400
+    )
   }
 
   if (action === 'reject' && !reject_reason) {
@@ -1020,7 +1028,7 @@ export async function handleBatchReview(req: Request): Promise<Response> {
       // 批量通过：先查询所有视频的状态
       const { data: videos, error: queryError } = await supabaseAdmin
         .from('videos')
-        .select('id, status')
+        .select('id, status, author_id')
         .in('id', video_ids)
 
       if (queryError) {
@@ -1035,12 +1043,44 @@ export async function handleBatchReview(req: Request): Promise<Response> {
           .from('videos')
           .update({
             review_status: 'approved',
-            status: shouldPublish ? 'published' : video.status
+            status: shouldPublish ? 'published' : video.status,
+            published_at: shouldPublish ? new Date().toISOString() : null
           })
           .eq('id', video.id)
       })
 
       const results = await Promise.all(updatePromises)
+
+      // 🎯 任务 2: 处理作者的 auto_approve 提升
+      const authorIds = Array.from(new Set((videos ?? []).map((v) => v.author_id).filter(Boolean)))
+      if (authorIds.length > 0) {
+        // 查找这些作者中还没有 auto_approve 权限的
+        const { data: profilesToPromote } = await supabaseAdmin
+          .from('profiles')
+          .select('id, auto_approve')
+          .in('id', authorIds)
+          .or('auto_approve.eq.false,auto_approve.is.null')
+
+        if (profilesToPromote && profilesToPromote.length > 0) {
+          const promoteIds = profilesToPromote.map((p) => p.id)
+          await supabaseAdmin.from('profiles').update({ auto_approve: true }).in('id', promoteIds)
+
+          // 发送通知
+          const approvalNotice =
+            `🎉 <b>您的作品已通过审核！</b>\n\n` +
+            `由于您的首个作品表现优秀，系统已为您开启<b>【免审核模式】</b>。今后您发布的作品将自动发布，无需等待人工审核。\n\n` +
+            `📌 <b>发布规范提醒：</b>\n` +
+            `1. <b>成人内容</b>：请务必将其分类到<b>【成人】</b>频道。\n` +
+            `2. <b>东南亚内容</b>：请务必将其分类到<b>【东南亚】</b>频道。\n\n` +
+            `良好的分类有助于您的作品获得更多精准流量。感谢您的配合！`
+
+          for (const pid of promoteIds) {
+            checkAndSendNotification(pid, 'request_update', approvalNotice).catch((e) =>
+              console.error(`[batch-review] 通知作者 ${pid} 失败:`, e)
+            )
+          }
+        }
+      }
 
       // 检查是否有错误
       const errors = results.filter((r) => r.error)
@@ -1082,10 +1122,7 @@ export async function handleBatchReview(req: Request): Promise<Response> {
       if (action === 'set_sea') updatePayload.is_sea = true
       if (action === 'unset_sea') updatePayload.is_sea = false
 
-      const { error } = await supabaseAdmin
-        .from('videos')
-        .update(updatePayload)
-        .in('id', video_ids)
+      const { error } = await supabaseAdmin.from('videos').update(updatePayload).in('id', video_ids)
 
       if (error) {
         console.error(`[batch-review] Batch ${action} error:`, error)
@@ -1173,6 +1210,19 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
       } else {
         autoApproveEnabled = true
         console.log(`[approve] Enabled auto_approve for user: ${profile.id}`)
+
+        // 🎯 任务2：通知新用户已获得免审核权限，并提醒分类规范
+        const approvalNotice =
+          `🎉 <b>您的作品已通过审核！</b>\n\n` +
+          `由于您的首个作品表现优秀，系统已为您开启<b>【免审核模式】</b>。今后您发布的作品将自动发布，无需等待人工审核。\n\n` +
+          `📌 <b>发布规范提醒：</b>\n` +
+          `1. <b>成人内容</b>：请务必将其分类到<b>【成人】</b>频道。\n` +
+          `2. <b>东南亚内容</b>：请务必将其分类到<b>【东南亚】</b>频道。\n\n` +
+          `良好的分类有助于您的作品获得更多精准流量。感谢您的配合！`
+
+        checkAndSendNotification(profile.id, 'request_update', approvalNotice).catch((e) =>
+          console.error('[approve] 发送免审核通知失败:', e)
+        )
       }
     }
 
@@ -1222,11 +1272,11 @@ export async function handleRecordView(req: Request): Promise<Response> {
     // 3. 自动更新 watch_history
     // 4. 自动触发任务进度 increment_task_progress (完播时)
     const { data, error } = await supabaseAdmin.rpc('record_video_view_v2', {
-          p_user_id: user.id,
+      p_user_id: user.id,
       p_video_id: video_id,
       p_progress: progress ?? 0,
       p_completed: completed === true
-      })
+    })
 
     if (error) {
       console.error('[view] RPC record_video_view_v2 failed:', error)
