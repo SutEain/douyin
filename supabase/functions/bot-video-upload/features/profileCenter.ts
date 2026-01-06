@@ -138,7 +138,7 @@ export async function handleHelp(chatId: number, messageId?: number) {
     `• 转发其他频道的视频给机器人\n` +
     `• 机器人会自动处理并保存\n\n` +
     `<b>2. 分享视频</b>\n` +
-    `• 在任何聊天窗口输入 <code>@tg_douyin_bot 关键词</code> 即可搜索并分享视频\n` +
+    `• 在任何聊天窗口输入 <code>@dydy 关键词</code> 即可搜索并分享视频\n` +
     `• 也可以在视频详情页点击分享按钮，自动复制搜索指令\n\n` +
     `<b>3. 邀请赚钱</b>\n` +
     `• 点击「个人中心」-「邀请赚钱」\n` +
@@ -280,7 +280,7 @@ export async function handleInviteUnlock(chatId: number, messageId?: number) {
       .eq('tg_user_id', chatId)
       .single()
 
-    const inviteLink = `https://t.me/tg_douyin_bot?start=${profile?.numeric_id || ''}`
+    const inviteLink = `https://t.me/dydy?start=${profile?.numeric_id || ''}`
     const count = profile?.invite_success_count || 0
     const balance = Math.floor(profile?.balance_coins || 0)
 

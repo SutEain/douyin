@@ -12,8 +12,8 @@ VITE_SUPABASE_URL=https://zhlkanxfucnsatafeqdp.supabase.co
 VITE_SUPABASE_ANON_KEY=<从 Supabase Dashboard 获取>
 
 # Telegram Bot 配置
-VITE_TG_BOT_USERNAME=tg_douyin_bot
-VITE_TG_BOT_NAME=@tg_douyin_bot
+VITE_TG_BOT_USERNAME=dydy
+VITE_TG_BOT_NAME=@dydy
 ```
 
 **如何获取 SUPABASE_ANON_KEY:**
@@ -109,8 +109,8 @@ reply_markup = InlineKeyboardMarkup(keyboard)
 ```
 VITE_SUPABASE_URL=https://zhlkanxfucnsatafeqdp.supabase.co
 VITE_SUPABASE_ANON_KEY=<your_anon_key>
-VITE_TG_BOT_USERNAME=tg_douyin_bot
-VITE_TG_BOT_NAME=@tg_douyin_bot
+VITE_TG_BOT_USERNAME=dydy
+VITE_TG_BOT_NAME=@dydy
 ```
 
 ### 2. 构建配置

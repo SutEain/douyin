@@ -266,7 +266,6 @@ const emit = defineEmits<{
 }>()
 
 const videoStore = useVideoStore()
-const baseStore = useBaseStore()
 
 const graphicDetail = reactive<{
   visible: boolean
@@ -484,7 +483,7 @@ const isPausedOverlay = computed(() => !isPlaying.value)
 /*
 const inviteLink = computed(() => {
   if (baseStore.userinfo.numeric_id) {
-    return `https://t.me/tg_douyin_bot?start=${baseStore.userinfo.numeric_id}`
+    return `https://t.me/dydy?start=${baseStore.userinfo.numeric_id}`
   }
   return ''
 })
@@ -500,7 +499,7 @@ const inviteLink = computed(() => {
 // 🎯 分享邀请链接
 // function shareInvite() {
 //   if (!inviteLink.value) return
-//   const botUsername = 'tg_douyin_bot'
+//   const botUsername = 'dydy'
 //   const shareText = `@${botUsername}`
 //   _copy(shareText)
 //   _notice('分享指令已复制，去聊天框粘贴即可生成卡片～')

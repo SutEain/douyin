@@ -272,7 +272,7 @@ export default {
       _hideLoading()
 
       // 🎯 恢复为“分享口令”格式，以便在 Telegram 中弹出卡片
-      const botUsername = (import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot').replace('@', '')
+      const botUsername = (import.meta.env.VITE_TG_BOT_USERNAME || 'dydy').replace('@', '')
       const baseStore = useBaseStore()
       let shareCommand = `@${botUsername} video_${this.videoId}`
       if (baseStore.userinfo?.numeric_id) {

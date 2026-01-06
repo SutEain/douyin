@@ -1,7 +1,7 @@
 // bot-video-upload: 环境变量集中管理（仅重构，不改行为）
 
 export const BOT_TOKEN = Deno.env.get('TG_BOT_TOKEN')!
-export const TG_API_BASE = Deno.env.get('TELEGRAM_API_BASE') || 'https://api.telegram.org'
+export const TG_API_BASE = Deno.env.get('TG_API_BASE') || Deno.env.get('TELEGRAM_API_BASE') || 'https://api.telegram.org'
 export const BOT_WORKER_URL = Deno.env.get('BOT_WORKER_URL')
 export const TG_FILE_PROXY_URL =
   Deno.env.get('TG_CDN_PROXY_URL') || Deno.env.get('TG_VIDEO_PROXY_URL')
@@ -12,9 +12,9 @@ export const TG_MINIAPP_URL =
   (Deno.env.get('TG_MINIAPP_URL') || Deno.env.get('MINIAPP_URL') || '').trim() || null
 
 // Telegram Mini App 的 t.me 启动链接（用于 inline button / 普通 URL 跳转）
-// 例如: https://t.me/tg_douyin_bot/tgdouyin
+// 例如: https://t.me/dydy/tgdouyin
 export const TG_MINIAPP_TME_URL = Deno.env.get('TG_MINIAPP_TME_URL')
-export const TG_BOT_USERNAME = Deno.env.get('TG_BOT_USERNAME') || 'tg_douyin_bot'
+export const TG_BOT_USERNAME = Deno.env.get('TG_BOT_USERNAME') || 'dydy'
 export const TG_APP_NAME = Deno.env.get('TG_APP_NAME') || 'tgdouyin'
 
 // 本地开发用 SB_ 前缀，生产环境用 SUPABASE_ 前缀

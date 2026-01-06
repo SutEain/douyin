@@ -2,7 +2,7 @@
 
 ## 🤖 你的 Bot 信息
 
-- **Bot Username**: @tg_douyin_bot
+- **Bot Username**: @dydy
 - **Bot Token**: `8165687613:AAGPhuzFIwq2PRfxaLPlBnoGspLMBJjL-k8`
 - **本地开发 URL**: https://fcf5027c3e4b.ngrok-free.app
 - **登录页面**: https://fcf5027c3e4b.ngrok-free.app/login/telegram
@@ -22,7 +22,7 @@
 ```
 1. 打开 Telegram，搜索 @BotFather
 2. 发送 /setmenubutton
-3. 选择 @tg_douyin_bot
+3. 选择 @dydy
 4. 选择 "Configure menu button"
 5. 输入按钮文字: 打开应用
 6. 输入 Web App URL: https://fcf5027c3e4b.ngrok-free.app/login/telegram
@@ -33,7 +33,7 @@
 ```
 1. 与 @BotFather 对话
 2. 发送 /setcommands
-3. 选择 @tg_douyin_bot
+3. 选择 @dydy
 4. 输入以下命令:
 
 start - 启动应用
@@ -45,7 +45,7 @@ help - 帮助信息
 ```
 1. 与 @BotFather 对话
 2. 发送 /setdescription
-3. 选择 @tg_douyin_bot
+3. 选择 @dydy
 4. 输入: 欢迎使用 Douyin 短视频平台！在这里发现精彩视频，分享你的生活。
 ```
 
@@ -54,7 +54,7 @@ help - 帮助信息
 ```
 1. 与 @BotFather 对话
 2. 发送 /setabouttext
-3. 选择 @tg_douyin_bot
+3. 选择 @dydy
 4. 输入: 短视频分享平台
 ```
 
@@ -72,7 +72,7 @@ https://zhlkanxfucnsatafeqdp.supabase.co/functions/v1/server
 ### 步骤 2: 测试登录流程
 
 1. **打开 Telegram**
-   - 搜索 @tg_douyin_bot
+   - 搜索 @dydy
    - 点击 "Start" 或直接打开对话
 
 2. **点击 Menu Button**
@@ -155,7 +155,7 @@ LIMIT 1;
 如果你使用 Telegram Desktop，可以：
 
 1. 打开 Telegram Desktop
-2. 搜索 @tg_douyin_bot
+2. 搜索 @dydy
 3. 点击 Menu Button
 4. 应用会在内置浏览器中打开
 5. 可以打开开发者工具调试

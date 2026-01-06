@@ -36,10 +36,13 @@ export function buildCdnUrl(fileIdOrUrl: string): string {
     return `${base}${fileIdOrUrl}`
   }
 
-  // 3. 🎯 如果是 file_id，在纯 R2 架构下不再代理
-  // 后台预览也强制走 R2，如果没有搬家则显示为空，提示需要补救
-  console.warn('[buildCdnUrl] 检测到未搬家的 Telegram file_id:', fileIdOrUrl)
-  return ''
+  // 3. 🎯 如果是 file_id，尝试走代理显示（仅用于后台预览兼容，避免显示“无封面”）
+  const baseUrl =
+    import.meta.env.VITE_APP_API_BASE_URL ||
+    import.meta.env.VITE_APP_VIDEO_BASE_URL ||
+    window.location.origin
+  const base = String(baseUrl).replace(/\/$/, '')
+  return `${base}/tg/${fileIdOrUrl}`
 }
 
 /**

@@ -237,7 +237,7 @@ async function edgeNotifyFollowersLive(
   liveTitle: string
 ) {
   const TG_BOT_TOKEN = Deno.env.get('TG_BOT_TOKEN')
-  const TG_BOT_USERNAME = Deno.env.get('TG_BOT_USERNAME') || 'tg_douyin_bot'
+  const TG_BOT_USERNAME = Deno.env.get('TG_BOT_USERNAME') || 'dydy'
   const TG_APP_NAME = Deno.env.get('TG_APP_NAME') || 'tgdouyin'
 
   if (!TG_BOT_TOKEN) return

@@ -1,5 +1,15 @@
 <template>
-  <router-view v-slot="{ Component, route }">
+  <div v-if="store.userinfo.is_banned" class="banned-overlay">
+    <div class="banned-box">
+      <div class="icon-wrap">
+        <Icon icon="solar:danger-bold" class="icon" />
+      </div>
+      <div class="title">账号已被封禁</div>
+      <div class="reason">{{ store.userinfo.ban_reason || '由于违反社区规范，您的账号已被封禁。' }}</div>
+      <div class="tip">如有疑问，请通过 Telegram 联系管理员</div>
+    </div>
+  </div>
+  <router-view v-else v-slot="{ Component, route }">
     <transition :name="transitionName">
       <keep-alive :exclude="store.excludeNames">
         <component :is="Component" :key="route.path" />
@@ -15,6 +25,7 @@ try {navigator.control.longpressMenu(false);} catch (e) {} //关闭长按弹出�
 * */
 import routes from './router/routes'
 import Call from './components/Call.vue'
+import { Icon } from '@iconify/vue'
 import { useBaseStore } from '@/store/pinia.js'
 import { onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -156,5 +167,53 @@ onMounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.banned-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 999999;
+  background: #161823;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40rem;
+
+  .banned-box {
+    text-align: center;
+    color: white;
+
+    .icon-wrap {
+      margin-bottom: 24rem;
+      .icon {
+        font-size: 80rem;
+        color: #fe2c55;
+      }
+    }
+
+    .title {
+      font-size: 24rem;
+      font-weight: bold;
+      margin-bottom: 16rem;
+    }
+
+    .reason {
+      font-size: 16rem;
+      color: rgba(255, 255, 255, 0.8);
+      line-height: 1.6;
+      margin-bottom: 32rem;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 20rem;
+      border-radius: 12rem;
+    }
+
+    .tip {
+      font-size: 14rem;
+      color: rgba(255, 255, 255, 0.4);
+    }
+  }
 }
 </style>

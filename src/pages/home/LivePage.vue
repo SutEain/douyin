@@ -793,7 +793,7 @@ function showViewerList() {
 
 // --- 分享相关 ---
 const showShareDrawer = ref(false)
-const rawBotUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot'
+const rawBotUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'dydy'
 const botUsername = rawBotUsername.replace('@', '')
 const appName = import.meta.env.VITE_TG_APP_NAME || 'tgdouyin'
 
@@ -812,7 +812,7 @@ function copyRoomLink() {
   if (!rid) return
 
   // 🎯 恢复为“分享口令”格式，以便在 Telegram 中弹出卡片
-  let shareCommand = `@${botUsername} live_${rid}`
+  let shareCommand = `@dydy live_${rid}`
   if (baseStore.userinfo?.numeric_id) {
     shareCommand += `_i${baseStore.userinfo.numeric_id}`
   }
@@ -841,11 +841,6 @@ function shareRoomDirect() {
     window.open(shareUrl, '_blank')
   }
   showShareDrawer.value = false
-}
-
-// 分享直播间 (旧逻辑保留兼容)
-function shareRoom() {
-  showShareDrawer.value = true
 }
 
 // --- 动画通知模板 ---

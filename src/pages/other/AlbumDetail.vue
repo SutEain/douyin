@@ -867,7 +867,7 @@ async function toggleCollect() {
 
 // --- 分享相关 ---
 const showShareDrawer = ref(false)
-const rawBotUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot'
+const rawBotUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'dydy'
 const botUsername = rawBotUsername.replace('@', '')
 const appName = import.meta.env.VITE_TG_APP_NAME || 'tgdouyin'
 
@@ -885,7 +885,7 @@ function copyAlbumLink() {
   // 🎯 严格要求：前 15 个字，不要链接，不要省略号，用于触发 Inline Mode
   const title = (props.detail?.note_card?.display_title || '精彩内容').trim()
   const queryText = title.substring(0, 15)
-  const copyText = `@tg_douyin_bot ${queryText}`
+  const copyText = `@dydy ${queryText}`
   _copy(copyText)
   _notice('搜索指令已复制，在聊天框粘贴即可搜索')
   showShareDrawer.value = false

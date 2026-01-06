@@ -182,8 +182,8 @@ onMounted(() => {
       fetchVideoDetail(videoId)
     } else {
       console.error('[VideoDetail] 未找到视频数据且无 ID')
-      router.back()
-      return
+    router.back()
+    return
     }
   }
 
@@ -195,12 +195,12 @@ onMounted(() => {
     () => state.videoItem,
     (item) => {
       if (item?.is_adult) {
-        getAdultQuota().then((res) => {
-          if (res.success && !res.data.unlimited && res.data.remaining <= 0) {
-            state.showAdultRules = true
-          }
-        })
+    getAdultQuota().then((res) => {
+      if (res.success && !res.data.unlimited && res.data.remaining <= 0) {
+        state.showAdultRules = true
       }
+    })
+  }
     },
     { immediate: true }
   )

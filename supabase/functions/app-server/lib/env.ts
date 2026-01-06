@@ -9,7 +9,7 @@ export const SUPABASE_SERVICE_ROLE_KEY =
   ''
 
 export const TG_BOT_TOKEN = Deno.env.get('TG_BOT_TOKEN')
-export const TG_BOT_USERNAME = Deno.env.get('TG_BOT_USERNAME') || 'tg_douyin_bot'
+export const TG_BOT_USERNAME = Deno.env.get('TG_BOT_USERNAME') || 'dydy'
 export const TG_APP_NAME = Deno.env.get('TG_APP_NAME') || 'tgdouyin'
 export const TG_FILE_PROXY_URL =
   Deno.env.get('TG_CDN_PROXY_URL') || Deno.env.get('TG_VIDEO_PROXY_URL')

@@ -271,27 +271,37 @@ async function startRolling(chatId: number, roomId: string) {
 
     for (const player of players) {
       // 2. 发送官方骰子 (这个必须是独立消息，无法合并)
-      const res = await sendDice(chatId, { emoji: '🎲' })
-
-      if (res.ok) {
-        const value = res.result.dice.value
-        results.push({ id: player.id, user_id: player.user_id, name: player.user?.nickname, value })
-
-        // 更新数据库
-        await supabase.from('dice_room_players').update({ roll_result: value }).eq('id', player.id)
-
-        // 3. 🎯 核心优化：编辑战报看板，而不是发送新消息
-        if (progressMsgId) {
-          const currentBoard = results
-            .map((r, i) => `${i + 1}. ${escapeHTML(r.name || '玩家')}: <b>${r.value}</b> 点`)
-            .join('\n')
-          const updateText = `🎲 <b>对局进行中...</b>\n\n${currentBoard}\n\n⏳ 正在等待下一位玩家...`
-          await editMessage(chatId, progressMsgId, updateText)
-        }
-
-        // 缩短延时，加快对局节奏
-        await new Promise((r) => setTimeout(r, 1500))
+      // 🎯 增加重试机制，如果发送失败不应跳过，而是直接报错触发退款流程
+      let res = await sendDice(chatId, { emoji: '🎲' })
+      
+      // 如果第一次失败，重试一次
+      if (!res.ok) {
+        console.warn(`[Dice] 骰子发送失败，尝试重试: ${player.user?.nickname}`)
+        await new Promise(r => setTimeout(r, 1000))
+        res = await sendDice(chatId, { emoji: '🎲' })
       }
+
+      if (!res.ok) {
+        throw new Error(`无法为玩家 ${player.user?.nickname || '未知'} 发送骰子，请检查网络或机器人权限`)
+      }
+
+      const value = res.result.dice.value
+      results.push({ id: player.id, user_id: player.user_id, name: player.user?.nickname, value })
+
+      // 更新数据库
+      await supabase.from('dice_room_players').update({ roll_result: value }).eq('id', player.id)
+
+      // 3. 🎯 核心优化：编辑战报看板，而不是发送新消息
+      if (progressMsgId) {
+        const currentBoard = results
+          .map((r, i) => `${i + 1}. ${escapeHTML(r.name || '玩家')}: <b>${r.value}</b> 点`)
+          .join('\n')
+        const updateText = `🎲 <b>对局进行中...</b>\n\n${currentBoard}\n\n⏳ 正在等待下一位玩家...`
+        await editMessage(chatId, progressMsgId, updateText)
+      }
+
+      // 缩短延时，加快对局节奏
+      await new Promise((r) => setTimeout(r, 1500))
     }
 
     // 4. 结算逻辑
@@ -350,6 +360,27 @@ async function startRolling(chatId: number, roomId: string) {
     }
   } catch (err: any) {
     console.error('Rolling Error:', err)
-    await sendMessage(chatId, `❌ 结算过程发生异常: ${sanitizeError(err.message)}`)
+    await sendMessage(
+      chatId,
+      `🚨 <b>结算过程发生异常:</b>\n${sanitizeError(err.message)}\n\n💰 正在尝试为您自动退回本金...`
+    )
+
+    try {
+      const { data: refundRes, error: refundError } = await supabase.rpc('refund_dice_room', {
+        p_room_id: roomId
+      })
+
+      if (refundError || !refundRes?.success) {
+        await sendMessage(
+          chatId,
+          `❌ <b>自动退款失败:</b> ${refundRes?.message || refundError?.message}\n请联系管理员处理房ID: <code>${roomId}</code>`
+        )
+      } else {
+        await sendMessage(chatId, `✅ <b>退款成功！</b> 本金已原路退回您的余额。`)
+      }
+    } catch (finalErr: any) {
+      console.error('Critical Refund Error:', finalErr)
+      await sendMessage(chatId, `🚨 <b>严重错误:</b> 无法完成退款，请务必保留截图联系管理员。`)
+    }
   }
 }

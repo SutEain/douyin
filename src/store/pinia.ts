@@ -29,6 +29,8 @@ type SupabaseProfile = {
   is_admin?: boolean | null
   checkin_streak?: number | null
   last_checkin_at?: string | null
+  is_banned?: boolean | null
+  ban_reason?: string | null
 }
 
 function normalizeLang(lang?: string | null) {
@@ -85,6 +87,8 @@ function mapProfileToUserinfo(profile: SupabaseProfile, current: any) {
     follower_count: profile.follower_count ?? current.follower_count ?? 0,
     balance_coins: profile.balance_coins ?? current.balance_coins ?? 0,
     is_admin: profile.is_admin === true,
+    is_banned: profile.is_banned === true,
+    ban_reason: profile.ban_reason || '',
     // 🎯 数字ID
     numeric_id: profile.numeric_id ?? current.numeric_id ?? null,
     // 🎯 隐私设置
@@ -142,6 +146,8 @@ export const useBaseStore = defineStore('base', {
         follower_count: 0,
         balance_coins: 0,
         is_admin: false,
+        is_banned: false,
+        ban_reason: '',
         is_private: false,
         numeric_id: null,
         show_collect: true,
@@ -383,6 +389,10 @@ export const useBaseStore = defineStore('base', {
     clearStartVideoId() {
       this.startVideoId = null
       this.startVideoData = null
+    },
+    // 🎯 仅清除 ID 触发器，保留预加载数据供详情页使用
+    consumeStartVideoId() {
+      this.startVideoId = null
     },
     clearStartLiveId() {
       this.startLiveId = null

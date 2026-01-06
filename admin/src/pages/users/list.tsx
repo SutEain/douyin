@@ -31,6 +31,9 @@ export const UserList = () => {
   const [adjustingUser, setAdjustingUser] = useState<any>(null)
   const [adjustForm] = Form.useForm()
   const [isAdjusting, setIsAdjusting] = useState(false)
+  const [banModalVisible, setBanModalVisible] = useState(false)
+  const [banningUser, setBanningUser] = useState<any>(null)
+  const [banForm] = Form.useForm()
 
   const table = useTable({
     // ✅ 用视图直接 join 邀请人，避免 PostgREST 自关联 embed（PGRST200）
@@ -156,6 +159,63 @@ export const UserList = () => {
   }
 
   // 处理余额调整
+  // 处理封禁/解封
+  const handleToggleBan = (record: any) => {
+    if (record.is_banned) {
+      // 如果是解封，直接确认
+      Modal.confirm({
+        title: '确认解封',
+        content: `确定要为「${record.nickname || record.username}」解除封禁吗？`,
+        onOk: () => {
+          updateProfile(
+            {
+              resource: 'profiles',
+              id: record.id,
+              values: { is_banned: false, ban_reason: null }
+            },
+            {
+              onSuccess: () => {
+                message.success('已解除封禁')
+              },
+              onError: () => {
+                message.error('操作失败')
+              }
+            }
+          )
+        }
+      })
+    } else {
+      // 如果是封禁，弹出填写原因的弹窗
+      setBanningUser(record)
+      setBanModalVisible(true)
+    }
+  }
+
+  const handleConfirmBan = async () => {
+    try {
+      const values = await banForm.validateFields()
+      updateProfile(
+        {
+          resource: 'profiles',
+          id: banningUser.id,
+          values: { is_banned: true, ban_reason: values.reason }
+        },
+        {
+          onSuccess: () => {
+            message.success('已封禁用户')
+            setBanModalVisible(false)
+            banForm.resetFields()
+          },
+          onError: () => {
+            message.error('操作失败')
+          }
+        }
+      )
+    } catch (err) {
+      // 验证失败
+    }
+  }
+
   const handleAdjustBalance = async () => {
     try {
       const values = await adjustForm.validateFields()
@@ -285,8 +345,11 @@ export const UserList = () => {
           dataIndex="auto_approve"
           title="审核状态"
           width={100}
-          render={(value) => (
-            <Tag color={value ? 'green' : 'orange'}>{value ? '自动通过' : '需审核'}</Tag>
+          render={(value, record: any) => (
+            <Space direction="vertical" size={0}>
+              <Tag color={value ? 'green' : 'orange'}>{value ? '自动通过' : '需审核'}</Tag>
+              {record.is_banned && <Tag color="red">已封禁</Tag>}
+            </Space>
           )}
         />
         <Table.Column
@@ -362,10 +425,40 @@ export const UserList = () => {
               >
                 {record.auto_approve ? '需审核' : '免审核'}
               </Button>
+              <Button
+                type="primary"
+                danger={!record.is_banned}
+                size="small"
+                ghost={record.is_banned}
+                onClick={() => handleToggleBan(record)}
+              >
+                {record.is_banned ? '解除封禁' : '封禁'}
+              </Button>
             </Space>
           )}
         />
       </Table>
+
+      <Modal
+        title={`封禁用户 - ${banningUser?.nickname || banningUser?.username || ''}`}
+        open={banModalVisible}
+        onOk={handleConfirmBan}
+        onCancel={() => {
+          setBanModalVisible(false)
+          banForm.resetFields()
+        }}
+        destroyOnClose
+      >
+        <Form form={banForm} layout="vertical">
+          <Form.Item
+            label="封禁原因"
+            name="reason"
+            rules={[{ required: true, message: '请输入封禁原因' }]}
+          >
+            <Input.TextArea placeholder="请输入违规原因，用户尝试使用机器人时会看到此信息" rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title={`调整余额 - ${adjustingUser?.nickname || adjustingUser?.username || ''}`}

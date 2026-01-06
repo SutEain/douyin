@@ -128,6 +128,12 @@ export async function requireAuth(req: Request, options: AuthOptions = {}) {
       throw new HttpError('Profile not found', 404)
     }
 
+    // 🎯 拦截封禁用户：禁止其进行任何需要 Profile 的写操作或核心操作
+    if (profileData.is_banned) {
+      const reason = profileData.ban_reason || '账号由于违反社区规范已被封禁'
+      throw new HttpError(`Forbidden: ${reason}`, 403)
+    }
+
     profile = profileData
   }
 

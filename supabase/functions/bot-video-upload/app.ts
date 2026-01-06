@@ -41,7 +41,59 @@ export async function handleRequest(req: Request): Promise<Response> {
 
       console.log('[BOT-APP] Update received:', JSON.stringify(update).substring(0, 500))
 
-      // ✅ 处理 Worker 完成回调
+      // 🎯 1. 提取 chatId 进行黑名单检查
+      const extractedChatId = 
+        update.message?.chat?.id || 
+        update.callback_query?.message?.chat?.id || 
+        update.inline_query?.from?.id;
+
+      if (extractedChatId && update.type !== 'worker_complete') {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_banned, ban_reason')
+          .eq('tg_user_id', extractedChatId)
+          .maybeSingle();
+
+        if (profile?.is_banned) {
+          console.log(`[BOT-BAN] 用户被拦截: ${extractedChatId}`);
+          const banReason = profile.ban_reason || '由于违反社区规范，您的账号已被封禁。';
+          const banNotice = `🚫 <b>您的账号已被封禁</b>\n\n原因: ${banReason}\n\n如有疑问，请联系管理员。`;
+
+          if (update.message) {
+            await sendMessage(extractedChatId, banNotice);
+          } else if (update.callback_query) {
+             // 弹出警告提示框
+             const { answerCallbackQuery } = await import('./telegram.ts');
+             await answerCallbackQuery(update.callback_query.id, {
+               text: `🚫 账号已封禁\n原因: ${banReason}`,
+               show_alert: true
+             });
+          } else if (update.inline_query) {
+             // 对于搜索分享，返回一个告知封禁的单条结果
+             const { TG_BOT_TOKEN } = await import('./env.ts');
+             await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/answerInlineQuery`, {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({
+                 inline_query_id: update.inline_query.id,
+                 results: [{
+                   type: 'article',
+                   id: 'banned',
+                   title: '🚫 您的账号已被封禁',
+                   description: banReason,
+                   input_message_content: {
+                     message_text: '🚫 抱歉，由于违反规范，我暂时无法使用分享功能。'
+                   }
+                 }],
+                 cache_time: 0
+               })
+             });
+          }
+          return new Response('OK', { status: 200 });
+        }
+      }
+
+      // ✅ 2. 处理 Worker 完成回调
       if (update.type === 'worker_complete') {
         const {
           chatId,

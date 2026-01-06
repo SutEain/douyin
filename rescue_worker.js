@@ -1,5 +1,6 @@
 /* eslint-disable */
-require('dotenv').config()
+const path = require('path')
+require('dotenv').config({ path: path.resolve(__dirname, '.env') })
 const axios = require('axios')
 const { createClient } = require('@supabase/supabase-js')
 
@@ -23,7 +24,7 @@ async function rescue() {
   // 2. 查询卡住的视频 (优先处理 status = 'processing' 且 storage_type = 'r2_pending' 的视频)
   const { data: videos, error } = await supabase
     .from('videos')
-    .select('id, tg_file_id, tg_user_id, status')
+    .select('id, tg_file_id, tg_thumbnail_file_id, tg_user_id, status')
     .eq('storage_type', 'r2_pending')
     .eq('status', 'processing') // 🎯 优先处理处理中的
     .not('tg_file_id', 'is', null)
@@ -48,6 +49,7 @@ async function rescue() {
       const payload = {
         video_id: video.id,
         file_id: video.tg_file_id,
+        thumbnail_file_id: video.tg_thumbnail_file_id, // 🎯 传递缩略图 ID
         chat_id: video.tg_user_id,
         bot_token: BOT_TOKEN,
         message_id: null // 补救任务没有原始消息 ID

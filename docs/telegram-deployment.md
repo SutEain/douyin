@@ -31,8 +31,8 @@ npm install @supabase/supabase-js
 ```env
 VITE_SUPABASE_URL=https://zhlkanxfucnsatafeqdp.supabase.co
 VITE_SUPABASE_ANON_KEY=<从 Dashboard 获取>
-VITE_TG_BOT_USERNAME=tg_douyin_bot
-VITE_TG_BOT_NAME=@tg_douyin_bot
+VITE_TG_BOT_USERNAME=dydy
+VITE_TG_BOT_NAME=@dydy
 ```
 
 **获取 ANON_KEY:**
@@ -86,7 +86,7 @@ npx supabase functions deploy server
 
 ```
 /setmenubutton
-选择 @tg_douyin_bot
+选择 @dydy
 选择 "Configure menu button"
 输入按钮文字: 打开应用
 输入 Web App URL: https://your-app.vercel.app/login/telegram
@@ -96,7 +96,7 @@ npx supabase functions deploy server
 
 ```
 /setcommands
-选择 @tg_douyin_bot
+选择 @dydy
 
 start - 启动应用
 help - 帮助信息
@@ -111,8 +111,8 @@ help - 帮助信息
 ```
 VITE_SUPABASE_URL=https://zhlkanxfucnsatafeqdp.supabase.co
 VITE_SUPABASE_ANON_KEY=<your_anon_key>
-VITE_TG_BOT_USERNAME=tg_douyin_bot
-VITE_TG_BOT_NAME=@tg_douyin_bot
+VITE_TG_BOT_USERNAME=dydy
+VITE_TG_BOT_NAME=@dydy
 ```
 
 #### 6.2 部署
@@ -139,7 +139,7 @@ ngrok http 5173
 # 3. 将 ngrok 提供的 HTTPS URL 配置到 Telegram Bot
 # 例如: https://abc123.ngrok.io/login/telegram
 
-# 4. 在 Telegram 中打开 @tg_douyin_bot
+# 4. 在 Telegram 中打开 @dydy
 # 5. 点击 Menu Button 测试登录
 ```
 

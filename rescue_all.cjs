@@ -7,20 +7,19 @@ const { createClient } = require('@supabase/supabase-js')
 
 /**
  * 补救脚本 v2.1
- *
+ * 
  * 功能：
  * 1. 扫描所有 status = 'processing' 的视频/图片/相册
  * 2. 识别出其中的 Telegram file_id
  * 3. 触发 Worker 进行下载、处理并上传到 R2
- *
+ * 
  * 使用方式：
  * node rescue_all.js "你的机器人TOKEN"
  */
 
 // 1. 初始化 Supabase
 const SUPABASE_URL = process.env.SUPABASE_URL
-const SUPABASE_SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   console.error('❌ 错误: 未找到 Supabase 配置 (SUPABASE_URL / SUPABASE_SERVICE_KEY)')
@@ -31,12 +30,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 // 2. 环境配置
 // 🎯 优先级：命令行参数 > 环境变量
-const BOT_TOKEN = (
-  process.argv[2] ||
-  process.env.TG_BOT_TOKEN ||
-  process.env.BOT_TOKEN ||
-  ''
-).trim()
+const BOT_TOKEN = (process.argv[2] || process.env.TG_BOT_TOKEN || process.env.BOT_TOKEN || '').trim()
 const WORKER_URL = process.env.BOT_WORKER_URL || 'http://localhost:3000/process'
 
 async function rescueAll() {
@@ -56,9 +50,7 @@ async function rescueAll() {
   // 查询所有需要修复的作品
   const { data: videos, error } = await supabase
     .from('videos')
-    .select(
-      'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type'
-    )
+    .select('id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type')
     .or('status.eq.processing,storage_type.eq.telegram,storage_type.eq.r2_pending')
     .order('created_at', { ascending: false })
 
@@ -81,13 +73,7 @@ async function rescueAll() {
     if (v.content_type === 'video' || v.content_type === 'image') {
       // 单文件模式
       if (v.tg_file_id) {
-        // 🎯 同样检查缩略图是否已是 URL
-        const thumbId =
-          v.tg_thumbnail_file_id && !String(v.tg_thumbnail_file_id).startsWith('http')
-            ? v.tg_thumbnail_file_id
-            : null
-
-        tasks.push({ fileId: v.tg_file_id, thumbnailFileId: thumbId })
+        tasks.push({ fileId: v.tg_file_id, thumbnailFileId: v.tg_thumbnail_file_id })
       }
     } else {
       // 相册或合集模式：遍历 media_list，找出没有 play_url 的项
@@ -100,25 +86,16 @@ async function rescueAll() {
       }
 
       for (const item of list) {
-        // 🛡️ 防御性检查：确保 item 存在且 play_url 是字符串
-        const itemPlayUrl = String(item.play_url || '')
-        const itemCoverUrl = String(item.cover_url || '')
-
         // 如果没有 play_url 或者 play_url 包含 undefined/telegram (旧格式)，则需要重刷
-        const needsUpload =
-          !itemPlayUrl ||
-          itemPlayUrl.includes('undefined') ||
-          item.storage_type === 'telegram' ||
-          !itemPlayUrl.startsWith('http')
+        const needsUpload = !item.play_url || 
+                           item.play_url.includes('undefined') || 
+                           item.storage_type === 'telegram' ||
+                           !item.play_url.startsWith('http')
 
         if (needsUpload && item.file_id) {
-          // 🎯 只有当 cover_url 不是 HTTP 链接时，才视其为 thumbnail_file_id
-          const thumbId =
-            itemCoverUrl && !itemCoverUrl.startsWith('http') ? itemCoverUrl : null
-
-          tasks.push({
-            fileId: item.file_id,
-            thumbnailFileId: thumbId
+          tasks.push({ 
+            fileId: item.file_id, 
+            thumbnailFileId: item.cover_url // 相册项的 cover_url 通常存的是 thumbnail 的 file_id
           })
         }
       }

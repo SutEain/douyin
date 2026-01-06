@@ -88,7 +88,7 @@ export async function handleInlineQuery(inlineQuery: any) {
       .single()
 
     const numericId = sharer?.numeric_id
-    const startUrl = `https://t.me/tg_douyin_bot?start=${numericId || ''}`
+    const startUrl = `https://t.me/dydy?start=${numericId || ''}`
 
     const welcomeText =
       '<b>👋 欢迎来到 TG 抖音 🚀</b>\n' +
@@ -160,7 +160,7 @@ export async function handleInlineQuery(inlineQuery: any) {
         .eq('tg_user_id', userId)
         .single()
       const inviteSuffix = sharer?.numeric_id ? `_i${sharer.numeric_id}` : ''
-      const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/tg_douyin_bot/tgdouyin'
+      const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/dydy/tgdouyin'
       const deepLink = `${tmeUrl}?startapp=live_${roomId}${inviteSuffix}`
 
       const result: any = {
@@ -215,7 +215,7 @@ export async function handleInlineQuery(inlineQuery: any) {
         .eq('tg_user_id', userId)
         .single()
       const inviteSuffix = sharer?.numeric_id ? `_i${sharer.numeric_id}` : ''
-      const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/tg_douyin_bot/tgdouyin'
+      const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/dydy/tgdouyin'
       const deepLink = `${tmeUrl}?startapp=video_${video.id}${inviteSuffix}`
 
       const result: any = {
@@ -281,7 +281,7 @@ export async function handleInlineQuery(inlineQuery: any) {
     return
   }
 
-  const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/tg_douyin_bot/tgdouyin'
+  const tmeUrl = TG_MINIAPP_TME_URL || 'https://t.me/dydy/tgdouyin'
 
   const results = videos.map((v: any, idx: number) => {
     const videoId = v.id

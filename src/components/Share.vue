@@ -211,7 +211,7 @@ async function copyLink() {
   _hideLoading()
 
   // 🎯 恢复为“分享口令”格式，以便在 Telegram 中弹出卡片
-  const botUsername = (import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot').replace('@', '')
+  const botUsername = (import.meta.env.VITE_TG_BOT_USERNAME || 'dydy').replace('@', '')
   let shareCommand = `@${botUsername} video_${props.videoId || props.item?.id}`
   if (store.userinfo?.numeric_id) {
     shareCommand += `_i${store.userinfo.numeric_id}`

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { _formatNumber, cloneDeep, _notice, _copy, _truncate } from '@/utils'
+import { _formatNumber, cloneDeep, _notice, _copy } from '@/utils'
 import bus, { EVENT_KEY } from '@/utils/bus'
 import { useClick } from '@/utils/hooks/useClick'
 import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -218,7 +218,7 @@ function showComments() {
 
 // 🎯 分享到 Telegram
 // 🎯 修正 Bot 用户名（自动去掉 @）
-const rawBotUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'tg_douyin_bot'
+const rawBotUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'dydy'
 const botUsername = rawBotUsername.replace('@', '')
 const appName = import.meta.env.VITE_TG_APP_NAME || 'tgdouyin'
 
@@ -237,7 +237,7 @@ async function copyVideoLink() {
   const desc = (props.item?.desc || '精彩视频').trim()
   // 🎯 严格要求：前 15 个字，不要链接，不要省略号，用于触发 Inline Mode
   const queryText = desc.substring(0, 15)
-  const copyText = `@tg_douyin_bot ${queryText}`
+  const copyText = `@dydy ${queryText}`
   _copy(copyText)
   _notice('搜索指令已复制，在聊天框粘贴即可搜索')
   showMoreDrawer.value = false
@@ -263,10 +263,6 @@ function shareToTelegramDirect() {
     window.open(shareUrl, '_blank')
   }
   showMoreDrawer.value = false
-}
-
-function shareToTelegram() {
-  // 旧方法不再使用，由 shareToTelegramDirect 代替
 }
 
 // 🎯 更多选项抽屉
