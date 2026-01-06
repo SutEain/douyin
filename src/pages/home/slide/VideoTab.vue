@@ -240,6 +240,10 @@ function onAvatarError(e) {
           </div>
         </template>
         <div v-else-if="!loading" class="empty">暂无视频</div>
+        <div v-else class="loading-container">
+          <div class="loading-spinner"></div>
+          <p>加载中...</p>
+        </div>
       </template>
     </ScrollList>
   </div>
@@ -256,6 +260,31 @@ function onAvatarError(e) {
     height: calc(
       var(--vh, 1vh) * 100 - var(--home-header-height) - var(--footer-height)
     ) !important;
+  }
+
+  .loading-container {
+    padding: 40rem 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #999;
+    gap: 12rem;
+
+    .loading-spinner {
+      width: 32rem;
+      height: 32rem;
+      border: 3rem solid rgba(255, 255, 255, 0.1);
+      border-top-color: #fe2c55;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 }
 

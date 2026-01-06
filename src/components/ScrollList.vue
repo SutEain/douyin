@@ -32,7 +32,7 @@ const state = reactive({
   total: 0,
   pageNo: 0,
   pageSize: 10,
-  loading: true // 🎯 初始设为 true，避免闪现空状态
+  loading: true // 🎯 初始设为 true，配合模板避免闪现“暂无视频”
 })
 
 function loadData() {
@@ -47,24 +47,35 @@ async function getData(refresh = false) {
   } else {
     if (state.total !== 0 && state.total === state.list.length) return
   }
-  if (state.loading) return
+
+  // 🎯 修复逻辑：如果是第一次加载（list 为空），允许通过，否则拦截重复请求
+  if (state.loading && state.list.length > 0) return
+
   state.loading = true
-  let res = await props.api({
-    pageNo: state.pageNo,
-    pageSize: state.pageSize
-  })
-  state.loading = false
-  if (res.success) {
-    if (refresh) {
-      state.list = res.data.list
+  try {
+    let res = await props.api({
+      pageNo: state.pageNo,
+      pageSize: state.pageSize
+    })
+    if (res.success) {
+      if (refresh) {
+        state.list = res.data.list
+      } else {
+        state.list = state.list.concat(res.data.list)
+      }
+      state.total = res.data.total
     } else {
-      state.list = state.list.concat(res.data.list)
+      _notice('查询失败')
     }
-    state.total = res.data.total
-  } else {
-    _notice('查询失败')
+  } catch (e) {
+    console.error('[ScrollList] getData error:', e)
+  } finally {
+    state.loading = false
   }
 }
 
-onMounted(getData)
+onMounted(() => {
+  // 🎯 确保在挂载后执行，且 list 为空时能通过 loading 锁
+  getData()
+})
 </script>
