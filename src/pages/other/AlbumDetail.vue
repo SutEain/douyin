@@ -9,7 +9,18 @@
       <div class="slide-imgs">
         <SlideHorizontal v-model:index="state.index">
           <SlideItem :key="i" v-for="(item, i) in props.detail.note_card?.image_list">
-            <img :src="_checkImgUrl(item.info_list?.[0]?.url)" alt="" />
+            <!-- 🎬 视频类型 -->
+            <video
+              v-if="item.type === 'video'"
+              :src="_checkImgUrl(item.info_list?.[0]?.url)"
+              style="height: 100%; width: 100%; object-fit: contain"
+              autoplay
+              loop
+              muted
+              playsinline
+            />
+            <!-- 🖼️ 图片类型 -->
+            <img v-else :src="_checkImgUrl(item.info_list?.[0]?.url)" alt="" />
           </SlideItem>
         </SlideHorizontal>
 

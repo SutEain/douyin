@@ -39,7 +39,13 @@ import { buildCdnUrl } from '@/utils/media'
 import ImagePreview from './ImagePreview.vue'
 
 interface Props {
-  images: Array<{ file_id: string; url?: string; width?: number; height?: number }>
+  images: Array<{
+    file_id: string
+    url?: string
+    play_url?: string // 🎯 增加 play_url
+    width?: number
+    height?: number
+  }>
 }
 
 const props = defineProps<Props>()
@@ -55,9 +61,10 @@ function openPreview() {
 // 获取第一张图片的 URL
 const imageUrl = computed(() => {
   if (props.images && props.images.length > 0) {
-    // 🎯 优先使用后端返回的完整 URL
-    if (props.images[0].url) return props.images[0].url
-    return buildCdnUrl(props.images[0].file_id)
+    const first = props.images[0]
+    // 🎯 优先使用 R2 直链 (play_url 或 url)
+    if (first.play_url || first.url) return first.play_url || first.url
+    return buildCdnUrl(first.file_id)
   }
   return ''
 })

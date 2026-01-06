@@ -291,6 +291,7 @@ function buildNoteCardDetailFromItem(item: VideoItem) {
   const imageList = Array.isArray(imgs)
     ? imgs
         .map((img: any) => ({
+          type: img?.type || 'image', // 🎯 传递媒体类型
           info_list: [
             {
               // 🎯 优先使用 play_url (R2)，然后是 url，最后才是 file_id
@@ -552,12 +553,11 @@ function getSlotVideoFit(slot: SlotState): 'contain' | 'cover' {
 }
 
 // 🎯 获取 slot 对应的图片数组
-function getSlotImages(
-  slot: SlotState
-): Array<{ file_id: string; width?: number; height?: number }> {
+function getSlotImages(slot: SlotState): VideoItem['images'] {
   if (slot.videoIndex == null) return []
   const item = props.items[slot.videoIndex]
-  return parseImages(item?.images)
+  // 🎯 同时检查 images 和 media_list 字段
+  return parseImages(item?.images || (item as any)?.media_list)
 }
 
 // 🎯 图片/相册点击处理（可以用于暂停/恢复等交互）
