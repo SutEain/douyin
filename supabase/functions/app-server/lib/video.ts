@@ -56,15 +56,27 @@ export async function mapVideoRow(row: any, profile: any) {
             parsed.map(async (item: any) => {
               const mappedItem = { ...item }
               if (item.file_id) {
-                // 如果是视频且没有 play_url，尝试构建
-                if (item.type === 'video' && !item.play_url) {
-                  mappedItem.play_url = await buildTelegramFileUrl(item.file_id)
+                // 🎯 优先使用已有的 play_url (R2 完整路径)，避免重新生成指向 CDN 的旧链接
+                if (item.play_url && /^https?:\/\//i.test(item.play_url)) {
+                  mappedItem.url = item.play_url
+                } else if (item.url && /^https?:\/\//i.test(item.url)) {
+                  mappedItem.url = item.url
+                } else {
+                  // 只有确实没有直链时才走代理
+                  mappedItem.url = await buildTelegramFileUrl(item.file_id)
                 }
-                // 如果是图片，或者作为封面的预览图
-                mappedItem.url = await buildTelegramFileUrl(item.file_id)
+
+                // 如果是视频且没有 play_url，尝试构建
+                if (item.type === 'video' && !mappedItem.play_url) {
+                  mappedItem.play_url = mappedItem.url
+                }
               }
               // 如果是视频且有封面 file_id，也转换它
-              if (item.type === 'video' && item.cover_url && !item.cover_url.startsWith('http')) {
+              if (
+                item.type === 'video' &&
+                item.cover_url &&
+                !/^https?:\/\//i.test(item.cover_url)
+              ) {
                 mappedItem.cover_url = await buildTelegramFileUrl(item.cover_url)
               }
               return mappedItem
@@ -184,12 +196,13 @@ export async function buildCoverUrl(row: any, profile: any): Promise<string> {
     }
     if (media.length > 0) {
       const first = media[0]
-      // 如果第一项是视频且有封面，用它的封面
-      if (first.type === 'video' && first.cover_url) {
-        const url = await convertMediaReferenceToUrl(first.cover_url)
-        if (url) return url
+      // 🎯 优先使用 R2 直链 (封面或播放地址)
+      const r2Target = first.cover_url || first.play_url || first.url
+      if (r2Target && /^https?:\/\//i.test(r2Target)) {
+        return r2Target
       }
-      // 否则用 file_id
+
+      // 否则才用 file_id
       if (first.file_id) {
         const url = await buildTelegramFileUrl(first.file_id)
         if (url) return url
@@ -218,10 +231,19 @@ export async function buildTelegramFileUrl(fileId?: string): Promise<string | nu
   if (!fileId) return null
 
   if (TG_FILE_PROXY_URL) {
-    const base = TG_FILE_PROXY_URL.endsWith('/')
-      ? TG_FILE_PROXY_URL.slice(0, -1)
-      : TG_FILE_PROXY_URL
-    return `${base}?file_id=${encodeURIComponent(fileId)}`
+    const base = String(TG_FILE_PROXY_URL).replace(/\/$/, '')
+
+    // 🎯 兼容旧的 ?file_id= 模式，但优先使用直链路径模式 /tg/file_id
+    if (base.includes('?')) {
+      const sep = base.includes('file_id=') ? '' : base.includes('?') ? '&' : '?'
+      return `${base}${sep}file_id=${encodeURIComponent(fileId)}`
+    }
+
+    // 🎯 统一使用路径模式，这样可以直接指向 R2 (需 R2 开启 /tg/ 路径访问)
+    if (base.endsWith('/tg')) {
+      return `${base}/${encodeURIComponent(fileId)}`
+    }
+    return `${base}/tg/${encodeURIComponent(fileId)}`
   }
 
   if (!TG_BOT_TOKEN) {
