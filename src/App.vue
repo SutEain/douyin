@@ -37,28 +37,12 @@ async function handleDeepLink() {
     setTimeout(() => {
       router.push({ path: '/home/live', query: { id: roomId } })
     }, 100)
-  } else if (store.startVideoId) {
-    const videoId = store.startVideoId
-    store.clearStartVideoId()
-
-    await router.isReady()
-
-    setTimeout(() => {
-      router.push({ path: '/video-detail', query: { id: videoId } })
-    }, 100)
   }
 }
 
-// 🎯 监听 Store 中的深链接参数
+// 🎯 监听 Store 中的深链接参数 (仅直播需要重定向，视频由首页 Feed 自动处理)
 watch(
   () => store.startLiveId,
-  (newId) => {
-    if (newId) handleDeepLink()
-  },
-  { immediate: true }
-)
-watch(
-  () => store.startVideoId,
   (newId) => {
     if (newId) handleDeepLink()
   },

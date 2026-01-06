@@ -41,6 +41,11 @@
       />
     </div>
 
+    <!-- 🎯 加载中占位 -->
+    <div v-else class="video-loading">
+      <Loading style="width: 40rem" />
+    </div>
+
     <!-- 底部导航 -->
     <BaseFooter :init-tab="5" />
 
@@ -61,13 +66,15 @@
 </template>
 
 <script setup lang="jsx">
-import { reactive, onMounted, onUnmounted, onDeactivated, provide, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { reactive, onMounted, onUnmounted, onDeactivated, provide, computed, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import VideoList from '@/components/video/VideoList.vue'
 import BaseFooter from '@/components/BaseFooter.vue'
 import Comment from '@/components/CommentNew.vue'
 import Share from '@/components/Share.vue'
+import Loading from '@/components/Loading.vue'
+import { _notice } from '@/utils'
 import { useBaseStore } from '@/store/pinia'
 import { videoPlaybackManager } from '@/utils/videoPlaybackManager'
 import bus, { EVENT_KEY } from '@/utils/bus'
@@ -163,8 +170,13 @@ onMounted(() => {
     state.videoItem = baseStore.routeData.items[initialIndex.value]
   } else if (baseStore.routeData?.item) {
     state.videoItem = baseStore.routeData.item
+  } else if (baseStore.startVideoData) {
+    // 🎯 优先使用全局预加载的数据（深链接）
+    console.log('[VideoDetail] 使用预加载的深链视频数据')
+    state.videoItem = baseStore.startVideoData
+    baseStore.clearStartVideoId() // 使用后彻底清除
   } else {
-    // 🎯 深链接兜底：如果路由没有传数据，根据 ID 查后端
+    // 🎯 深链接兜底：如果路由没有传数据且没预加载，根据 ID 查后端
     const videoId = route.query.id
     if (videoId) {
       fetchVideoDetail(videoId)
@@ -250,6 +262,15 @@ onDeactivated(() => {
     &.no-transition {
       transition: none;
     }
+  }
+
+  .video-loading {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: black;
   }
 }
 </style>
