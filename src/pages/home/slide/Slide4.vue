@@ -54,8 +54,11 @@ const state = reactive({
 async function loadMore() {
   if (state.loading) return
 
-  // 1. 🎯 核心重构：必须等待应用 Ready
-  if (!store.isAppReady) {
+  // 1. 🎯 核心重构：允许并行加载
+  // 如果在 Telegram 环境且有 initData，可以直接请求，后端能识别用户
+  const hasTGInitData = !!(window as any).Telegram?.WebApp?.initData
+
+  if (!store.isAppReady && !hasTGInitData) {
     console.log('[Slide4] 等待 App Ready...')
     const unwatch = watch(
       () => store.isAppReady,

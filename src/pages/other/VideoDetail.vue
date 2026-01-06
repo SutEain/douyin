@@ -71,17 +71,19 @@ import Share from '@/components/Share.vue'
 import { useBaseStore } from '@/store/pinia'
 import { videoPlaybackManager } from '@/utils/videoPlaybackManager'
 import bus, { EVENT_KEY } from '@/utils/bus'
-import { getAdultQuota } from '@/api/videos'
+import { getAdultQuota, getVideoById } from '@/api/videos'
 
 defineOptions({
   name: 'VideoDetail'
 })
 
+const route = useRoute()
 const router = useRouter()
 const baseStore = useBaseStore()
 
 const state = reactive({
   videoItem: null,
+  loading: false,
   showComments: false,
   commentVideoId: '',
   isSharing: false,
@@ -137,6 +139,24 @@ function handleTouchStart() {}
 function handleTouchMove() {}
 function handleTouchEnd() {}
 
+async function fetchVideoDetail(id) {
+  state.loading = true
+  try {
+    const res = await getVideoById(id)
+    if (res.success && res.data) {
+      state.videoItem = res.data
+    } else {
+      _notice('视频加载失败')
+      router.back()
+    }
+  } catch (e) {
+    console.error('[VideoDetail] fetch error:', e)
+    router.back()
+  } finally {
+    state.loading = false
+  }
+}
+
 onMounted(() => {
   // 从路由数据获取单个视频
   if (baseStore.routeData?.items?.length) {
@@ -144,22 +164,34 @@ onMounted(() => {
   } else if (baseStore.routeData?.item) {
     state.videoItem = baseStore.routeData.item
   } else {
-    console.error('[VideoDetail] 未找到视频数据')
-    router.back()
-    return
+    // 🎯 深链接兜底：如果路由没有传数据，根据 ID 查后端
+    const videoId = route.query.id
+    if (videoId) {
+      fetchVideoDetail(videoId)
+    } else {
+      console.error('[VideoDetail] 未找到视频数据且无 ID')
+      router.back()
+      return
+    }
   }
 
   // 暂停其他页面的视频
   videoPlaybackManager.pauseAll()
 
   // 如果是成人视频，检查今日配额
-  if (state.videoItem?.is_adult) {
-    getAdultQuota().then((res) => {
-      if (res.success && !res.data.unlimited && res.data.remaining <= 0) {
-        state.showAdultRules = true
+  watch(
+    () => state.videoItem,
+    (item) => {
+      if (item?.is_adult) {
+        getAdultQuota().then((res) => {
+          if (res.success && !res.data.unlimited && res.data.remaining <= 0) {
+            state.showAdultRules = true
+          }
+        })
       }
-    })
-  }
+    },
+    { immediate: true }
+  )
 
   // 监听事件
   bus.on(EVENT_KEY.UPDATE_ITEM, updateItem)

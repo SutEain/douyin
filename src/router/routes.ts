@@ -5,7 +5,12 @@ import type { RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   // {path: '/', redirect: '/attention'},
-  { path: '/', redirect: '/home' },
+  {
+    path: '/',
+    redirect: (to) => {
+      return { path: '/home', query: to.query, hash: to.hash }
+    }
+  },
   { path: '/test', component: Test },
   { path: '/test4', component: Test4 },
 
