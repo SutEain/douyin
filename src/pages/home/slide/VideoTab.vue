@@ -150,7 +150,7 @@ function onAvatarError(e) {
 <template>
   <div class="video-tab" @dragstart="(e) => _stopPropagation(e)">
     <ScrollList class="Scroll" v-if="state.show" :api="recommendedVideoTab">
-      <template v-slot="{ list }">
+      <template v-slot="{ list, loading }">
         <template v-if="list?.length">
           <div class="list">
             <div
@@ -239,7 +239,7 @@ function onAvatarError(e) {
             </div>
           </div>
         </template>
-        <div v-else class="empty">暂无视频</div>
+        <div v-else-if="!loading" class="empty">暂无视频</div>
       </template>
     </ScrollList>
   </div>

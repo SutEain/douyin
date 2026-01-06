@@ -1,15 +1,9 @@
 <template>
   <SlideItem class="slide-item-class">
     <div class="video-container" style="background: black">
-      <!-- Loading 状态 -->
-      <div v-if="state.loading && state.list.length === 0" class="loading-state">
-        <div class="loading-spinner"></div>
-        <p>加载中...</p>
-      </div>
-
       <!-- 视频列表 -->
       <VideoList
-        v-else-if="state.list.length > 0"
+        v-if="state.list.length > 0"
         :items="state.list"
         page="home"
         :initial-index="0"
@@ -18,10 +12,16 @@
         @load-more="loadMore"
       />
 
-      <!-- 空状态提示 -->
-      <div v-else class="empty-state">
+      <!-- 空状态提示 (只有在不加载且明确没更多时显示) -->
+      <div v-else-if="!state.loading && !state.hasMore" class="empty-state">
         <p>你还没有关注或关注的人还没有发布作品</p>
         <div class="retry-btn" @click="loadMore">点击刷新</div>
+      </div>
+
+      <!-- Loading 状态 (初始加载或请求中) -->
+      <div v-else class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
       </div>
     </div>
   </SlideItem>

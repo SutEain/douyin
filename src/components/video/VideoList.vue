@@ -786,6 +786,13 @@ function playCurrent() {
 
   recordEnterCurrent(item, contentType)
 
+  // 🎯 检查是否允许播放（autoplay 代表当前 Tab 是否处于激活状态）
+  if (!props.autoplay) {
+    console.log(`${DEBUG_PREFIX} playCurrent: 中止播放 - autoplay 为 false (Tab 可能不活跃)`)
+    isPlaying.value = false
+    return
+  }
+
   // 🎯 图片/相册/合集类型不需要播放视频元素
   if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
     console.log(`${DEBUG_PREFIX} playCurrent:skip-non-video`, { contentType })
@@ -1371,6 +1378,25 @@ watch(
     const currentSlot = getSlotByRole('current')
     if (currentSlot && props.items.length === 0 && !props.hasMore) {
       currentSlot.videoIndex = null
+    }
+  }
+)
+
+// 🎯 监听播放激活状态（Tab 切换）
+watch(
+  () => props.autoplay,
+  (val) => {
+    console.log(`${DEBUG_PREFIX} watch:autoplay changed`, val)
+    if (val) {
+      playCurrent()
+    } else {
+      slotRefs.forEach((v) => {
+        if (!v.paused) {
+          v.pause()
+          console.log(`${DEBUG_PREFIX} autoplay=false, 暂停视频`)
+        }
+      })
+      isPlaying.value = false
     }
   }
 )

@@ -220,7 +220,29 @@ export const VideoList = () => {
       }, 100)
     } else {
       // 图片/相册/合集预览
-      const mediaItems = parseImages(record.media_list || record.images)
+      let mediaItems = parseImages(record.media_list || record.images)
+
+      // 🎯 补丁：对于单图类型，如果 mediaItems 里面没拿到 R2 地址，尝试用顶层的 play_url/cover_url 补全
+      // 这能解决：1. View 视图没选 media_list 字段 2. images 字段未同步更新 等问题
+      if (
+        contentType === 'image' &&
+        (mediaItems.length === 0 ||
+          (!mediaItems[0].play_url && !mediaItems[0].url && !mediaItems[0].cover_url))
+      ) {
+        const topUrl = record.play_url || record.cover_url
+        if (topUrl && (topUrl.startsWith('http') || topUrl.startsWith('/'))) {
+          console.log('[handlePreview] 使用顶层字段补偿图片预览 URL:', topUrl)
+          mediaItems = [
+            {
+              type: 'image',
+              file_id: record.tg_file_id || '',
+              play_url: topUrl,
+              cover_url: topUrl
+            }
+          ]
+        }
+      }
+
       if (mediaItems.length === 0) {
         message.error('媒体内容不可用')
         return

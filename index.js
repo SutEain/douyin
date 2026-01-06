@@ -170,7 +170,7 @@ app.post('/process', async (req, res) => {
     // 🎯 更新数据库
     const { data: vInfo } = await supabase
       .from('videos')
-      .select('status, review_status, content_type, media_list')
+      .select('status, review_status, content_type, media_list, images')
       .eq('id', video_id)
       .single()
 
@@ -199,6 +199,23 @@ app.post('/process', async (req, res) => {
       })
       if (changed) {
         updatePayload.media_list = list
+      }
+    }
+
+    // 🎯 兼容性修复：同时也更新 images 字段（部分老视图还在使用它）
+    if (vInfo && vInfo.images) {
+      let imgList = Array.isArray(vInfo.images) ? vInfo.images : JSON.parse(vInfo.images || '[]')
+      let changed = false
+      imgList = imgList.map((item) => {
+        if (item.file_id === file_id) {
+          item.play_url = playUrl
+          if (coverUrl) item.cover_url = coverUrl
+          changed = true
+        }
+        return item
+      })
+      if (changed) {
+        updatePayload.images = imgList
       }
     }
 

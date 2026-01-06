@@ -5,7 +5,7 @@
     :full-loading="!state.list.length"
     @pulldown="loadData"
   >
-    <slot :list="state.list"></slot>
+    <slot :list="state.list" :loading="state.loading"></slot>
     <NoMore v-if="state.total !== 0 && state.total === state.list.length" />
   </Scroll>
 </template>
@@ -32,7 +32,7 @@ const state = reactive({
   total: 0,
   pageNo: 0,
   pageSize: 10,
-  loading: false
+  loading: true // 🎯 初始设为 true，避免闪现空状态
 })
 
 function loadData() {
