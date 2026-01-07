@@ -1,8 +1,9 @@
 import { List, useTable } from '@refinedev/antd'
 import { Table, Space, Tag, Button, Modal, Input, Select, Form, message, Tooltip } from 'antd'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useInvalidate, useUpdate, useDelete } from '@refinedev/core'
 import { useNavigate } from 'react-router-dom'
+import Hls from 'hls.js'
 import {
   EditOutlined,
   DeleteOutlined,
@@ -24,6 +25,43 @@ import { supabaseClient } from '../../supabaseClient'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
+
+// 🎯 HLS 视频播放组件
+const HlsVideo = ({ src, ...props }: any) => {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const hlsRef = useRef<Hls | null>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !src) return
+
+    if (src.includes('.m3u8')) {
+      if (Hls.isSupported()) {
+        if (hlsRef.current) hlsRef.current.destroy()
+        const hls = new Hls()
+        hlsRef.current = hls
+        hls.loadSource(src)
+        hls.attachMedia(video)
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {})
+        })
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = src
+      }
+    } else {
+      video.src = src
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy()
+        hlsRef.current = null
+      }
+    }
+  }, [src])
+
+  return <video ref={videoRef} controls controlsList="nodownload" playsInline {...props} />
+}
 
 const statusMap: Record<string, { text: string; color: string }> = {
   draft: { text: '草稿', color: 'default' },
@@ -60,7 +98,6 @@ export const VideoList = () => {
   const { mutate: updateVideo } = useUpdate()
   const { mutate: deleteVideo } = useDelete()
   const invalidate = useInvalidate()
-  const videoRef = useRef<HTMLVideoElement>(null)
 
   // 📸 图片/相册/合集预览相关状态
   const [previewContentType, setPreviewContentType] = useState<
@@ -209,15 +246,6 @@ export const VideoList = () => {
       setCurrentVideoUrl(videoUrl)
       setPreviewMediaItems([])
       setPreviewModalVisible(true)
-
-      // 延迟设置视频音频（等待 DOM 渲染）
-      setTimeout(() => {
-        if (videoRef.current) {
-          const video = videoRef.current
-          video.muted = false
-          video.volume = 1.0
-        }
-      }, 100)
     } else {
       // 图片/相册/合集预览
       let mediaItems = parseImages(record.media_list || record.images)
@@ -256,11 +284,6 @@ export const VideoList = () => {
 
   // 关闭预览
   const handleClosePreview = () => {
-    // 停止视频播放
-    if (videoRef.current) {
-      videoRef.current.pause()
-      videoRef.current.currentTime = 0
-    }
     setPreviewModalVisible(false)
     setCurrentVideoUrl('')
     setPreviewMediaItems([])
@@ -1167,15 +1190,11 @@ export const VideoList = () => {
               </Space>
             </div>
 
-            <video
+            <HlsVideo
               key={currentVideoUrl}
-              ref={videoRef}
               src={currentVideoUrl}
-              controls
-              controlsList="nodownload"
               style={{ width: '100%', maxHeight: '70vh' }}
               muted={false}
-              playsInline
               onError={() => {
                 message.warning('预览播放失败（可能 403 防盗链）')
               }}
@@ -1198,13 +1217,12 @@ export const VideoList = () => {
                       {previewMediaItems[currentImageIndex].file_id}
                     </small>
                   </div>
-                  <video
+                  <HlsVideo
                     src={buildCdnUrl(
                       previewMediaItems[currentImageIndex].play_url ||
                         previewMediaItems[currentImageIndex].url ||
                         previewMediaItems[currentImageIndex].file_id
                     )}
-                    controls
                     autoPlay
                     style={{ maxWidth: '100%', maxHeight: '60vh' }}
                     onError={() => message.warning('视频加载失败')}
