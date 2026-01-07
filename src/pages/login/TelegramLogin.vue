@@ -45,18 +45,39 @@ const isBrowserEnv = ref(false)
 
 // 🎯 检测环境
 function detectEnvironment() {
+  // 开发环境强制认为是浏览器环境
+  const host = window.location.hostname
+  const isDev =
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.endsWith('.test') ||
+    host.endsWith('.local')
+
+  if (isDev) {
+    isBrowserEnv.value = true
+    return
+  }
+
   const uaTelegram = /Telegram/i.test(navigator.userAgent)
   const refTelegram = /t\.me|telegram\.org|telegram\.me|web\.telegram\.org/i.test(
     document.referrer || ''
   )
-  const hasTelegramObj = !!(window.Telegram && window.Telegram.WebApp)
+
+  // 🎯 检查是否是真实的 Telegram WebApp（排除降级对象）
+  const tgWebApp = window.Telegram?.WebApp
+  const hasRealTelegramObj =
+    tgWebApp &&
+    tgWebApp.version !== 'fallback' &&
+    tgWebApp.platform !== 'unknown' &&
+    tgWebApp.initData // 真实的 Telegram WebApp 会有 initData
+
   const hasTgData =
     window.location.href.includes('tgWebAppData') ||
     window.location.hash.includes('tgWebAppData') ||
     window.location.search.includes('tgWebAppData')
 
   // 如果完全没有 Telegram 相关标识，认为是浏览器环境
-  isBrowserEnv.value = !hasTgData && !uaTelegram && !refTelegram && !hasTelegramObj
+  isBrowserEnv.value = !hasTgData && !uaTelegram && !refTelegram && !hasRealTelegramObj
 }
 
 onMounted(async () => {

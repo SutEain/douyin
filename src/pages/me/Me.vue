@@ -9,7 +9,23 @@
         <p v-else>您的 Telegram 账号尚未成功同步</p>
 
         <!-- 🎯 浏览器环境：显示 Telegram Login Widget -->
-        <div v-if="isBrowserEnv" ref="widgetContainer" class="telegram-widget-container"></div>
+        <div v-if="isBrowserEnv" class="widget-wrapper">
+          <div ref="widgetContainer" class="telegram-widget-container"></div>
+          <!-- 备用方案：如果 Widget 未加载，显示手动登录链接 -->
+          <div v-if="showWidgetFallback" class="widget-fallback">
+            <a :href="telegramLoginUrl" target="_blank" class="fallback-link">
+              <Icon icon="mdi:telegram" style="font-size: 20px; margin-right: 8px" />
+              <span>点击使用 Telegram 登录</span>
+            </a>
+            <p class="fallback-tip">
+              {{
+                isLocalhost
+                  ? '本地环境可能无法显示 Widget，请使用上方链接登录'
+                  : 'Widget 加载失败，请使用上方链接登录'
+              }}
+            </p>
+          </div>
+        </div>
 
         <!-- 🎯 Telegram WebApp 环境：显示重试按钮 -->
         <div
@@ -294,7 +310,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, onMounted, watch, ref, onUnmounted } from 'vue'
+import { reactive, computed, onMounted, watch, ref, onUnmounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import Posters from '@/components/Posters.vue'
 import Indicator from '@/components/slide/Indicator.vue'
@@ -320,21 +336,59 @@ const baseStore = useBaseStore()
 // ========== Refs ==========
 const widgetContainer = ref<HTMLElement | null>(null)
 const errorMessage = ref('')
+const showWidgetFallback = ref(false)
+
+// 🎯 检查是否是 localhost
+const isLocalhost = computed(() => {
+  const host = window.location.hostname
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.endsWith('.test') ||
+    host.endsWith('.local')
+  )
+})
+
+// 🎯 Telegram 登录 URL（备用方案：直接打开 Bot）
+const telegramLoginUrl = computed(() => {
+  const botUsername = (import.meta.env.VITE_TG_BOT_USERNAME || 'dydy').replace('@', '')
+  return `https://t.me/${botUsername}?start=web_login`
+})
 
 // 🎯 检测是否在浏览器环境（非 Telegram WebApp）
 const isBrowserEnv = computed(() => {
+  // 开发环境强制认为是浏览器环境
+  const host = window.location.hostname
+  const isDev =
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.endsWith('.test') ||
+    host.endsWith('.local')
+
+  if (isDev) {
+    return true
+  }
+
   const uaTelegram = /Telegram/i.test(navigator.userAgent)
   const refTelegram = /t\.me|telegram\.org|telegram\.me|web\.telegram\.org/i.test(
     document.referrer || ''
   )
-  const hasTelegramObj = !!(window.Telegram && window.Telegram.WebApp)
+
+  // 🎯 检查是否是真实的 Telegram WebApp（排除降级对象）
+  const tgWebApp = window.Telegram?.WebApp
+  const hasRealTelegramObj =
+    tgWebApp &&
+    tgWebApp.version !== 'fallback' &&
+    tgWebApp.platform !== 'unknown' &&
+    tgWebApp.initData // 真实的 Telegram WebApp 会有 initData
+
   const hasTgData =
     window.location.href.includes('tgWebAppData') ||
     window.location.hash.includes('tgWebAppData') ||
     window.location.search.includes('tgWebAppData')
 
   // 如果完全没有 Telegram 相关标识，认为是浏览器环境
-  return !hasTgData && !uaTelegram && !refTelegram && !hasTelegramObj
+  return !hasTgData && !uaTelegram && !refTelegram && !hasRealTelegramObj
 })
 
 // ========== State ==========
@@ -631,38 +685,19 @@ watch(
 // ========== 生命周期 ==========
 // 🎯 浏览器环境：初始化 Telegram Login Widget
 function initBrowserLogin() {
-  if (!widgetContainer.value) return
+  console.log('[Me] 🚀 initBrowserLogin 被调用', {
+    hasWidgetContainer: !!widgetContainer.value,
+    containerElement: widgetContainer.value
+  })
 
-  // 获取 Bot Username
-  const botUsername = (import.meta.env.VITE_TG_BOT_USERNAME || 'dydy').replace('@', '')
-
-  // 加载 Telegram Widget Script
-  const scriptId = 'telegram-widget-script'
-  if (document.getElementById(scriptId)) {
-    // 脚本已加载，直接创建 widget
-    createWidget(botUsername)
+  if (!widgetContainer.value) {
+    console.error('[Me] ❌ widgetContainer 为空，无法初始化 Widget')
     return
   }
 
-  const script = document.createElement('script')
-  script.id = scriptId
-  script.src = 'https://telegram.org/js/telegram-widget.js?22'
-  script.async = true
-  script.onload = () => {
-    createWidget(botUsername)
-  }
-  script.onerror = () => {
-    errorMessage.value = '加载 Telegram 登录组件失败，请刷新页面重试'
-  }
-  document.head.appendChild(script)
-}
-
-// 🎯 创建 Telegram Login Widget
-function createWidget(botUsername: string) {
-  if (!widgetContainer.value) return
-
-  // 清空容器
-  widgetContainer.value.innerHTML = ''
+  // 获取 Bot Username
+  const botUsername = (import.meta.env.VITE_TG_BOT_USERNAME || 'dydy').replace('@', '')
+  console.log('[Me] Bot Username:', botUsername)
 
   // 设置全局回调函数（必须在创建 widget 之前）
   ;(window as any).onTelegramAuthMe = async (user: any) => {
@@ -696,16 +731,83 @@ function createWidget(botUsername: string) {
     }
   }
 
-  // 创建 widget script 标签（Telegram 会自动转换为 iframe）
+  // 清空容器
+  widgetContainer.value.innerHTML = ''
+  console.log('[Me] ✅ 容器已清空')
+
+  // 🎯 如果是 localhost，直接显示备用方案（Telegram Widget 需要 HTTPS）
+  if (isLocalhost.value) {
+    console.log('[Me] ⚠️ 本地环境，Telegram Widget 可能无法正常工作，显示备用方案')
+    showWidgetFallback.value = true
+    // 仍然尝试加载 Widget，但显示备用方案
+  }
+
+  // 🎯 直接创建 Telegram Login Widget script 标签（Telegram 会自动转换为 iframe）
+  // 注意：必须一次性创建完整的 script 标签，包含所有 data-* 属性
   const widget = document.createElement('script')
-  widget.setAttribute('src', 'https://telegram.org/js/telegram-widget.js?22')
+  widget.async = true
+  widget.src = 'https://telegram.org/js/telegram-widget.js?22'
   widget.setAttribute('data-telegram-login', botUsername)
   widget.setAttribute('data-size', 'large')
   widget.setAttribute('data-onauth', 'onTelegramAuthMe(user)')
   widget.setAttribute('data-request-access', 'write')
-  widget.async = true
+
+  // 添加加载监听
+  widget.onload = () => {
+    console.log('[Me] ✅ Telegram Widget 脚本加载成功')
+    // 等待一下让脚本处理 DOM
+    setTimeout(() => {
+      const iframe = widgetContainer.value?.querySelector('iframe')
+      if (iframe) {
+        console.log('[Me] ✅ Widget iframe 已创建:', iframe)
+      } else {
+        console.warn('[Me] ⚠️ Widget 脚本已加载，但未找到 iframe')
+        // 检查是否有其他元素
+        console.log('[Me] 容器内容:', widgetContainer.value?.innerHTML)
+      }
+    }, 500)
+  }
+
+  widget.onerror = (error) => {
+    console.error('[Me] ❌ Telegram Widget 脚本加载失败:', error)
+    errorMessage.value = '加载 Telegram 登录组件失败，请检查网络连接'
+  }
+
+  console.log('[Me] 📝 创建 Widget script 标签:', {
+    botUsername,
+    src: widget.src,
+    attributes: {
+      'data-telegram-login': widget.getAttribute('data-telegram-login'),
+      'data-size': widget.getAttribute('data-size'),
+      'data-onauth': widget.getAttribute('data-onauth')
+    },
+    container: widgetContainer.value
+  })
 
   widgetContainer.value.appendChild(widget)
+  console.log('[Me] ✅ Widget script 已添加到容器')
+
+  // 额外检查：5秒后检查是否渲染成功
+  setTimeout(() => {
+    const iframe = widgetContainer.value?.querySelector('iframe')
+    if (!iframe) {
+      console.error('[Me] ❌ 5秒后仍未检测到 Widget iframe')
+      console.log('[Me] 容器当前内容:', widgetContainer.value?.innerHTML)
+      console.log('[Me] 容器子元素:', widgetContainer.value?.children)
+
+      // 显示备用方案
+      if (!widgetContainer.value?.querySelector('iframe')) {
+        console.log('[Me] 🎯 显示备用登录方案')
+        showWidgetFallback.value = true
+        if (isLocalhost.value) {
+          console.warn('[Me] ⚠️ 本地环境可能无法显示 Widget，建议使用 HTTPS 或部署到生产环境')
+        }
+      }
+    } else {
+      // Widget 加载成功，隐藏备用方案
+      showWidgetFallback.value = false
+    }
+  }, 5000)
 }
 
 // 🎯 浏览器端 Widget 登录 API
@@ -767,25 +869,46 @@ async function loginWithTelegramWidget(user: any): Promise<any> {
   return result.data
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 🎯 等待 DOM 渲染完成
+  await nextTick()
+
   // 🎯 如果未登录且在浏览器环境，初始化 Widget
   if (!userinfo.value.uid && isBrowserEnv.value) {
+    console.log('[Me] 🎯 浏览器环境，准备初始化 Widget', {
+      hasWidgetContainer: !!widgetContainer.value,
+      isBrowserEnv: isBrowserEnv.value,
+      hasUid: !!userinfo.value.uid
+    })
+
     // 延迟一下确保 DOM 已渲染
     setTimeout(() => {
-      initBrowserLogin()
-    }, 100)
+      if (widgetContainer.value) {
+        initBrowserLogin()
+      } else {
+        console.error('[Me] ❌ widgetContainer 未找到')
+      }
+    }, 200)
+  } else {
+    console.log('[Me] ⚠️ 不初始化 Widget', {
+      hasUid: !!userinfo.value.uid,
+      isBrowserEnv: isBrowserEnv.value
+    })
   }
 })
 
 // 🎯 监听登录状态变化，如果登出后重新显示 Widget
 watch(
   () => !userinfo.value.uid && isBrowserEnv.value,
-  (shouldShowWidget) => {
-    if (shouldShowWidget && widgetContainer.value) {
-      // 延迟一下确保 DOM 已渲染
-      setTimeout(() => {
-        initBrowserLogin()
-      }, 100)
+  async (shouldShowWidget) => {
+    if (shouldShowWidget) {
+      await nextTick()
+      if (widgetContainer.value) {
+        console.log('[Me] 🎯 登录状态变化，重新初始化 Widget')
+        setTimeout(() => {
+          initBrowserLogin()
+        }, 200)
+      }
     }
   }
 )
@@ -846,10 +969,51 @@ onUnmounted(() => {
         margin-bottom: 30px;
       }
 
+      .widget-wrapper {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+
       .telegram-widget-container {
         display: flex;
         justify-content: center;
-        margin-bottom: 20px;
+        min-height: 50px;
+        width: 100%;
+      }
+
+      .widget-fallback {
+        text-align: center;
+        margin-top: 20px;
+
+        .fallback-link {
+          display: inline-flex;
+          align-items: center;
+          background: #0088cc;
+          color: white;
+          padding: 12px 24px;
+          border-radius: 8px;
+          text-decoration: none;
+          font-size: 16px;
+          font-weight: bold;
+          transition: opacity 0.3s;
+
+          &:hover {
+            opacity: 0.9;
+          }
+
+          &:active {
+            opacity: 0.8;
+          }
+        }
+
+        .fallback-tip {
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.5);
+          margin-top: 10px;
+        }
       }
 
       .error-message {
