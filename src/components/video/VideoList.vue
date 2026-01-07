@@ -769,6 +769,14 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
           hls.loadSource(resolvedUrl)
           hls.attachMedia(video)
           hlsInstances.set(slot.key, hls)
+
+          // 🎯 核心修复：等索引解析完再起播，解决 HLS 初始化异步导致的播放指令失效
+          if (slot.role === 'current') {
+            hls.once(Hls.Events.MANIFEST_PARSED, () => {
+              console.log(`${DEBUG_PREFIX} HLS 索引解析完成，准备播放`, slot.videoIndex)
+              playCurrent()
+            })
+          }
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = resolvedUrl
         }
@@ -802,7 +810,10 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
       bindCurrentVideoEvents(video)
     }
 
-    if (!preloadOnly && slot.role === 'current') {
+    // 🎯 核心逻辑：如果是 HLS 且是新初始化的，等待事件起播；否则直接起播
+    const isNewHls = !isSameSrc && resolvedUrl.includes('.m3u8') && Hls.isSupported()
+
+    if (!preloadOnly && slot.role === 'current' && !isNewHls) {
       playCurrent()
     }
   }
