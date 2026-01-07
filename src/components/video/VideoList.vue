@@ -157,6 +157,7 @@ import {
   ref,
   watch
 } from 'vue'
+import Hls from 'hls.js'
 import { Icon } from '@iconify/vue'
 import ItemToolbar from '../slide/ItemToolbar.vue'
 import ItemDesc from '../slide/ItemDesc.vue'
@@ -429,6 +430,7 @@ const slots = reactive<SlotState[]>([
   }
 ])
 const slotRefs = new Map<string, HTMLVideoElement>()
+const hlsInstances = new Map<string, Hls>()
 const boundVideos = new WeakSet<HTMLVideoElement>()
 const progressRef = ref<HTMLElement | null>(null)
 const playState = reactive({
@@ -697,6 +699,12 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
   if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
     slot.posterUrl = ''
     slot.isPlaying = false
+    // 销毁可能存在的 HLS 实例
+    const oldHls = hlsInstances.get(slot.key)
+    if (oldHls) {
+      oldHls.destroy()
+      hlsInstances.delete(slot.key)
+    }
     // 这些类型交由 ImageViewer 或 AlbumSwiper 处理，不需要外层视频元素，直接返回
     return
   }
@@ -716,6 +724,12 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
   }
 
   if (idx == null || !props.items[idx]) {
+    // 销毁 HLS 实例
+    const oldHls = hlsInstances.get(slot.key)
+    if (oldHls) {
+      oldHls.destroy()
+      hlsInstances.delete(slot.key)
+    }
     video.removeAttribute('src')
     video.load()
     slot.posterUrl = ''
@@ -739,14 +753,34 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     const isSameSrc = video.src === resolvedUrl
 
     if (!isSameSrc) {
-      video.src = resolvedUrl
+      // 销毁旧的 HLS 实例
+      const oldHls = hlsInstances.get(slot.key)
+      if (oldHls) {
+        oldHls.destroy()
+        hlsInstances.delete(slot.key)
+      }
+
+      if (resolvedUrl.includes('.m3u8')) {
+        if (Hls.isSupported()) {
+          const hls = new Hls({
+            capLevelToPlayerSize: true,
+            autoStartLoad: slot.role === 'current'
+          })
+          hls.loadSource(resolvedUrl)
+          hls.attachMedia(video)
+          hlsInstances.set(slot.key, hls)
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = resolvedUrl
+        }
+      } else {
+        video.src = resolvedUrl
+      }
+
       if (poster) {
         video.poster = poster
       }
       // 非 current 只预加载元数据，减少无谓缓冲
-      if (slot.role === 'current') {
-        video.load()
-      } else {
+      if (slot.role !== 'current') {
         video.preload = 'metadata'
       }
     }
@@ -1516,6 +1550,12 @@ onUnmounted(() => {
     unbindVideoEvents(currentBoundVideo)
     currentBoundVideo = null
   }
+  // 清理 HLS 实例
+  hlsInstances.forEach((hls) => {
+    hls.destroy()
+  })
+  hlsInstances.clear()
+
   // 确保清理拖动状态
   isDragging = false
   playState.isMoving = false

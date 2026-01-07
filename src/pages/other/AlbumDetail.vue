@@ -12,7 +12,7 @@
             <!-- 🎬 视频类型 -->
             <video
               v-if="item.type === 'video'"
-              :src="_checkImgUrl(item.info_list?.[0]?.url)"
+              v-is-can-play="_checkImgUrl(item.info_list?.[0]?.url)"
               style="height: 100%; width: 100%; object-fit: contain"
               autoplay
               loop
@@ -340,7 +340,8 @@
 <script setup>
 import SlideHorizontal from '@/components/slide/SlideHorizontal.vue'
 import SlideItem from '@/components/slide/SlideItem.vue'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import Hls from 'hls.js'
+import { computed, onMounted, reactive, ref, watch, onUnmounted } from 'vue'
 import {
   _checkImgUrl,
   _copy,
@@ -390,6 +391,33 @@ const scrollEl = ref()
 const state = reactive({
   index: 0
 })
+
+const hlsInstances = new Map()
+const vIsCanPlay = {
+  mounted(el, binding) {
+    const url = binding.value
+    if (!url) return
+    if (url.includes('.m3u8')) {
+      if (Hls.isSupported()) {
+        const hls = new Hls({ capLevelToPlayerSize: true })
+        hls.loadSource(url)
+        hls.attachMedia(el)
+        hlsInstances.set(el, hls)
+      } else if (el.canPlayType('application/vnd.apple.mpegurl')) {
+        el.src = url
+      }
+    } else {
+      el.src = url
+    }
+  },
+  unmounted(el) {
+    const hls = hlsInstances.get(el)
+    if (hls) {
+      hls.destroy()
+      hlsInstances.delete(el)
+    }
+  }
+}
 
 const commentList = computed(() => {
   const list = props.detail?.note_card?.comment_list

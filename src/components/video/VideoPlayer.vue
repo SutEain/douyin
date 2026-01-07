@@ -7,7 +7,6 @@
     <!-- 视频元素 -->
     <video
       ref="videoRef"
-      :src="videoUrl"
       :poster="posterUrl"
       :muted="state.isMuted"
       :style="{ objectFit: videoFit }"
@@ -63,6 +62,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, watch, provide } from 'vue'
+import Hls from 'hls.js'
 import { Icon } from '@iconify/vue'
 import Loading from '../Loading.vue'
 import ItemToolbar from '../slide/ItemToolbar.vue'
@@ -89,6 +89,7 @@ const videoStore = useVideoStore()
 const videoRef = ref<HTMLVideoElement>()
 const wrapperRef = ref<HTMLDivElement>()
 const progressRef = ref<HTMLDivElement>()
+let hls: Hls | null = null
 
 // 🎯 倍速播放：默认 1.0，仅对当前视频生效
 const playbackRate = ref<number>(1)
@@ -181,6 +182,53 @@ provide('playbackRate', playbackRate)
 provide('setPlaybackRate', setPlaybackRate)
 
 // ========== Methods ==========
+function initVideo() {
+  const url = videoUrl.value
+  if (!videoRef.value || !url) return
+
+  // 1. 清理旧的 Hls 实例
+  if (hls) {
+    hls.destroy()
+    hls = null
+  }
+
+  // 2. 判断是否是 m3u8
+  if (url.includes('.m3u8')) {
+    if (Hls.isSupported()) {
+      hls = new Hls({
+        capLevelToPlayerSize: true,
+        autoStartLoad: true
+      })
+      hls.loadSource(url)
+      hls.attachMedia(videoRef.value)
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              console.error('[VideoPlayer] HLS 网络错误，尝试恢复...')
+              hls?.startLoad()
+              break
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              console.error('[VideoPlayer] HLS 媒体错误，尝试恢复...')
+              hls?.recoverMediaError()
+              break
+            default:
+              console.error('[VideoPlayer] HLS 致命错误，无法恢复')
+              hls?.destroy()
+              break
+          }
+        }
+      })
+    } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
+      // 原生支持 (Safari)
+      videoRef.value.src = url
+    }
+  } else {
+    // 普通 mp4
+    videoRef.value.src = url
+  }
+}
+
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60)
   const secs = Math.floor(seconds % 60)
@@ -354,6 +402,8 @@ function handleSeeked() {
 onMounted(() => {
   if (!videoRef.value) return
 
+  initVideo()
+
   // 注册到视频管理器
   videoManager.register(props.item.aweme_id, videoRef.value, props.page)
 
@@ -375,6 +425,11 @@ onUnmounted(() => {
     page: props.page
   })
 
+  if (hls) {
+    hls.destroy()
+    hls = null
+  }
+
   // 从视频管理器注销
   videoManager.unregister(props.item.aweme_id)
 })
@@ -386,6 +441,8 @@ watch(
     state.localItem = newItem
     // 🎯 切换到新视频时，重置倍速为 1.0（仅对当前视频生效）
     setPlaybackRate(1)
+    // 重新初始化视频
+    initVideo()
   }
 )
 
