@@ -538,7 +538,7 @@ function setPlaybackRate(rate: number) {
 }
 
 // 🎯 获取 slot 对应的内容类型
-function getSlotContentType(slot: SlotState): 'video' | 'image' | 'album' {
+function getSlotContentType(slot: SlotState): 'video' | 'image' | 'album' | 'collection' {
   if (slot.videoIndex == null) return 'video'
   const item = props.items[slot.videoIndex]
   // 🎯 如果 images 数组中包含视频，且类型是 album，则统一交由 AlbumSwiper 处理
@@ -1295,16 +1295,41 @@ function snapToNext() {
   // 轮转后，新的 current 在 100vh 下方，我们需要把它移到正确位置
   slideState.offsetY = currentOffsetY + window.innerHeight
 
-  // 等待一帧确保 DOM 更新
-  requestAnimationFrame(() => {
-    slideState.isTransitioning = true
-    slideState.offsetY = 0
+  // 🎯 检查下一个视频的内容类型
+  const nextSlot = getSlotByRole('current')
+  const nextContentType = nextSlot ? getSlotContentType(nextSlot) : 'video'
+  const isNonVideoContent =
+    nextContentType === 'image' || nextContentType === 'album' || nextContentType === 'collection'
 
-    // 动画结束后关闭 transition
-    setTimeout(() => {
-      slideState.isTransitioning = false
-    }, 350)
-  })
+  // 🎯 如果是图文/相册/合辑，需要等待组件渲染完成后再执行动画
+  if (isNonVideoContent) {
+    // 等待 DOM 更新和组件渲染
+    nextTick(() => {
+      // 再等待一帧确保组件完全渲染
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          slideState.isTransitioning = true
+          slideState.offsetY = 0
+
+          // 动画结束后关闭 transition
+          setTimeout(() => {
+            slideState.isTransitioning = false
+          }, 350)
+        })
+      })
+    })
+  } else {
+    // 视频类型，只需要等待一帧确保 DOM 更新
+    requestAnimationFrame(() => {
+      slideState.isTransitioning = true
+      slideState.offsetY = 0
+
+      // 动画结束后关闭 transition
+      setTimeout(() => {
+        slideState.isTransitioning = false
+      }, 350)
+    })
+  }
 }
 
 // 🎯 吸附到上一个视频（新方案：动画开始时就轮转）
@@ -1316,16 +1341,41 @@ function snapToPrev() {
   // 轮转后，新的 current 在 -100vh 上方，我们需要把它移到正确位置
   slideState.offsetY = currentOffsetY - window.innerHeight
 
-  // 等待一帧确保 DOM 更新
-  requestAnimationFrame(() => {
-    slideState.isTransitioning = true
-    slideState.offsetY = 0
+  // 🎯 检查上一个视频的内容类型
+  const prevSlot = getSlotByRole('current')
+  const prevContentType = prevSlot ? getSlotContentType(prevSlot) : 'video'
+  const isNonVideoContent =
+    prevContentType === 'image' || prevContentType === 'album' || prevContentType === 'collection'
 
-    // 动画结束后关闭 transition
-    setTimeout(() => {
-      slideState.isTransitioning = false
-    }, 350)
-  })
+  // 🎯 如果是图文/相册/合辑，需要等待组件渲染完成后再执行动画
+  if (isNonVideoContent) {
+    // 等待 DOM 更新和组件渲染
+    nextTick(() => {
+      // 再等待一帧确保组件完全渲染
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          slideState.isTransitioning = true
+          slideState.offsetY = 0
+
+          // 动画结束后关闭 transition
+          setTimeout(() => {
+            slideState.isTransitioning = false
+          }, 350)
+        })
+      })
+    })
+  } else {
+    // 视频类型，只需要等待一帧确保 DOM 更新
+    requestAnimationFrame(() => {
+      slideState.isTransitioning = true
+      slideState.offsetY = 0
+
+      // 动画结束后关闭 transition
+      setTimeout(() => {
+        slideState.isTransitioning = false
+      }, 350)
+    })
+  }
 }
 
 // 🎯 弹回当前位置
@@ -1808,7 +1858,7 @@ defineExpose({
 // 新的进度条样式
 .video-progress {
   position: absolute;
-  bottom: 2px; // 🎯 向上移动一点，确保不被文字挡住，且在屏幕可见范围内
+  bottom: -7px; // 🎯 向上移动一点，确保不被文字挡住，且在屏幕可见范围内
   left: 0;
   right: 0;
   z-index: 1000; // 🎯 绝对置顶，确保在描述文字上方
