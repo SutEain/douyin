@@ -5,7 +5,6 @@
 
 // 1. 获取视频/图片的 R2 基础域名
 const VIDEO_BASE_URL = import.meta.env.VITE_APP_VIDEO_BASE_URL || ''
-console.log('DEBUG_VIDEO_URL_CONFIG:', VIDEO_BASE_URL)
 
 /**
  * 将路径或 ID 转换为最终的可访问 URL

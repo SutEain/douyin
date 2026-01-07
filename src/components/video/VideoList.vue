@@ -783,6 +783,18 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
       if (slot.role !== 'current') {
         video.preload = 'metadata'
       }
+    } else {
+      // 🎯 关键修复：如果是同一个源（之前预载的），但现在变成了 current，需要启动 HLS 加载
+      if (slot.role === 'current') {
+        const hls = hlsInstances.get(slot.key)
+        if (hls) {
+          console.log(`${DEBUG_PREFIX} 启动预载 HLS 的加载`, {
+            slotKey: slot.key,
+            id: item.aweme_id?.substring(0, 8)
+          })
+          hls.startLoad()
+        }
+      }
     }
 
     if (slot.role === 'current') {
@@ -1638,18 +1650,34 @@ function togglePlay(slot: SlotState) {
 
 function handlePlayError(slot: SlotState, err: any) {
   const video = slotRefs.get(slot.key)
+  const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
+
   console.warn(`${DEBUG_PREFIX} play:error`, {
-    id: slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8) : 'none',
+    id: item?.aweme_id?.substring(0, 8),
     page: props.page,
-    error: err?.name
+    error: err?.name,
+    muted: video?.muted
   })
 
-  // 去掉自动重试：出错后停止当前的播放尝试，保持当前索引，等待用户滑动或手动操作
+  if (!video) return
+
+  // 🎯 核心修复：处理浏览器自动播放限制
+  if (err?.name === 'NotAllowedError') {
+    console.log(`${DEBUG_PREFIX} 自动播放被拦截，尝试静音播放`)
+    video.muted = true
+    slot.muted = true
+    video.play().catch((e) => {
+      console.error(`${DEBUG_PREFIX} 静音播放依然失败`, e)
+    })
+    return
+  }
+
+  // 🛡️ 只有在非 NotAllowedError 的致命错误时才清空 src
   if (video) {
     video.pause()
     // 清空 src 避免浏览器继续重试
-    video.removeAttribute('src')
-    video.load()
+    // video.removeAttribute('src') // 暂时注释掉，避免过于激进的清理导致无法手动点击播放
+    // video.load()
   }
 }
 
