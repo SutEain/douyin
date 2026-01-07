@@ -305,12 +305,16 @@ export async function handleRequest(req: Request): Promise<Response> {
         const message = update.message
         const chatId = message.chat.id
 
-        // 🎯 严格权限控制：仅接受私聊消息（作品上传和指令）
+        // 🎯 严格权限控制：仅接受私聊、官方群或 dice 群的消息
         // 频道同步由 update.channel_post 独立处理，不受此影响
         const officialGroupId = Deno.env.get('OFFICIAL_GROUP_ID')
-        if (message.chat.type !== 'private' && String(chatId) !== String(officialGroupId)) {
+        const diceGroupId = Deno.env.get('DICE_GROUP_ID')
+        const isAllowedGroup =
+          String(chatId) === String(officialGroupId) || String(chatId) === String(diceGroupId)
+
+        if (message.chat.type !== 'private' && !isAllowedGroup) {
           console.log(
-            `[MAIN] 忽略非私聊且非官方群消息: chatId=${chatId}, type=${message.chat.type}`
+            `[MAIN] 忽略非私聊且非允许群消息: chatId=${chatId}, type=${message.chat.type}`
           )
           return new Response('OK', { status: 200 })
         }
@@ -540,12 +544,13 @@ export async function handleRequest(req: Request): Promise<Response> {
         const messageId = callback.message?.message_id
         const data = callback.data
 
-        // 🎯 严格权限控制：仅接受私聊或官方群的回调
+        // 🎯 严格权限控制：仅接受私聊、官方群或 dice 群的回调
         const officialGroupId = Deno.env.get('OFFICIAL_GROUP_ID')
-        if (
-          callback.message?.chat?.type !== 'private' &&
-          String(chatId) !== String(officialGroupId)
-        ) {
+        const diceGroupId = Deno.env.get('DICE_GROUP_ID')
+        const isAllowedGroup =
+          String(chatId) === String(officialGroupId) || String(chatId) === String(diceGroupId)
+
+        if (callback.message?.chat?.type !== 'private' && !isAllowedGroup) {
           return new Response('OK', { status: 200 })
         }
 

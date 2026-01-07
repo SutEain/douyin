@@ -164,7 +164,36 @@ export async function handleText(
         `——————————————\n` +
         `💎 <b>TG抖音官方频道 :</b> @avdy`
 
-      await sendMessage(chatId, msg, { reply_to_message_id: userMessageId })
+      // 构建按钮
+      const { TG_MINIAPP_TME_URL, TG_BOT_USERNAME } = await import('../env.ts')
+      const diceGroupLink = Deno.env.get('DICE_GROUP_LINK') || ''
+
+      const buttons: any[] = []
+
+      // 按钮1：刷TG抖音（优先小程序，否则机器人）
+      if (TG_MINIAPP_TME_URL) {
+        buttons.push({ text: '📱 刷TG抖音', url: TG_MINIAPP_TME_URL })
+      } else {
+        buttons.push({ text: '📱 刷TG抖音', url: `https://t.me/${TG_BOT_USERNAME}` })
+      }
+
+      // 按钮2：抖币游戏（跳转到游戏群）
+      if (diceGroupLink) {
+        buttons.push({ text: '🎲 抖币游戏', url: diceGroupLink })
+      }
+
+      const replyOptions: any = {
+        reply_to_message_id: userMessageId
+      }
+
+      // 如果有按钮，添加键盘
+      if (buttons.length > 0) {
+        replyOptions.reply_markup = {
+          inline_keyboard: [buttons]
+        }
+      }
+
+      await sendMessage(chatId, msg, replyOptions)
     } else {
       await sendMessage(chatId, '❌ 未找到您的账号信息，请先私聊机器人发送 /start', {
         reply_to_message_id: userMessageId
