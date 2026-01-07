@@ -1,15 +1,28 @@
 <template>
   <div class="Me">
-    <!-- 🎯 情况 A：已就绪但未登录 (重试页面) -->
+    <!-- 🎯 情况 A：已就绪但未登录 (登录页面) -->
     <div v-if="baseStore.isAppReady && !userinfo.uid" class="not-logged-in">
       <div class="content">
         <img src="../../assets/img/icon/avatar/0.png" class="placeholder-avatar" />
         <h2>登录后查看更多精彩</h2>
-        <p>您的 Telegram 账号尚未成功同步</p>
-        <div class="retry-btn" :class="{ loading: baseStore.loading }" @click="handleRetryLogin">
+        <p v-if="isBrowserEnv">使用 Telegram 账号登录</p>
+        <p v-else>您的 Telegram 账号尚未成功同步</p>
+
+        <!-- 🎯 浏览器环境：显示 Telegram Login Widget -->
+        <div v-if="isBrowserEnv" ref="widgetContainer" class="telegram-widget-container"></div>
+
+        <!-- 🎯 Telegram WebApp 环境：显示重试按钮 -->
+        <div
+          v-else
+          class="retry-btn"
+          :class="{ loading: baseStore.loading }"
+          @click="handleRetryLogin"
+        >
           <Icon v-if="baseStore.loading" icon="eos-icons:loading" class="icon" />
           <span>{{ baseStore.loading ? '正在重试...' : '点击重试登录' }}</span>
         </div>
+
+        <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
       </div>
       <!-- 未登录也要有底部导航，方便切回首页 -->
       <BaseFooter :init-tab="5" />
@@ -155,9 +168,9 @@
                 v-for="day in 7"
                 :key="day"
                 class="day-item"
-                :class="{ 
-                  active: day <= currentCycleDay, 
-                  today: !isCheckedInToday && day === (currentCycleDay + 1)
+                :class="{
+                  active: day <= currentCycleDay,
+                  today: !isCheckedInToday && day === currentCycleDay + 1
                 }"
               >
                 <div class="coin">
@@ -281,7 +294,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, onMounted, watch } from 'vue'
+import { reactive, computed, onMounted, watch, ref, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import Posters from '@/components/Posters.vue'
 import Indicator from '@/components/slide/Indicator.vue'
@@ -295,6 +308,7 @@ import { likeVideo, myVideo, collectedVideo } from '@/api/videos'
 import { checkIn } from '@/api/user'
 import { useBaseStore } from '@/store/pinia'
 import { useNav } from '@/utils/hooks/useNav'
+import { supabase } from '@/utils/supabase'
 
 defineOptions({
   name: 'Me'
@@ -304,6 +318,24 @@ const $nav = useNav()
 const baseStore = useBaseStore()
 
 // ========== Refs ==========
+const widgetContainer = ref<HTMLElement | null>(null)
+const errorMessage = ref('')
+
+// 🎯 检测是否在浏览器环境（非 Telegram WebApp）
+const isBrowserEnv = computed(() => {
+  const uaTelegram = /Telegram/i.test(navigator.userAgent)
+  const refTelegram = /t\.me|telegram\.org|telegram\.me|web\.telegram\.org/i.test(
+    document.referrer || ''
+  )
+  const hasTelegramObj = !!(window.Telegram && window.Telegram.WebApp)
+  const hasTgData =
+    window.location.href.includes('tgWebAppData') ||
+    window.location.hash.includes('tgWebAppData') ||
+    window.location.search.includes('tgWebAppData')
+
+  // 如果完全没有 Telegram 相关标识，认为是浏览器环境
+  return !hasTgData && !uaTelegram && !refTelegram && !hasTelegramObj
+})
 
 // ========== State ==========
 const state = reactive({
@@ -597,9 +629,172 @@ watch(
 )
 
 // ========== 生命周期 ==========
+// 🎯 浏览器环境：初始化 Telegram Login Widget
+function initBrowserLogin() {
+  if (!widgetContainer.value) return
+
+  // 获取 Bot Username
+  const botUsername = (import.meta.env.VITE_TG_BOT_USERNAME || 'dydy').replace('@', '')
+
+  // 加载 Telegram Widget Script
+  const scriptId = 'telegram-widget-script'
+  if (document.getElementById(scriptId)) {
+    // 脚本已加载，直接创建 widget
+    createWidget(botUsername)
+    return
+  }
+
+  const script = document.createElement('script')
+  script.id = scriptId
+  script.src = 'https://telegram.org/js/telegram-widget.js?22'
+  script.async = true
+  script.onload = () => {
+    createWidget(botUsername)
+  }
+  script.onerror = () => {
+    errorMessage.value = '加载 Telegram 登录组件失败，请刷新页面重试'
+  }
+  document.head.appendChild(script)
+}
+
+// 🎯 创建 Telegram Login Widget
+function createWidget(botUsername: string) {
+  if (!widgetContainer.value) return
+
+  // 清空容器
+  widgetContainer.value.innerHTML = ''
+
+  // 设置全局回调函数（必须在创建 widget 之前）
+  ;(window as any).onTelegramAuthMe = async (user: any) => {
+    try {
+      baseStore.loading = true
+      errorMessage.value = ''
+
+      console.log('[Me] Telegram Widget 回调:', user)
+
+      // 调用后端 API 处理 Widget 登录
+      const result = await loginWithTelegramWidget(user)
+      if (result?.user) {
+        baseStore.applyProfile(result.user)
+      }
+
+      // 等待 session 写入
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      const { data } = await supabase.auth.getSession()
+      if (data.session) {
+        // 重新初始化 store
+        await baseStore.init()
+        if (userinfo.value.uid) {
+          loadMyVideos() // 登录成功后立即加载数据
+        }
+      }
+    } catch (error: any) {
+      console.error('[Me] ❌ 登录失败:', error)
+      errorMessage.value = error?.message || '登录失败，请重试'
+    } finally {
+      baseStore.loading = false
+    }
+  }
+
+  // 创建 widget script 标签（Telegram 会自动转换为 iframe）
+  const widget = document.createElement('script')
+  widget.setAttribute('src', 'https://telegram.org/js/telegram-widget.js?22')
+  widget.setAttribute('data-telegram-login', botUsername)
+  widget.setAttribute('data-size', 'large')
+  widget.setAttribute('data-onauth', 'onTelegramAuthMe(user)')
+  widget.setAttribute('data-request-access', 'write')
+  widget.async = true
+
+  widgetContainer.value.appendChild(widget)
+}
+
+// 🎯 浏览器端 Widget 登录 API
+async function loginWithTelegramWidget(user: any): Promise<any> {
+  const getAppServerBase = () => {
+    if (import.meta.env.VITE_APP_SERVER_URL) {
+      return import.meta.env.VITE_APP_SERVER_URL.replace(/\/$/, '')
+    }
+    if (import.meta.env.DEV) {
+      return '/api/app-server'
+    }
+    if (import.meta.env.VITE_SUPABASE_URL) {
+      return `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/app-server`
+    }
+    throw new Error('Missing app server URL configuration')
+  }
+
+  const url = `${getAppServerBase()}/auth/tg-widget-login`
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 20000)
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({ user }),
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+  } catch (error: any) {
+    clearTimeout(timeoutId)
+    if (error.name === 'AbortError') {
+      throw new Error('登录请求超时，请检查网络连接')
+    }
+    throw new Error('网络连接失败，请检查网络或 VPN 设置')
+  }
+
+  const result = await response.json()
+
+  if (result.code !== 0) {
+    throw new Error(result.msg || 'Login failed')
+  }
+
+  // 设置 Supabase session
+  const { access_token, refresh_token } = result.data
+  const { error } = await supabase.auth.setSession({
+    access_token,
+    refresh_token
+  })
+
+  if (error) {
+    throw new Error('Failed to set session')
+  }
+
+  return result.data
+}
+
 onMounted(() => {
-  console.log('[Me] mounted')
-  loadMyVideos()
+  // 🎯 如果未登录且在浏览器环境，初始化 Widget
+  if (!userinfo.value.uid && isBrowserEnv.value) {
+    // 延迟一下确保 DOM 已渲染
+    setTimeout(() => {
+      initBrowserLogin()
+    }, 100)
+  }
+})
+
+// 🎯 监听登录状态变化，如果登出后重新显示 Widget
+watch(
+  () => !userinfo.value.uid && isBrowserEnv.value,
+  (shouldShowWidget) => {
+    if (shouldShowWidget && widgetContainer.value) {
+      // 延迟一下确保 DOM 已渲染
+      setTimeout(() => {
+        initBrowserLogin()
+      }, 100)
+    }
+  }
+)
+
+onUnmounted(() => {
+  // 清理全局回调
+  if ((window as any).onTelegramAuthMe) {
+    delete (window as any).onTelegramAuthMe
+  }
 })
 </script>
 
@@ -649,6 +844,18 @@ onMounted(() => {
         font-size: 14px;
         color: rgba(255, 255, 255, 0.6);
         margin-bottom: 30px;
+      }
+
+      .telegram-widget-container {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 20px;
+      }
+
+      .error-message {
+        color: #ff6b6b;
+        font-size: 14px;
+        margin-top: 15px;
       }
 
       .retry-btn {

@@ -1,7 +1,11 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { successResponse, errorResponse } from '../_shared/response.ts'
-import { validateTelegramInitData } from '../_shared/telegram.ts'
+import {
+  validateTelegramInitData,
+  validateTelegramWidgetData,
+  type TelegramWidgetData
+} from '../_shared/telegram.ts'
 import { supabaseAdmin, TG_BOT_TOKEN } from './lib/env.ts'
 import { HttpError } from './lib/auth.ts'
 import {
@@ -79,6 +83,10 @@ serve(async (req) => {
 
     if (route === '/auth/tg-login' && method === 'POST') {
       return handleTelegramLogin(req)
+    }
+
+    if (route === '/auth/tg-widget-login' && method === 'POST') {
+      return handleTelegramWidgetLogin(req)
     }
 
     if (route === '/video/my' && method === 'GET') {
@@ -269,6 +277,159 @@ function extractRoute(urlString: string) {
   const funcIndex = segments.indexOf('app-server')
   const subSegments = funcIndex >= 0 ? segments.slice(funcIndex + 1) : []
   return '/' + subSegments.join('/')
+}
+
+// 🎯 处理浏览器端 Telegram Login Widget 登录
+async function handleTelegramWidgetLogin(req: Request): Promise<Response> {
+  if (!TG_BOT_TOKEN) {
+    return errorResponse('Server misconfigured', 1, 500)
+  }
+
+  let body: { user?: TelegramWidgetData }
+  try {
+    body = await req.json()
+  } catch {
+    return errorResponse('Invalid request body', 1, 400)
+  }
+
+  if (!body?.user) {
+    return errorResponse('Missing user data', 1, 400)
+  }
+
+  // 验证 Widget 数据
+  const isValid = await validateTelegramWidgetData(body.user, TG_BOT_TOKEN)
+  if (!isValid) {
+    return errorResponse('Invalid Telegram widget data', 1, 401)
+  }
+
+  const user = body.user
+
+  // 🎯 步骤1: 查询 profile 是否存在
+  const { data: existingProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('id, username, nickname, tg_user_id, avatar_url, lang')
+    .eq('tg_user_id', user.id)
+    .maybeSingle()
+
+  let userId: string
+  let isNewUser = false
+
+  if (!existingProfile) {
+    console.log('[app-server] Widget Login: Profile 不存在，开始创建用户，tg_user_id:', user.id)
+
+    // 🎯 步骤2: 创建 auth 用户
+    const uniqueEmail = `tg_${user.id}@telegram.user`
+    let authUserId: string
+
+    try {
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: uniqueEmail,
+        email_confirm: true,
+        user_metadata: {
+          tg_user_id: user.id,
+          tg_username: user.username,
+          tg_first_name: user.first_name,
+          tg_last_name: user.last_name
+        }
+      })
+
+      if (authError) {
+        if (authError.status === 422 || authError.message?.includes('email')) {
+          const { data: users } = await supabaseAdmin.auth.admin.listUsers()
+          const existingUser = users?.users?.find((u) => u.email === uniqueEmail)
+          if (existingUser) {
+            authUserId = existingUser.id
+          } else {
+            return errorResponse('创建用户失败', 1, 500)
+          }
+        } else {
+          return errorResponse('创建用户失败', 1, 500)
+        }
+      } else {
+        authUserId = authData.user.id
+      }
+    } catch (err) {
+      console.error('[app-server] ❌ 创建 auth 用户异常:', err)
+      return errorResponse('创建用户失败', 1, 500)
+    }
+
+    // 🎯 步骤3: 创建 profile
+    const nickname = user.first_name + (user.last_name ? ` ${user.last_name}` : '')
+    const avatarUrl = user.photo_url || `https://t.me/i/userpic/320/${user.id}.jpg`
+
+    const { data: profile, error: upsertError } = await supabaseAdmin
+      .from('profiles')
+      .upsert(
+        {
+          id: authUserId!,
+          tg_user_id: user.id,
+          tg_username: user.username || null,
+          nickname: nickname,
+          username: user.username || `user_${user.id}`,
+          avatar_url: avatarUrl,
+          auth_provider: 'tg',
+          lang: 'zh-CN' // Widget 不提供 language_code，使用默认值
+        },
+        { onConflict: 'id' }
+      )
+      .select('id')
+      .single()
+
+    if (upsertError) {
+      console.error('[app-server] ❌ upsert profile 失败:', upsertError)
+      return errorResponse('创建用户资料失败', 1, 500)
+    }
+
+    userId = profile.id
+    isNewUser = true
+
+    // 🎯 步骤4: 新用户默认关注官方账号
+    try {
+      const { data: officialUser } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('numeric_id', 88888)
+        .maybeSingle()
+
+      if (officialUser && officialUser.id !== userId) {
+        await supabaseAdmin.from('follows').upsert(
+          {
+            follower_id: userId,
+            followee_id: officialUser.id
+          },
+          { onConflict: 'follower_id,followee_id' }
+        )
+      }
+    } catch (followErr) {
+      console.error('[app-server] 自动关注官方账号失败:', followErr)
+    }
+  } else {
+    userId = existingProfile.id
+  }
+
+  // 🎯 生成 session token
+  const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.createSession({
+    userId: userId
+  })
+
+  if (sessionError || !sessionData?.session) {
+    console.error('[app-server] ❌ 创建 session 失败:', sessionError)
+    return errorResponse('创建会话失败', 1, 500)
+  }
+
+  return successResponse({
+    user: existingProfile || {
+      id: userId,
+      tg_user_id: user.id,
+      username: user.username || `user_${user.id}`,
+      nickname: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
+      avatar_url: user.photo_url || `https://t.me/i/userpic/320/${user.id}.jpg`
+    },
+    access_token: sessionData.session.access_token,
+    refresh_token: sessionData.session.refresh_token,
+    expires_in: sessionData.session.expires_in || 3600,
+    is_new_user: isNewUser
+  })
 }
 
 async function handleTelegramLogin(req: Request): Promise<Response> {

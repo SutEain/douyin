@@ -25,6 +25,83 @@ export interface ValidatedInitData {
   start_param?: string // 🎯 深链接参数
 }
 
+export interface TelegramWidgetData {
+  id: number
+  first_name: string
+  last_name?: string
+  username?: string
+  photo_url?: string
+  auth_date: number
+  hash: string
+}
+
+/**
+ * 验证 Telegram Login Widget 数据
+ * Widget 使用 hash (HMAC-SHA-256) 验证，不同于 WebApp 的 signature (Ed25519)
+ * 参考: https://core.telegram.org/widgets/login#checking-authorization
+ */
+export async function validateTelegramWidgetData(
+  user: TelegramWidgetData,
+  botToken: string
+): Promise<boolean> {
+  try {
+    // 1. 检查时效性（86400 秒 = 24 小时）
+    const currentTime = Math.floor(Date.now() / 1000)
+    const age = currentTime - user.auth_date
+
+    if (age > 86400) {
+      console.error('[TG Widget] ❌ Data expired, age:', age, 'seconds')
+      return false
+    }
+
+    // 2. 构造 data_check_string
+    // 格式：按字段名排序，格式为 key=value，用换行符连接（不包括 hash）
+    const dataCheckArray: string[] = []
+
+    // 添加所有字段（除了 hash）
+    dataCheckArray.push(`auth_date=${user.auth_date}`)
+    if (user.first_name) dataCheckArray.push(`first_name=${user.first_name}`)
+    if (user.id) dataCheckArray.push(`id=${user.id}`)
+    if (user.last_name) dataCheckArray.push(`last_name=${user.last_name}`)
+    if (user.photo_url) dataCheckArray.push(`photo_url=${user.photo_url}`)
+    if (user.username) dataCheckArray.push(`username=${user.username}`)
+
+    // 按字段名排序（已经是排序后的顺序）
+    const dataCheckString = dataCheckArray.join('\n')
+
+    // 3. 计算 HMAC-SHA-256，密钥是 Bot Token
+    const botTokenKey = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(botToken),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    )
+
+    const signature = await crypto.subtle.sign('HMAC', botTokenKey, encoder.encode(dataCheckString))
+    const signatureHex = Array.from(new Uint8Array(signature))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+
+    // 4. 验证 hash
+    const isValid = signatureHex === user.hash
+
+    if (!isValid) {
+      console.error('[TG Widget] ❌ Hash validation failed')
+      console.error('[TG Widget] Expected:', user.hash)
+      console.error('[TG Widget] Got:', signatureHex)
+      console.error('[TG Widget] Data check string:', dataCheckString)
+    } else {
+      console.log('[TG Widget] ✅ Hash validation passed')
+    }
+
+    return isValid
+  } catch (error) {
+    console.error('[TG Widget] ❌ Validation error:', error)
+    return false
+  }
+}
+
 const encoder = new TextEncoder()
 
 // Telegram 官方 Ed25519 公钥（Production 环境）

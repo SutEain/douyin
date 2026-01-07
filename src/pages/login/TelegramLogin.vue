@@ -1,6 +1,19 @@
 <template>
   <div class="telegram-login">
-    <div class="container">
+    <!-- 🎯 浏览器环境：显示 Telegram Login Widget -->
+    <div v-if="isBrowserEnv" class="browser-login">
+      <div class="content">
+        <img src="../../assets/img/icon/avatar/0.png" class="placeholder-avatar" />
+        <h2>登录后查看更多精彩</h2>
+        <p>使用 Telegram 账号登录</p>
+        <!-- Telegram Login Widget -->
+        <div ref="widgetContainer" class="telegram-widget-container"></div>
+        <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
+      </div>
+    </div>
+
+    <!-- 🎯 Telegram WebApp 环境：使用原有流程 -->
+    <div v-else class="container">
       <div v-if="isLoading" class="logo">
         <img src="/images/icon/logo.svg" alt="Logo" class="logo-img" />
       </div>
@@ -15,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { loginWithTelegram } from '@/api/auth'
 import { useBaseStore } from '@/store/pinia'
@@ -25,6 +38,26 @@ const router = useRouter()
 const baseStore = useBaseStore()
 const isLoading = ref(true)
 const errorMessage = ref('')
+const widgetContainer = ref<HTMLElement | null>(null)
+
+// 🎯 检测是否在浏览器环境（非 Telegram WebApp）
+const isBrowserEnv = ref(false)
+
+// 🎯 检测环境
+function detectEnvironment() {
+  const uaTelegram = /Telegram/i.test(navigator.userAgent)
+  const refTelegram = /t\.me|telegram\.org|telegram\.me|web\.telegram\.org/i.test(
+    document.referrer || ''
+  )
+  const hasTelegramObj = !!(window.Telegram && window.Telegram.WebApp)
+  const hasTgData =
+    window.location.href.includes('tgWebAppData') ||
+    window.location.hash.includes('tgWebAppData') ||
+    window.location.search.includes('tgWebAppData')
+
+  // 如果完全没有 Telegram 相关标识，认为是浏览器环境
+  isBrowserEnv.value = !hasTgData && !uaTelegram && !refTelegram && !hasTelegramObj
+}
 
 onMounted(async () => {
   // 🎯 如果已经有 session 了，说明是回退回来的，直接进入首页
@@ -36,7 +69,17 @@ onMounted(async () => {
     }
     return
   }
-  initTelegramLogin()
+
+  // 检测环境
+  detectEnvironment()
+
+  if (isBrowserEnv.value) {
+    // 浏览器环境：加载 Telegram Login Widget
+    initBrowserLogin()
+  } else {
+    // Telegram WebApp 环境：使用原有流程
+    initTelegramLogin()
+  }
 })
 
 // ✅ 优先从 URL 解析 tgWebAppData（即使 Telegram.WebApp 还没注入，也能登录）
@@ -214,6 +257,146 @@ const getInitData = (): string | null => {
 
   return null
 }
+
+// 🎯 浏览器环境：初始化 Telegram Login Widget
+function initBrowserLogin() {
+  isLoading.value = false
+
+  // 获取 Bot Username
+  const botUsername = (import.meta.env.VITE_TG_BOT_USERNAME || 'dydy').replace('@', '')
+
+  // 加载 Telegram Widget Script
+  const scriptId = 'telegram-widget-script'
+  if (document.getElementById(scriptId)) {
+    // 脚本已加载，直接创建 widget
+    createWidget(botUsername)
+    return
+  }
+
+  const script = document.createElement('script')
+  script.id = scriptId
+  script.src = 'https://telegram.org/js/telegram-widget.js?22'
+  script.async = true
+  script.onload = () => {
+    createWidget(botUsername)
+  }
+  script.onerror = () => {
+    errorMessage.value = '加载 Telegram 登录组件失败，请刷新页面重试'
+  }
+  document.head.appendChild(script)
+}
+
+// 🎯 创建 Telegram Login Widget
+function createWidget(botUsername: string) {
+  if (!widgetContainer.value) return
+
+  // 清空容器
+  widgetContainer.value.innerHTML = ''
+
+  // 设置全局回调函数（必须在创建 widget 之前）
+  ;(window as any).onTelegramAuth = async (user: any) => {
+    try {
+      isLoading.value = true
+      errorMessage.value = ''
+
+      console.log('[BrowserLogin] Telegram Widget 回调:', user)
+
+      // 调用后端 API 处理 Widget 登录
+      const result = await loginWithTelegramWidget(user)
+      if (result?.user) {
+        baseStore.applyProfile(result.user)
+      }
+
+      // 等待 session 写入
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      await supabase.auth.getSession()
+
+      // 跳转到首页
+      router.replace('/')
+    } catch (error: any) {
+      console.error('[BrowserLogin] ❌ 登录失败:', error)
+      errorMessage.value = error?.message || '登录失败，请重试'
+      isLoading.value = false
+    }
+  }
+
+  // 创建 widget script 标签（Telegram 会自动转换为 iframe）
+  const widget = document.createElement('script')
+  widget.setAttribute('src', 'https://telegram.org/js/telegram-widget.js?22')
+  widget.setAttribute('data-telegram-login', botUsername)
+  widget.setAttribute('data-size', 'large')
+  widget.setAttribute('data-onauth', 'onTelegramAuth(user)')
+  widget.setAttribute('data-request-access', 'write')
+  widget.async = true
+
+  widgetContainer.value.appendChild(widget)
+}
+
+// 🎯 浏览器端 Widget 登录 API
+async function loginWithTelegramWidget(user: any): Promise<any> {
+  const getAppServerBase = () => {
+    if (import.meta.env.VITE_APP_SERVER_URL) {
+      return import.meta.env.VITE_APP_SERVER_URL.replace(/\/$/, '')
+    }
+    if (import.meta.env.DEV) {
+      return '/api/app-server'
+    }
+    if (import.meta.env.VITE_SUPABASE_URL) {
+      return `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/app-server`
+    }
+    throw new Error('Missing app server URL configuration')
+  }
+
+  const url = `${getAppServerBase()}/auth/tg-widget-login`
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 20000)
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({ user }),
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+  } catch (error: any) {
+    clearTimeout(timeoutId)
+    if (error.name === 'AbortError') {
+      throw new Error('登录请求超时，请检查网络连接')
+    }
+    throw new Error('网络连接失败，请检查网络或 VPN 设置')
+  }
+
+  const result = await response.json()
+
+  if (result.code !== 0) {
+    throw new Error(result.msg || 'Login failed')
+  }
+
+  // 设置 Supabase session
+  const { access_token, refresh_token } = result.data
+  const { error } = await supabase.auth.setSession({
+    access_token,
+    refresh_token
+  })
+
+  if (error) {
+    throw new Error('Failed to set session')
+  }
+
+  return result.data
+}
+
+onUnmounted(() => {
+  // 清理全局回调
+  if ((window as any).onTelegramAuth) {
+    delete (window as any).onTelegramAuth
+  }
+})
 </script>
 
 <style scoped lang="less">
@@ -223,11 +406,58 @@ const getInitData = (): string | null => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: #111111;
+  background: #000;
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
+
+  // 🎯 浏览器登录样式（参考 Me.vue）
+  .browser-login {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    .content {
+      text-align: center;
+      padding: 0 40px;
+
+      .placeholder-avatar {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        margin-bottom: 20px;
+        opacity: 0.5;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+      }
+
+      h2 {
+        font-size: 20px;
+        margin-bottom: 10px;
+      }
+
+      p {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.6);
+        margin-bottom: 30px;
+      }
+
+      .telegram-widget-container {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 20px;
+      }
+
+      .error-message {
+        color: #ff6b6b;
+        font-size: 14px;
+        margin-top: 15px;
+      }
+    }
+  }
 
   .container {
     width: 90%;
