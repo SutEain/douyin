@@ -55,27 +55,55 @@ export async function handleCallback(
   messageId: number,
   data: string,
   callbackQueryId: string,
-  tgUserId: number
+  tgUserId: number,
+  callback?: any
 ) {
   console.log('[handleCallback] 开始处理回调')
   console.log('[handleCallback] chatId:', chatId, 'messageId:', messageId, 'data:', data)
 
+  // 🎯 检查是否为私聊（个人中心、视频编辑等功能仅限私聊）
+  const isPrivate = callback?.message?.chat?.type === 'private'
+  const isPrivateOnlyCallback =
+    data === 'user_profile' ||
+    data === 'back_home' ||
+    data.startsWith('profile_') ||
+    data.startsWith('video_') ||
+    data.startsWith('edit_') ||
+    data.startsWith('my_videos_') ||
+    data.startsWith('settings_') ||
+    data === 'upload_video' ||
+    data === 'withdraw_submit' ||
+    data.startsWith('recharge_') ||
+    data.startsWith('claim_reward:') ||
+    data.startsWith('channel_')
+
+  if (isPrivateOnlyCallback && !isPrivate) {
+    console.log(`[handleCallback] 非私聊回调被忽略: ${data}`)
+    return
+  }
+
   try {
-    // ✅ “noop/禁用按钮”回调：只提示，不做任何动作
+    // ✅ "noop/禁用按钮"回调：只提示，不做任何动作
     if (data === 'noop') {
       await answerCallbackQuery(callbackQueryId, '⏳ 正在处理中，请稍等…')
       return
     }
 
-    // 🎯 个人中心相关回调
+    // 🎯 个人中心相关回调 - 仅限私聊
     if (data === 'user_profile') {
+      if (callback.message?.chat?.type !== 'private') {
+        return
+      }
       await answerCallbackQuery(callbackQueryId)
       await handleUserProfile(chatId, messageId)
       return
     }
 
-    // 🎯 返回首页
+    // 🎯 返回首页 - 仅限私聊
     if (data === 'back_home') {
+      if (callback.message?.chat?.type !== 'private') {
+        return
+      }
       await answerCallbackQuery(callbackQueryId)
       const { getWelcomeKeyboard } = await import('../keyboards.ts')
 
@@ -107,12 +135,18 @@ export async function handleCallback(
     }
 
     if (data === 'profile_invite_unlock') {
+      if (callback.message?.chat?.type !== 'private') {
+        return
+      }
       await answerCallbackQuery(callbackQueryId)
       await handleInviteUnlock(chatId, messageId)
       return
     }
 
     if (data === 'profile_live_pending') {
+      if (callback.message?.chat?.type !== 'private') {
+        return
+      }
       await answerCallbackQuery(
         callbackQueryId,
         '⏳ 直播申请正在审核中，请耐心等待。\n\n您可以联系 @Edison521 申请快速通过。',
@@ -265,6 +299,13 @@ export async function handleCallback(
 
     // 🎯 骰子游戏处理
     if (data.startsWith('dice_join_')) {
+      // 🎯 如果是在 dice 群，主机器人不处理骰子回调，交给骰子机器人处理
+      const diceGroupId = Deno.env.get('DICE_GROUP_ID')
+      if (diceGroupId && String(chatId) === String(diceGroupId)) {
+        console.log(`[Callback] 在 dice 群中检测到骰子回调，主机器人忽略，交由骰子机器人处理`)
+        return
+      }
+
       const roomId = data.replace('dice_join_', '')
       const { handleJoinDiceGame } = await import('../features/diceGame.ts')
       await handleJoinDiceGame(chatId, messageId, callbackQueryId, roomId, tgUserId)
@@ -272,6 +313,13 @@ export async function handleCallback(
     }
 
     if (data.startsWith('dice_cancel_')) {
+      // 🎯 如果是在 dice 群，主机器人不处理骰子回调，交给骰子机器人处理
+      const diceGroupId = Deno.env.get('DICE_GROUP_ID')
+      if (diceGroupId && String(chatId) === String(diceGroupId)) {
+        console.log(`[Callback] 在 dice 群中检测到骰子回调，主机器人忽略，交由骰子机器人处理`)
+        return
+      }
+
       const roomId = data.replace('dice_cancel_', '')
       const { handleCancelDiceGame } = await import('../features/diceGame.ts')
       await handleCancelDiceGame(chatId, messageId, callbackQueryId, roomId, tgUserId)

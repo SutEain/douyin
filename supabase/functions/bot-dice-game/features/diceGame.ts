@@ -6,11 +6,11 @@ import { escapeHTML, sanitizeError } from '../utils/text.ts'
  * 处理骰子比大小指令: tz [金额] [人数]
  */
 export async function handleDiceCommand(chatId: number, text: string, message: any) {
-  const officialGroupId = Deno.env.get('OFFICIAL_GROUP_ID')
+  const diceGroupId = Deno.env.get('DICE_GROUP_ID')
 
-  // 1. 验证权限 (仅限官方群)
-  if (String(chatId) !== String(officialGroupId)) {
-    // 不是官方群，直接返回（包括私聊和其他群组）
+  // 1. 验证权限 (仅限骰子游戏群)
+  if (String(chatId) !== String(diceGroupId)) {
+    // 不是骰子游戏群，直接返回（包括私聊和其他群组）
     return
   }
 
@@ -68,7 +68,7 @@ export async function handleDiceCommand(chatId: number, text: string, message: a
       if (chatId > 0) {
         await sendMessage(chatId, `❌ 创建失败: ${res.message}`)
       } else {
-        console.log(`[Dice] 房间创建失败: ${res.message}, chatId=${chatId}`)
+        console.log(`[DICE-BOT][Dice] 房间创建失败: ${res.message}, chatId=${chatId}`)
       }
       return
     }
@@ -96,7 +96,7 @@ export async function handleDiceCommand(chatId: number, text: string, message: a
       }
     })
   } catch (err: any) {
-    console.error('Dice Command Error:', err)
+    console.error('[DICE-BOT] Dice Command Error:', err)
     await sendMessage(chatId, `❌ 游戏发起失败: ${sanitizeError(err.message)}`)
   }
 }
@@ -146,7 +146,7 @@ export async function handleJoinDiceGame(
 
     // 3. 只有当 RPC 明确返回 is_full 时，才由当前请求触发开奖流程
     if (res.is_full) {
-      console.log(`[Dice] 房间已满，准备开奖: ${roomId}`)
+      console.log(`[DICE-BOT][Dice] 房间已满，准备开奖: ${roomId}`)
 
       // 先刷新一次房间信息和玩家列表用于显示
       const { data: room } = await supabase
@@ -220,7 +220,7 @@ export async function handleJoinDiceGame(
       })
     }
   } catch (err: any) {
-    console.error('Join Dice Error:', err)
+    console.error('[DICE-BOT] Join Dice Error:', err)
     await answerCallbackQuery(callbackQueryId, `❌ 加入异常: ${sanitizeError(err.message)}`, true)
   }
 }
@@ -260,7 +260,7 @@ export async function handleCancelDiceGame(
     await answerCallbackQuery(callbackQueryId, '✅ 房间已取消，本金已退还', false)
     await editMessage(chatId, messageId, '❌ <b>本局游戏已被房主取消。</b>')
   } catch (err: any) {
-    console.error('Cancel Dice Error:', err)
+    console.error('[DICE-BOT] Cancel Dice Error:', err)
     await answerCallbackQuery(callbackQueryId, `❌ 操作失败: ${sanitizeError(err.message)}`, true)
   }
 }
@@ -289,7 +289,7 @@ async function startRolling(chatId: number, roomId: string) {
 
     if (!players || players.length === 0) return
 
-    // 2. 发送一条持久化的“战报看板”
+    // 2. 发送一条持久化的"战报看板"
     const progressMsgRes = await sendMessage(chatId, `🎲 <b>正在依次为玩家掷骰子...</b>`)
     const progressMsgId = progressMsgRes.ok ? progressMsgRes.result.message_id : null
 
@@ -368,7 +368,7 @@ async function startRolling(chatId: number, roomId: string) {
       await editMessage(chatId, progressMsgId, resultText)
     }
   } catch (err: any) {
-    console.error('Rolling Error:', err)
+    console.error('[DICE-BOT] Rolling Error:', err)
     await sendMessage(
       chatId,
       `🚨 <b>结算过程发生异常:</b>\n${sanitizeError(err.message)}\n\n💰 正在尝试为您自动退回本金...`
@@ -388,7 +388,7 @@ async function startRolling(chatId: number, roomId: string) {
         await sendMessage(chatId, `✅ <b>退款成功！</b> 本金已原路退回您的余额。`)
       }
     } catch (finalErr: any) {
-      console.error('Critical Refund Error:', finalErr)
+      console.error('[DICE-BOT] Critical Refund Error:', finalErr)
       await sendMessage(chatId, `🚨 <b>严重错误:</b> 无法完成退款，请务必保留截图联系管理员。`)
     }
   }

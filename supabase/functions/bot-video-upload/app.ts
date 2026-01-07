@@ -438,12 +438,18 @@ export async function handleRequest(req: Request): Promise<Response> {
             )
           }
         }
-        // /settings 命令
+        // /settings 命令 - 仅限私聊
         else if (message.text === '/settings') {
+          if (message.chat.type !== 'private') {
+            return new Response('OK', { status: 200 })
+          }
           await handleSettings(chatId)
         }
-        // "首页"按钮
+        // "首页"按钮 - 仅限私聊
         else if (message.text === '🏠 首页') {
+          if (message.chat.type !== 'private') {
+            return new Response('OK', { status: 200 })
+          }
           // 重新发送欢迎消息（首页）
           const welcomeText =
             '👋 欢迎来到 TG 抖音 🚀\n' +
@@ -475,16 +481,22 @@ export async function handleRequest(req: Request): Promise<Response> {
             await updateUserState(chatId, { dashboard_message_id: sentMessage.message_id })
           }
         }
-        // "个人中心"按钮
+        // "个人中心"按钮 - 仅限私聊
         else if (message.text === '👤 个人中心') {
+          if (message.chat.type !== 'private') {
+            return new Response('OK', { status: 200 })
+          }
           // 底部键盘点击 -> 始终新发一条消息，避免编辑上一条
           await handleUserProfile(chatId, undefined, { forceNew: true })
         }
-        // 📸 图片消息
+        // 📸 图片消息 - 仅限私聊
         else if (
           message.photo ||
           (message.document && message.document.mime_type?.startsWith('image/'))
         ) {
+          if (message.chat.type !== 'private') {
+            return new Response('OK', { status: 200 })
+          }
           const photo = message.photo || [message.document]
           console.log('[MAIN] 识别到图片上传:', {
             hasPhoto: !!message.photo,
@@ -493,11 +505,14 @@ export async function handleRequest(req: Request): Promise<Response> {
 
           await handlePhoto(chatId, photo, message.caption, message.from, message.media_group_id)
         }
-        // 🎬 视频消息
+        // 🎬 视频消息 - 仅限私聊
         else if (
           message.video ||
           (message.document && message.document.mime_type?.startsWith('video/'))
         ) {
+          if (message.chat.type !== 'private') {
+            return new Response('OK', { status: 200 })
+          }
           const video = message.video || message.document
           console.log('[MAIN] 识别到视频上传:', {
             hasVideo: !!message.video,
@@ -506,8 +521,11 @@ export async function handleRequest(req: Request): Promise<Response> {
 
           await handleVideo(chatId, video, message.caption, message.from, message.media_group_id)
         }
-        // 位置消息
+        // 位置消息 - 仅限私聊
         else if (message.location) {
+          if (message.chat.type !== 'private') {
+            return new Response('OK', { status: 200 })
+          }
           await handleLocation(chatId, message.location, message.message_id)
         }
         // 文本消息
@@ -538,7 +556,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             data
           })
 
-          await handleCallback(chatId, messageId, data, callback.id, callback.from.id)
+          await handleCallback(chatId, messageId, data, callback.id, callback.from.id, callback)
         }
       }
       // 🎯 处理 inline query（分享功能）

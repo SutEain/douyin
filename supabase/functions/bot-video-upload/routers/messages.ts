@@ -175,6 +175,13 @@ export async function handleText(
 
   // 3. 处理骰子游戏
   if (isDiceCmd) {
+    // 🎯 如果是在 dice 群，主机器人不处理 tz 指令，交给骰子机器人处理
+    const diceGroupId = Deno.env.get('DICE_GROUP_ID')
+    if (diceGroupId && String(chatId) === String(diceGroupId)) {
+      console.log(`[Dice] 在 dice 群中检测到 tz 指令，主机器人忽略，交由骰子机器人处理`)
+      return
+    }
+
     console.log(`[Dice] 匹配到骰子指令，准备执行...`)
     const { handleDiceCommand } = await import('../features/diceGame.ts')
     await handleDiceCommand(chatId, text, rawMessage)
