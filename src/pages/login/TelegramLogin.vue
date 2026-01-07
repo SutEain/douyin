@@ -160,10 +160,9 @@ const waitForTelegram = (): Promise<any> => {
       return
     }
 
-    // ✅ 轮询检查（最多等待 3 秒）
+    // ✅ 优化：缩短等待时间，避免长时间阻塞导致 WebView 崩溃
     let attempts = 0
-    // 🎯 缩短等待时间：3s 已经足够大部分设备加载 WebApp SDK
-    const maxAttempts = 30
+    const maxAttempts = 20 // 从 30 次减少到 20 次（2 秒）
     const checkInterval = setInterval(() => {
       attempts++
       // @ts-ignore
@@ -173,8 +172,10 @@ const waitForTelegram = (): Promise<any> => {
         resolve(window.Telegram.WebApp)
       } else if (attempts >= maxAttempts) {
         clearInterval(checkInterval)
-        console.warn('[TelegramLogin] 等待 WebApp SDK 超时')
-        resolve(null)
+        console.warn('[TelegramLogin] 等待 WebApp SDK 超时，尝试使用 URL 参数')
+        // ✅ 即使超时也返回降级对象，避免后续代码报错
+        // @ts-ignore
+        resolve(window.Telegram?.WebApp || null)
       }
     }, 100)
   })

@@ -4,7 +4,7 @@ import { _notice } from './index'
 
 export const axiosInstance = axios.create({
   baseURL: config.baseUrl,
-  timeout: 60000
+  timeout: 30000 // ✅ 优化：缩短超时时间到 30 秒，避免长时间等待导致 WebView 卡死
 })
 
 // request拦截器
@@ -68,11 +68,18 @@ axiosInstance.interceptors.response.use(
   },
   (error: AxiosError) => {
     console.log('error', error)
-    // console.log(error.response)
-    // console.log(error.response.status)
+    // ✅ 优化：区分网络错误和超时错误
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      _notice('请求超时，请检查网络连接')
+      return { success: false, code: 504, msg: '请求超时，请检查网络连接', data: [] }
+    }
     if (error.response === undefined) {
-      _notice('服务器响应超时')
-      return { success: false, code: 500, msg: '服务器响应超时', data: [] }
+      // 网络错误（可能是被墙、DNS 失败等）
+      const isNetworkError =
+        error.code === 'ERR_NETWORK' || error.code === 'ERR_INTERNET_DISCONNECTED'
+      const msg = isNetworkError ? '网络连接失败，请检查网络或 VPN 设置' : '服务器响应超时'
+      _notice(msg)
+      return { success: false, code: 500, msg, data: [] }
     }
     if (error.response.status >= 500) {
       _notice('服务器出现错误')

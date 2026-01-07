@@ -11,29 +11,42 @@
     />
     <title>Douyin</title>
     <script>
+      // ✅ 优化：移除严格的 Telegram 环境检查，避免误判导致 WebView 崩溃
+      // 改为仅记录警告，不阻止应用启动
       ;(function () {
-        const host = window.location.hostname
-        const isDev =
-          host === 'localhost' ||
-          host === '127.0.0.1' ||
-          host.endsWith('.test') ||
-          host.endsWith('.local')
-        if (isDev) return
+        try {
+          const host = window.location.hostname
+          const isDev =
+            host === 'localhost' ||
+            host === '127.0.0.1' ||
+            host.endsWith('.test') ||
+            host.endsWith('.local')
+          if (isDev) return
 
-        const url = window.location.href
-        const hasTgData =
-          url.includes('tgWebAppData') ||
-          window.location.hash.includes('tgWebAppData') ||
-          window.location.search.includes('tgWebAppData')
-        const uaTelegram = /Telegram/i.test(navigator.userAgent)
-        const refTelegram = /t\.me|telegram\.org|telegram\.me|web\.telegram\.org/i.test(
-          document.referrer || ''
-        )
-        const hasTelegramObj = !!(window.Telegram && window.Telegram.WebApp)
+          // 延迟检查，给 Telegram SDK 更多时间加载
+          setTimeout(() => {
+            try {
+              const url = window.location.href
+              const hasTgData =
+                url.includes('tgWebAppData') ||
+                window.location.hash.includes('tgWebAppData') ||
+                window.location.search.includes('tgWebAppData')
+              const uaTelegram = /Telegram/i.test(navigator.userAgent)
+              const refTelegram = /t\.me|telegram\.org|telegram\.me|web\.telegram\.org/i.test(
+                document.referrer || ''
+              )
+              const hasTelegramObj = !!(window.Telegram && window.Telegram.WebApp)
 
-        if (!(hasTgData || uaTelegram || refTelegram || hasTelegramObj)) {
-          document.documentElement.innerHTML = ''
-          window.stop()
+              // ✅ 只记录警告，不阻止应用运行
+              if (!hasTgData && !uaTelegram && !refTelegram && !hasTelegramObj) {
+                console.warn('[Telegram Check] 未检测到 Telegram 环境，但允许应用继续运行')
+              }
+            } catch (e) {
+              console.warn('[Telegram Check] 检查过程出错，继续运行:', e)
+            }
+          }, 2000) // 延迟 2 秒检查，确保 SDK 有时间加载
+        } catch (e) {
+          console.warn('[Telegram Check] 初始化失败，继续运行:', e)
         }
       })()
     </script>
@@ -45,11 +58,64 @@
       }
     </script>
     <!-- Telegram WebApp Script -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script>
-      if (window.Telegram && window.Telegram.WebApp) {
-        window.Telegram.WebApp.ready()
-      }
+      // ✅ 优化：添加错误处理和超时机制，防止脚本加载失败导致 WebView 崩溃
+      ;(function () {
+        const script = document.createElement('script')
+        script.src = 'https://telegram.org/js/telegram-web-app.js'
+        script.async = true
+
+        // 设置超时（5秒）
+        const timeout = setTimeout(() => {
+          console.warn('[Telegram WebApp] 脚本加载超时，使用降级方案')
+          // 创建降级对象，避免后续代码报错
+          if (!window.Telegram) {
+            window.Telegram = {
+              WebApp: {
+                ready: function () {},
+                initData: '',
+                initDataUnsafe: {},
+                version: 'fallback',
+                platform: 'unknown'
+              }
+            }
+          }
+        }, 5000)
+
+        script.onload = function () {
+          clearTimeout(timeout)
+          try {
+            if (window.Telegram && window.Telegram.WebApp) {
+              window.Telegram.WebApp.ready()
+            }
+          } catch (e) {
+            console.error('[Telegram WebApp] 初始化失败:', e)
+          }
+        }
+
+        script.onerror = function () {
+          clearTimeout(timeout)
+          console.warn('[Telegram WebApp] 脚本加载失败，使用降级方案')
+          // ✅ 优化：立即创建降级对象，确保应用可以正常启动
+          try {
+            if (!window.Telegram) {
+              window.Telegram = {
+                WebApp: {
+                  ready: function () {},
+                  initData: '',
+                  initDataUnsafe: {},
+                  version: 'fallback',
+                  platform: 'unknown'
+                }
+              }
+            }
+          } catch (e) {
+            console.error('[Telegram WebApp] 创建降级对象失败:', e)
+          }
+        }
+
+        document.head.appendChild(script)
+      })()
     </script>
     <style>
       ::-webkit-scrollbar {

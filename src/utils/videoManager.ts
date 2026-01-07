@@ -102,8 +102,18 @@ class VideoManager {
     if (element) {
       element.pause()
       element.currentTime = 0
+      // ✅ 优化：清理视频源，释放内存
+      element.src = ''
+      element.load()
     }
     this.videoElements.delete(id)
+
+    // ✅ 优化：清理对应的定时器，防止内存泄漏
+    const timer = this.stallTimers.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      this.stallTimers.delete(id)
+    }
 
     if (this.currentVideo?.id === id) {
       this.currentVideo = null

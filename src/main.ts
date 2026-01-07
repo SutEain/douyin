@@ -56,6 +56,11 @@ if (typeof window !== 'undefined') {
       if (src.includes('_vercel/insights') || src.includes('_vercel/speed-insights')) {
         return false
       }
+      // ✅ 优化：Telegram WebApp 脚本加载失败不阻止应用运行
+      if (src.includes('telegram.org/js/telegram-web-app.js')) {
+        console.warn('[Script Error] Telegram WebApp 脚本加载失败，使用降级方案')
+        return false // 不阻止应用继续运行
+      }
     }
 
     console.warn(
@@ -83,27 +88,34 @@ if (typeof window !== 'undefined') {
 window.isMoved = false
 window.isMuted = true
 window.showMutedNotice = true
-HTMLElement.prototype.addEventListener = new Proxy(HTMLElement.prototype.addEventListener, {
-  apply(target, ctx, args) {
-    const eventName = args[0]
-    const listener = args[1]
-    if (listener instanceof Function && eventName === 'click') {
-      args[1] = new Proxy(listener, {
-        apply(target1, ctx1, args1) {
-          // console.log('e', args1)
-          // console.log('click点击', window.isMoved)
-          if (window.isMoved) return
-          try {
-            return target1.apply(ctx1, args1)
-          } catch (e) {
-            console.error(`[proxyPlayerEvent][${eventName}]`, listener, e)
+
+// ✅ 优化：包装 Proxy 操作，避免在某些 WebView 中导致崩溃
+try {
+  HTMLElement.prototype.addEventListener = new Proxy(HTMLElement.prototype.addEventListener, {
+    apply(target, ctx, args) {
+      const eventName = args[0]
+      const listener = args[1]
+      if (listener instanceof Function && eventName === 'click') {
+        args[1] = new Proxy(listener, {
+          apply(target1, ctx1, args1) {
+            // console.log('e', args1)
+            // console.log('click点击', window.isMoved)
+            if (window.isMoved) return
+            try {
+              return target1.apply(ctx1, args1)
+            } catch (e) {
+              console.error(`[proxyPlayerEvent][${eventName}]`, listener, e)
+            }
           }
-        }
-      })
+        })
+      }
+      return target.apply(ctx, args)
     }
-    return target.apply(ctx, args)
-  }
-})
+  })
+} catch (e) {
+  console.warn('[Main] Proxy addEventListener 失败，使用原生方法:', e)
+  // 如果 Proxy 失败，继续使用原生方法，不影响应用运行
+}
 
 const vClick = useClick()
 const pinia = createPinia()

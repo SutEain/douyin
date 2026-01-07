@@ -46,14 +46,31 @@ export async function loginWithTelegram(initData: string): Promise<TelegramLogin
   const url = `${base}/auth/tg-login`
   console.log('[loginWithTelegram] 📡 发送登录请求:', url)
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-    },
-    body: JSON.stringify({ initData })
-  })
+  // ✅ 优化：添加超时控制，防止长时间等待导致 WebView 崩溃
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 20000) // 20 秒超时
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({ initData }),
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+  } catch (error: any) {
+    clearTimeout(timeoutId)
+    if (error.name === 'AbortError') {
+      console.error('[loginWithTelegram] ❌ 请求超时')
+      throw new Error('登录请求超时，请检查网络连接')
+    }
+    console.error('[loginWithTelegram] ❌ 网络错误:', error)
+    throw new Error('网络连接失败，请检查网络或 VPN 设置')
+  }
 
   console.log('[loginWithTelegram] 📥 响应状态:', response.status, response.statusText)
 

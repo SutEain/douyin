@@ -492,11 +492,27 @@ async function callAppServer(path: string, options: CallOptions = {}) {
     // 忽略错误，不影响正常请求
   }
 
-  const response = await fetch(`${getAppServerBase()}${path}`, {
-    method,
-    headers,
-    body: method !== 'GET' && options.body !== undefined ? JSON.stringify(options.body) : undefined
-  })
+  // ✅ 优化：添加超时控制，防止长时间等待
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 20000) // 20 秒超时
+
+  let response: Response
+  try {
+    response = await fetch(`${getAppServerBase()}${path}`, {
+      method,
+      headers,
+      body:
+        method !== 'GET' && options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+  } catch (error: any) {
+    clearTimeout(timeoutId)
+    if (error.name === 'AbortError') {
+      throw new Error('请求超时，请检查网络连接')
+    }
+    throw error
+  }
   const payload = await response.json()
   if (response.ok && payload.code === 0) {
     return payload.data
