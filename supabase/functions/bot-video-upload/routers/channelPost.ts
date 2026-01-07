@@ -14,7 +14,7 @@ export async function handleChannelPost(post: any) {
     // 1. 查询该频道是否已绑定且开启同步
     const { data: channel, error: qErr } = await supabase
       .from('bound_channels')
-      .select('user_id, is_adult, is_sea, profiles(id, tg_user_id, auto_approve)')
+      .select('user_id, is_adult, is_sea, blocked_keywords, profiles(id, tg_user_id, auto_approve)')
       .eq('id', channelId)
       .eq('sync_enabled', true)
       .single()
@@ -22,6 +22,23 @@ export async function handleChannelPost(post: any) {
     if (qErr || !channel) {
       console.log(`[ChannelSync] 频道未绑定或已关闭同步，忽略。chat_id=${channelId}`)
       return
+    }
+
+    // 🎯 2. 检查屏蔽词（如果设置了屏蔽词，且消息包含屏蔽词，则跳过搬运）
+    const blockedKeywords = channel.blocked_keywords || []
+    if (blockedKeywords.length > 0 && post.caption) {
+      const captionLower = post.caption.toLowerCase()
+      const hasBlockedKeyword = blockedKeywords.some((keyword: string) => {
+        if (!keyword) return false
+        return captionLower.includes(keyword.toLowerCase())
+      })
+
+      if (hasBlockedKeyword) {
+        console.log(
+          `[ChannelSync] 消息包含屏蔽词，跳过搬运。channel=${channelId}, caption=${post.caption?.substring(0, 50)}`
+        )
+        return
+      }
     }
 
     const profile = channel.profiles as any
@@ -40,7 +57,7 @@ export async function handleChannelPost(post: any) {
       is_auto_sync: true // 🎯 明确标记为自动同步
     }
 
-    // 2. 识别内容类型并调用上传逻辑
+    // 3. 识别内容类型并调用上传逻辑
     // 注意：频道消息没有 message.from，我们需要模拟一个 from 对象，用于 handleVideo/handlePhoto 内部逻辑
     const mockFrom = {
       id: ownerTgChatId,

@@ -30,7 +30,12 @@ import {
   handleAskBindChannel,
   handleToggleChannelSync,
   handleUnbindChannel,
-  handleToggleChannelAttr
+  handleToggleChannelAttr,
+  handleChannelKeywords,
+  handleChannelKeywordAdd,
+  handleChannelKeywordDelete,
+  handleChannelKeywordRemove,
+  handleChannelKeywordClear
 } from '../features/profileCenter.ts'
 import { getEditKeyboard, getEditMenuText, parseVideoAction } from '../features/editor.ts'
 import {
@@ -289,6 +294,44 @@ export async function handleCallback(
       const channelId = data.split(':')[1]
       await answerCallbackQuery(callbackQueryId, '🌏 正在切换东南亚标记...')
       await handleToggleChannelAttr(chatId, messageId, channelId, 'is_sea')
+      return
+    }
+
+    // 🎯 频道屏蔽词管理
+    if (data.startsWith('channel_keywords:')) {
+      const channelId = data.split(':')[1]
+      await answerCallbackQuery(callbackQueryId)
+      await handleChannelKeywords(chatId, messageId, channelId)
+      return
+    }
+
+    if (data.startsWith('channel_keyword_add:')) {
+      const channelId = data.split(':')[1]
+      await answerCallbackQuery(callbackQueryId)
+      await handleChannelKeywordAdd(chatId, messageId, channelId)
+      return
+    }
+
+    if (data.startsWith('channel_keyword_delete:')) {
+      const channelId = data.split(':')[1]
+      await answerCallbackQuery(callbackQueryId)
+      await handleChannelKeywordDelete(chatId, messageId, channelId)
+      return
+    }
+
+    if (data.startsWith('channel_keyword_remove:')) {
+      const parts = data.split(':')
+      const channelId = parts[1]
+      const keyword = decodeURIComponent(parts.slice(2).join(':'))
+      await answerCallbackQuery(callbackQueryId, '🗑️ 正在删除...')
+      await handleChannelKeywordRemove(chatId, messageId, channelId, keyword)
+      return
+    }
+
+    if (data.startsWith('channel_keyword_clear:')) {
+      const channelId = data.split(':')[1]
+      await answerCallbackQuery(callbackQueryId, '🗑️ 正在清空...')
+      await handleChannelKeywordClear(chatId, messageId, channelId)
       return
     }
 

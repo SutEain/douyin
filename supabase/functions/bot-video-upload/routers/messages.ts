@@ -338,6 +338,70 @@ export async function handleText(
     return
   }
 
+  // ✅ 频道屏蔽词添加
+  if (userState.state === 'waiting_channel_keyword_add') {
+    await deleteTelegramMessage(chatId, userMessageId)
+    if (!userState.current_message_id) return
+
+    const ctx = (userState as any).context || {}
+    const channelId = ctx.channel_id
+
+    if (!channelId) {
+      await updateUserState(chatId, { state: 'idle' })
+      await sendMessage(chatId, '❌ 频道ID丢失，请重新操作')
+      return
+    }
+
+    if (text.trim() === '/cancel') {
+      await updateUserState(chatId, { state: 'idle' })
+      const { handleChannelKeywords } = await import('../features/profileCenter.ts')
+      await handleChannelKeywords(chatId, userState.current_message_id, channelId)
+      return
+    }
+
+    // 解析关键词（用空格分隔）
+    const keywords = text
+      .trim()
+      .split(/\s+/)
+      .map((kw) => kw.trim())
+      .filter((kw) => kw.length > 0)
+
+    if (keywords.length === 0) {
+      await sendSelfDestructMessage(chatId, '❌ 请输入有效的关键词')
+      return
+    }
+
+    try {
+      // 获取当前屏蔽词列表
+      const { data: channel } = await supabase
+        .from('bound_channels')
+        .select('blocked_keywords')
+        .eq('id', channelId)
+        .single()
+
+      if (!channel) {
+        await sendMessage(chatId, '❌ 频道不存在')
+        return
+      }
+
+      const existingKeywords = channel.blocked_keywords || []
+      const newKeywords = [...new Set([...existingKeywords, ...keywords])] // 去重
+
+      await supabase
+        .from('bound_channels')
+        .update({ blocked_keywords: newKeywords })
+        .eq('id', channelId)
+
+      await updateUserState(chatId, { state: 'idle' })
+      const { handleChannelKeywords } = await import('../features/profileCenter.ts')
+      await handleChannelKeywords(chatId, userState.current_message_id, channelId)
+    } catch (error) {
+      console.error('handleChannelKeywordAdd error:', error)
+      await sendMessage(chatId, '❌ 添加屏蔽词失败，请重试')
+    }
+    return
+  }
+
   // ✅ 直播流程：设置标题
   if (userState.state === 'waiting_live_title') {
     await deleteTelegramMessage(chatId, userMessageId)

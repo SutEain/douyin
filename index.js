@@ -170,7 +170,7 @@ app.post('/process', async (req, res) => {
     // 🎯 更新数据库
     const { data: vInfo } = await supabase
       .from('videos')
-      .select('status, review_status, content_type, media_list, images')
+      .select('status, review_status, content_type, media_list, images, is_auto_sync')
       .eq('id', video_id)
       .single()
 
@@ -225,8 +225,19 @@ app.post('/process', async (req, res) => {
       if (vInfo.status === 'processing') {
         const isApproved =
           vInfo.review_status === 'approved' || vInfo.review_status === 'auto_approved'
-        updatePayload.status = isApproved ? 'published' : 'ready'
-        console.log(`[${video_id}] 单视频状态转换: processing -> ${updatePayload.status}`)
+        // 🎯 频道同步 + 免审用户：直接转换为 published，不会变成 ready
+        // 🎯 非频道同步或非免审用户：根据审核状态转换
+        if (vInfo.is_auto_sync && isApproved) {
+          updatePayload.status = 'published'
+          updatePayload.published_at = new Date().toISOString()
+          console.log(`[${video_id}] 频道同步免审用户，单视频状态转换: processing -> published`)
+        } else {
+          updatePayload.status = isApproved ? 'published' : 'ready'
+          if (isApproved && !vInfo.published_at) {
+            updatePayload.published_at = new Date().toISOString()
+          }
+          console.log(`[${video_id}] 单视频状态转换: processing -> ${updatePayload.status}`)
+        }
       }
     }
 

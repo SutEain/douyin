@@ -226,11 +226,11 @@ export async function handlePhoto(
           .eq('id', result.id)
           .single()
         if (newPost) {
-          // 🎯 频道同步：如果是自动处理模式
-          if (extraData?.status === 'ready' || extraData?.status === 'published') {
-            const statusText =
-              extraData.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
-            await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新相册，${statusText}。`)
+          // 🎯 频道同步：不立即发送通知，等待Worker完成后统一处理
+          if (extraData?.is_auto_sync) {
+            console.log(
+              `[handlePhoto] 频道同步：相册模式，等待Worker完成后发送通知。id=${newPost.id}`
+            )
             return
           }
 
@@ -359,14 +359,15 @@ export async function saveSinglePhoto(
   console.log(`[saveSinglePhoto] 图片记录已保存: ${draftPost.id}`)
 
   // 🎯 触发 Worker 处理图片 (转存 R2)
+  // 🎯 频道同步模式：传递 messageId=0，Worker完成后会检查 is_auto_sync 并发送通知
+  // 🎯 非频道同步模式：不传递 messageId，Worker完成后会显示编辑菜单
   await triggerWorker(draftPost.id, photo.file_id, chatId, 0)
 
-  // 🎯 如果是频道同步（自动就绪/发布），则发送同步成功提示并退出
+  // 🎯 如果是频道同步，不显示编辑菜单，等待Worker完成后发送通知
   if (extraData?.is_auto_sync) {
-    console.log(`[saveSinglePhoto] 频道同步：自动处理模式，不显示编辑菜单。id=${draftPost.id}`)
-    const statusText =
-      extraData.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
-    await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新图片，${statusText}。`)
+    console.log(
+      `[saveSinglePhoto] 频道同步：自动处理模式，等待Worker完成后发送通知。id=${draftPost.id}`
+    )
     return
   }
 

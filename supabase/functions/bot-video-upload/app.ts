@@ -131,8 +131,16 @@ export async function handleRequest(req: Request): Promise<Response> {
           )
 
           if (!success) {
-            if (messageId) await deleteTelegramMessage(chatId, messageId)
-            await sendMessage(chatId, `❌ 处理失败\n\n${sanitizeError(workerError || '未知错误')}`)
+            if (messageId && messageId > 0) await deleteTelegramMessage(chatId, messageId)
+            // 🎯 补救脚本场景：messageId 为 0 或 null 时，不发送错误通知（避免给频道同步用户发送重复通知）
+            if (messageId && messageId > 0) {
+              await sendMessage(
+                chatId,
+                `❌ 处理失败\n\n${sanitizeError(workerError || '未知错误')}`
+              )
+            } else {
+              console.log(`[WorkerCallback] 补救脚本场景，跳过错误通知（messageId=${messageId}）`)
+            }
             return new Response('OK', { status: 200 })
           }
 
@@ -145,8 +153,13 @@ export async function handleRequest(req: Request): Promise<Response> {
 
           if (!video) {
             console.error(`[WorkerCallback] 找不到视频记录: ${videoId}`)
-            if (messageId) await deleteTelegramMessage(chatId, messageId)
-            await sendMessage(chatId, '❌ 视频信息同步失败')
+            if (messageId && messageId > 0) await deleteTelegramMessage(chatId, messageId)
+            // 🎯 补救脚本场景：messageId 为 0 或 null 时，不发送错误通知
+            if (messageId && messageId > 0) {
+              await sendMessage(chatId, '❌ 视频信息同步失败')
+            } else {
+              console.log(`[WorkerCallback] 补救脚本场景，跳过错误通知（messageId=${messageId}）`)
+            }
             return new Response('OK', { status: 200 })
           }
 
@@ -193,21 +206,71 @@ export async function handleRequest(req: Request): Promise<Response> {
             if (video.status === 'processing') {
               const isApproved =
                 video.review_status === 'approved' || video.review_status === 'auto_approved'
-              const newStatus = isApproved ? 'published' : 'ready'
+              // 🎯 频道同步 + 免审用户：始终转换为 published，不会变成 ready
+              const newStatus =
+                video.is_auto_sync && isApproved ? 'published' : isApproved ? 'published' : 'ready'
               console.log(`[WorkerCallback] 转换相册状态: processing -> ${newStatus}`)
-              await supabase.from('videos').update({ status: newStatus }).eq('id', videoId)
+              const updatePayload: any = { status: newStatus }
+              if (newStatus === 'published' && !video.published_at) {
+                updatePayload.published_at = new Date().toISOString()
+              }
+              await supabase.from('videos').update(updatePayload).eq('id', videoId)
               video.status = newStatus
             }
           }
 
-          // 🎯 频道同步：只有明确标记为 is_auto_sync 的视频，且处于自动发布模式（就绪/已发布），才发送通知并直接退出
-          if (video.is_auto_sync && (video.status === 'ready' || video.status === 'published')) {
-            console.log(`[WorkerCallback] 频道同步模式，尝试删除处理中消息并退出.`)
-            if (messageId) await deleteTelegramMessage(chatId, messageId)
-            const statusText =
-              video.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
-            await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新视频，${statusText}。`)
-            return new Response('OK', { status: 200 })
+          // 🎯 对于所有视频（包括普通视频）：如果是频道同步 + 免审用户，且状态是 processing，自动转换为 published
+          if (video.is_auto_sync && video.status === 'processing') {
+            const isApproved =
+              video.review_status === 'approved' || video.review_status === 'auto_approved'
+            if (isApproved) {
+              console.log(
+                `[WorkerCallback] 频道同步免审用户，自动转换状态: processing -> published`
+              )
+              await supabase
+                .from('videos')
+                .update({ status: 'published', published_at: new Date().toISOString() })
+                .eq('id', videoId)
+              video.status = 'published'
+            }
+          }
+
+          // 🎯 频道同步：只有明确标记为 is_auto_sync 的视频，且处于已发布状态，才发送通知并直接退出
+          // 🎯 免审用户的频道同步作品：状态应该是 published，不应该出现 ready 状态
+          // 🎯 补救脚本场景判断：如果视频创建时间超过1小时，且 messageId 是 0 或 null，可能是补救脚本
+          if (video.is_auto_sync) {
+            // 🎯 如果状态是 ready（非免审用户），也发送通知但提示需要审核
+            if (video.status === 'ready') {
+              console.log(`[WorkerCallback] 频道同步非免审用户，状态为 ready，发送待审核通知`)
+              if (messageId && messageId > 0) await deleteTelegramMessage(chatId, messageId)
+
+              const videoCreatedAt = new Date(video.created_at).getTime()
+              const oneHourAgo = Date.now() - 60 * 60 * 1000
+              const isRescueScript = !messageId && videoCreatedAt < oneHourAgo
+
+              if (!isRescueScript) {
+                await sendMessage(
+                  chatId,
+                  `同步成功 📢：检测到您的频道发布了新视频，已自动搬运并进入待发布状态，等待管理员审核通过后自动发布。`
+                )
+              }
+              return new Response('OK', { status: 200 })
+            }
+
+            // 🎯 如果状态是 published（免审用户），发送已发布通知
+            if (video.status === 'published') {
+              console.log(`[WorkerCallback] 频道同步免审用户，状态为 published，发送已发布通知`)
+              if (messageId && messageId > 0) await deleteTelegramMessage(chatId, messageId)
+
+              const videoCreatedAt = new Date(video.created_at).getTime()
+              const oneHourAgo = Date.now() - 60 * 60 * 1000
+              const isRescueScript = !messageId && videoCreatedAt < oneHourAgo
+
+              if (!isRescueScript) {
+                await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新视频，已自动发布。`)
+              }
+              return new Response('OK', { status: 200 })
+            }
           }
 
           // 🎯 如果视频状态还是 processing，不要显示"已就绪"菜单

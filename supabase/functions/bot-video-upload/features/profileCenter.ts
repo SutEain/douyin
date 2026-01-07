@@ -1031,7 +1031,11 @@ export async function handleListChannels(chatId: number, messageId?: number) {
         if (c.is_sea) attrs.push('🌏 东南亚')
         const attrText = attrs.length > 0 ? ` [${attrs.join(' | ')}]` : ''
 
-        text += `• <b>${c.title}</b> (${c.sync_enabled ? '✅ 同步中' : '⏸ 已暂停'})${attrText}\n`
+        const blockedKeywords = c.blocked_keywords || []
+        const keywordCount = blockedKeywords.length
+        const keywordText = keywordCount > 0 ? ` 🚫屏蔽词(${keywordCount})` : ''
+
+        text += `• <b>${c.title}</b> (${c.sync_enabled ? '✅ 同步中' : '⏸ 已暂停'})${attrText}${keywordText}\n`
 
         keyboard.push([
           { text: `🗑 解绑: ${c.title}`, callback_data: `channel_unbind:${c.id}` },
@@ -1048,6 +1052,12 @@ export async function handleListChannels(chatId: number, messageId?: number) {
           {
             text: c.is_sea ? '✅ 标记东南亚' : '⬜️ 设为东南亚',
             callback_data: `channel_attr_sea:${c.id}`
+          }
+        ])
+        keyboard.push([
+          {
+            text: `🚫 屏蔽词管理 (${keywordCount})`,
+            callback_data: `channel_keywords:${c.id}`
           }
         ])
       })
@@ -1235,5 +1245,206 @@ export async function handleTransactions(chatId: number, messageId?: number) {
   } catch (error) {
     console.error('handleTransactions error:', error)
     await sendMessage(chatId, '❌ 获取账单失败')
+  }
+}
+
+// 🎯 显示频道屏蔽词管理界面
+export async function handleChannelKeywords(chatId: number, messageId: number, channelId: string) {
+  try {
+    const { data: channel } = await supabase
+      .from('bound_channels')
+      .select('title, blocked_keywords')
+      .eq('id', channelId)
+      .single()
+
+    if (!channel) {
+      await editMessage(chatId, messageId, '❌ 频道不存在', {
+        reply_markup: {
+          inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'profile_channels' }]]
+        }
+      })
+      return
+    }
+
+    const keywords = channel.blocked_keywords || []
+    let text = `🚫 <b>屏蔽词管理</b>\n\n`
+    text += `频道：<b>${channel.title}</b>\n\n`
+
+    if (keywords.length === 0) {
+      text += `当前没有设置屏蔽词。\n\n`
+      text += `💡 <b>使用方法：</b>\n`
+      text += `1. 点击「➕ 添加屏蔽词」\n`
+      text += `2. 发送要屏蔽的关键词（多个词用空格分隔）\n`
+      text += `3. 包含这些词的消息将不会被搬运`
+    } else {
+      text += `当前屏蔽词 (${keywords.length}个)：\n`
+      keywords.forEach((kw: string, idx: number) => {
+        text += `${idx + 1}. <code>${kw}</code>\n`
+      })
+      text += `\n💡 包含这些词的消息将不会被搬运`
+    }
+
+    const keyboard: any[][] = []
+    keyboard.push([{ text: '➕ 添加屏蔽词', callback_data: `channel_keyword_add:${channelId}` }])
+    if (keywords.length > 0) {
+      keyboard.push([
+        { text: '🗑️ 删除屏蔽词', callback_data: `channel_keyword_delete:${channelId}` }
+      ])
+      keyboard.push([{ text: '🗑️ 清空所有', callback_data: `channel_keyword_clear:${channelId}` }])
+    }
+    keyboard.push([{ text: '⬅️ 返回频道列表', callback_data: 'profile_channels' }])
+
+    await editMessage(chatId, messageId, text, {
+      reply_markup: { inline_keyboard: keyboard },
+      parse_mode: 'HTML'
+    })
+  } catch (error) {
+    console.error('handleChannelKeywords error:', error)
+    await editMessage(chatId, messageId, '❌ 获取屏蔽词失败', {
+      reply_markup: {
+        inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'profile_channels' }]]
+      }
+    })
+  }
+}
+
+// 🎯 处理添加屏蔽词
+export async function handleChannelKeywordAdd(
+  chatId: number,
+  messageId: number,
+  channelId: string
+) {
+  try {
+    const { updateUserState } = await import('../state.ts')
+    await updateUserState(chatId, {
+      state: 'waiting_channel_keyword_add',
+      context: { channel_id: channelId },
+      current_message_id: messageId
+    })
+
+    const text =
+      `➕ <b>添加屏蔽词</b>\n\n` +
+      `请发送要添加的屏蔽词。\n\n` +
+      `💡 <b>提示：</b>\n` +
+      `• 可以一次添加多个词，用空格分隔\n` +
+      `• 例如：广告 推广 营销\n\n` +
+      `发送 /cancel 可取消`
+
+    await editMessage(chatId, messageId, text, {
+      reply_markup: {
+        inline_keyboard: [[{ text: '⬅️ 取消', callback_data: `channel_keywords:${channelId}` }]]
+      },
+      parse_mode: 'HTML'
+    })
+  } catch (error) {
+    console.error('handleChannelKeywordAdd error:', error)
+  }
+}
+
+// 🎯 处理删除屏蔽词
+export async function handleChannelKeywordDelete(
+  chatId: number,
+  messageId: number,
+  channelId: string
+) {
+  try {
+    const { data: channel } = await supabase
+      .from('bound_channels')
+      .select('title, blocked_keywords')
+      .eq('id', channelId)
+      .single()
+
+    if (!channel) {
+      await editMessage(chatId, messageId, '❌ 频道不存在', {
+        reply_markup: {
+          inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'profile_channels' }]]
+        }
+      })
+      return
+    }
+
+    const keywords = channel.blocked_keywords || []
+    if (keywords.length === 0) {
+      await handleChannelKeywords(chatId, messageId, channelId)
+      return
+    }
+
+    const keyboard: any[][] = []
+    keywords.forEach((kw: string) => {
+      keyboard.push([
+        {
+          text: `🗑️ ${kw}`,
+          callback_data: `channel_keyword_remove:${channelId}:${encodeURIComponent(kw)}`
+        }
+      ])
+    })
+    keyboard.push([{ text: '⬅️ 返回', callback_data: `channel_keywords:${channelId}` }])
+
+    let text = `🗑️ <b>删除屏蔽词</b>\n\n`
+    text += `请选择要删除的屏蔽词：`
+
+    await editMessage(chatId, messageId, text, {
+      reply_markup: { inline_keyboard: keyboard },
+      parse_mode: 'HTML'
+    })
+  } catch (error) {
+    console.error('handleChannelKeywordDelete error:', error)
+  }
+}
+
+// 🎯 处理移除单个屏蔽词
+export async function handleChannelKeywordRemove(
+  chatId: number,
+  messageId: number,
+  channelId: string,
+  keyword: string
+) {
+  try {
+    const { data: channel } = await supabase
+      .from('bound_channels')
+      .select('blocked_keywords')
+      .eq('id', channelId)
+      .single()
+
+    if (!channel) {
+      await editMessage(chatId, messageId, '❌ 频道不存在', {
+        reply_markup: {
+          inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'profile_channels' }]]
+        }
+      })
+      return
+    }
+
+    const keywords = (channel.blocked_keywords || []).filter((kw: string) => kw !== keyword)
+
+    await supabase.from('bound_channels').update({ blocked_keywords: keywords }).eq('id', channelId)
+
+    await handleChannelKeywords(chatId, messageId, channelId)
+  } catch (error) {
+    console.error('handleChannelKeywordRemove error:', error)
+    await editMessage(chatId, messageId, '❌ 删除失败', {
+      reply_markup: {
+        inline_keyboard: [[{ text: '⬅️ 返回', callback_data: `channel_keywords:${channelId}` }]]
+      }
+    })
+  }
+}
+
+// 🎯 处理清空所有屏蔽词
+export async function handleChannelKeywordClear(
+  chatId: number,
+  messageId: number,
+  channelId: string
+) {
+  try {
+    await supabase.from('bound_channels').update({ blocked_keywords: [] }).eq('id', channelId)
+    await handleChannelKeywords(chatId, messageId, channelId)
+  } catch (error) {
+    console.error('handleChannelKeywordClear error:', error)
+    await editMessage(chatId, messageId, '❌ 清空失败', {
+      reply_markup: {
+        inline_keyboard: [[{ text: '⬅️ 返回', callback_data: `channel_keywords:${channelId}` }]]
+      }
+    })
   }
 }
