@@ -56,10 +56,11 @@
             @click="togglePlay(slot)"
           />
 
-          <!-- 自定义 poster 层：视频加载时显示缩略图 -->
+          <!-- 自定义 poster 层：视频加载时显示缩略图，确保覆盖 Video 占位符 -->
           <div
-            v-if="slot.posterUrl && !slot.isPlaying"
+            v-if="slot.posterUrl"
             class="video-poster"
+            :class="{ 'poster-hidden': slot.isPlaying }"
             :style="{
               backgroundImage: `url(${slot.posterUrl})`,
               backgroundSize: getSlotVideoFit(slot) === 'cover' ? 'cover' : 'contain'
@@ -732,6 +733,8 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
       oldHls.destroy()
       hlsInstances.delete(slot.key)
     }
+    // 🎯 先设置 poster，再清空 src，避免显示 Video 占位符
+    video.poster = ''
     video.removeAttribute('src')
     video.load()
     slot.posterUrl = ''
@@ -742,9 +745,15 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
   const url = item.video?.play_addr?.url_list?.[0]
   const poster = item.video?.cover?.url_list?.[0] || ''
 
-  // 🎯 设置 poster URL 到 slot 状态
-  slot.posterUrl = buildCdnUrl(poster)
+  // 🎯 立即设置 poster URL（在切换视频源之前），避免显示 Video 占位符
+  const posterUrl = buildCdnUrl(poster)
+  slot.posterUrl = posterUrl
   slot.isPlaying = false
+
+  // 🎯 立即设置 video 元素的 poster 属性，确保切换时立即显示封面
+  if (posterUrl) {
+    video.poster = posterUrl
+  }
 
   if (!url) {
     console.warn(`${DEBUG_PREFIX} source:empty`, { slot: slot.role, key: slot.key, idx })
@@ -786,10 +795,6 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
         }
       } else {
         video.src = resolvedUrl
-      }
-
-      if (poster) {
-        video.poster = poster
       }
       // 非 current 只预加载元数据，减少无谓缓冲
       if (slot.role !== 'current') {
@@ -1909,6 +1914,18 @@ defineExpose({
     width: 100%;
     height: 100%;
     object-fit: contain;
+    background-color: #000;
+    // 🎯 隐藏浏览器默认的 Video 占位符文字
+    color: transparent;
+    font-size: 0;
+    // 🎯 确保 video 元素在加载时显示黑色背景，而不是默认占位符
+    &::-webkit-media-controls {
+      display: none !important;
+    }
+    // 🎯 隐藏所有浏览器默认控件和占位符
+    &::-webkit-media-controls-enclosure {
+      display: none !important;
+    }
   }
 
   // 🎯 自定义 poster 层：视频加载时显示缩略图
@@ -1921,8 +1938,16 @@ defineExpose({
     background-position: center;
     background-repeat: no-repeat;
     background-color: #000;
-    z-index: 1;
+    z-index: 2;
     pointer-events: none;
+    // 🎯 确保 poster 层在视频加载时始终显示，播放时淡出
+    transition: opacity 0.2s ease-out;
+    opacity: 1;
+
+    &.poster-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
   }
 }
 
