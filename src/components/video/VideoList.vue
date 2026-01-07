@@ -739,8 +739,6 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     video.poster = ''
     video.removeAttribute('src')
     video.load()
-    // 🎯 移除 playing 类，隐藏 video 元素
-    video.classList.remove('playing')
     slot.posterUrl = ''
     slot.isPlaying = false
     return
@@ -771,8 +769,6 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
       // 🎯 关键修复：在切换视频源之前，先暂停并确保 poster 显示
       video.pause()
       slot.isPlaying = false
-      // 🎯 移除 playing 类，隐藏 video 元素，彻底删除 Video 占位符
-      video.classList.remove('playing')
 
       // 销毁旧的 HLS 实例
       const oldHls = hlsInstances.get(slot.key)
@@ -1632,12 +1628,8 @@ function onPlay(slot: SlotState) {
 
 // 🎯 视频真正开始播放（有画面输出）
 function onPlaying(slot: SlotState) {
-  // 🎯 视频真正播放时，隐藏 poster 并显示 video 元素
+  // 🎯 视频真正播放时，隐藏 poster 层（此时 video 元素已经有画面，不需要遮罩了）
   slot.isPlaying = true
-  const video = slotRefs.get(slot.key)
-  if (video) {
-    video.classList.add('playing')
-  }
   // 🎯 同步倍速到“当前视频”
   if (slot.role === 'current') {
     applyPlaybackRate(playbackRate.value)
@@ -1952,19 +1944,10 @@ defineExpose({
     background-color: #000;
     position: relative;
     z-index: 0;
-    // 🎯 关键：直接隐藏 video 元素，直到视频真正播放
-    opacity: 0;
-    visibility: hidden;
-    // 🎯 当视频真正播放时，才显示 video 元素
-    &.playing {
-      opacity: 1;
-      visibility: visible;
-    }
-    // 🎯 彻底隐藏浏览器默认的 Video 占位符文字
-    color: transparent !important;
+    // 🎯 彻底删除 Video 文字：设置字体大小为 0，颜色透明
     font-size: 0 !important;
+    color: transparent !important;
     line-height: 0 !important;
-    text-indent: -9999px !important;
     // 🎯 确保 video 元素在加载时显示黑色背景，而不是默认占位符
     &::-webkit-media-controls {
       display: none !important;
@@ -1975,7 +1958,7 @@ defineExpose({
     }
   }
 
-  // 🎯 自定义 poster 层：完全覆盖 video 元素，彻底隐藏 Video 占位符
+  // 🎯 完全覆盖层：彻底删除 Video 文字，显示封面图或黑色背景
   .video-poster {
     position: absolute;
     top: 0;
@@ -1985,15 +1968,16 @@ defineExpose({
     background-position: center;
     background-repeat: no-repeat;
     background-color: #000;
-    z-index: 9999; // 🎯 极高的 z-index，确保完全覆盖 video 元素和所有占位符
+    z-index: 99999; // 🎯 极高的 z-index，确保完全覆盖 video 元素和所有内容（包括 Video 文字）
     pointer-events: none;
     // 🎯 确保 poster 层在视频加载时始终显示，播放时淡出
     transition: opacity 0.15s ease-out;
     opacity: 1;
-    // 🎯 关键：使用 will-change 优化，确保渲染优先级最高
-    will-change: opacity;
-    // 🎯 强制覆盖，即使 video 元素有任何内容也看不到
+    // 🎯 强制 GPU 渲染，确保在最上层
     transform: translateZ(0);
+    will-change: opacity;
+    // 🎯 关键：完全覆盖，即使 video 元素有任何文字也看不到
+    overflow: hidden;
 
     &.poster-hidden {
       opacity: 0;
