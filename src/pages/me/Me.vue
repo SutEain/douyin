@@ -369,10 +369,29 @@ const isBrowserEnv = computed(() => {
     return true
   }
 
+  // 🎯 优先检查 URL 中是否有 Telegram WebApp 数据（最可靠的标识）
+  const hasTgData =
+    window.location.href.includes('tgWebAppData') ||
+    window.location.hash.includes('tgWebAppData') ||
+    window.location.search.includes('tgWebAppData')
+
+  if (hasTgData) {
+    return false // 有 Telegram 数据，不是浏览器环境
+  }
+
+  // 🎯 检查 User Agent
   const uaTelegram = /Telegram/i.test(navigator.userAgent)
+  if (uaTelegram) {
+    return false // Telegram User Agent，不是浏览器环境
+  }
+
+  // 🎯 检查 Referrer
   const refTelegram = /t\.me|telegram\.org|telegram\.me|web\.telegram\.org/i.test(
     document.referrer || ''
   )
+  if (refTelegram) {
+    return false // Telegram Referrer，不是浏览器环境
+  }
 
   // 🎯 检查是否是真实的 Telegram WebApp（排除降级对象）
   const tgWebApp = window.Telegram?.WebApp
@@ -380,15 +399,15 @@ const isBrowserEnv = computed(() => {
     tgWebApp &&
     tgWebApp.version !== 'fallback' &&
     tgWebApp.platform !== 'unknown' &&
-    tgWebApp.initData // 真实的 Telegram WebApp 会有 initData
+    tgWebApp.initData && // 真实的 Telegram WebApp 会有 initData
+    tgWebApp.initData.length > 0 // 确保 initData 不为空
 
-  const hasTgData =
-    window.location.href.includes('tgWebAppData') ||
-    window.location.hash.includes('tgWebAppData') ||
-    window.location.search.includes('tgWebAppData')
+  if (hasRealTelegramObj) {
+    return false // 有真实的 Telegram WebApp 对象，不是浏览器环境
+  }
 
-  // 如果完全没有 Telegram 相关标识，认为是浏览器环境
-  return !hasTgData && !uaTelegram && !refTelegram && !hasRealTelegramObj
+  // 🎯 如果以上都不满足，认为是浏览器环境
+  return true
 })
 
 // ========== State ==========
@@ -742,8 +761,60 @@ function initBrowserLogin() {
     // 仍然尝试加载 Widget，但显示备用方案
   }
 
-  // 🎯 直接创建 Telegram Login Widget script 标签（Telegram 会自动转换为 iframe）
-  // 注意：必须一次性创建完整的 script 标签，包含所有 data-* 属性
+  // 🎯 检查是否已经加载过 Telegram Widget 脚本
+  const existingScript = document.querySelector('script[src*="telegram-widget.js"]')
+  if (existingScript) {
+    console.log('[Me] ✅ Telegram Widget 脚本已存在，直接创建 Widget')
+    createWidgetElement(botUsername)
+    return
+  }
+
+  // 🎯 加载 Telegram Widget 脚本
+  const script = document.createElement('script')
+  script.src = 'https://telegram.org/js/telegram-widget.js?22'
+  script.async = true
+
+  script.onload = () => {
+    console.log('[Me] ✅ Telegram Widget 脚本加载成功')
+    // 等待一下让脚本处理 DOM
+    setTimeout(() => {
+      createWidgetElement(botUsername)
+    }, 100)
+  }
+
+  script.onerror = (error) => {
+    console.error('[Me] ❌ Telegram Widget 脚本加载失败:', error)
+    errorMessage.value = '加载 Telegram 登录组件失败，请检查网络连接'
+    showWidgetFallback.value = true
+  }
+
+  document.head.appendChild(script)
+  console.log('[Me] ✅ Telegram Widget 脚本已添加到 head')
+
+  // 额外检查：3秒后检查是否渲染成功
+  setTimeout(() => {
+    const iframe = widgetContainer.value?.querySelector('iframe')
+    if (!iframe) {
+      console.warn('[Me] ⚠️ 3秒后仍未检测到 Widget iframe')
+      showWidgetFallback.value = true
+    } else {
+      // Widget 加载成功，隐藏备用方案
+      showWidgetFallback.value = false
+    }
+  }, 3000)
+}
+
+// 🎯 创建 Widget 元素
+function createWidgetElement(botUsername: string) {
+  if (!widgetContainer.value) {
+    console.error('[Me] ❌ widgetContainer 为空，无法创建 Widget')
+    return
+  }
+
+  // 清空容器
+  widgetContainer.value.innerHTML = ''
+
+  // 🎯 创建 Telegram Login Widget script 标签（Telegram 会自动转换为 iframe）
   const widget = document.createElement('script')
   widget.async = true
   widget.src = 'https://telegram.org/js/telegram-widget.js?22'
@@ -754,23 +825,31 @@ function initBrowserLogin() {
 
   // 添加加载监听
   widget.onload = () => {
-    console.log('[Me] ✅ Telegram Widget 脚本加载成功')
-    // 等待一下让脚本处理 DOM
+    console.log('[Me] ✅ Widget script 标签加载完成')
+    // 等待一下让 Telegram 脚本处理 DOM
     setTimeout(() => {
       const iframe = widgetContainer.value?.querySelector('iframe')
       if (iframe) {
         console.log('[Me] ✅ Widget iframe 已创建:', iframe)
+        showWidgetFallback.value = false
       } else {
-        console.warn('[Me] ⚠️ Widget 脚本已加载，但未找到 iframe')
-        // 检查是否有其他元素
+        console.warn('[Me] ⚠️ Widget script 已加载，但未找到 iframe')
         console.log('[Me] 容器内容:', widgetContainer.value?.innerHTML)
+        // 再等一会儿
+        setTimeout(() => {
+          const iframe2 = widgetContainer.value?.querySelector('iframe')
+          if (!iframe2) {
+            console.warn('[Me] ⚠️ 仍然未找到 iframe，显示备用方案')
+            showWidgetFallback.value = true
+          }
+        }, 2000)
       }
     }, 500)
   }
 
   widget.onerror = (error) => {
-    console.error('[Me] ❌ Telegram Widget 脚本加载失败:', error)
-    errorMessage.value = '加载 Telegram 登录组件失败，请检查网络连接'
+    console.error('[Me] ❌ Widget script 标签加载失败:', error)
+    showWidgetFallback.value = true
   }
 
   console.log('[Me] 📝 创建 Widget script 标签:', {
@@ -780,34 +859,11 @@ function initBrowserLogin() {
       'data-telegram-login': widget.getAttribute('data-telegram-login'),
       'data-size': widget.getAttribute('data-size'),
       'data-onauth': widget.getAttribute('data-onauth')
-    },
-    container: widgetContainer.value
+    }
   })
 
   widgetContainer.value.appendChild(widget)
   console.log('[Me] ✅ Widget script 已添加到容器')
-
-  // 额外检查：5秒后检查是否渲染成功
-  setTimeout(() => {
-    const iframe = widgetContainer.value?.querySelector('iframe')
-    if (!iframe) {
-      console.error('[Me] ❌ 5秒后仍未检测到 Widget iframe')
-      console.log('[Me] 容器当前内容:', widgetContainer.value?.innerHTML)
-      console.log('[Me] 容器子元素:', widgetContainer.value?.children)
-
-      // 显示备用方案
-      if (!widgetContainer.value?.querySelector('iframe')) {
-        console.log('[Me] 🎯 显示备用登录方案')
-        showWidgetFallback.value = true
-        if (isLocalhost.value) {
-          console.warn('[Me] ⚠️ 本地环境可能无法显示 Widget，建议使用 HTTPS 或部署到生产环境')
-        }
-      }
-    } else {
-      // Widget 加载成功，隐藏备用方案
-      showWidgetFallback.value = false
-    }
-  }, 5000)
 }
 
 // 🎯 浏览器端 Widget 登录 API
@@ -980,8 +1036,24 @@ onUnmounted(() => {
       .telegram-widget-container {
         display: flex;
         justify-content: center;
+        align-items: center;
         min-height: 50px;
         width: 100%;
+        margin-bottom: 20px;
+
+        // 确保 iframe 可见
+        iframe {
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+        }
+
+        // 如果容器为空，显示占位符
+        &:empty::before {
+          content: '正在加载登录组件...';
+          color: rgba(255, 255, 255, 0.5);
+          font-size: 14px;
+        }
       }
 
       .widget-fallback {
