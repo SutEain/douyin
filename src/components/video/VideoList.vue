@@ -56,13 +56,13 @@
             @click="togglePlay(slot)"
           />
 
-          <!-- 自定义 poster 层：视频加载时显示缩略图，确保覆盖 Video 占位符 -->
+          <!-- 自定义 poster 层：完全覆盖 video 元素，隐藏 Video 占位符 -->
           <div
-            v-if="slot.posterUrl"
+            v-if="slot.posterUrl || !slot.isPlaying"
             class="video-poster"
             :class="{ 'poster-hidden': slot.isPlaying }"
             :style="{
-              backgroundImage: `url(${slot.posterUrl})`,
+              backgroundImage: slot.posterUrl ? `url(${slot.posterUrl})` : 'none',
               backgroundSize: getSlotVideoFit(slot) === 'cover' ? 'cover' : 'contain'
             }"
           ></div>
@@ -1935,9 +1935,11 @@ defineExpose({
     object-fit: contain;
     background-color: #000;
     position: relative;
-    // 🎯 隐藏浏览器默认的 Video 占位符文字
-    color: transparent;
-    font-size: 0;
+    // 🎯 彻底隐藏浏览器默认的 Video 占位符文字
+    color: transparent !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    text-indent: -9999px !important;
     // 🎯 确保 video 元素在加载时显示黑色背景，而不是默认占位符
     &::-webkit-media-controls {
       display: none !important;
@@ -1948,7 +1950,7 @@ defineExpose({
     }
   }
 
-  // 🎯 自定义 poster 层：视频加载时显示缩略图
+  // 🎯 自定义 poster 层：完全覆盖 video 元素，隐藏 Video 占位符
   .video-poster {
     position: absolute;
     top: 0;
@@ -1958,13 +1960,11 @@ defineExpose({
     background-position: center;
     background-repeat: no-repeat;
     background-color: #000;
-    z-index: 10; // 🎯 提高 z-index，确保完全覆盖 video 元素
+    z-index: 999; // 🎯 极高的 z-index，确保完全覆盖 video 元素和所有占位符
     pointer-events: none;
     // 🎯 确保 poster 层在视频加载时始终显示，播放时淡出
-    transition: opacity 0.2s ease-out;
+    transition: opacity 0.15s ease-out;
     opacity: 1;
-    // 🎯 关键修复：使用 will-change 优化渲染性能
-    will-change: opacity;
 
     &.poster-hidden {
       opacity: 0;
