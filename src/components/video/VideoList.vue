@@ -45,7 +45,8 @@
             webkit-playsinline
             x5-playsinline
             x5-video-player-type="h5-page"
-            :muted="slot.muted"
+            :muted="true"
+            :autoplay="slot.role === 'current'"
             :style="{ objectFit: getSlotVideoFit(slot) }"
             @play="onPlay(slot)"
             @playing="onPlaying(slot)"
@@ -764,19 +765,11 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
         if (Hls.isSupported()) {
           const hls = new Hls({
             capLevelToPlayerSize: true,
-            autoStartLoad: slot.role === 'current'
+            autoStartLoad: true
           })
           hls.loadSource(resolvedUrl)
           hls.attachMedia(video)
           hlsInstances.set(slot.key, hls)
-
-          // 🎯 核心修复：等索引解析完再起播，解决 HLS 初始化异步导致的播放指令失效
-          if (slot.role === 'current') {
-            hls.once(Hls.Events.MANIFEST_PARSED, () => {
-              console.log(`${DEBUG_PREFIX} HLS 索引解析完成，准备播放`, slot.videoIndex)
-              playCurrent()
-            })
-          }
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = resolvedUrl
         }
@@ -791,30 +784,13 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
       if (slot.role !== 'current') {
         video.preload = 'metadata'
       }
-    } else {
-      // 🎯 关键修复：如果是同一个源（之前预载的），但现在变成了 current，需要启动 HLS 加载
-      if (slot.role === 'current') {
-        const hls = hlsInstances.get(slot.key)
-        if (hls) {
-          console.log(`${DEBUG_PREFIX} 启动预载 HLS 的加载`, {
-            slotKey: slot.key,
-            id: item.aweme_id?.substring(0, 8)
-          })
-          hls.startLoad()
-        }
-      }
     }
 
     if (slot.role === 'current') {
       resetProgressState()
       bindCurrentVideoEvents(video)
-    }
-
-    // 🎯 核心逻辑：如果是 HLS 且是新初始化的，等待事件起播；否则直接起播
-    const isNewHls = !isSameSrc && resolvedUrl.includes('.m3u8') && Hls.isSupported()
-
-    if (!preloadOnly && slot.role === 'current' && !isNewHls) {
-      playCurrent()
+      // 🎯 统一管理：依靠 autoplay 属性，同时手动 play 确保成功率
+      video.play().catch(() => {})
     }
   }
 }

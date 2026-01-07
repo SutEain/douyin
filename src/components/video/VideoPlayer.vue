@@ -8,7 +8,8 @@
     <video
       ref="videoRef"
       :poster="posterUrl"
-      :muted="state.isMuted"
+      muted
+      autoplay
       :style="{ objectFit: videoFit }"
       preload="auto"
       loop
@@ -203,15 +204,6 @@ function initVideo() {
       })
       hls.loadSource(url)
       hls.attachMedia(videoRef.value)
-
-      // 🎯 核心修复：深链进入时，等待 HLS 解析完成自动播放
-      hls.once(Hls.Events.MANIFEST_PARSED, () => {
-        if (props.autoplay) {
-          console.log('[VideoPlayer] HLS 就绪，触发自动播放')
-          play()
-        }
-      })
-
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
           switch (data.type) {
@@ -233,12 +225,10 @@ function initVideo() {
     } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
       // 原生支持 (Safari)
       videoRef.value.src = url
-      if (props.autoplay) play()
     }
   } else {
     // 普通 mp4
     videoRef.value.src = url
-    if (props.autoplay) play()
   }
 }
 

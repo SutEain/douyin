@@ -71,7 +71,10 @@ const vIsCanPlay = {
             if (Hls.isSupported()) {
               let hls = hlsInstances.get(el)
               if (hls) hls.destroy()
-              hls = new Hls({ capLevelToPlayerSize: true })
+              hls = new Hls({
+                capLevelToPlayerSize: true,
+                autoStartLoad: true
+              })
               hls.loadSource(url)
               hls.attachMedia(el)
               hlsInstances.set(el, hls)
@@ -82,7 +85,7 @@ const vIsCanPlay = {
             el.src = url
           }
 
-          el.play()
+          el.play().catch(() => {})
           playingEl.value = el
           // 🎯 当前视频默认倍速 1.0（仅对当前视频生效）
           try {
@@ -198,7 +201,8 @@ function onAvatarError(e) {
             >
               <div class="video-wrapper" v-if="i % 9 === 0">
                 <video
-                  :muted="isMuted"
+                  muted
+                  autoplay
                   preload
                   loop
                   x5-video-player-type="h5-page"

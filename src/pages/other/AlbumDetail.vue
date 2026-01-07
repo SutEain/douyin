@@ -18,6 +18,9 @@
               loop
               muted
               playsinline
+              webkit-playsinline
+              x5-playsinline
+              x5-video-player-type="h5-page"
             />
             <!-- 🖼️ 图片类型 -->
             <img v-else :src="_checkImgUrl(item.info_list?.[0]?.url)" alt="" />
@@ -399,7 +402,10 @@ const vIsCanPlay = {
     if (!url) return
     if (url.includes('.m3u8')) {
       if (Hls.isSupported()) {
-        const hls = new Hls({ capLevelToPlayerSize: true })
+        const hls = new Hls({
+          capLevelToPlayerSize: true,
+          autoStartLoad: true
+        })
         hls.loadSource(url)
         hls.attachMedia(el)
         hlsInstances.set(el, hls)
@@ -409,6 +415,7 @@ const vIsCanPlay = {
     } else {
       el.src = url
     }
+    el.play().catch(() => {})
   },
   unmounted(el) {
     const hls = hlsInstances.get(el)
