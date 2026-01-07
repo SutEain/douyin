@@ -47,15 +47,50 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 const s3 = new S3Client({
   endpoint: R2_ENDPOINT,
   region: 'auto',
-  credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY }
+  credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
+  // 🎯 增加超时设置，防止网络挂死
+  requestHandler: {
+    connectionTimeout: 30000,
+    socketTimeout: 30000
+  }
 })
 
 const TEMP_DIR = path.join(os.tmpdir(), 'hls-processor')
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR)
 
+// --- 日志美化助手 ---
+function formatSize(bytes) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+function getTS() {
+  return new Date().toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+function logger(workerId, msg, type = 'info') {
+  const icon = {
+    info: '💡',
+    start: '📦',
+    download: '⏳',
+    slice: '✂️',
+    upload: '☁️',
+    db: '💾',
+    clean: '🗑️',
+    success: '✅',
+    error: '💥',
+    wait: '😴'
+  }[type]
+  console.log(`[${getTS()}][W${workerId}] ${icon} ${msg}`)
+}
+
 async function main() {
   console.log('------------------------------------------------------------')
   console.log(`🚀 HLS 高可靠处理器启动 | 并发: ${CONCURRENCY} | 上传线程: ${UPLOAD_THREADS}`)
+  console.log(`📂 临时目录: ${TEMP_DIR}`)
   console.log('------------------------------------------------------------')
 
   const workers = Array(CONCURRENCY)
@@ -90,19 +125,21 @@ async function startWorker(workerId) {
         .limit(1)
         .maybeSingle()
       if (!fallback) {
-        console.log(`[W${workerId}] 😴 暂无任务，休息 30s...`)
+        logger(workerId, '暂无待处理任务，休息 30s...', 'wait')
         await sleep(30000)
         continue
       }
       try {
         await processVideo(fallback, workerId)
       } catch (e) {
+        logger(workerId, `视频处理异常: ${e.message}`, 'error')
         await sleep(5000)
       }
     } else {
       try {
         await processVideo(video, workerId)
       } catch (e) {
+        logger(workerId, `视频处理异常: ${e.message}`, 'error')
         await sleep(5000)
       }
     }
@@ -111,7 +148,8 @@ async function startWorker(workerId) {
 
 async function processVideo(video, workerId) {
   const { id, play_url } = video
-  console.log(`[W${workerId}] 📦 任务开始: ${id}`)
+  const startTime = Date.now()
+  logger(workerId, `任务开始: ${id}`, 'start')
 
   // 1. 路径解析
   let relativePath = ''
@@ -128,28 +166,56 @@ async function processVideo(video, workerId) {
   const outputFolder = path.join(TEMP_DIR, `${id}_out`)
   if (!fs.existsSync(outputFolder)) fs.mkdirSync(outputFolder)
 
+  let stageTime = Date.now()
   try {
     // 2. 下载原片
-    console.log(`[W${workerId}] ⏳ 下载中: ${relativePath}`)
-    const { Body } = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: relativePath }))
+    const { Body, ContentLength } = await s3.send(
+      new GetObjectCommand({ Bucket: R2_BUCKET, Key: relativePath })
+    )
+    const totalBytes = parseInt(ContentLength || '0')
+    logger(workerId, `下载原片: ${relativePath} (${formatSize(totalBytes)})`, 'download')
+
     const writeStream = fs.createWriteStream(localMp4)
-    // @ts-ignore
-    await Body.pipe(writeStream)
+    let downloadedBytes = 0
+    let lastLogTime = Date.now()
+
+    // 🎯 优化：使用流式下载并手动计算进度
     await new Promise((res, rej) => {
+      // @ts-ignore
+      Body.on('data', (chunk) => {
+        downloadedBytes += chunk.length
+        const now = Date.now()
+        if (now - lastLogTime > 5000) {
+          const percent = totalBytes > 0 ? ((downloadedBytes / totalBytes) * 100).toFixed(1) : '?'
+          logger(workerId, `下载进度: ${percent}% (${formatSize(downloadedBytes)})`, 'download')
+          lastLogTime = now
+        }
+      })
+      // @ts-ignore
+      Body.pipe(writeStream)
       writeStream.on('finish', res)
       writeStream.on('error', rej)
+      // @ts-ignore
+      Body.on('error', rej)
     })
+    const downloadTime = ((Date.now() - stageTime) / 1000).toFixed(1)
+    stageTime = Date.now()
 
     // 3. 极速切片
-    console.log(`[W${workerId}] ✂️ 切片中...`)
+    logger(workerId, `FFmpeg 切片开始...`, 'slice')
+    // 🎯 增加 ffmpeg 超时保护，防止异常视频导致进程挂死
     await execPromise(
-      `ffmpeg -i "${localMp4}" -c copy -hls_time 5 -hls_list_size 0 -f hls "${path.join(outputFolder, 'index.m3u8')}"`
+      `ffmpeg -y -i "${localMp4}" -c copy -hls_time 5 -hls_list_size 0 -f hls "${path.join(outputFolder, 'index.m3u8')}"`,
+      { timeout: 300000 } // 5 分钟超时
     )
+    const sliceTime = ((Date.now() - stageTime) / 1000).toFixed(1)
+    stageTime = Date.now()
 
     // 4. 并发上传切片 (Buffer 模式 + 重试逻辑)
     const files = fs.readdirSync(outputFolder)
-    console.log(`[W${workerId}] ☁️ 上传中 (${files.length} 个文件)...`)
+    logger(workerId, `并发上传切片 (共 ${files.length} 个文件)...`, 'upload')
 
+    let uploadedCount = 0
     for (let i = 0; i < files.length; i += UPLOAD_THREADS) {
       const chunk = files.slice(i, i + UPLOAD_THREADS)
       await Promise.all(
@@ -170,6 +236,7 @@ async function processVideo(video, workerId) {
                   CacheControl: 'public, max-age=31536000'
                 })
               )
+              uploadedCount++
               break
             } catch (err) {
               attempt++
@@ -179,9 +246,17 @@ async function processVideo(video, workerId) {
           }
         })
       )
+      // 每上传 50 个文件打一次日志
+      if (uploadedCount % 50 === 0 || uploadedCount === files.length) {
+        const percent = ((uploadedCount / files.length) * 100).toFixed(1)
+        logger(workerId, `上传进度: ${percent}% (${uploadedCount}/${files.length})`, 'upload')
+      }
     }
+    const uploadTime = ((Date.now() - stageTime) / 1000).toFixed(1)
+    stageTime = Date.now()
 
     // 5. 更新数据库
+    logger(workerId, `同步数据库状态...`, 'db')
     const newUrl = `/${folder}/${baseName}/index.m3u8`
     const { error: dbErr } = await supabase
       .from('videos')
@@ -190,10 +265,15 @@ async function processVideo(video, workerId) {
     if (dbErr) throw dbErr
 
     // 6. 安全清理 R2 原片
-    console.log(`[W${workerId}] 🗑️ 清理 R2 原文件`)
+    logger(workerId, `清理 R2 原文件 (MP4)`, 'clean')
     await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: relativePath })).catch(() => {})
 
-    console.log(`[W${workerId}] ✅ 任务完成: ${id}`)
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1)
+    logger(
+      workerId,
+      `任务成功! 耗时: ${totalTime}s (下载:${downloadTime}s, 切片:${sliceTime}s, 上传:${uploadTime}s)`,
+      'success'
+    )
   } finally {
     // 7. 清理本地环境
     if (fs.existsSync(localMp4)) fs.unlinkSync(localMp4)

@@ -39,6 +39,7 @@
           <!-- 视频元素 -->
           <video
             :ref="setSlotRef(slot.key)"
+            :poster="slot.posterUrl"
             preload="auto"
             loop
             playsinline
@@ -47,7 +48,7 @@
             x5-video-player-type="h5-page"
             :muted="true"
             :autoplay="slot.role === 'current'"
-            :style="{ objectFit: getSlotVideoFit(slot) }"
+            :style="{ objectFit: getSlotVideoFit(slot), backgroundColor: '#000' }"
             @play="onPlay(slot)"
             @playing="onPlaying(slot)"
             @pause="onPause(slot)"
@@ -770,6 +771,16 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
           hls.loadSource(resolvedUrl)
           hls.attachMedia(video)
           hlsInstances.set(slot.key, hls)
+
+          // 🎯 HLS 视频：监听第一个片段加载完成，确保有画面输出后再隐藏 poster
+          hls.once(Hls.Events.FRAG_LOADED, () => {
+            // 延迟一帧确保画面已渲染
+            requestAnimationFrame(() => {
+              if (slot.role === 'current' && !video.paused) {
+                slot.isPlaying = true
+              }
+            })
+          })
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = resolvedUrl
         }

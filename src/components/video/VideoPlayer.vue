@@ -10,7 +10,7 @@
       :poster="posterUrl"
       muted
       autoplay
-      :style="{ objectFit: videoFit }"
+      :style="{ objectFit: videoFit, backgroundColor: '#000' }"
       preload="auto"
       loop
       playsinline
@@ -204,6 +204,18 @@ function initVideo() {
       })
       hls.loadSource(url)
       hls.attachMedia(videoRef.value)
+
+      // 🎯 HLS 视频：监听第一个片段加载完成，确保有画面输出
+      hls.once(Hls.Events.FRAG_LOADED, () => {
+        // 延迟一帧确保画面已渲染，此时 poster 会被浏览器自动隐藏
+        requestAnimationFrame(() => {
+          if (videoRef.value && !videoRef.value.paused) {
+            // 强制清除 poster，避免闪烁
+            videoRef.value.poster = ''
+          }
+        })
+      })
+
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
           switch (data.type) {

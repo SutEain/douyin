@@ -54,60 +54,107 @@ app.post('/process', async (req, res) => {
     const isImage = ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext)
     // const isVideo = ['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)
 
-    let uploadPath = localFilePath
-    let contentType = isImage ? `image/${ext === 'jpg' ? 'jpeg' : ext}` : 'video/mp4'
     let playUrl = ''
     let coverUrl = ''
+    let isHls = false
 
     if (isImage) {
-      console.log(`[${video_id}] 识别为图片项，跳过视频优化流程...`)
+      console.log(`[${video_id}] 识别为图片项，直接上传...`)
+      const r2Key = `videos/${video_id}/${file_id}.${ext}`
+      const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: R2_BUCKET,
+          Key: r2Key,
+          Body: fs.createReadStream(localFilePath),
+          ContentType: contentType
+        })
+      )
+      playUrl = `/${r2Key}`
     } else {
-      // 🎯 视频兼容性处理
-      console.log(`[${video_id}] 正在执行兼容性分析...`)
+      // 🎬 视频转 HLS
+      console.log(`[${video_id}] 正在执行 HLS 切片转换...`)
+      const hlsOutputDir = `${localFilePath}_hls`
+      if (!fs.existsSync(hlsOutputDir)) fs.mkdirSync(hlsOutputDir)
+
       try {
-        const probeJson = execSync(
-          `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,codec_tag_string -of json "${localFilePath}"`
-        ).toString()
-        const vStream = JSON.parse(probeJson).streams[0]
-
-        if (vStream && vStream.codec_name) {
-          let ffmpegArgs = `-c copy -movflags +faststart`
-          const codecName = (vStream.codec_name || '').toLowerCase()
-          const codecTag = (vStream.codec_tag_string || '').toLowerCase()
-
-          if (codecName === 'hevc' && codecTag === 'hev1') {
-            console.log(`[${video_id}] 修正苹果不兼容标签 (hev1 -> hvc1)...`)
-            ffmpegArgs = `-c copy -tag:v hvc1 -movflags +faststart`
+        // 1. 自动识别并修复苹果 hev1 标签
+        let tagArgs = ''
+        try {
+          const probeJson = execSync(
+            `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,codec_tag_string -of json "${localFilePath}"`
+          ).toString()
+          const vStream = JSON.parse(probeJson).streams[0]
+          if (vStream && vStream.codec_name === 'hevc' && vStream.codec_tag_string === 'hev1') {
+            console.log(`[${video_id}] 识别到苹果 hev1 标签，应用修复参数...`)
+            tagArgs = '-tag:v hvc1'
           }
+        } catch (e) {
+          // ignore probe error
+        }
 
-          const optimizedPath = `${localFilePath}.opt.mp4`
-          execSync(`ffmpeg -y -i "${localFilePath}" ${ffmpegArgs} "${optimizedPath}"`, {
+        // 2. 执行切片 (使用 -c copy 极速转换)
+        execSync(
+          `ffmpeg -y -i "${localFilePath}" -c copy ${tagArgs} -hls_time 5 -hls_list_size 0 -f hls "${hlsOutputDir}/index.m3u8"`,
+          {
             stdio: 'ignore'
-          })
-          if (fs.existsSync(optimizedPath)) {
-            uploadPath = optimizedPath
+          }
+        )
+
+        // 3. 上传所有 HLS 文件 (并发上传优化)
+        const files = fs.readdirSync(hlsOutputDir)
+        console.log(`[${video_id}] 正在并发上传 HLS 切片 (${files.length} 个文件)...`)
+
+        const UPLOAD_THREADS = 10
+        let uploadedCount = 0
+        for (let i = 0; i < files.length; i += UPLOAD_THREADS) {
+          const chunk = files.slice(i, i + UPLOAD_THREADS)
+          await Promise.all(
+            chunk.map(async (file) => {
+              const filePath = path.join(hlsOutputDir, file)
+              const fileContent = fs.readFileSync(filePath)
+              const r2Key = `videos/${video_id}/${file}`
+
+              await r2.send(
+                new PutObjectCommand({
+                  Bucket: R2_BUCKET,
+                  Key: r2Key,
+                  Body: fileContent,
+                  ContentType: file.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t',
+                  CacheControl: 'public, max-age=31536000'
+                })
+              )
+              uploadedCount++
+            })
+          )
+          // 每 50 个文件打一次进度日志
+          if (uploadedCount % 50 === 0 || uploadedCount === files.length) {
+            const percent = ((uploadedCount / files.length) * 100).toFixed(1)
+            console.log(`[${video_id}] ☁️ 上传进度: ${percent}% (${uploadedCount}/${files.length})`)
           }
         }
+
+        playUrl = `/videos/${video_id}/index.m3u8`
+        isHls = true
+        console.log(`[${video_id}] HLS 上传完成: ${playUrl}`)
+
+        // 清理 HLS 临时文件
+        files.forEach((f) => fs.unlinkSync(path.join(hlsOutputDir, f)))
+        fs.rmdirSync(hlsOutputDir)
       } catch (e) {
-        console.warn(`[${video_id}] ffprobe/ffmpeg 失败，尝试原始上传:`, e.message)
+        console.error(`[${video_id}] HLS 转换失败，回退到原始 MP4 上传:`, e.message)
+        const r2Key = `videos/${video_id}/${file_id}.${ext}`
+        await r2.send(
+          new PutObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: r2Key,
+            Body: fs.createReadStream(localFilePath),
+            ContentType: 'video/mp4'
+          })
+        )
+        playUrl = `/${r2Key}`
       }
     }
-
-    // 🎯 上传主文件到 R2
-    const r2Key = `videos/${video_id}/${file_id}.${ext}`
-    console.log(`[${video_id}] 正在上传到 R2: ${r2Key} (${contentType})`)
-
-    await r2.send(
-      new PutObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: r2Key,
-        Body: fs.createReadStream(uploadPath),
-        ContentType: contentType
-      })
-    )
-
-    playUrl = `${R2_PUBLIC_URL}/${r2Key}`
-    console.log(`[${video_id}] 上传完成: ${playUrl}`)
 
     // 🎯 处理封面图
     if (thumbnail_file_id) {
@@ -128,7 +175,7 @@ app.post('/process', async (req, res) => {
               ContentType: `image/${thumbExt === 'jpg' ? 'jpeg' : thumbExt}`
             })
           )
-          coverUrl = `${R2_PUBLIC_URL}/${thumbR2Key}`
+          coverUrl = `/${thumbR2Key}`
           fs.unlinkSync(localThumbPath)
         }
       } catch (e) {
@@ -137,12 +184,12 @@ app.post('/process', async (req, res) => {
     }
 
     // 🎯 兜底方案：如果还没有封面且是视频，则从视频中截取第一帧
-    if (!coverUrl && !isImage && fs.existsSync(uploadPath)) {
+    if (!coverUrl && !isImage && fs.existsSync(localFilePath)) {
       console.log(`[${video_id}] 正在从视频截取封面...`)
       try {
-        const screenshotPath = `${uploadPath}.thumb.jpg`
+        const screenshotPath = `${localFilePath}.thumb.jpg`
         // 截取第 1 秒的一帧
-        execSync(`ffmpeg -y -i "${uploadPath}" -ss 00:00:01 -vframes 1 "${screenshotPath}"`, {
+        execSync(`ffmpeg -y -i "${localFilePath}" -ss 00:00:01 -vframes 1 "${screenshotPath}"`, {
           stdio: 'ignore'
         })
         if (fs.existsSync(screenshotPath)) {
@@ -155,7 +202,7 @@ app.post('/process', async (req, res) => {
               ContentType: 'image/jpeg'
             })
           )
-          coverUrl = `${R2_PUBLIC_URL}/${thumbR2Key}`
+          coverUrl = `/${thumbR2Key}`
           fs.unlinkSync(screenshotPath)
           console.log(`[${video_id}] 视频截图封面已生成: ${coverUrl}`)
         }
@@ -177,7 +224,8 @@ app.post('/process', async (req, res) => {
     const updatePayload = {
       play_url: playUrl,
       storage_type: 'r2',
-      is_optimized: true
+      is_optimized: true,
+      is_hls: isHls
     }
     if (coverUrl) {
       updatePayload.cover_url = coverUrl
@@ -192,6 +240,7 @@ app.post('/process', async (req, res) => {
       list = list.map((item) => {
         if (item.file_id === file_id) {
           item.play_url = playUrl
+          item.is_hls = isHls
           if (coverUrl) item.cover_url = coverUrl
           changed = true
         }
@@ -209,6 +258,7 @@ app.post('/process', async (req, res) => {
       imgList = imgList.map((item) => {
         if (item.file_id === file_id) {
           item.play_url = playUrl
+          item.is_hls = isHls
           if (coverUrl) item.cover_url = coverUrl
           changed = true
         }
@@ -270,6 +320,7 @@ app.post('/process', async (req, res) => {
           file_id: file_id,
           play_url: playUrl,
           cover_url: coverUrl, // 🎯 传递缩略图 URL
+          is_hls: isHls, // 🎯 告知回调是 HLS 格式
           success: true
         },
         {

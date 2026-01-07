@@ -234,35 +234,72 @@ async function processVideo(video) {
       }
     )
 
-    // 3. 上传到 R2
-    const fileKey = `videos/${videoId}.mp4`
-    console.log(`   - 🔼 正在上传到 R2...`)
+    // 🎯 3. 执行 HLS 切片转换
+    console.log(`   - ✂️ 正在执行 HLS 切片转换...`)
+    const hlsOutputDir = path.join(__dirname, `sync_hls_${videoId}`)
+    if (!fs.existsSync(hlsOutputDir)) fs.mkdirSync(hlsOutputDir)
 
-    if (!fs.existsSync(tempOutput) || fs.statSync(tempOutput).size === 0) {
-      throw new Error('FFmpeg 生成的文件为空')
+    let isHlsSuccess = false
+    try {
+      execSync(
+        `ffmpeg -y -i "${tempOutput}" -c copy -hls_time 5 -hls_list_size 0 -f hls "${hlsOutputDir}/index.m3u8"`,
+        { stdio: 'ignore' }
+      )
+
+      const files = fs.readdirSync(hlsOutputDir)
+      console.log(`   - 🔼 正在上传 HLS 切片 (${files.length} 个文件)...`)
+
+      for (const file of files) {
+        const filePath = path.join(hlsOutputDir, file)
+        const fileContent = fs.readFileSync(filePath)
+        const r2Key = `videos/${videoId}/${file}`
+
+        await r2.send(
+          new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET,
+            Key: r2Key,
+            Body: fileContent,
+            ContentType: file.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t',
+            CacheControl: 'public, max-age=31536000'
+          })
+        )
+      }
+      isHlsSuccess = true
+    } catch (hlsErr) {
+      console.error(`   - ⚠️ HLS 转换或上传失败: ${hlsErr.message}，将退回到 MP4 模式`)
     }
 
-    const fileSize = fs.statSync(tempOutput).size
-    await r2.send(
-      new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET,
-        Key: fileKey,
-        Body: fs.createReadStream(tempOutput),
-        ContentType: 'video/mp4',
-        ContentLength: fileSize // 🎯 修复：显式提供文件大小，解决 "exceeds maximum allowed size" 报错
-      })
-    )
+    let finalPlayUrl = ''
+    if (isHlsSuccess) {
+      finalPlayUrl = `/videos/${videoId}/index.m3u8`
+      console.log(`   ✅ HLS 成功: ${finalPlayUrl}`)
+    } else {
+      // 4. 回退模式：直接上传 MP4
+      const fileKey = `videos/${videoId}.mp4`
+      console.log(`   - 🔼 正在回退上传 MP4 到 R2...`)
+      const fileSize = fs.statSync(tempOutput).size
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET,
+          Key: fileKey,
+          Body: fs.createReadStream(tempOutput),
+          ContentType: 'video/mp4',
+          ContentLength: fileSize
+        })
+      )
+      finalPlayUrl = `${R2_PUBLIC_URL}/${fileKey}`
+      console.log(`   ✅ MP4 成功: ${finalPlayUrl}`)
+    }
 
-    const newUrl = `${R2_PUBLIC_URL}/${fileKey}`
-
-    // 4. 更新数据库 (同时更新封面和视频链接)
+    // 5. 更新数据库 (同时更新封面和视频链接)
     await supabase
       .from('videos')
       .update({
-        play_url: newUrl,
+        play_url: finalPlayUrl,
         cover_url: newCoverUrl,
         storage_type: 'r2',
         is_optimized: true,
+        is_hls: isHlsSuccess,
         status: 'published'
       })
       .eq('id', videoId)
@@ -274,6 +311,17 @@ async function processVideo(video) {
     if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput)
     if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput)
     if (fs.existsSync(tempCover)) fs.unlinkSync(tempCover)
+
+    // 清理 HLS 临时目录
+    const hlsOutputDir = path.join(__dirname, `sync_hls_${videoId}`)
+    if (fs.existsSync(hlsOutputDir)) {
+      try {
+        fs.readdirSync(hlsOutputDir).forEach((f) => fs.unlinkSync(path.join(hlsOutputDir, f)))
+        fs.rmdirSync(hlsOutputDir)
+      } catch (e) {
+        // ignore
+      }
+    }
   }
 }
 
