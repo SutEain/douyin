@@ -1251,14 +1251,33 @@ export async function handleTransactions(chatId: number, messageId?: number) {
 // 🎯 显示频道屏蔽词管理界面
 export async function handleChannelKeywords(chatId: number, messageId: number, channelId: string) {
   try {
-    const { data: channel } = await supabase
-      .from('bound_channels')
-      .select('title, blocked_keywords')
-      .eq('id', channelId)
+    // 1. 先获取用户ID，确保权限检查
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
       .single()
 
-    if (!channel) {
-      await editMessage(chatId, messageId, '❌ 频道不存在', {
+    if (!profile) {
+      await editMessage(chatId, messageId, '❌ 用户不存在', {
+        reply_markup: {
+          inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'profile_channels' }]]
+        }
+      })
+      return
+    }
+
+    // 2. 查询频道，同时检查是否属于当前用户
+    const { data: channel, error } = await supabase
+      .from('bound_channels')
+      .select('title, blocked_keywords, user_id')
+      .eq('id', channelId)
+      .eq('user_id', profile.id)
+      .single()
+
+    if (error || !channel) {
+      console.error('handleChannelKeywords query error:', error)
+      await editMessage(chatId, messageId, '❌ 频道不存在或无权限', {
         reply_markup: {
           inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'profile_channels' }]]
         }
@@ -1400,14 +1419,32 @@ export async function handleChannelKeywordRemove(
   keyword: string
 ) {
   try {
-    const { data: channel } = await supabase
-      .from('bound_channels')
-      .select('blocked_keywords')
-      .eq('id', channelId)
+    // 1. 先获取用户ID，确保权限检查
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
       .single()
 
-    if (!channel) {
-      await editMessage(chatId, messageId, '❌ 频道不存在', {
+    if (!profile) {
+      await editMessage(chatId, messageId, '❌ 用户不存在', {
+        reply_markup: {
+          inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'profile_channels' }]]
+        }
+      })
+      return
+    }
+
+    // 2. 查询频道，同时检查是否属于当前用户
+    const { data: channel, error } = await supabase
+      .from('bound_channels')
+      .select('blocked_keywords, user_id')
+      .eq('id', channelId)
+      .eq('user_id', profile.id)
+      .single()
+
+    if (error || !channel) {
+      await editMessage(chatId, messageId, '❌ 频道不存在或无权限', {
         reply_markup: {
           inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'profile_channels' }]]
         }
@@ -1437,7 +1474,33 @@ export async function handleChannelKeywordClear(
   channelId: string
 ) {
   try {
-    await supabase.from('bound_channels').update({ blocked_keywords: [] }).eq('id', channelId)
+    // 1. 先获取用户ID，确保权限检查
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tg_user_id', chatId)
+      .single()
+
+    if (!profile) {
+      await editMessage(chatId, messageId, '❌ 用户不存在', {
+        reply_markup: {
+          inline_keyboard: [[{ text: '⬅️ 返回', callback_data: 'profile_channels' }]]
+        }
+      })
+      return
+    }
+
+    // 2. 更新频道，同时检查是否属于当前用户
+    const { error } = await supabase
+      .from('bound_channels')
+      .update({ blocked_keywords: [] })
+      .eq('id', channelId)
+      .eq('user_id', profile.id)
+
+    if (error) {
+      throw error
+    }
+
     await handleChannelKeywords(chatId, messageId, channelId)
   } catch (error) {
     console.error('handleChannelKeywordClear error:', error)

@@ -372,15 +372,28 @@ export async function handleText(
     }
 
     try {
-      // 获取当前屏蔽词列表
-      const { data: channel } = await supabase
-        .from('bound_channels')
-        .select('blocked_keywords')
-        .eq('id', channelId)
+      // 1. 先获取用户ID，确保权限检查
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('tg_user_id', chatId)
         .single()
 
-      if (!channel) {
-        await sendMessage(chatId, '❌ 频道不存在')
+      if (!profile) {
+        await sendMessage(chatId, '❌ 用户不存在')
+        return
+      }
+
+      // 2. 获取当前屏蔽词列表，同时检查是否属于当前用户
+      const { data: channel, error } = await supabase
+        .from('bound_channels')
+        .select('blocked_keywords, user_id')
+        .eq('id', channelId)
+        .eq('user_id', profile.id)
+        .single()
+
+      if (error || !channel) {
+        await sendMessage(chatId, '❌ 频道不存在或无权限')
         return
       }
 
