@@ -36,36 +36,38 @@
 
         <!-- 🎯 根据内容类型渲染不同组件 -->
         <template v-else-if="getSlotContentType(slot) === 'video'">
-          <!-- 视频元素 -->
-          <video
-            :ref="setSlotRef(slot.key)"
-            :poster="slot.posterUrl"
-            preload="auto"
-            loop
-            playsinline
-            webkit-playsinline
-            x5-playsinline
-            x5-video-player-type="h5-page"
-            :muted="true"
-            :autoplay="slot.role === 'current'"
-            :style="{ objectFit: getSlotVideoFit(slot), backgroundColor: '#000' }"
-            @play="onPlay(slot)"
-            @playing="onPlaying(slot)"
-            @pause="onPause(slot)"
-            @error="onError(slot)"
-            @click="togglePlay(slot)"
-          />
+          <!-- 🎯 视频容器：确保 poster 层始终覆盖 video -->
+          <div class="video-wrapper">
+            <!-- 视频元素 -->
+            <video
+              :ref="setSlotRef(slot.key)"
+              :poster="slot.posterUrl"
+              preload="auto"
+              loop
+              playsinline
+              webkit-playsinline
+              x5-playsinline
+              x5-video-player-type="h5-page"
+              :muted="true"
+              :autoplay="slot.role === 'current'"
+              :style="{ objectFit: getSlotVideoFit(slot), backgroundColor: '#000' }"
+              @play="onPlay(slot)"
+              @playing="onPlaying(slot)"
+              @pause="onPause(slot)"
+              @error="onError(slot)"
+              @click="togglePlay(slot)"
+            />
 
-          <!-- 自定义 poster 层：完全覆盖 video 元素，隐藏 Video 占位符 -->
-          <div
-            v-if="slot.posterUrl || !slot.isPlaying"
-            class="video-poster"
-            :class="{ 'poster-hidden': slot.isPlaying }"
-            :style="{
-              backgroundImage: slot.posterUrl ? `url(${slot.posterUrl})` : 'none',
-              backgroundSize: getSlotVideoFit(slot) === 'cover' ? 'cover' : 'contain'
-            }"
-          ></div>
+            <!-- 🎯 完全覆盖层：彻底隐藏 Video 占位符，直到视频真正播放 -->
+            <div
+              class="video-poster"
+              :class="{ 'poster-hidden': slot.isPlaying }"
+              :style="{
+                backgroundImage: slot.posterUrl ? `url(${slot.posterUrl})` : 'none',
+                backgroundSize: getSlotVideoFit(slot) === 'cover' ? 'cover' : 'contain'
+              }"
+            ></div>
+          </div>
 
           <!-- 暂停图标 -->
           <div v-if="slot.role === 'current' && isPausedOverlay" class="pause-layer">
@@ -1929,12 +1931,19 @@ defineExpose({
   transform-style: preserve-3d;
   overflow: hidden;
 
+  .video-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
   video {
     width: 100%;
     height: 100%;
     object-fit: contain;
     background-color: #000;
     position: relative;
+    z-index: 0; // 🎯 确保 video 在 poster 层下方
     // 🎯 彻底隐藏浏览器默认的 Video 占位符文字
     color: transparent !important;
     font-size: 0 !important;
@@ -1950,7 +1959,7 @@ defineExpose({
     }
   }
 
-  // 🎯 自定义 poster 层：完全覆盖 video 元素，隐藏 Video 占位符
+  // 🎯 自定义 poster 层：完全覆盖 video 元素，彻底隐藏 Video 占位符
   .video-poster {
     position: absolute;
     top: 0;
@@ -1960,11 +1969,15 @@ defineExpose({
     background-position: center;
     background-repeat: no-repeat;
     background-color: #000;
-    z-index: 999; // 🎯 极高的 z-index，确保完全覆盖 video 元素和所有占位符
+    z-index: 9999; // 🎯 极高的 z-index，确保完全覆盖 video 元素和所有占位符
     pointer-events: none;
     // 🎯 确保 poster 层在视频加载时始终显示，播放时淡出
     transition: opacity 0.15s ease-out;
     opacity: 1;
+    // 🎯 关键：使用 will-change 优化，确保渲染优先级最高
+    will-change: opacity;
+    // 🎯 强制覆盖，即使 video 元素有任何内容也看不到
+    transform: translateZ(0);
 
     &.poster-hidden {
       opacity: 0;
