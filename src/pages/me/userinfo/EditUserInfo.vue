@@ -90,6 +90,14 @@
             </div>
           </div>
         </div>
+
+        <!-- 🎯 退出登录（仅在浏览器环境显示） -->
+        <div v-if="isBrowserEnv" class="logout-section">
+          <div class="logout-btn" @click="handleLogout">
+            <Icon icon="mdi:logout" style="font-size: 18px; margin-right: 8px" />
+            <span>退出登录</span>
+          </div>
+        </div>
         <!-- ✅ 关闭 userinfo -->
       </div>
       <!-- ✅ 关闭 main -->
@@ -127,6 +135,7 @@ import { useNav } from '@/utils/hooks/useNav'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { uploadImage } from '@/utils/upload'
+import { logout } from '@/api/auth'
 
 defineOptions({
   name: 'EditUserInfo'
@@ -326,6 +335,53 @@ function handleLocationClick(e: Event) {
   e.stopPropagation()
   nav('/me/choose-location')
 }
+
+// 🎯 检测是否在浏览器环境（非 Telegram WebApp）
+const isBrowserEnv = computed(() => {
+  const host = window.location.hostname
+  const isDev =
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.endsWith('.test') ||
+    host.endsWith('.local')
+
+  if (isDev) {
+    return true
+  }
+
+  // 生产环境：检查是否有真实的 Telegram WebApp
+  return !window.Telegram?.WebApp || !window.Telegram.WebApp.initData
+})
+
+// 🎯 退出登录
+function handleLogout() {
+  _showConfirmDialog(
+    '确定要退出登录吗？',
+    '退出后需要重新登录才能使用',
+    undefined,
+    async () => {
+      try {
+        _showLoading()
+        await logout()
+        // 清除 store 中的用户信息
+        store.userinfo.uid = ''
+        store.userinfo.nickname = ''
+        store.userinfo.unique_id = ''
+        // 跳转到首页（会自动显示登录页面）
+        nav('/')
+        _notice('已退出登录')
+      } catch (error: any) {
+        console.error('退出登录失败:', error)
+        _notice('退出登录失败: ' + (error.message || '未知错误'))
+      } finally {
+        _hideLoading()
+      }
+    },
+    undefined, // cancelCb
+    '退出',
+    '取消'
+  )
+}
 </script>
 
 <style scoped lang="less">
@@ -468,6 +524,31 @@ function handleLocationClick(e: Event) {
         object-fit: cover;
         border-radius: 4rem;
       }
+    }
+  }
+}
+
+.logout-section {
+  margin-top: 30rem;
+  padding: 0 15rem;
+  padding-bottom: 30rem;
+
+  .logout-btn {
+    height: 54rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(254, 44, 85, 0.1);
+    border: 1px solid rgba(254, 44, 85, 0.3);
+    border-radius: 8rem;
+    color: #fe2c55;
+    font-size: 15rem;
+    cursor: pointer;
+    transition: all 0.3s;
+
+    &:active {
+      background: rgba(254, 44, 85, 0.2);
+      opacity: 0.8;
     }
   }
 }

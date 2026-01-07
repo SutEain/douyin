@@ -1,12 +1,18 @@
 import { supabase } from '../supabaseClient.ts'
+import { checkRateLimit } from './rateLimit.ts'
 
 /**
  * 生成 6 位数验证码（100000-999999）
+ * 使用加密安全的随机数生成器
  */
 function generateVerificationCode(): string {
   const min = 100000
   const max = 999999
-  return String(Math.floor(Math.random() * (max - min + 1)) + min)
+  // 使用 Web Crypto API 生成加密安全的随机数
+  const array = new Uint32Array(1)
+  crypto.getRandomValues(array)
+  const random = array[0] / (0xffffffff + 1)
+  return String(Math.floor(random * (max - min + 1)) + min)
 }
 
 /**
@@ -20,6 +26,21 @@ export async function createVerificationCode(
   tgUserInfo?: { first_name?: string; last_name?: string; username?: string }
 ): Promise<string | null> {
   try {
+    // 🎯 速率限制：每个用户每分钟最多生成 3 个验证码
+    const rateLimitResult = await checkRateLimit(String(tgUserId), 'tg_user_id', 'generate', {
+      maxAttempts: 3,
+      windowMs: 60 * 1000, // 1 分钟
+      lockDurationMs: 5 * 60 * 1000 // 超过限制锁定 5 分钟
+    })
+
+    if (!rateLimitResult.allowed) {
+      const lockedMsg = rateLimitResult.lockedUntil
+        ? `，已锁定至 ${new Date(rateLimitResult.lockedUntil).toLocaleTimeString()}`
+        : ''
+      console.warn(`[Verification] 速率限制：用户 ${tgUserId} 生成验证码过于频繁${lockedMsg}`)
+      return null
+    }
+
     // 生成验证码（确保唯一）
     let code: string
     let attempts = 0
@@ -52,7 +73,7 @@ export async function createVerificationCode(
     expiresAt.setMinutes(expiresAt.getMinutes() + 5)
 
     // 插入验证码记录
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('verification_codes')
       .insert({
         code,
