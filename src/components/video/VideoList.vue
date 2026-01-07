@@ -739,6 +739,8 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     video.poster = ''
     video.removeAttribute('src')
     video.load()
+    // 🎯 移除 playing 类，隐藏 video 元素
+    video.classList.remove('playing')
     slot.posterUrl = ''
     slot.isPlaying = false
     return
@@ -769,6 +771,8 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
       // 🎯 关键修复：在切换视频源之前，先暂停并确保 poster 显示
       video.pause()
       slot.isPlaying = false
+      // 🎯 移除 playing 类，隐藏 video 元素，彻底删除 Video 占位符
+      video.classList.remove('playing')
 
       // 销毁旧的 HLS 实例
       const oldHls = hlsInstances.get(slot.key)
@@ -1628,8 +1632,12 @@ function onPlay(slot: SlotState) {
 
 // 🎯 视频真正开始播放（有画面输出）
 function onPlaying(slot: SlotState) {
-  // 🎯 视频真正播放时，隐藏 poster
+  // 🎯 视频真正播放时，隐藏 poster 并显示 video 元素
   slot.isPlaying = true
+  const video = slotRefs.get(slot.key)
+  if (video) {
+    video.classList.add('playing')
+  }
   // 🎯 同步倍速到“当前视频”
   if (slot.role === 'current') {
     applyPlaybackRate(playbackRate.value)
@@ -1943,7 +1951,15 @@ defineExpose({
     object-fit: contain;
     background-color: #000;
     position: relative;
-    z-index: 0; // 🎯 确保 video 在 poster 层下方
+    z-index: 0;
+    // 🎯 关键：直接隐藏 video 元素，直到视频真正播放
+    opacity: 0;
+    visibility: hidden;
+    // 🎯 当视频真正播放时，才显示 video 元素
+    &.playing {
+      opacity: 1;
+      visibility: visible;
+    }
     // 🎯 彻底隐藏浏览器默认的 Video 占位符文字
     color: transparent !important;
     font-size: 0 !important;
