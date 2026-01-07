@@ -30,7 +30,11 @@ export const LiveRoomEdit = () => {
           return Upload.LIST_IGNORE
         }
 
-        const key = `covers/${crypto.randomUUID()}.${ext}`
+        const key = `covers/${
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : Math.random().toString(36).slice(2) + Date.now().toString(36)
+        }.${ext}`
 
         const { error } = await supabaseClient.storage.from(BUCKET).upload(key, file, {
           upsert: true,

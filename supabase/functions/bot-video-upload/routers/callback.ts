@@ -255,9 +255,11 @@ export async function handleCallback(
 
     // 🎯 红包领取处理
     if (data.startsWith('hb_claim_')) {
-      const packetId = data.replace('hb_claim_', '')
+      const parts = data.replace('hb_claim_', '').split('_')
+      const packetId = parts[0]
+      const userAnswer = parts[1] || '' // 兼容旧红包
       const { handleClaimRedPacket } = await import('../features/redPacket.ts')
-      await handleClaimRedPacket(chatId, messageId, callbackQueryId, packetId, tgUserId)
+      await handleClaimRedPacket(chatId, messageId, callbackQueryId, packetId, tgUserId, userAnswer)
       return
     }
 

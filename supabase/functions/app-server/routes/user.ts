@@ -538,7 +538,10 @@ export async function handleAutoInit(req: Request): Promise<Response> {
 
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: `tg_${tgUser.id}@telegram.placeholder`,
-      password: crypto.randomUUID(),
+      password:
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36),
       email_confirm: true,
       user_metadata: {
         tg_user_id: tgUser.id,

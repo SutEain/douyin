@@ -122,6 +122,17 @@ export async function handleText(
 
   // 🎯 严格控制：群组中仅允许指定指令，其他文本直接忽略
   if (chatId < 0 && !isRedPacketCmd && !isDiceCmd && !isBalanceCmd && !isCleanCmd) {
+    // 检查是否是红包回复
+    if (rawMessage.reply_to_message) {
+      const { handleReplyClaimRedPacket } = await import('../features/redPacket.ts')
+      await handleReplyClaimRedPacket(
+        chatId,
+        userMessageId,
+        rawMessage.reply_to_message.message_id,
+        text,
+        rawMessage.from.id
+      )
+    }
     return
   }
 

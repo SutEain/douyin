@@ -31,9 +31,12 @@
             @canplay="onVideoCanplay(index)"
             @playing="onVideoPlaying(index)"
             @pause="onVideoPause(index)"
+            @timeupdate="onVideoTimeUpdate(index)"
+            @seeked="onVideoSeeked(index)"
             @error="onVideoError(index)"
             @click.stop="toggleVideoPlay(index)"
           />
+
           <!-- 加载中 -->
           <div v-if="videoLoadingStates[index]" class="video-loading">
             <Icon icon="eos-icons:loading" class="loading-icon" />
@@ -155,6 +158,43 @@ function setVideoRef(index: number) {
   }
 }
 
+// 🎯 建立父级进度条同步
+const albumSync = inject<any>('albumSync', null)
+
+if (albumSync) {
+  albumSync.onSeek = (time: number) => {
+    const video = videoRefs.get(currentIndex.value)
+    if (video) {
+      video.currentTime = time
+      if (videoPlayingStates[currentIndex.value]) {
+        video.play().catch(() => {})
+      }
+    }
+  }
+}
+
+// 🎯 视频时间更新
+function onVideoTimeUpdate(index: number) {
+  const video = videoRefs.get(index)
+  if (!video) return
+
+  // 同步给父级进度条
+  if (index === currentIndex.value && albumSync && props.isCurrent) {
+    // 🎯 增加 isCurrent 判断，只有当前激活的 slot 才能同步进度，防止后台 slot 干扰
+    albumSync.currentTime = video.currentTime
+    albumSync.duration = video.duration
+  }
+
+  if (videoLoadingStates[index] && video.currentTime > 0.1) {
+    videoLoadingStates[index] = false
+  }
+}
+
+// 🎯 视频跳转完成
+function onVideoSeeked(index: number) {
+  videoLoadingStates[index] = false
+}
+
 // 🎯 重新尝试播放
 function retryVideo(index: number) {
   const video = videoRefs.get(index)
@@ -257,8 +297,15 @@ async function playVideo(index: number) {
 // 🎯 视频就绪回调
 function onVideoCanplay(index: number) {
   videoLoadingStates[index] = false
-  if (index === currentIndex.value && isParentPlaying.value) {
-    playVideo(index)
+  if (index === currentIndex.value) {
+    const video = videoRefs.get(index)
+    if (video && albumSync) {
+      albumSync.duration = video.duration
+      albumSync.currentTime = video.currentTime
+    }
+    if (isParentPlaying.value) {
+      playVideo(index)
+    }
   }
 }
 
@@ -305,9 +352,23 @@ watch(
 // 🎯 处理当前项切换
 watch(currentIndex, (newIdx) => {
   const media = props.images[newIdx]
+
+  // 重置进度条同步状态
+  if (albumSync) {
+    albumSync.currentTime = 0
+    albumSync.duration = 0
+  }
+
   if (media?.type === 'video' && isParentPlaying.value && props.isCurrent) {
     // 延迟一小会儿，等待 swiper 动画完成或 DOM 就绪
-    setTimeout(() => playVideo(newIdx), 100)
+    setTimeout(() => {
+      const video = videoRefs.get(newIdx)
+      if (video && albumSync) {
+        albumSync.duration = video.duration
+        albumSync.currentTime = video.currentTime
+      }
+      playVideo(newIdx)
+    }, 100)
   } else {
     // 滑走时，如果是视频则暂停
     videoRefs.forEach((v) => v.pause())

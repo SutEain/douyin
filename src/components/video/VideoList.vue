@@ -100,9 +100,9 @@
           @view-detail="openGraphicDetail"
         />
 
-        <!-- 进度条：只在视频类型时显示 -->
+        <!-- 进度条：在视频或合辑类型时显示 -->
         <div
-          v-if="currentContentType === 'video'"
+          v-show="currentContentType === 'video' || (isAlbumLike && albumSync.duration > 0)"
           class="video-progress"
           @pointerdown.stop.prevent="handleProgressStart"
           data-progress="video-progress"
@@ -112,7 +112,8 @@
             v-if="playState.isMoving || playState.showTimeHint"
             data-progress="time"
           >
-            {{ formatTime(playState.currentTime) }} / {{ formatTime(playState.duration) }}
+            {{ formatTime(isAlbumLike ? albumSync.currentTime : playState.currentTime) }} /
+            {{ formatTime(isAlbumLike ? albumSync.duration : playState.duration) }}
           </div>
           <div class="progress-track" :ref="setProgressRef" data-progress="track">
             <div
@@ -198,8 +199,8 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
   }
 
   // 根据内容类型计算完播时长
-  if (contentType === 'image' || contentType === 'album') {
-    // 🎯 图片/相册：立即记录完播，且由于 RPC v2 支持，我们只需确保一次性标记
+  if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
+    // 🎯 图片/相册/合集：立即记录完播，且由于 RPC v2 支持，我们只需确保一次性标记
     if (!completedViews.has(item.aweme_id)) {
       recordedViews.add(item.aweme_id)
       completedViews.add(item.aweme_id)
@@ -508,6 +509,12 @@ const inviteLink = computed(() => {
 // 🎯 当前内容类型
 const currentContentType = computed(() => getContentType(currentItem.value))
 
+// 🎯 是否是相册或合集类型（需要同步子组件进度）
+const isAlbumLike = computed(() => {
+  const t = currentContentType.value
+  return t === 'album' || t === 'collection'
+})
+
 // 🎯 倍速播放：默认 1.0，仅对当前视频生效
 const playbackRate = ref<number>(1)
 function getCurrentVideoEl(): HTMLVideoElement | null {
@@ -575,8 +582,21 @@ function handleAlbumComplete(slot: SlotState) {
   }
 }
 
+// 🎯 为合辑视频提供进度条同步机制
+const albumSync = reactive({
+  currentTime: 0,
+  duration: 0,
+  onSeek: null as ((time: number) => void) | null
+})
+
+provide('albumSync', albumSync)
+
 // 进度百分比
 const progressPercent = computed(() => {
+  if (isAlbumLike.value) {
+    if (!albumSync.duration) return 0
+    return Math.min(100, Math.max(0, (albumSync.currentTime / albumSync.duration) * 100))
+  }
   if (!playState.duration || playState.duration <= 0) return 0
   return Math.min(100, Math.max(0, (playState.currentTime / playState.duration) * 100))
 })
@@ -939,11 +959,13 @@ function rotateToNext() {
     emit('loadMore')
   }
 
-  // 🎯 强制记录观看历史（针对图片/相册），防止 playCurrent 未及时执行
+  // 🎯 强制记录观看历史（针对图片/相册/合集），防止 playCurrent 未及时执行
   if (nextItem) {
     const type = getContentType(nextItem)
-    if (type === 'image' || type === 'album') {
-      console.log(`${DEBUG_PREFIX} rotateToNext: 强制记录图片/相册历史`, { id: nextItem.aweme_id })
+    if (type === 'image' || type === 'album' || type === 'collection') {
+      console.log(`${DEBUG_PREFIX} rotateToNext: 强制记录图片/相册/合集历史`, {
+        id: nextItem.aweme_id
+      })
       recordEnterCurrent(nextItem, type)
     }
   }
@@ -1004,12 +1026,12 @@ function rotateToPrev() {
   updateSlotSource(next, true)
   updateSlotSource(prev)
 
-  // 🎯 强制记录观看历史（针对图片/相册）
+  // 🎯 强制记录观看历史（针对图片/相册/合集）
   const currentItem = props.items[currentIndex.value]
   if (currentItem) {
     const type = getContentType(currentItem)
-    if (type === 'image' || type === 'album') {
-      console.log(`${DEBUG_PREFIX} rotateToPrev: 强制记录图片/相册历史`, {
+    if (type === 'image' || type === 'album' || type === 'collection') {
+      console.log(`${DEBUG_PREFIX} rotateToPrev: 强制记录图片/相册/合集历史`, {
         id: currentItem.aweme_id
       })
       recordEnterCurrent(currentItem, type)
@@ -1596,9 +1618,10 @@ let isDragging = false
 let timeHintTimer: number | null = null
 
 function handleProgressStart(e: PointerEvent) {
+  const isAlbum = isAlbumLike.value
   const video = getCurrentVideo()
   const track = progressRef.value
-  if (!video || !track) return
+  if ((!isAlbum && !video) || !track) return
 
   isDragging = true
   playState.isMoving = true
@@ -1608,7 +1631,8 @@ function handleProgressStart(e: PointerEvent) {
     clearTimeout(timeHintTimer)
     timeHintTimer = null
   }
-  video.pause()
+
+  if (!isAlbum && video) video.pause()
 
   updateProgressFromPointer(e, track)
 
@@ -1621,8 +1645,16 @@ function handleProgressStart(e: PointerEvent) {
   const onEnd = () => {
     isDragging = false
     playState.isMoving = false
-    video.currentTime = playState.currentTime
-    video.play().catch(() => {})
+
+    if (isAlbum) {
+      // 🎯 如果是合辑，通知子组件 seek
+      if (albumSync.onSeek) {
+        albumSync.onSeek(albumSync.currentTime)
+      }
+    } else if (video) {
+      video.currentTime = playState.currentTime
+      video.play().catch(() => {})
+    }
 
     // 🎯 松手后延迟隐藏时间提示，避免一闪而逝
     timeHintTimer = window.setTimeout(() => {
@@ -1643,7 +1675,12 @@ function updateProgressFromPointer(e: PointerEvent, track: HTMLElement) {
   const rect = track.getBoundingClientRect()
   const x = e.clientX - rect.left
   const percent = Math.max(0, Math.min(1, x / rect.width))
-  playState.currentTime = percent * playState.duration
+
+  if (isAlbumLike.value) {
+    albumSync.currentTime = percent * albumSync.duration
+  } else {
+    playState.currentTime = percent * playState.duration
+  }
 }
 
 function getCurrentVideo() {
@@ -1771,39 +1808,40 @@ defineExpose({
 // 新的进度条样式
 .video-progress {
   position: absolute;
-  bottom: -15px;
-  left: 5%;
-  right: 5%;
-  z-index: 200; // 超高优先级，确保在最上层
+  bottom: 2px; // 🎯 向上移动一点，确保不被文字挡住，且在屏幕可见范围内
+  left: 0;
+  right: 0;
+  z-index: 1000; // 🎯 绝对置顶，确保在描述文字上方
   pointer-events: auto;
-  padding: 20px 0 20px 0; // 上20px 下10px，增加可拖动区域高度（方便手指点击）
+  padding: 15px 0 10px 0; // 🎯 调整点击区域
 
   .progress-time {
     position: absolute;
-    bottom: 40px; // 向上移，更大空间
+    bottom: 40px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 20px; // 更大的字号
-    font-weight: 600; // 更粗
+    font-size: 20px;
+    font-weight: 600;
     color: white;
     background: rgba(0, 0, 0, 0.75);
-    padding: 8px 18px; // 更大内边距
+    padding: 8px 18px;
     border-radius: 20px;
     white-space: nowrap;
-    z-index: 201; // 确保在最上层
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); // 增加阴影提升对比度
+    z-index: 1001;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   }
 
   .progress-track {
     position: relative;
-    width: 100%;
-    height: 3px;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 2px;
+    width: calc(100% - 30px); // 🎯 留点边距
+    margin: 0 15px;
+    height: 2px; // 🎯 保持细长风格
+    background: rgba(255, 255, 255, 0.2);
     cursor: pointer;
+    overflow: visible; // 🎯 确保圆点不被剪裁
 
     &:hover {
-      height: 4px;
+      height: 3px;
     }
   }
 
@@ -1813,7 +1851,6 @@ defineExpose({
     top: 0;
     height: 100%;
     background: #fe2c55;
-    border-radius: 2px;
     transition: width 0.1s linear;
   }
 
@@ -1822,11 +1859,11 @@ defineExpose({
     top: 50%;
     width: 10px;
     height: 10px;
-    background: #fe2c55;
-    border: 2px solid white;
+    background: white; // 🎯 白色圆点更显眼
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+    opacity: 1; // 🎯 始终显示
   }
 }
 

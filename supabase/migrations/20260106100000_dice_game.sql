@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.dice_rooms (
     total_prize NUMERIC DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    expired_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '10 minutes')
+    expired_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 seconds')
 );
 
 -- 2. 房间参与者表
@@ -180,6 +180,6 @@ $$;
 -- 7. 配置定时任务 (pg_cron)
 SELECT cron.schedule(
     'refund-expired-dice-rooms-job',
-    '*/5 * * * *',
+    '* * * * *',
     $$ SELECT public.refund_expired_dice_rooms() $$
 );

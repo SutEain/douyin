@@ -101,14 +101,18 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
       return
     }
 
-    // 4. 调用 RPC 创建红包
+    // 4. 调用 RPC 创建红包 (先不传 origin_message_id)
+    const { question, answer: verificationAnswer } = generateMathQuestion()
+
     const { data: res, error } = await supabase.rpc('create_group_red_packet', {
       p_sender_id: sender.id,
       p_group_id: chatId,
       p_type: type,
       p_total_amount: amount,
       p_total_count: count,
-      p_target_user_id: targetUserId
+      p_target_user_id: targetUserId,
+      p_verification_answer: verificationAnswer,
+      p_verification_question: question
     })
 
     if (error) throw error
@@ -131,16 +135,20 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
       `${hbTitle}\n` +
       `💰 总金额：<b>${amount}</b> 抖币\n` +
       `⏳ 剩余 <b>${count}</b>/${count} 份\n\n` +
+      `👉 <b>领取方式：回复本消息并输入正确答案</b>\n` +
+      `验证题目：<b>${question}</b>\n\n` +
       `📜 <b>红包规则：</b>\n` +
-      `• 最小限制：平均每份至少 1 抖币\n` +
       `• 退款：24小时内未领完将自动退回余额\n\n` +
       `📢 祝大家：好运连连，万事如意！`
 
-    await sendMessage(chatId, hbText, {
-      reply_markup: {
-        inline_keyboard: [[{ text: '🧧 抢红包', callback_data: `hb_claim_${res.packet_id}` }]]
-      }
-    })
+    const sentMsg = await sendMessage(chatId, hbText)
+    if (sentMsg.ok) {
+      // 更新原始消息 ID
+      await supabase
+        .from('group_red_packets')
+        .update({ origin_message_id: sentMsg.result.message_id })
+        .eq('id', res.packet_id)
+    }
   } catch (err: any) {
     console.error('RedPacket Error:', err)
     await sendMessage(chatId, `❌ 红包发送异常: ${sanitizeError(err.message)}`)
@@ -148,55 +156,82 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
 }
 
 /**
- * 处理抢红包回调
+ * 生成数学题
  */
-export async function handleClaimRedPacket(
+function generateMathQuestion() {
+  const a = Math.floor(Math.random() * 9) + 1
+  const b = Math.floor(Math.random() * 9) + 1
+  return {
+    question: `${a} + ${b} = ?`,
+    answer: String(a + b)
+  }
+}
+
+// 移除不再需要的 generateOptions 函数
+
+/**
+ * 处理回复消息抢红包
+ */
+export async function handleReplyClaimRedPacket(
   chatId: number,
-  messageId: number,
-  callbackQueryId: string,
-  packetId: string,
+  messageId: number, // 回复的消息 ID
+  replyToMessageId: number, // 红包消息的 ID
+  text: string,
   tgUserId: number
 ) {
   try {
-    // 1. 获取抢红包者信息
+    // 1. 获取对应的红包
+    const { data: packet } = await supabase
+      .from('group_red_packets')
+      .select('id, verification_answer, status, remaining_count')
+      .eq('group_id', chatId)
+      .eq('origin_message_id', replyToMessageId)
+      .single()
+
+    if (!packet) return // 不是红包消息，或者没录入 ID
+
+    if (packet.status !== 'active') return
+
+    // 2. 验证答案
+    const userAnswer = text.trim()
+    if (packet.verification_answer && packet.verification_answer !== userAnswer) {
+      // 答案错误，不予理睬或回复错误 (群组里回复太多会很吵，建议不理睬或者只针对第一个对的人发)
+      return
+    }
+
+    // 3. 答案正确，尝试抢包
+    // 这里我们直接复用部分逻辑，但不需要 callbackQueryId
     const { data: user } = await supabase
       .from('profiles')
       .select('id, nickname, is_banned, ban_reason')
       .eq('tg_user_id', tgUserId)
       .single()
 
-    if (!user) {
-      await answerCallbackQuery(callbackQueryId, '❌ 请先在私聊中激活机器人再抢红包哦', true)
-      return
-    }
+    if (!user || user.is_banned) return
 
-    if (user.is_banned) {
-      const reason = user.ban_reason || '由于违反社区规范，您的账号已被封禁。'
-      await answerCallbackQuery(callbackQueryId, `🚫 账号已封禁\n原因: ${reason}`, true)
-      return
-    }
-
-    // 2. 调用 RPC 抢红包
+    // 调用 RPC 抢红包
     const { data: res, error } = await supabase.rpc('claim_group_red_packet', {
-      p_packet_id: packetId,
+      p_packet_id: packet.id,
       p_user_id: user.id
     })
 
-    if (error) throw error
-
-    if (!res.success) {
-      await answerCallbackQuery(callbackQueryId, res.message, true)
+    if (error || !res?.success) {
+      console.log(`[ReplyClaim] 抢包失败: ${res?.message || error?.message}`)
       return
     }
 
-    // 3. 抢成功，通知用户
-    const amount = res.amount
-    await answerCallbackQuery(callbackQueryId, `🎊 恭喜！你抢到了 ${amount} 抖币！`, true)
+    // 4. 抢成功，静默更新红包主消息，不再发送新消息
+    await updateRedPacketMessage(chatId, replyToMessageId, packet.id)
+  } catch (err) {
+    console.error('ReplyClaim Error:', err)
+  }
+}
 
-    // 4. 如果红包领完了，或者有人领了（实时更新），更新消息展示领取情况
-    // 为了体验更好，我们可以每次有人领都尝试更新一下消息（或者只在领完时更新）
-    // 这里我们选择在领完时显示完整列表，平时只更新剩余份数
-
+/**
+ * 抽取出的更新红包消息逻辑
+ */
+async function updateRedPacketMessage(chatId: number, messageId: number, packetId: string) {
+  try {
     const { data: packet } = await supabase
       .from('group_red_packets')
       .select('*, sender:profiles!group_red_packets_sender_id_fkey(nickname)')
@@ -240,21 +275,91 @@ export async function handleClaimRedPacket(
           .join('\n')
     }
 
+    // 💡 保持显示验证题目逻辑
+    let questionText = ''
+    if (packet.status !== 'completed' && packet.verification_question) {
+      questionText = `\n\n验证题目：<b>${packet.verification_question}</b>\n👉 <b>领取方式：回复本消息输入答案</b>`
+    }
+
     const hbText =
       `${hbTitle}\n` +
       `💰 总金额：<b>${packet.total_amount}</b> 抖币\n` +
-      `📊 状态：${statusText}` +
+      `📊 状态：${statusText}${questionText}` +
       `${claimListText}`
 
-    // 如果领完了，移除按钮；没领完，保留按钮
-    const options: any = {}
-    if (packet.status !== 'completed') {
-      options.reply_markup = {
-        inline_keyboard: [[{ text: '🧧 抢红包', callback_data: `hb_claim_${packetId}` }]]
-      }
+    await editMessage(chatId, messageId, hbText)
+  } catch (e) {
+    console.error('Update HB Msg Error:', e)
+  }
+}
+
+/**
+ * 处理抢红包回调 (保留，以防万一或用于老红包)
+ */
+export async function handleClaimRedPacket(
+  chatId: number,
+  messageId: number,
+  callbackQueryId: string,
+  packetId: string,
+  tgUserId: number,
+  userAnswer?: string
+) {
+  try {
+    // 1. 获取抢红包者信息
+    const { data: user } = await supabase
+      .from('profiles')
+      .select('id, nickname, is_banned, ban_reason')
+      .eq('tg_user_id', tgUserId)
+      .single()
+
+    if (!user) {
+      await answerCallbackQuery(callbackQueryId, '❌ 请先在私聊中激活机器人再抢红包哦', true)
+      return
     }
 
-    await editMessage(chatId, messageId, hbText, options)
+    if (user.is_banned) {
+      const reason = user.ban_reason || '由于违反社区规范，您的账号已被封禁。'
+      await answerCallbackQuery(callbackQueryId, `🚫 账号已封禁\n原因: ${reason}`, true)
+      return
+    }
+
+    // 1.1 验证码校验
+    const { data: packet } = await supabase
+      .from('group_red_packets')
+      .select('verification_answer, status, remaining_count')
+      .eq('id', packetId)
+      .single()
+
+    if (!packet) {
+      await answerCallbackQuery(callbackQueryId, '❌ 红包不存在', true)
+      return
+    }
+
+    // 如果红包有验证码且用户提供的不匹配
+    if (packet.verification_answer && packet.verification_answer !== userAnswer) {
+      await answerCallbackQuery(callbackQueryId, '⚠️ 验证码错误，请看清题目再点哦！', true)
+      return
+    }
+
+    // 2. 调用 RPC 抢红包
+    const { data: res, error } = await supabase.rpc('claim_group_red_packet', {
+      p_packet_id: packetId,
+      p_user_id: user.id
+    })
+
+    if (error) throw error
+
+    if (!res.success) {
+      await answerCallbackQuery(callbackQueryId, res.message, true)
+      return
+    }
+
+    // 3. 抢成功，通知用户
+    const amount = res.amount
+    await answerCallbackQuery(callbackQueryId, `🎊 恭喜！你抢到了 ${amount} 抖币！`, true)
+
+    // 4. 更新红包主消息展示领取情况
+    await updateRedPacketMessage(chatId, messageId, packetId)
   } catch (err: any) {
     console.error('Claim RedPacket Error:', err)
     await answerCallbackQuery(callbackQueryId, `❌ 抢红包异常: ${sanitizeError(err.message)}`, true)

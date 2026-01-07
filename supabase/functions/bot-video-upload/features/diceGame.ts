@@ -269,43 +269,46 @@ export async function handleCancelDiceGame(
  */
 async function startRolling(chatId: number, roomId: string) {
   try {
+    // 1. 提前获取房间基础信息，避免中途房间被删或状态改变导致结算崩溃
+    const { data: roomInfo, error: roomError } = await supabase
+      .from('dice_rooms')
+      .select('bet_amount, target_count, owner:profiles!dice_rooms_owner_id_fkey(nickname)')
+      .eq('id', roomId)
+      .single()
+
+    if (roomError || !roomInfo) {
+      throw new Error('无法获取房间信息，可能已被取消')
+    }
+
     const { data: players } = await supabase
       .from('dice_room_players')
       .select('id, user_id, user:profiles!dice_room_players_user_id_fkey(nickname)')
       .eq('room_id', roomId)
       .order('created_at', { ascending: true })
 
-    if (!players) return
+    if (!players || players.length === 0) return
 
-    // 1. 发送一条持久化的“战报看板”
+    // 2. 发送一条持久化的“战报看板”
     const progressMsgRes = await sendMessage(chatId, `🎲 <b>正在依次为玩家掷骰子...</b>`)
     const progressMsgId = progressMsgRes.ok ? progressMsgRes.result.message_id : null
 
     const results: any[] = []
 
     for (const player of players) {
-      // 2. 发送官方骰子 (这个必须是独立消息，无法合并)
-      // 🎯 增加重试机制，如果发送失败不应跳过，而是直接报错触发退款流程
+      // ... 保持原有掷骰子逻辑 ...
       let res = await sendDice(chatId, { emoji: '🎲' })
-      
-      // 如果第一次失败，重试一次
       if (!res.ok) {
-        console.warn(`[Dice] 骰子发送失败，尝试重试: ${player.user?.nickname}`)
-        await new Promise(r => setTimeout(r, 1000))
+        await new Promise((r) => setTimeout(r, 1000))
         res = await sendDice(chatId, { emoji: '🎲' })
       }
-
       if (!res.ok) {
-        throw new Error(`无法为玩家 ${player.user?.nickname || '未知'} 发送骰子，请检查网络或机器人权限`)
+        throw new Error(`无法为玩家 ${player.user?.nickname || '未知'} 发送骰子`)
       }
 
       const value = res.result.dice.value
       results.push({ id: player.id, user_id: player.user_id, name: player.user?.nickname, value })
-
-      // 更新数据库
       await supabase.from('dice_room_players').update({ roll_result: value }).eq('id', player.id)
 
-      // 3. 🎯 核心优化：编辑战报看板，而不是发送新消息
       if (progressMsgId) {
         const currentBoard = results
           .map((r, i) => `${i + 1}. ${escapeHTML(r.name || '玩家')}: <b>${r.value}</b> 点`)
@@ -313,22 +316,15 @@ async function startRolling(chatId: number, roomId: string) {
         const updateText = `🎲 <b>对局进行中...</b>\n\n${currentBoard}\n\n⏳ 正在等待下一位玩家...`
         await editMessage(chatId, progressMsgId, updateText)
       }
-
-      // 缩短延时，加快对局节奏
       await new Promise((r) => setTimeout(r, 1500))
     }
 
-    // 4. 结算逻辑
+    // 4. 结算逻辑 (使用开头获取到的 roomInfo)
     const maxVal = Math.max(...results.map((r) => r.value))
     const winners = results.filter((r) => r.value === maxVal)
 
-    const { data: room } = await supabase
-      .from('dice_rooms')
-      .select('bet_amount, target_count')
-      .eq('id', roomId)
-      .single()
-    const totalPrize = room.bet_amount * room.target_count
-    const commission = Math.floor(totalPrize * 0.05) // 5% 系统抽水
+    const totalPrize = roomInfo.bet_amount * roomInfo.target_count
+    const commission = Math.floor(totalPrize * 0.05)
     const netPrize = totalPrize - commission
     const perWinnerPrize = Math.floor(netPrize / winners.length)
 
@@ -351,7 +347,7 @@ async function startRolling(chatId: number, roomId: string) {
       })
     }
 
-    // 5. 宣布最终结果 (编辑掉那个看板)
+    // 5. 宣布最终结果
     const winnerNames = winners.map((w) => `<b>${escapeHTML(w.name || '玩家')}</b>`).join(', ')
     const scoreBoard = results
       .map((r, i) => {
@@ -369,8 +365,6 @@ async function startRolling(chatId: number, roomId: string) {
 
     if (progressMsgId) {
       await editMessage(chatId, progressMsgId, resultText)
-    } else {
-      await sendMessage(chatId, resultText)
     }
   } catch (err: any) {
     console.error('Rolling Error:', err)
