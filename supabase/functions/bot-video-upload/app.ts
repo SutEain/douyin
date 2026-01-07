@@ -42,65 +42,68 @@ export async function handleRequest(req: Request): Promise<Response> {
       console.log('[BOT-APP] Update received:', JSON.stringify(update).substring(0, 500))
 
       // 🎯 1. 提取用户 ID 进行黑名单检查 (注意：在群组中 chat.id 是群 ID，from.id 才是用户 ID)
-      const userIdToCheck = 
-        update.message?.from?.id || 
-        update.edited_message?.from?.id || 
-        update.callback_query?.from?.id || 
-        update.inline_query?.from?.id;
+      const userIdToCheck =
+        update.message?.from?.id ||
+        update.edited_message?.from?.id ||
+        update.callback_query?.from?.id ||
+        update.inline_query?.from?.id
 
       if (userIdToCheck && update.type !== 'worker_complete') {
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_banned, ban_reason')
           .eq('tg_user_id', userIdToCheck)
-          .maybeSingle();
+          .maybeSingle()
 
         if (profile?.is_banned) {
-          console.log(`[BOT-BAN] 拦截到封禁用户操作: userId=${userIdToCheck}, updateType=${Object.keys(update).find(k => k !== 'update_id')}`);
-          const banReason = profile.ban_reason || '由于违反社区规范，您的账号已被封禁。';
-          const banNotice = `🚫 <b>您的账号已被封禁</b>\n\n原因: ${banReason}\n\n如有疑问，请联系管理员。`;
+          console.log(
+            `[BOT-BAN] 拦截到封禁用户操作: userId=${userIdToCheck}, updateType=${Object.keys(update).find((k) => k !== 'update_id')}`
+          )
+          const banReason = profile.ban_reason || '由于违反社区规范，您的账号已被封禁。'
+          const banNotice = `🚫 <b>您的账号已被封禁</b>\n\n原因: ${banReason}\n\n如有疑问，请联系管理员。`
 
           // 确定发送通知的目标
-          const targetChatId = 
-            update.message?.chat?.id || 
-            update.edited_message?.chat?.id || 
-            update.callback_query?.message?.chat?.id;
+          const targetChatId =
+            update.message?.chat?.id ||
+            update.edited_message?.chat?.id ||
+            update.callback_query?.message?.chat?.id
 
           if ((update.message || update.edited_message) && targetChatId) {
-            const msg = update.message || update.edited_message;
-            const replyOptions = msg.chat.type !== 'private' 
-              ? { reply_to_message_id: msg.message_id } 
-              : {};
-            await sendMessage(targetChatId, banNotice, replyOptions);
+            const msg = update.message || update.edited_message
+            const replyOptions =
+              msg.chat.type !== 'private' ? { reply_to_message_id: msg.message_id } : {}
+            await sendMessage(targetChatId, banNotice, replyOptions)
           } else if (update.callback_query) {
-             // 弹出警告提示框
-             const { answerCallbackQuery } = await import('./telegram.ts');
-             await answerCallbackQuery(update.callback_query.id, {
-               text: `🚫 账号已封禁\n原因: ${banReason}`,
-               show_alert: true
-             });
+            // 弹出警告提示框
+            const { answerCallbackQuery } = await import('./telegram.ts')
+            await answerCallbackQuery(update.callback_query.id, {
+              text: `🚫 账号已封禁\n原因: ${banReason}`,
+              show_alert: true
+            })
           } else if (update.inline_query) {
-             // 对于搜索分享，返回一个告知封禁的单条结果
-             const { TG_BOT_TOKEN } = await import('./env.ts');
-             await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/answerInlineQuery`, {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({
-                 inline_query_id: update.inline_query.id,
-                 results: [{
-                   type: 'article',
-                   id: 'banned',
-                   title: '🚫 您的账号已被封禁',
-                   description: banReason,
-                   input_message_content: {
-                     message_text: '🚫 抱歉，由于违反规范，我暂时无法使用机器人功能。'
-                   }
-                 }],
-                 cache_time: 0
-               })
-             });
+            // 对于搜索分享，返回一个告知封禁的单条结果
+            const { TG_BOT_TOKEN } = await import('./env.ts')
+            await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/answerInlineQuery`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                inline_query_id: update.inline_query.id,
+                results: [
+                  {
+                    type: 'article',
+                    id: 'banned',
+                    title: '🚫 您的账号已被封禁',
+                    description: banReason,
+                    input_message_content: {
+                      message_text: '🚫 抱歉，由于违反规范，我暂时无法使用机器人功能。'
+                    }
+                  }
+                ],
+                cache_time: 0
+              })
+            })
           }
-          return new Response('OK', { status: 200 });
+          return new Response('OK', { status: 200 })
         }
       }
 
@@ -204,6 +207,14 @@ export async function handleRequest(req: Request): Promise<Response> {
             const statusText =
               video.status === 'published' ? '已自动发布' : '已自动搬运并进入待发布状态'
             await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新视频，${statusText}。`)
+            return new Response('OK', { status: 200 })
+          }
+
+          // 🎯 如果视频状态还是 processing，不要显示"已就绪"菜单
+          if (video.status === 'processing') {
+            console.log(
+              `[WorkerCallback] 视频状态仍为 processing，不显示已就绪菜单. videoId=${videoId}`
+            )
             return new Response('OK', { status: 200 })
           }
 
@@ -325,18 +336,49 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         // /start 命令 - 创建用户并显示欢迎消息
         if (message.text && message.text.startsWith('/start')) {
+          const parts = message.text.split(' ')
+          const startParam = parts.length > 1 ? parts[1] : null
+
+          // 🎯 处理 Web 登录验证码生成
+          if (startParam === 'web_login') {
+            // 创建或获取用户 profile（直接使用 message.from 数据，无需额外 API 调用）
+            const profile = await getOrCreateProfile(chatId, message.from)
+
+            if (profile) {
+              const { createVerificationCode } = await import('./services/verification.ts')
+              const code = await createVerificationCode(chatId, message.from)
+
+              if (code) {
+                const loginMessage =
+                  `🔐 <b>Web 登录验证码</b>\n\n` +
+                  `您的验证码是：<code>${code}</code>\n\n` +
+                  `请在网页上输入此验证码完成登录。\n` +
+                  `⏰ 验证码有效期：5 分钟\n\n` +
+                  `💡 提示：验证码仅可使用一次，使用后自动失效。`
+
+                await sendMessage(chatId, loginMessage, {
+                  parse_mode: 'HTML'
+                })
+              } else {
+                await sendMessage(chatId, '❌ 生成验证码失败，请稍后重试')
+              }
+            } else {
+              await sendMessage(chatId, '❌ 账号初始化失败，请稍后重试')
+            }
+            return new Response('OK', { status: 200 })
+          }
+
           // 创建或获取用户 profile（直接使用 message.from 数据，无需额外 API 调用）
           const profile = await getOrCreateProfile(chatId, message.from)
 
           if (profile) {
             // 🎯 处理邀请逻辑 (检查是否有参数 /start 12345)
-            const parts = message.text.split(' ')
-            if (parts.length > 1) {
-              const inviteCode = parts[1]
-              // 必须是新用户才算有效邀请
-              if (/^\d+$/.test(inviteCode) && String(inviteCode) !== String(profile.numeric_id)) {
-                await handleInvitation(profile.id, parseInt(inviteCode))
-              }
+            if (
+              startParam &&
+              /^\d+$/.test(startParam) &&
+              String(startParam) !== String(profile.numeric_id)
+            ) {
+              await handleInvitation(profile.id, parseInt(startParam))
             }
 
             // 1. 先发送底部菜单（Persistent Keyboard） - 仅限私聊

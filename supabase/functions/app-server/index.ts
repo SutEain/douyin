@@ -89,6 +89,10 @@ serve(async (req) => {
       return handleTelegramWidgetLogin(req)
     }
 
+    if (route === '/auth/verify-code' && method === 'POST') {
+      return handleVerifyCodeLogin(req)
+    }
+
     if (route === '/video/my' && method === 'GET') {
       return handleVideoMy(req)
     }
@@ -424,6 +428,192 @@ async function handleTelegramWidgetLogin(req: Request): Promise<Response> {
       username: user.username || `user_${user.id}`,
       nickname: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
       avatar_url: user.photo_url || `https://t.me/i/userpic/320/${user.id}.jpg`
+    },
+    access_token: sessionData.session.access_token,
+    refresh_token: sessionData.session.refresh_token,
+    expires_in: sessionData.session.expires_in || 3600,
+    is_new_user: isNewUser
+  })
+}
+
+// 🎯 处理验证码登录
+async function handleVerifyCodeLogin(req: Request): Promise<Response> {
+  let body: { code?: string }
+  try {
+    body = await req.json()
+  } catch {
+    return errorResponse('Invalid request body', 1, 400)
+  }
+
+  if (!body?.code || !/^\d{6}$/.test(body.code)) {
+    return errorResponse('Invalid verification code', 1, 400)
+  }
+
+  // 验证验证码
+  const { data: codeRecord, error: codeError } = await supabaseAdmin
+    .from('verification_codes')
+    .select('id, tg_user_id, tg_username, tg_first_name, tg_last_name, expires_at, is_used')
+    .eq('code', body.code)
+    .maybeSingle()
+
+  if (codeError || !codeRecord) {
+    return errorResponse('验证码无效', 1, 401)
+  }
+
+  // 检查是否已使用
+  if (codeRecord.is_used) {
+    return errorResponse('验证码已使用', 1, 401)
+  }
+
+  // 检查是否过期
+  const expiresAt = new Date(codeRecord.expires_at)
+  if (expiresAt < new Date()) {
+    return errorResponse('验证码已过期', 1, 401)
+  }
+
+  const tgUserId = codeRecord.tg_user_id
+
+  // 🎯 查询 profile 是否存在
+  const { data: existingProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('id, username, nickname, tg_user_id, avatar_url, lang')
+    .eq('tg_user_id', tgUserId)
+    .maybeSingle()
+
+  let userId: string
+  let isNewUser = false
+
+  if (!existingProfile) {
+    console.log(
+      '[app-server] Verify Code Login: Profile 不存在，开始创建用户，tg_user_id:',
+      tgUserId
+    )
+
+    // 🎯 创建 auth 用户
+    const uniqueEmail = `tg_${tgUserId}@telegram.user`
+    let authUserId: string
+
+    try {
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: uniqueEmail,
+        email_confirm: true,
+        user_metadata: {
+          tg_user_id: tgUserId,
+          tg_username: codeRecord.tg_username,
+          tg_first_name: codeRecord.tg_first_name,
+          tg_last_name: codeRecord.tg_last_name
+        }
+      })
+
+      if (authError) {
+        if (authError.status === 422 || authError.message?.includes('email')) {
+          const { data: users } = await supabaseAdmin.auth.admin.listUsers()
+          const existingUser = users?.users?.find((u) => u.email === uniqueEmail)
+          if (existingUser) {
+            authUserId = existingUser.id
+          } else {
+            return errorResponse('创建用户失败', 1, 500)
+          }
+        } else {
+          return errorResponse('创建用户失败', 1, 500)
+        }
+      } else {
+        authUserId = authData.user.id
+      }
+    } catch (err) {
+      console.error('[app-server] ❌ 创建 auth 用户异常:', err)
+      return errorResponse('创建用户失败', 1, 500)
+    }
+
+    // 🎯 创建 profile
+    const nickname =
+      (codeRecord.tg_first_name || '') +
+      (codeRecord.tg_last_name ? ` ${codeRecord.tg_last_name}` : '')
+    const avatarUrl = `https://t.me/i/userpic/320/${tgUserId}.jpg`
+
+    const { data: profile, error: upsertError } = await supabaseAdmin
+      .from('profiles')
+      .upsert(
+        {
+          id: authUserId!,
+          tg_user_id: tgUserId,
+          tg_username: codeRecord.tg_username || null,
+          nickname: nickname || `user_${tgUserId}`,
+          username: codeRecord.tg_username || `user_${tgUserId}`,
+          avatar_url: avatarUrl,
+          auth_provider: 'tg',
+          lang: 'zh-CN'
+        },
+        { onConflict: 'id' }
+      )
+      .select('id')
+      .single()
+
+    if (upsertError) {
+      console.error('[app-server] ❌ upsert profile 失败:', upsertError)
+      return errorResponse('创建用户资料失败', 1, 500)
+    }
+
+    userId = profile.id
+    isNewUser = true
+
+    // 🎯 新用户默认关注官方账号
+    try {
+      const { data: officialUser } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('numeric_id', 88888)
+        .maybeSingle()
+
+      if (officialUser && officialUser.id !== userId) {
+        await supabaseAdmin.from('follows').upsert(
+          {
+            follower_id: userId,
+            followee_id: officialUser.id
+          },
+          { onConflict: 'follower_id,followee_id' }
+        )
+      }
+    } catch (err) {
+      console.warn('[app-server] 关注官方账号失败（可忽略）:', err)
+    }
+  } else {
+    userId = existingProfile.id
+    isNewUser = false
+  }
+
+  // 🎯 标记验证码为已使用
+  await supabaseAdmin
+    .from('verification_codes')
+    .update({
+      is_used: true,
+      used_at: new Date().toISOString()
+    })
+    .eq('id', codeRecord.id)
+
+  // 🎯 创建 session
+  const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.createSession({
+    userId: userId
+  })
+
+  if (sessionError || !sessionData.session) {
+    console.error('[app-server] ❌ 创建 session 失败:', sessionError)
+    return errorResponse('创建会话失败', 1, 500)
+  }
+
+  // 🎯 获取用户信息
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('id, username, nickname, tg_user_id, avatar_url, lang')
+    .eq('id', userId)
+    .single()
+
+  return successResponse({
+    user: {
+      uid: profile.id,
+      username: profile.username,
+      nickname: profile.nickname,
+      avatar_url: profile.avatar_url
     },
     access_token: sessionData.session.access_token,
     refresh_token: sessionData.session.refresh_token,

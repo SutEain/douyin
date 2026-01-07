@@ -101,6 +101,60 @@ export async function loginWithTelegram(initData: string): Promise<TelegramLogin
 }
 
 /**
+ * 验证码登录
+ * @param code 6 位数验证码
+ */
+export async function loginWithVerificationCode(code: string): Promise<TelegramLoginResponse> {
+  console.log('[loginWithVerificationCode] 🚀 开始验证码登录流程')
+
+  const base = getAppServerBase()
+  const url = `${base}/auth/verify-code`
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 20000)
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({ code }),
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+  } catch (error: any) {
+    clearTimeout(timeoutId)
+    if (error.name === 'AbortError') {
+      throw new Error('登录请求超时，请检查网络连接')
+    }
+    throw new Error('网络连接失败，请检查网络或 VPN 设置')
+  }
+
+  const result = await response.json()
+
+  if (result.code !== 0) {
+    throw new Error(result.msg || 'Login failed')
+  }
+
+  // 设置 Supabase session
+  const { access_token, refresh_token } = result.data
+  const { error } = await supabase.auth.setSession({
+    access_token,
+    refresh_token
+  })
+
+  if (error) {
+    throw new Error('Failed to set session')
+  }
+
+  console.log('[loginWithVerificationCode] ✅ 登录成功！')
+  return result.data
+}
+
+/**
  * 退出登录
  */
 export async function logout() {
