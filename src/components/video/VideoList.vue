@@ -58,7 +58,7 @@
               @click="togglePlay(slot)"
             />
 
-            <!-- 🎯 完全覆盖层：彻底隐藏 Video 占位符，直到视频真正播放 -->
+            <!-- 🎯 封面层：始终渲染，HLS 视频切换时立即显示封面，彻底覆盖 Video 占位符 -->
             <div
               class="video-poster"
               :class="{ 'poster-hidden': slot.isPlaying }"
@@ -779,26 +779,32 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
 
       if (resolvedUrl.includes('.m3u8')) {
         if (Hls.isSupported()) {
-          // 🎯 关键修复：先创建并 attach HLS 实例，再清空 src，避免显示占位符
+          // 🎯 HLS 视频：确保 poster 属性在 attachMedia 之前设置
+          if (posterUrl) {
+            video.poster = posterUrl
+          }
+
           const hls = new Hls({
             capLevelToPlayerSize: true,
-            autoStartLoad: slot.role === 'current' // 只有 current 才自动加载
+            autoStartLoad: slot.role === 'current'
           })
 
-          // 🎯 先 attachMedia，确保 video 元素已准备好
+          // 🎯 attachMedia 后，再次确保 poster 属性（hls.js 可能会重置）
           hls.attachMedia(video)
+          if (posterUrl) {
+            video.poster = posterUrl
+          }
 
-          // 🎯 现在才清空旧的 src（此时 poster 已经设置，HLS 实例已 attach）
+          // 🎯 清空旧的 src
           video.removeAttribute('src')
           video.load()
 
-          // 🎯 然后加载新的 HLS 源
+          // 🎯 加载新的 HLS 源
           hls.loadSource(resolvedUrl)
           hlsInstances.set(slot.key, hls)
 
           // 🎯 HLS 视频：监听第一个片段加载完成，确保有画面输出后再隐藏 poster
           hls.once(Hls.Events.FRAG_LOADED, () => {
-            // 延迟一帧确保画面已渲染
             requestAnimationFrame(() => {
               if (slot.role === 'current' && !video.paused) {
                 slot.isPlaying = true
@@ -806,13 +812,13 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
             })
           })
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          // Safari 原生 HLS：先设置 poster，再设置 src
+          // Safari 原生 HLS：poster 属性应该能正常工作
           video.removeAttribute('src')
           video.load()
           video.src = resolvedUrl
         }
       } else {
-        // MP4 视频：先设置 poster，再设置 src
+        // MP4 视频：poster 属性正常工作
         video.removeAttribute('src')
         video.load()
         video.src = resolvedUrl
