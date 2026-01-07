@@ -198,15 +198,15 @@ export async function buildCoverUrl(row: any, profile: any): Promise<string> {
       const first = media[0]
       // 🎯 优先使用 R2 直链 (封面或播放地址)
       const r2Target = first.cover_url || first.play_url || first.url
-      if (r2Target && /^https?:\/\//i.test(r2Target)) {
-        return r2Target
+      if (r2Target) {
+        // 完整 URL 或相对路径都可以直接返回
+        if (/^https?:\/\//i.test(r2Target) || r2Target.startsWith('/')) {
+          return r2Target
+        }
       }
 
-      // 否则才用 file_id
-      if (first.file_id) {
-        const url = await buildTelegramFileUrl(first.file_id)
-        if (url) return url
-      }
+      // 🎯 Telegram file_id 不再支持，直接跳过
+      // 如果 media_list 中的 cover_url 是 file_id，会被跳过，继续检查 row.cover_url
     }
   }
 
@@ -237,8 +237,12 @@ export async function buildTelegramFileUrl(fileId?: string): Promise<string | nu
 
 export async function convertMediaReferenceToUrl(value?: string): Promise<string | null> {
   if (!value) return null
+  // 🎯 完整 URL：直接返回
   if (/^https?:\/\//i.test(value)) return value
-  return buildTelegramFileUrl(value)
+  // 🎯 相对路径（R2 存储路径）：直接返回，前端会通过 buildCdnUrl 处理
+  if (value.startsWith('/')) return value
+  // 🎯 Telegram file_id：不再支持，返回 null
+  return null
 }
 
 export async function getVideoAuthorProfile(row: any, cache: Map<string, any>) {
