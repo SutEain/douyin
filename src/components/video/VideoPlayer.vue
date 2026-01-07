@@ -69,6 +69,7 @@ import ItemToolbar from '../slide/ItemToolbar.vue'
 import ItemDesc from '../slide/ItemDesc.vue'
 import { videoManager } from '@/utils/videoManager'
 import { useVideoStore } from '@/stores/video'
+import { buildCdnUrl } from '@/utils/media'
 import type { VideoItem } from '@/types'
 
 // ========== Props ==========
@@ -129,7 +130,8 @@ const state = reactive({
 // ========== Computed ==========
 const videoUrl = computed(() => {
   // 使用第一个可用的视频源
-  return props.item.video?.play_addr?.url_list?.[0] || ''
+  const rawUrl = props.item.video?.play_addr?.url_list?.[0] || ''
+  return buildCdnUrl(rawUrl)
 })
 
 const posterUrl = computed(() => {

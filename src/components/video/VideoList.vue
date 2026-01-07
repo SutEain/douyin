@@ -741,15 +741,15 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
   const poster = item.video?.cover?.url_list?.[0] || ''
 
   // 🎯 设置 poster URL 到 slot 状态
-  slot.posterUrl = poster
+  slot.posterUrl = buildCdnUrl(poster)
   slot.isPlaying = false
 
   if (!url) {
     console.warn(`${DEBUG_PREFIX} source:empty`, { slot: slot.role, key: slot.key, idx })
   }
   if (url) {
-    // 避免重复设置同一个 src 触发重新缓冲，导致切换时卡顿
-    const resolvedUrl = new URL(url, window.location.href).href
+    // 🎯 修复：使用 buildCdnUrl 转换 URL，确保指向 R2 域名而非主站
+    const resolvedUrl = buildCdnUrl(url)
     const isSameSrc = video.src === resolvedUrl
 
     if (!isSameSrc) {

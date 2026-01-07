@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import Hls from 'hls.js'
 import { _checkImgUrl, _duration, _formatNumber, _stopPropagation, _truncate } from '@/utils'
+import { buildCdnUrl } from '@/utils/media'
 import { recommendedVideoTab } from '@/api/videos'
 import ScrollList from '@/components/ScrollList.vue'
 import { useNav } from '@/utils/hooks/useNav'
@@ -206,7 +207,7 @@ function onAvatarError(e) {
                   :x5-playsinline="true"
                   :playsinline="true"
                   :fullscreen="false"
-                  v-is-can-play="item.video.play_addr.url_list[0]"
+                  v-is-can-play="buildCdnUrl(item.video.play_addr.url_list[0])"
                   :poster="_checkImgUrl(item.video.cover.url_list[0])"
                   @error="onVideoError"
                 ></video>
