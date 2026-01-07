@@ -134,6 +134,19 @@ export async function handleCallback(
       return
     }
 
+    // 🎯 快捷菜单 - 重置底部键盘 - 仅限私聊
+    if (data === 'reset_keyboard') {
+      if (callback.message?.chat?.type !== 'private') {
+        return
+      }
+      await answerCallbackQuery(callbackQueryId, '✅ 底部键盘已重置')
+      const { getPersistentKeyboard } = await import('../keyboards.ts')
+      await sendMessage(chatId, '✅ 底部键盘已重置，您现在可以使用快捷按钮了！', {
+        reply_markup: getPersistentKeyboard()
+      })
+      return
+    }
+
     if (data === 'profile_invite_unlock') {
       if (callback.message?.chat?.type !== 'private') {
         return

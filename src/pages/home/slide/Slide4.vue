@@ -85,8 +85,13 @@ async function loadMore() {
       const newList = res.data.list || []
 
       // 💡 前端去重
-      const existingIds = new Set(state.list.map((v) => v.aweme_id || v.id))
-      const uniqueNewList = newList.filter((v: any) => !existingIds.has(v.aweme_id || v.id))
+      // 🎯 如果是第一次加载（page === 0），确保深链视频在第一个位置，不去重
+      // 后续加载时才进行去重
+      let uniqueNewList = newList
+      if (state.page > 0) {
+        const existingIds = new Set(state.list.map((v) => v.aweme_id || v.id))
+        uniqueNewList = newList.filter((v: any) => !existingIds.has(v.aweme_id || v.id))
+      }
 
       if (uniqueNewList.length > 0) {
         state.list.push(...uniqueNewList)

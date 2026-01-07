@@ -107,12 +107,13 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     }
   }
 
-  // 🎯 计算需要获取的数量
+  // 🎯 计算需要获取的数量（如果有深链视频，需要少获取一个）
   const targetCount = startVideo ? pageSize - 1 : pageSize
 
   let rows: any[] = []
 
   // 使用优化的 RPC 获取混合流（排除历史，随机推荐）
+  // 🎯 深链打开时，保持原有过滤逻辑（排除历史、成人、东南亚），只是把深链作品放到第一个
   const { data, error } = await supabaseAdmin.rpc('get_optimized_video_feed', {
     p_user_id: user?.id || null,
     p_type: 'recommend',
@@ -140,7 +141,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     rows = rows.filter((r) => r.id !== startVideoId)
   }
 
-  // 🎯 合并：深链接视频在最前面
+  // 🎯 合并：深链接视频在最前面（无论深链视频是什么类型，都放到第一个）
   const allRows = startVideo ? [startVideo, ...rows] : rows
 
   console.log('[Feed] 结果:', {

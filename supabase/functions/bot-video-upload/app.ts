@@ -493,6 +493,37 @@ export async function handleRequest(req: Request): Promise<Response> {
           // 底部键盘点击 -> 始终新发一条消息，避免编辑上一条
           await handleUserProfile(chatId, undefined, { forceNew: true })
         }
+        // "Web版登录"按钮 - 仅限私聊
+        else if (message.text === '🌐 Web版登录') {
+          if (message.chat.type !== 'private') {
+            return new Response('OK', { status: 200 })
+          }
+          const webUrl = 'https://tgdouyin.com'
+          // 先发送纯文本网址，方便用户选择复制
+          await sendMessage(chatId, webUrl)
+
+          // 再发送说明消息和打开按钮
+          const webLoginText =
+            '🌐 <b>TG抖音 Web版登录</b>\n\n' +
+            '📱 请在浏览器中打开上方网址进行登录\n\n' +
+            '💡 您可以：\n' +
+            '• 长按上方网址选择复制\n' +
+            '• 或点击下方按钮直接在浏览器打开'
+
+          await sendMessage(chatId, webLoginText, {
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '🌐 在浏览器打开',
+                    url: webUrl
+                  }
+                ]
+              ]
+            }
+          })
+        }
         // 📸 图片消息 - 仅限私聊
         else if (
           message.photo ||
