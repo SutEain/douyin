@@ -764,6 +764,10 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     const isSameSrc = video.src === resolvedUrl
 
     if (!isSameSrc) {
+      // 🎯 关键修复：在切换视频源之前，先暂停并确保 poster 显示
+      video.pause()
+      slot.isPlaying = false
+
       // 销毁旧的 HLS 实例
       const oldHls = hlsInstances.get(slot.key)
       if (oldHls) {
@@ -773,12 +777,21 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
 
       if (resolvedUrl.includes('.m3u8')) {
         if (Hls.isSupported()) {
+          // 🎯 关键修复：先创建并 attach HLS 实例，再清空 src，避免显示占位符
           const hls = new Hls({
             capLevelToPlayerSize: true,
-            autoStartLoad: true
+            autoStartLoad: slot.role === 'current' // 只有 current 才自动加载
           })
-          hls.loadSource(resolvedUrl)
+
+          // 🎯 先 attachMedia，确保 video 元素已准备好
           hls.attachMedia(video)
+
+          // 🎯 现在才清空旧的 src（此时 poster 已经设置，HLS 实例已 attach）
+          video.removeAttribute('src')
+          video.load()
+
+          // 🎯 然后加载新的 HLS 源
+          hls.loadSource(resolvedUrl)
           hlsInstances.set(slot.key, hls)
 
           // 🎯 HLS 视频：监听第一个片段加载完成，确保有画面输出后再隐藏 poster
@@ -791,9 +804,15 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
             })
           })
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Safari 原生 HLS：先设置 poster，再设置 src
+          video.removeAttribute('src')
+          video.load()
           video.src = resolvedUrl
         }
       } else {
+        // MP4 视频：先设置 poster，再设置 src
+        video.removeAttribute('src')
+        video.load()
         video.src = resolvedUrl
       }
       // 非 current 只预加载元数据，减少无谓缓冲
@@ -1915,6 +1934,7 @@ defineExpose({
     height: 100%;
     object-fit: contain;
     background-color: #000;
+    position: relative;
     // 🎯 隐藏浏览器默认的 Video 占位符文字
     color: transparent;
     font-size: 0;
@@ -1938,11 +1958,13 @@ defineExpose({
     background-position: center;
     background-repeat: no-repeat;
     background-color: #000;
-    z-index: 2;
+    z-index: 10; // 🎯 提高 z-index，确保完全覆盖 video 元素
     pointer-events: none;
     // 🎯 确保 poster 层在视频加载时始终显示，播放时淡出
     transition: opacity 0.2s ease-out;
     opacity: 1;
+    // 🎯 关键修复：使用 will-change 优化渲染性能
+    will-change: opacity;
 
     &.poster-hidden {
       opacity: 0;
