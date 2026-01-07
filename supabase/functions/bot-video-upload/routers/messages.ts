@@ -179,18 +179,12 @@ export async function handleText(
       }
 
       // 按钮2：抖币游戏（跳转到游戏群）
-      // 优先使用配置的链接，否则使用群组ID构建链接
+      // 优先使用配置的链接，否则使用默认游戏群链接
       if (diceGroupLink) {
         buttons.push({ text: '🎲 抖币游戏', url: diceGroupLink })
-      } else if (diceGroupId) {
-        // 如果没有配置链接，尝试使用群组ID构建链接
-        // Telegram 群组链接格式：https://t.me/c/群组ID（去掉-100前缀）
-        const groupIdStr = diceGroupId.toString()
-        const cleanGroupId = groupIdStr.startsWith('-100') ? groupIdStr.slice(4) : groupIdStr
-        buttons.push({ text: '🎲 抖币游戏', url: `https://t.me/c/${cleanGroupId}` })
       } else {
-        // 如果都没有配置，仍然显示按钮（建议配置 DICE_GROUP_LINK）
-        buttons.push({ text: '🎲 抖币游戏', url: 'https://t.me' })
+        // 默认游戏群链接
+        buttons.push({ text: '🎲 抖币游戏', url: 'https://t.me/douyinyouxi' })
       }
 
       const replyOptions: any = {

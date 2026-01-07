@@ -1416,14 +1416,19 @@ watch(
       const currentSlot = getSlotByRole('current')
       if (currentSlot && currentSlot.videoIndex === null) {
         console.log('[VideoList] 🚀 数据延迟到达，立即填充 SlotB')
-        currentIndex.value = 0
-        currentSlot.videoIndex = 0
+        // 🎯 Windows 深链修复：使用 props.initialIndex 而不是固定 0
+        const targetIndex =
+          props.initialIndex >= 0 && props.initialIndex < props.items.length
+            ? props.initialIndex
+            : 0
+        currentIndex.value = targetIndex
+        currentSlot.videoIndex = targetIndex
         updateSlotSource(currentSlot)
 
         // 预载 next
         const nextSlot = getSlotByRole('next')
-        if (nextSlot && props.items.length > 1) {
-          nextSlot.videoIndex = 1
+        if (nextSlot && props.items.length > targetIndex + 1) {
+          nextSlot.videoIndex = targetIndex + 1
           updateSlotSource(nextSlot, true)
         }
       }

@@ -83,7 +83,7 @@ export async function handleDiceCommand(chatId: number, text: string, message: a
       `📜 <b>游戏规则：</b>\n` +
       `• 金额范围：5 - 10000 抖币\n` +
       `• 人数范围：2 - 5 人\n` +
-      `• 抽水：系统自动抽取赢家总奖金的 5%\n` +
+      `• 抽水：系统自动抽取赢家总奖金的 2%\n` +
       `• 限制：本群同时只能存在 1 局游戏\n\n` +
       `1. ${escapeHTML(sender.nickname)} (房主)`
 
@@ -325,7 +325,7 @@ async function startRolling(chatId: number, roomId: string) {
     const winners = results.filter((r) => r.value === maxVal)
 
     const totalPrize = roomInfo.bet_amount * roomInfo.target_count
-    const commission = Math.floor(totalPrize * 0.05)
+    const commission = Math.floor(totalPrize * 0.02)
     const netPrize = totalPrize - commission
     const perWinnerPrize = Math.floor(netPrize / winners.length)
 
@@ -361,7 +361,7 @@ async function startRolling(chatId: number, roomId: string) {
       `🎊 <b>本局结算完成</b> 🎊\n\n` +
       `📊 <b>比分榜：</b>\n${scoreBoard}\n\n` +
       `🏆 赢家：${winnerNames}\n` +
-      `💰 获得奖励：<b>${perWinnerPrize}</b> 抖币 (已扣除5%抽水)\n\n` +
+      `💰 获得奖励：<b>${perWinnerPrize}</b> 抖币 (已扣除2%抽水)\n\n` +
       `感谢大家的参与！`
 
     if (progressMsgId) {

@@ -6,7 +6,7 @@
         v-if="state.list.length > 0"
         :items="state.list"
         page="home"
-        :initial-index="0"
+        :initial-index="state.initialIndex"
         :autoplay="props.active"
         :has-more="state.hasMore"
         @load-more="loadMore"
@@ -48,7 +48,8 @@ const state = reactive({
   page: 0, // 🎯 增加页码计数，用于辅助后端逻辑（如跳过深链接首位）
   pageSize: 10,
   hasMore: true,
-  loading: false // 🎯 恢复为 false，配合模板逻辑处理闪现
+  loading: false, // 🎯 恢复为 false，配合模板逻辑处理闪现
+  initialIndex: 0 // 🎯 动态计算初始索引（用于深链视频）
 })
 
 async function loadMore() {
@@ -94,10 +95,26 @@ async function loadMore() {
       }
 
       if (uniqueNewList.length > 0) {
+        const isFirstLoad = state.list.length === 0
         state.list.push(...uniqueNewList)
         state.page++
         state.hasMore = true
         console.log(`[Slide4] 成功加载 ${uniqueNewList.length} 条新内容，总计 ${state.list.length}`)
+
+        // 🎯 Windows 深链修复：第一次加载时，根据 startVideoId 找到对应的索引
+        if (isFirstLoad && store.startVideoId && state.list.length > 0) {
+          const deepLinkIndex = state.list.findIndex(
+            (v) => (v.aweme_id || v.id) === store.startVideoId
+          )
+          if (deepLinkIndex >= 0) {
+            state.initialIndex = deepLinkIndex
+            console.log('[Slide4] 🎯 找到深链视频索引:', {
+              startVideoId: store.startVideoId,
+              index: deepLinkIndex,
+              videoId: state.list[deepLinkIndex]?.aweme_id || state.list[deepLinkIndex]?.id
+            })
+          }
+        }
 
         // 💡 强力补货策略：如果列表里的有效视频太少（不足5条），无法支撑流畅滑动
         // 则不论后端返回了多少，都强制再请求一次，直到攒够 5 条或后端彻底没数据

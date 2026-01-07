@@ -327,6 +327,33 @@ export const useBaseStore = defineStore('base', {
     // 🎯 解析 Telegram 启动参数
     parseStartParam() {
       try {
+        // 🎯 Windows 修复：优先从 URL 中解析 startapp 参数（适用于通知链接）
+        const urlParams = new URLSearchParams(window.location.search)
+        const startappParam = urlParams.get('startapp')
+
+        if (startappParam) {
+          // 解析格式：video_xxxxx[_iyyyyy] 或 live_xxxxx[_iyyyyy]
+          if (startappParam.startsWith('video_')) {
+            let videoId = startappParam.replace('video_', '')
+            // 去除邀请码后缀
+            if (videoId.includes('_i')) {
+              videoId = videoId.split('_i')[0]
+            }
+            this.startVideoId = videoId
+            console.log('[parseStartParam] 🎯 从 URL startapp 参数解析到视频 ID:', videoId)
+            return
+          } else if (startappParam.startsWith('live_')) {
+            let roomId = startappParam.replace('live_', '')
+            // 🎯 去除邀请码后缀
+            if (roomId.includes('_i')) {
+              roomId = roomId.split('_i')[0]
+            }
+            this.startLiveId = roomId
+            console.log('[parseStartParam] 🎯 从 URL startapp 参数解析到直播间 ID:', roomId)
+            return
+          }
+        }
+
         // @ts-ignore
         const tg = window.Telegram?.WebApp
 
@@ -346,6 +373,7 @@ export const useBaseStore = defineStore('base', {
               videoId = videoId.split('_i')[0]
             }
             this.startVideoId = videoId
+            console.log('[parseStartParam] 🎯 从 Telegram start_param 解析到视频 ID:', videoId)
             return
           } else if (startParam.startsWith('live_')) {
             let roomId = startParam.replace('live_', '')
@@ -354,16 +382,17 @@ export const useBaseStore = defineStore('base', {
               roomId = roomId.split('_i')[0]
             }
             this.startLiveId = roomId
+            console.log('[parseStartParam] 🎯 从 Telegram start_param 解析到直播间 ID:', roomId)
             return
           }
         }
 
         // 方式2: 从 URL 参数获取（格式：?video_id=abcd）
-        const urlParams = new URLSearchParams(window.location.search)
         const videoId = urlParams.get('video_id')
 
         if (videoId) {
           this.startVideoId = videoId
+          console.log('[parseStartParam] 🎯 从 URL video_id 参数解析到视频 ID:', videoId)
           return
         }
 
@@ -374,11 +403,12 @@ export const useBaseStore = defineStore('base', {
 
           if (hashVideoId) {
             this.startVideoId = hashVideoId
+            console.log('[parseStartParam] 🎯 从 URL hash 解析到视频 ID:', hashVideoId)
             return
           }
         }
       } catch (error) {
-        // ignore
+        console.error('[parseStartParam] 解析失败:', error)
       }
     },
     // 🎯 设置深链接视频数据

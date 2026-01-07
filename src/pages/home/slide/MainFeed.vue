@@ -4,7 +4,7 @@
       v-if="state.list.length > 0"
       :items="state.list"
       page="home"
-      :initial-index="0"
+      :initial-index="state.initialIndex"
       :autoplay="props.active"
       @load-more="loadMore"
       @update:index="handleIndexChange"
@@ -35,7 +35,8 @@ const state = reactive({
   totalSize: 0,
   pageSize: 10,
   currentIndex: 0,
-  hasMore: true
+  hasMore: true,
+  initialIndex: 0 // 🎯 动态计算初始索引（用于深链视频）
 })
 
 // ========== Methods ==========
@@ -66,7 +67,23 @@ async function loadMore() {
       const totalNum = Number(res.data.total)
       state.totalSize = Number.isFinite(totalNum) ? totalNum : res.data.total
 
+      const isFirstLoad = state.list.length === 0
       state.list.push(...res.data.list)
+
+      // 🎯 Windows 深链修复：第一次加载时，根据 startVideoId 找到对应的索引
+      if (isFirstLoad && baseStore.startVideoId && state.list.length > 0) {
+        const deepLinkIndex = state.list.findIndex(
+          (v) => (v.aweme_id || v.id) === baseStore.startVideoId
+        )
+        if (deepLinkIndex >= 0) {
+          state.initialIndex = deepLinkIndex
+          console.log('[MainFeed] 🎯 找到深链视频索引:', {
+            startVideoId: baseStore.startVideoId,
+            index: deepLinkIndex,
+            videoId: state.list[deepLinkIndex]?.aweme_id || state.list[deepLinkIndex]?.id
+          })
+        }
+      }
 
       if (Number.isFinite(totalNum)) {
         const nextLen = state.list.length
