@@ -107,28 +107,80 @@ async function startWorker(workerId) {
   while (true) {
     // 随机偏移抓取，避免 Worker 冲突
     const offset = Math.floor(Math.random() * 40)
+    // 🎯 查询条件：只查询视频类型（content_type 为 null 或 video），排除 album/image/collection
     const { data: videos, error } = await supabase
       .from('videos')
       .select('id, play_url, content_type')
       .eq('status', 'published')
       .eq('is_hls', false)
-      .like('play_url', '/videos/%') // 🎯 只查询有效的 R2 路径
-      .or('content_type.is.null,content_type.eq.video') // 🎯 只处理视频类型（content_type 为 null 或 video）
+      .or('content_type.is.null,content_type.eq.video') // 🎯 只处理视频类型（null 或 video）
+      .not('play_url', 'is', null) // 🎯 排除 play_url 为 null 的记录
       .range(offset, offset)
-      .limit(1)
+      .limit(20) // 🎯 查询更多条，然后在代码中过滤
 
-    const video = videos?.[0]
+    // 🎯 过滤：只处理有效的视频文件路径
+    const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v']
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+    const validVideos = (videos || []).filter((v) => {
+      // 🎯 双重检查：确保 content_type 是 video 或 null（排除 album/image/collection）
+      if (v.content_type && v.content_type !== 'video') {
+        return false
+      }
+      if (!v.play_url) return false
+
+      // 🎯 排除 API 端点
+      if (/\/aweme\/v1\/play\/?/i.test(v.play_url)) {
+        return false
+      }
+
+      // 🎯 提取文件扩展名（支持相对路径和完整 URL）
+      const urlPath = v.play_url.includes('/')
+        ? v.play_url.substring(v.play_url.lastIndexOf('/'))
+        : v.play_url
+      const ext = urlPath.toLowerCase().substring(urlPath.lastIndexOf('.'))
+
+      // 排除图片文件
+      if (imageExts.includes(ext)) return false
+      // 只处理视频文件（有扩展名且是视频格式）
+      return videoExts.includes(ext)
+    })
+
+    const video = validVideos[0]
 
     if (error || !video) {
-      const { data: fallback } = await supabase
+      const { data: fallbackList } = await supabase
         .from('videos')
         .select('id, play_url, content_type')
         .eq('status', 'published')
         .eq('is_hls', false)
-        .like('play_url', '/videos/%') // 🎯 只查询有效的 R2 路径
         .or('content_type.is.null,content_type.eq.video') // 🎯 只处理视频类型
-        .limit(1)
-        .maybeSingle()
+        .not('play_url', 'is', null) // 🎯 排除 play_url 为 null 的记录
+        .limit(20) // 🎯 查询更多条，然后在代码中过滤
+
+      // 🎯 过滤：只处理有效的视频文件路径
+      const validFallbacks = (fallbackList || []).filter((v) => {
+        // 🎯 双重检查：确保 content_type 是 video 或 null（排除 album/image/collection）
+        if (v.content_type && v.content_type !== 'video') {
+          return false
+        }
+        if (!v.play_url) return false
+
+        // 🎯 排除 API 端点
+        if (/\/aweme\/v1\/play\/?/i.test(v.play_url)) {
+          return false
+        }
+
+        // 🎯 提取文件扩展名（支持相对路径和完整 URL）
+        const urlPath = v.play_url.includes('/')
+          ? v.play_url.substring(v.play_url.lastIndexOf('/'))
+          : v.play_url
+        const ext = urlPath.toLowerCase().substring(urlPath.lastIndexOf('.'))
+
+        if (imageExts.includes(ext)) return false
+        return videoExts.includes(ext)
+      })
+
+      const fallback = validFallbacks[0]
       if (!fallback) {
         logger(workerId, '暂无待处理任务，休息 30s...', 'wait')
         await sleep(30000)
