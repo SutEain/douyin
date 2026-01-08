@@ -190,19 +190,17 @@ watch(
   top: 0;
   color: white;
   font-size: 14rem;
-  height: 100vh;
   overflow: hidden; // ✅ 外层禁止滚动
-  overscroll-behavior-y: contain; // ✅ 防止过度滚动传播
+  display: flex;
+  flex-direction: column;
 
   // ✅ 内层滚动容器
   .scroll-container {
-    height: 100vh;
+    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    overscroll-behavior-y: contain;
-    touch-action: pan-y pan-x; // ✅ 允许垂直和水平滚动（水平用于 SlideHorizontal）
+    background: var(--main-bg);
 
     &::-webkit-scrollbar {
       display: none;
@@ -210,7 +208,7 @@ watch(
   }
 
   .main {
-    touch-action: pan-y pan-x; // ✅ 允许垂直和水平滚动
+    min-height: 100.1%; // ✅ 强制内容超出一点点，确保 iOS 下能触发滚动
   }
 
   .content {
@@ -218,6 +216,10 @@ watch(
 
     .indicator-wrapper {
       padding: 0 var(--page-padding);
+      background: var(--main-bg);
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
 
     .search-ctn {

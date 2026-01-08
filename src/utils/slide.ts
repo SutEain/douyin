@@ -48,9 +48,8 @@ export function canSlide(state) {
     if (Math.abs(state.move.x) > state.judgeValue || Math.abs(state.move.y) > state.judgeValue) {
       //放大再相除，根据长宽比判断方向，angle大于1就是左右滑动，小于是上下滑动
       const angle = (Math.abs(state.move.x) * 10) / (Math.abs(state.move.y) * 10)
-      //根据当前slide的类型，判断能否滑动，并记录下来，后续不再判断，直接返回记录值
-      state.next = state.type === SlideType.HORIZONTAL ? angle > 1 : angle <= 1
-      // console.log('angle', angle, state.next)
+      // 🎯 优化：识别方向后，如果是垂直滑动且是水平组件，则不阻止默认行为
+      state.next = state.type === SlideType.HORIZONTAL ? angle > 1.2 : angle <= 1
       state.needCheck = false
     } else {
       return false

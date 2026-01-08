@@ -12,7 +12,7 @@
     <div
       id="base-slide-list"
       ref="slideList"
-      :style="{ 'flex-direction': 'row' }"
+      :style="{ 'flex-direction': 'row', 'touch-action': 'pan-y' }"
       @touchstart="touchStart($event)"
       @touchmove="touchMove($event)"
       @touchend="touchEnd($event)"
