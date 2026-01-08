@@ -1,7 +1,7 @@
 <template>
   <div class="posters">
     <div class="poster-item" :key="index" v-for="(i, index) in list" @click="goDetail(index)">
-      <img class="poster" v-lazy="_checkImgUrl(i.video.cover.url_list[0])" alt="" />
+      <img class="poster" v-lazy="buildCdnUrl(i.video.cover.url_list[0])" alt="" />
       <template v-if="mode === 'normal'">
         <div class="num">
           <Icon icon="icon-park-outline:like" />
@@ -46,7 +46,8 @@
 </template>
 
 <script setup>
-import { _checkImgUrl, _formatNumber } from '@/utils'
+import { _formatNumber } from '@/utils'
+import { buildCdnUrl } from '@/utils/media'
 import { useBaseStore } from '@/store/pinia'
 import { useRouter } from 'vue-router'
 import { cloneDeep } from '@/utils'

@@ -226,40 +226,39 @@ export async function buildCoverUrl(row: any, profile: any): Promise<string> {
   }
 
   // 🎯 HLS 视频特殊处理：如果 cover_url 是 thumb_{file_id}.jpg 格式，需要根据 play_url 构建路径
-  if (row.is_hls && row.play_url && row.cover_url) {
+  // 🎯 也处理非 HLS 视频的 thumb_ 格式封面（可能是转换过程中的数据）
+  if (row.cover_url && row.play_url) {
     const playUrl = row.play_url
     const coverUrl = row.cover_url.trim()
 
-    // 如果 play_url 是 HLS 格式：/videos/{uuid}/{file_id}/index.m3u8 或 /videos/{uuid}/index.m3u8
-    // 封面应该是：/videos/{uuid}/thumb_{file_id}.jpg
-    if (playUrl.includes('.m3u8')) {
-      // 情况1：cover_url 是 thumb_{file_id}.jpg（没有路径前缀）
-      if (coverUrl.startsWith('thumb_') && coverUrl.endsWith('.jpg') && !coverUrl.includes('/')) {
-        // 从 play_url 提取路径：
-        // /videos/{uuid}/{file_id}/index.m3u8 -> /videos/{uuid}
-        // /videos/{uuid}/index.m3u8 -> /videos/{uuid}
-        const playUrlMatch = playUrl.match(/^(\/videos\/[^/]+)/)
-        if (playUrlMatch) {
-          const videoDir = playUrlMatch[1]
-          return `${videoDir}/${coverUrl}`
-        }
+    // 🎯 如果 cover_url 是 thumb_{file_id}.jpg 格式（没有路径前缀）
+    if (coverUrl.startsWith('thumb_') && coverUrl.endsWith('.jpg') && !coverUrl.includes('/')) {
+      // 从 play_url 提取路径：
+      // /videos/{uuid}/{file_id}/index.m3u8 -> /videos/{uuid}
+      // /videos/{uuid}/index.m3u8 -> /videos/{uuid}
+      // /videos/{uuid}/{file_id}.mp4 -> /videos/{uuid}
+      // /videos/{uuid}.mp4 -> /videos/{uuid}
+      const playUrlMatch = playUrl.match(/^(\/videos\/[^/]+)/)
+      if (playUrlMatch) {
+        const videoDir = playUrlMatch[1]
+        return `${videoDir}/${coverUrl}`
       }
-      // 情况2：cover_url 是 videos/{uuid}/thumb_{file_id}.jpg（没有前导斜杠）
-      if (
-        coverUrl.startsWith('videos/') &&
-        coverUrl.includes('/thumb_') &&
-        coverUrl.endsWith('.jpg')
-      ) {
-        return `/${coverUrl}`
-      }
-      // 情况3：cover_url 已经是完整路径 /videos/{uuid}/thumb_{file_id}.jpg
-      if (
-        coverUrl.startsWith('/videos/') &&
-        coverUrl.includes('/thumb_') &&
-        coverUrl.endsWith('.jpg')
-      ) {
-        return coverUrl
-      }
+    }
+    // 情况2：cover_url 是 videos/{uuid}/thumb_{file_id}.jpg（没有前导斜杠）
+    if (
+      coverUrl.startsWith('videos/') &&
+      coverUrl.includes('/thumb_') &&
+      coverUrl.endsWith('.jpg')
+    ) {
+      return `/${coverUrl}`
+    }
+    // 情况3：cover_url 已经是完整路径 /videos/{uuid}/thumb_{file_id}.jpg
+    if (
+      coverUrl.startsWith('/videos/') &&
+      coverUrl.includes('/thumb_') &&
+      coverUrl.endsWith('.jpg')
+    ) {
+      return coverUrl
     }
   }
 
