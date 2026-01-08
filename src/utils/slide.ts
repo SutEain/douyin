@@ -44,13 +44,15 @@ export function slideInit(el, state) {
 export function canSlide(state) {
   //每次按下都需要检测，up事件会重置为true
   if (state.needCheck) {
-    //判断move x和y的距离是否大于判断值，因为距离太小无法判断滑动方向
     if (Math.abs(state.move.x) > state.judgeValue || Math.abs(state.move.y) > state.judgeValue) {
-      //放大再相除，根据长宽比判断方向，angle大于1就是左右滑动，小于是上下滑动
       const angle = (Math.abs(state.move.x) * 10) / (Math.abs(state.move.y) * 10)
-      // 🎯 优化：识别方向后，如果是垂直滑动且是水平组件，则不阻止默认行为
       state.next = state.type === SlideType.HORIZONTAL ? angle > 1.2 : angle <= 1
       state.needCheck = false
+
+      // 🎯 关键修复：如果是水平组件检测到了垂直滑动意图，标记为不需要滑动
+      if (state.type === SlideType.HORIZONTAL && angle <= 1.2) {
+        state.next = false
+      }
     } else {
       return false
     }

@@ -237,10 +237,12 @@ function initVideo() {
               hls?.recoverMediaError()
               break
             default:
-              console.error('[VideoPlayer] HLS 致命不可恢复错误:', data.details)
+              console.error('[VideoPlayer] HLS 致命不可恢复错误，尝试降级播放:', data.details)
               hls?.destroy()
-              // 🎯 致命错误后，尝试降级到普通播放（如果是安卓，hls.js 失败通常意味着 MSE 出了问题）
+              // 🎯 关键修复：Windows 端如果 MSE 报错，可能是因为缓存或格式，强制重置 src
               if (videoRef.value) {
+                videoRef.value.removeAttribute('src')
+                videoRef.value.load()
                 videoRef.value.src = url
               }
               break

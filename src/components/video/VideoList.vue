@@ -162,6 +162,7 @@ import {
   ref,
   watch
 } from 'vue'
+import { useRoute } from 'vue-router'
 import Hls from 'hls.js'
 import { Icon } from '@iconify/vue'
 import ItemToolbar from '../slide/ItemToolbar.vue'
@@ -265,6 +266,43 @@ const props = withDefaults(defineProps<Props>(), {
   hasMore: true,
   noMoreSubtext: '休息一下，稍后再来'
 })
+
+const route = useRoute()
+
+// 🎯 检查当前组件是否在活跃页面上
+const isPageActive = computed(() => {
+  // 详情页特殊处理：如果当前路由是 /video-detail，只有 page === 'detail' 的组件才是活跃的
+  if (route.path.startsWith('/video-detail')) {
+    return props.page === 'detail'
+  }
+  // 首页：只有 page === 'home' 且在首页路由下才活跃
+  if (props.page === 'home') {
+    return route.path === '/' || route.path.startsWith('/home')
+  }
+  // 我：只有 page === 'me' 且在 /me 路由下才活跃
+  if (props.page === 'me') {
+    return route.path.startsWith('/me')
+  }
+  return true
+})
+
+// 🎯 路由变化时，如果当前组件变为了非活跃页面，强制暂停所有 slot 中的视频
+watch(
+  () => route.path,
+  () => {
+    if (!isPageActive.value) {
+      console.log(`${DEBUG_PREFIX} [${props.page}] 页面切换，强制暂停非活跃页面的视频`)
+      slots.forEach((slot) => {
+        const video = slotRefs.get(slot.key)
+        if (video) {
+          video.pause()
+          slot.isPlaying = false
+        }
+      })
+    }
+  },
+  { immediate: true }
+)
 
 const emit = defineEmits<{
   'update:index': [index: number]
@@ -881,6 +919,12 @@ function playCurrent() {
   const slot = getSlotByRole('current')
   if (!slot) {
     console.warn(`${DEBUG_PREFIX} playCurrent:no-slot`)
+    return
+  }
+
+  // 🎯 核心修复：如果页面不活跃（用户已跳走），严禁播放
+  if (!isPageActive.value) {
+    console.log(`${DEBUG_PREFIX} [${props.page}] playCurrent: 拦截后台播放 - 页面不活跃`)
     return
   }
 

@@ -235,10 +235,13 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
           }
 
-          // 🎯 频道同步：只有明确标记为 is_auto_sync 的视频，且处于已发布状态，才发送通知并直接退出
-          // 🎯 免审用户的频道同步作品：状态应该是 published，不应该出现 ready 状态
-          // 🎯 补救脚本场景判断：如果视频创建时间超过1小时，且 messageId 是 0 或 null，可能是补救脚本
+          // 🎯 频道同步：只有明确标记为 is_auto_sync 的视频，且处于已发布或待审核状态，才发送通知并直接退出
+          // 🎯 频道同步用户严禁弹出编辑菜单
           if (video.is_auto_sync) {
+            console.log(
+              `[WorkerCallback] 检测到频道同步作品 (videoId=${videoId})，执行专用通知逻辑`
+            )
+
             // 🎯 如果状态是 ready（非免审用户），也发送通知但提示需要审核
             if (video.status === 'ready') {
               console.log(`[WorkerCallback] 频道同步非免审用户，状态为 ready，发送待审核通知`)
@@ -271,6 +274,18 @@ export async function handleRequest(req: Request): Promise<Response> {
               }
               return new Response('OK', { status: 200 })
             }
+
+            // 🎯 特殊情况：如果是频道同步但状态还是 processing（例如多图集合回调），也直接退出，不弹菜单
+            if (video.status === 'processing') {
+              console.log(
+                `[WorkerCallback] 频道同步作品处理中 (videoId=${videoId})，静默等待后续回调`
+              )
+              return new Response('OK', { status: 200 })
+            }
+
+            // 🎯 兜底拦截：只要是频道同步，无论什么状态都不允许往下走弹出菜单
+            console.log(`[WorkerCallback] 频道同步兜底拦截 (videoId=${videoId})`)
+            return new Response('OK', { status: 200 })
           }
 
           // 🎯 如果视频状态还是 processing，不要显示"已就绪"菜单
