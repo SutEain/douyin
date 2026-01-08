@@ -46,13 +46,21 @@ export function canSlide(state) {
   if (state.needCheck) {
     if (Math.abs(state.move.x) > state.judgeValue || Math.abs(state.move.y) > state.judgeValue) {
       const angle = (Math.abs(state.move.x) * 10) / (Math.abs(state.move.y) * 10)
-      state.next = state.type === SlideType.HORIZONTAL ? angle > 1.2 : angle <= 1
-      state.needCheck = false
 
-      // 🎯 关键修复：如果是水平组件检测到了垂直滑动意图，标记为不需要滑动
-      if (state.type === SlideType.HORIZONTAL && angle <= 1.2) {
-        state.next = false
+      // 🎯 极度激进的判定：在水平滑动组件中，如果 Y 的位移大于 X，或者角度不够大，直接锁死
+      if (state.type === SlideType.HORIZONTAL) {
+        // 如果垂直位移明显，或者角度小于 1.8（约 60度），都判定为纵向滚动意图
+        if (Math.abs(state.move.y) > Math.abs(state.move.x) || angle < 1.8) {
+          state.next = false
+          state.needCheck = false
+          return false
+        }
+        state.next = true
+      } else {
+        state.next = angle <= 1
       }
+
+      state.needCheck = false
     } else {
       return false
     }
@@ -119,6 +127,13 @@ export function slideTouchMove(
 
   //检测能否滑动
   const canSlideRes = canSlide(state)
+
+  // 🎯 关键修复：如果在水平组件中检测到不能滑动（即判定为纵向滑动）
+  // 立即释放状态，让系统接管
+  if (state.type === SlideType.HORIZONTAL && !canSlideRes && state.needCheck === false) {
+    state.isDown = false
+    return
+  }
 
   //是否在往到头或尾滑动
   const isNext = state.type === SlideType.HORIZONTAL ? state.move.x < 0 : state.move.y < 0
