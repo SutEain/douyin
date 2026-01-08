@@ -290,13 +290,45 @@ async function processVideo(video, workerId) {
     const downloadTime = ((Date.now() - stageTime) / 1000).toFixed(1)
     stageTime = Date.now()
 
-    // 3. 极速切片
+    // 3. 极速切片（先尝试流复制，失败则重新编码）
     logger(workerId, `FFmpeg 切片开始...`, 'slice')
-    // 🎯 增加 ffmpeg 超时保护，防止异常视频导致进程挂死
-    await execPromise(
-      `ffmpeg -y -i "${localMp4}" -c copy -hls_time 5 -hls_list_size 0 -f hls "${path.join(outputFolder, 'index.m3u8')}"`,
-      { timeout: 300000 } // 5 分钟超时
-    )
+    let sliceSuccess = false
+    try {
+      // 🎯 先尝试流复制模式（最快，但可能遇到损坏的视频会失败）
+      await execPromise(
+        `ffmpeg -y -i "${localMp4}" -c copy -hls_time 5 -hls_list_size 0 -f hls "${path.join(outputFolder, 'index.m3u8')}"`,
+        { timeout: 300000 } // 5 分钟超时
+      )
+      sliceSuccess = true
+    } catch (copyErr) {
+      const errMsg = copyErr.message || String(copyErr)
+      // 🎯 如果遇到 "Invalid data found" 错误，尝试重新编码
+      if (
+        errMsg.includes('Invalid data found') ||
+        errMsg.includes('Error applying bitstream filters')
+      ) {
+        logger(workerId, `流复制失败，尝试重新编码...`, 'slice')
+        try {
+          // 重新编码模式：使用 libx264 和 aac，忽略错误继续处理
+          await execPromise(
+            `ffmpeg -y -err_detect ignore_err -i "${localMp4}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -hls_time 5 -hls_list_size 0 -f hls "${path.join(outputFolder, 'index.m3u8')}"`,
+            { timeout: 600000 } // 重新编码需要更长时间，10 分钟超时
+          )
+          sliceSuccess = true
+          logger(workerId, `重新编码成功`, 'slice')
+        } catch (reencodeErr) {
+          throw new Error(`视频切片失败（流复制和重新编码都失败）: ${reencodeErr.message}`)
+        }
+      } else {
+        // 其他错误直接抛出
+        throw copyErr
+      }
+    }
+
+    if (!sliceSuccess) {
+      throw new Error('视频切片失败')
+    }
+
     const sliceTime = ((Date.now() - stageTime) / 1000).toFixed(1)
     stageTime = Date.now()
 
@@ -365,10 +397,39 @@ async function processVideo(video, workerId) {
     )
   } finally {
     // 7. 清理本地环境
-    if (fs.existsSync(localMp4)) fs.unlinkSync(localMp4)
-    if (fs.existsSync(outputFolder)) {
-      fs.readdirSync(outputFolder).forEach((f) => fs.unlinkSync(path.join(outputFolder, f)))
-      fs.rmdirSync(outputFolder)
+    try {
+      if (fs.existsSync(localMp4)) {
+        fs.unlinkSync(localMp4)
+      }
+    } catch (e) {
+      // 忽略删除文件错误
+    }
+
+    try {
+      if (fs.existsSync(outputFolder)) {
+        // 🎯 改进：递归删除目录中的所有文件
+        const files = fs.readdirSync(outputFolder)
+        files.forEach((f) => {
+          try {
+            const filePath = path.join(outputFolder, f)
+            const stat = fs.statSync(filePath)
+            if (stat.isDirectory()) {
+              // 如果是目录，递归删除
+              fs.readdirSync(filePath).forEach((subF) => {
+                fs.unlinkSync(path.join(filePath, subF))
+              })
+              fs.rmdirSync(filePath)
+            } else {
+              fs.unlinkSync(filePath)
+            }
+          } catch (e) {
+            // 忽略单个文件删除错误
+          }
+        })
+        fs.rmdirSync(outputFolder)
+      }
+    } catch (e) {
+      // 忽略删除目录错误（可能目录不为空或已被删除）
     }
   }
 }
