@@ -212,7 +212,7 @@ function onAvatarError(e) {
                   :playsinline="true"
                   :fullscreen="false"
                   v-is-can-play="buildCdnUrl(item.video.play_addr.url_list[0])"
-                  :poster="_checkImgUrl(item.video.cover.url_list[0])"
+                  :poster="buildCdnUrl(item.video.cover.url_list[0])"
                   @error="onVideoError"
                 ></video>
                 <div class="options">
@@ -245,7 +245,7 @@ function onAvatarError(e) {
 
               <img
                 v-else
-                v-lazy="_checkImgUrl(item.video.cover.url_list[0])"
+                v-lazy="buildCdnUrl(item.video.cover.url_list[0])"
                 alt=""
                 class="poster"
                 @error="onCoverError"
