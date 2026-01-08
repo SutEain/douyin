@@ -23,7 +23,13 @@
               x5-video-player-type="h5-page"
             />
             <!-- 🖼️ 图片类型 -->
-            <img v-else :src="buildCdnUrl(item.info_list?.[0]?.url)" alt="" />
+            <img
+              v-else
+              :src="buildCdnUrl(item.info_list?.[0]?.url)"
+              alt=""
+              @error="handleImageError"
+              style="background-color: #000; min-height: 100%; object-fit: contain"
+            />
           </SlideItem>
         </SlideHorizontal>
 
@@ -481,6 +487,15 @@ const showRewardPanel = ref(false)
 const rewardAmount = ref('')
 const rewardPresets = [10, 50, 100, 500]
 const isRewarding = ref(false)
+
+// 🎯 图片加载错误处理
+function handleImageError(event) {
+  const img = event.target
+  if (img) {
+    // 如果图片加载失败，隐藏图片或显示占位符
+    img.style.display = 'none'
+  }
+}
 
 async function handleReward() {
   if (isRewarding.value) return

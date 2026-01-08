@@ -1,7 +1,13 @@
 import { errorResponse, successResponse } from '../../_shared/response.ts'
 import { parsePagination, tryGetAuth } from '../lib/auth.ts'
 import { supabaseAdmin } from '../lib/env.ts'
-import { getVideoAuthorProfile, mapVideoRow, applyRowFlags, attachUserFlags } from '../lib/video.ts'
+import {
+  getVideoAuthorProfile,
+  mapVideoRow,
+  applyRowFlags,
+  attachUserFlags,
+  buildCoverUrl
+} from '../lib/video.ts'
 
 // 图文（壁纸）推荐：返回 note_card 结构，供 Community.vue + AlbumDetail.vue 使用
 export async function handlePostRecommended(req: Request): Promise<Response> {
@@ -37,16 +43,29 @@ export async function handlePostRecommended(req: Request): Promise<Response> {
     if (!mapped) continue
     applyRowFlags(mapped, row)
 
-    const coverUrl =
-      mapped?.images?.[0]?.url || mapped?.video?.cover?.url_list?.[0] || mapped?.video?.poster || ''
-
+    // 🎯 构建图片列表，优先使用 play_url，然后是 cover_url，最后是 url
     const imageList = Array.isArray(mapped.images)
       ? mapped.images
-          .filter((img: any) => !!img?.url)
-          .map((img: any) => ({
-            info_list: [{ url: img.url }]
-          }))
+          .filter((img: any) => {
+            // 至少要有 play_url、cover_url 或 url 中的一个
+            return !!(img?.play_url || img?.cover_url || img?.url)
+          })
+          .map((img: any) => {
+            // 🎯 优先使用 play_url（图片的实际URL），然后是 cover_url，最后是 url
+            const imageUrl = img.play_url || img.cover_url || img.url || ''
+            return {
+              type: img.type || 'image',
+              info_list: [{ url: imageUrl }]
+            }
+          })
       : []
+
+    // 🎯 使用 buildCoverUrl 确保封面URL正确构建（兼容相对路径和完整URL）
+    // 如果 buildCoverUrl 返回空，尝试从 imageList 的第一项获取封面
+    let coverUrl = (await buildCoverUrl(row, authorProfile)) || ''
+    if (!coverUrl && imageList.length > 0) {
+      coverUrl = imageList[0].info_list?.[0]?.url || ''
+    }
 
     const nickname = mapped?.author?.nickname || '用户'
     const avatar = mapped?.author?.avatar_168x168?.url_list?.[0] || ''
