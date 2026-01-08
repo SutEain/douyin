@@ -65,19 +65,29 @@ function pickBestPlayUrl(lists: any[]): string | null {
 
   if (!urls.length) return null
 
-  // ✅ 选择“更适合浏览器播放”的链接：
-  // - 优先 douyin.com 的 /aweme/v1/play（通常是官方播放入口，兼容性更强）
-  // - 其次 douyin.com 域
-  // - 尽量避免 zjcdn 直链（后台浏览器环境经常 403）
+  // 🎯 修复：排除 API 端点，优先选择实际的视频文件 URL
+  // - 排除 /aweme/v1/play/ 这样的 API 端点（不是实际视频文件）
+  // - 优先选择包含视频文件扩展名的 URL（.mp4, .m3u8 等）
+  // - 其次选择 CDN 直链（zjcdn.com 等）
+  // - 最后选择 douyin.com 域的其他链接
+  const videoExts = /\.(mp4|m3u8|mov|avi|mkv|webm|flv)(\?|$)/i
   let best = urls[0]
   let bestScore = -1e9
   for (const u of urls) {
+    // 🎯 跳过 API 端点
+    if (/\/aweme\/v1\/play\/?/i.test(u)) {
+      continue
+    }
+
     let score = 0
-    if (/\/aweme\/v1\/play\/?/i.test(u)) score += 100
-    if (/https?:\/\/www\.douyin\.com\//i.test(u)) score += 80
-    if (/https?:\/\/[^/]*douyin\.com\//i.test(u)) score += 40
-    if (/zjcdn\.com/i.test(u)) score -= 30
-    // 更短的链接通常更“入口化”（如 /aweme/v1/play），稍微加权
+    // 优先选择包含视频文件扩展名的 URL
+    if (videoExts.test(u)) score += 200
+    // CDN 直链（通常是实际视频文件）
+    if (/zjcdn\.com/i.test(u)) score += 150
+    // douyin.com 域的其他链接
+    if (/https?:\/\/www\.douyin\.com\//i.test(u)) score += 50
+    if (/https?:\/\/[^/]*douyin\.com\//i.test(u)) score += 30
+    // 更短的链接稍微加权
     score += Math.max(0, 2000 - u.length) / 2000
     if (score > bestScore) {
       bestScore = score
