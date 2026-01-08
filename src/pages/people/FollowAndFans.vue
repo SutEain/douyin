@@ -15,6 +15,7 @@
       </template>
     </BaseHeader>
 
+    <!-- ✅ 采用 flex 布局，确保容器高度精准等于剩余空间 -->
     <div class="scroll-container" ref="scrollContainer">
       <div class="main" ref="mainContent">
         <div class="content">
@@ -23,11 +24,13 @@
               tabStyleWidth="50%"
               :tabTexts="['关注', '粉丝']"
               v-model:active-index="data.slideIndex"
-            >
-            </Indicator>
+            />
           </div>
-          <SlideHorizontal v-model:index="data.slideIndex" :disableSwipe="true" class="list-slider">
-            <SlideItem class="tab1">
+
+          <!-- ✅ 彻底移除 SlideHorizontal 组建，改用纯 Vue 条件渲染 -->
+          <!-- 这样可以 100% 消除 JS 触摸冲突 -->
+          <div class="list-content">
+            <div v-if="data.slideIndex === 0" class="tab-pane">
               <Search
                 v-model="data.searchKey"
                 placeholder="搜索用户备注或名字"
@@ -42,7 +45,7 @@
                     :show-unfollow="true"
                     @unfollow="handleUnfollow(item.user_id)"
                     @clickAvatar="handleClickAvatar(item)"
-                  ></People>
+                  />
                 </div>
                 <div class="no-result" v-else>
                   <img src="../../assets/img/icon/no-result.png" alt="" />
@@ -58,25 +61,27 @@
                   :show-unfollow="true"
                   @unfollow="handleUnfollow(item.user_id)"
                   @clickAvatar="handleClickAvatar(item)"
-                ></People>
+                />
                 <NoMore v-if="data.following.length" />
               </div>
-            </SlideItem>
-            <SlideItem class="tab2">
+            </div>
+
+            <div v-else class="tab-pane">
               <People
                 :key="i"
                 v-for="(item, i) in data.followers"
                 :people="item"
                 @clickAvatar="handleClickAvatar(item)"
-              ></People>
+              />
               <NoMore v-if="data.followers.length" />
-            </SlideItem>
-          </SlideHorizontal>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </template>
+
 <script setup lang="ts">
 import People from './components/People.vue'
 import Search from '../../components/Search.vue'
@@ -98,9 +103,8 @@ const router = useRouter()
 const nav = useNav()
 const store = useBaseStore()
 const data = reactive({
-  isSearch: false,
-  searchKey: '',
   slideIndex: 0,
+  searchKey: '',
   following: [] as any[],
   followers: [] as any[],
   searchFollowing: [] as any[]
@@ -110,7 +114,7 @@ const scrollContainer = ref<HTMLElement | null>(null)
 const mainContent = ref<HTMLElement | null>(null)
 let startY = 0
 
-// ✅ 🎯 参考 UserPanel.vue 的拦截逻辑
+// ✅ 🎯 核心修复：精准拦截顶部下拉
 function touchStart(e: TouchEvent) {
   startY = e.touches[0].pageY
 }
@@ -120,18 +124,23 @@ function touchMove(e: TouchEvent) {
   const moveY = e.touches[0].pageY - startY
   const isTop = scrollContainer.value.scrollTop <= 0
 
-  // 如果在顶部且向下拉，拦截它，防止 Telegram 关闭 APP
+  // 只有在顶部且手指“向下拉”时，才拦截（防止 Telegram 关闭 APP）
+  // 向上划（moveY < 0）绝对不拦截，交给系统原生滚动
   if (isTop && moveY > 0) {
     if (e.cancelable) e.preventDefault()
   }
 }
 
+function handleScroll() {
+  // 可以在这里处理加载更多
+}
+
 onMounted(async () => {
-  data.slideIndex = ~~route.query.type
+  data.slideIndex = ~~route.query.type || 0
   await loadFollowing()
   await loadFollowers()
 
-  // ✅ 手动绑定非 passive 事件以允许 preventDefault
+  // ✅ 在内容主体上绑定拦截，非 passive 模式
   if (mainContent.value) {
     mainContent.value.addEventListener('touchstart', touchStart, { passive: true })
     mainContent.value.addEventListener('touchmove', touchMove, { passive: false })
@@ -199,23 +208,19 @@ watch(
 
 .FollowAndFans {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  top: 0;
+  inset: 0;
   color: white;
   font-size: 14rem;
   overflow: hidden;
   display: flex;
-  flex-direction: column;
+  flex-direction: column; // ✅ 关键：垂直排列 header 和 container
   background: var(--main-bg);
 
   .scroll-container {
-    height: 100vh;
+    flex: 1; // ✅ 关键：自动占满剩余高度
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 80px;
 
     &::-webkit-scrollbar {
       display: none;
@@ -224,12 +229,11 @@ watch(
 
   .main {
     width: 100%;
-    min-height: 100.1%; // ✅ 关键：强制激活 iOS 滚动
+    min-height: 100.1%; // 激活 iOS 滚动引擎
+    padding-bottom: 50px; // 给底部留点空间
   }
 
   .content {
-    padding-top: var(--common-header-height);
-
     .indicator-wrapper {
       padding: 0 var(--page-padding);
       background: var(--main-bg);
@@ -239,19 +243,17 @@ watch(
     }
   }
 
-  .list-slider {
-    height: auto !important; // ✅ 移除 100% 高度限制
-    overflow: visible !important;
+  .tab-pane {
+    padding: 0 var(--page-padding);
+    animation: fadeIn 0.2s ease-in;
+  }
 
-    :deep(.slide-list) {
-      height: auto !important;
-      display: block !important; // ✅ 打破 flex 布局限制
-      touch-action: auto !important;
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
     }
-
-    :deep(.slide-item) {
-      height: auto !important;
-      min-height: 50vh;
+    to {
+      opacity: 1;
     }
   }
 
