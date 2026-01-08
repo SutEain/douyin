@@ -203,6 +203,21 @@ export async function buildCoverUrl(row: any, profile: any): Promise<string> {
         if (/^https?:\/\//i.test(r2Target) || r2Target.startsWith('/')) {
           return r2Target
         }
+        // 🎯 HLS 视频特殊处理：如果 cover_url 是 thumb_{file_id}.jpg 格式，需要根据 play_url 构建路径
+        if (
+          first.type === 'video' &&
+          first.play_url &&
+          r2Target.startsWith('thumb_') &&
+          r2Target.endsWith('.jpg')
+        ) {
+          const playUrl = first.play_url
+          // 从 play_url 提取路径：/videos/{uuid}/{file_id}/index.m3u8 -> /videos/{uuid}
+          const playUrlMatch = playUrl.match(/^(\/videos\/[^/]+)/)
+          if (playUrlMatch) {
+            const videoDir = playUrlMatch[1]
+            return `${videoDir}/${r2Target}`
+          }
+        }
       }
 
       // 🎯 Telegram file_id 不再支持，直接跳过
@@ -215,13 +230,15 @@ export async function buildCoverUrl(row: any, profile: any): Promise<string> {
     const playUrl = row.play_url
     const coverUrl = row.cover_url.trim()
 
-    // 如果 play_url 是 HLS 格式：/videos/{uuid}/{file_id}/index.m3u8
+    // 如果 play_url 是 HLS 格式：/videos/{uuid}/{file_id}/index.m3u8 或 /videos/{uuid}/index.m3u8
     // 封面应该是：/videos/{uuid}/thumb_{file_id}.jpg
     if (playUrl.includes('.m3u8')) {
       // 情况1：cover_url 是 thumb_{file_id}.jpg（没有路径前缀）
       if (coverUrl.startsWith('thumb_') && coverUrl.endsWith('.jpg') && !coverUrl.includes('/')) {
-        // 从 play_url 提取路径：/videos/{uuid}/{file_id}/index.m3u8 -> /videos/{uuid}
-        const playUrlMatch = playUrl.match(/^(\/videos\/[^/]+)\//)
+        // 从 play_url 提取路径：
+        // /videos/{uuid}/{file_id}/index.m3u8 -> /videos/{uuid}
+        // /videos/{uuid}/index.m3u8 -> /videos/{uuid}
+        const playUrlMatch = playUrl.match(/^(\/videos\/[^/]+)/)
         if (playUrlMatch) {
           const videoDir = playUrlMatch[1]
           return `${videoDir}/${coverUrl}`
@@ -234,6 +251,14 @@ export async function buildCoverUrl(row: any, profile: any): Promise<string> {
         coverUrl.endsWith('.jpg')
       ) {
         return `/${coverUrl}`
+      }
+      // 情况3：cover_url 已经是完整路径 /videos/{uuid}/thumb_{file_id}.jpg
+      if (
+        coverUrl.startsWith('/videos/') &&
+        coverUrl.includes('/thumb_') &&
+        coverUrl.endsWith('.jpg')
+      ) {
+        return coverUrl
       }
     }
   }
