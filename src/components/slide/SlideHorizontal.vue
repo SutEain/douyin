@@ -160,7 +160,7 @@ function touchEnd(e) {
       @pointerdown="touchStart"
       @pointermove="touchMove"
       @pointerup="touchEnd"
-      style="touch-action: pan-y"
+      :style="disableSwipe ? '' : 'touch-action: pan-y'"
     >
       <slot></slot>
     </div>

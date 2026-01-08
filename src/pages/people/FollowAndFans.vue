@@ -188,18 +188,17 @@ watch(
   color: white;
   font-size: 14rem;
   overflow: hidden; // ✅ 外层禁止滚动
-  overscroll-behavior: contain; // ✅ 防止下拉时拉动整个 miniApp
-  overscroll-behavior-y: contain; // ✅ 明确指定 Y 轴
   display: flex;
   flex-direction: column;
+  background: var(--main-bg);
 
-  // ✅ 滚动容器（参考 Me 页面的样式）
+  // ✅ 滚动容器（完全参考 Me 页面的样式）
   .scroll-container {
     height: 100vh;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch; // ✅ iOS 平滑滚动
-    background: var(--main-bg);
+    padding-bottom: var(--footer-height); // ✅ 参考 Me 页面
 
     &::-webkit-scrollbar {
       display: none;
@@ -232,10 +231,17 @@ watch(
   .tab2 {
     padding: 0 var(--page-padding);
     box-sizing: border-box;
+    min-height: 100%; // ✅ 确保内容至少占满视口，触发滚动
 
-    // ✅ 确保 SlideItem 高度自适应内容
+    // ✅ 确保 SlideItem 高度自适应内容（参考 Me 页面）
     :deep(.slide-item) {
       height: auto !important;
+      min-height: 100%;
+    }
+
+    // ✅ 移除 SlideHorizontal 的 touch-action 限制（当 disableSwipe 时）
+    :deep(.slide-list) {
+      touch-action: auto !important;
     }
   }
 
