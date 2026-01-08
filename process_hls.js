@@ -232,12 +232,20 @@ async function processVideo(video, workerId) {
   const ext = path.extname(relativePath).toLowerCase()
   const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v']
   if (!videoExts.includes(ext)) {
+    // 🎯 如果是图片文件或其他非视频文件，删除记录（避免重复处理）
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+    if (imageExts.includes(ext)) {
+      await deleteInvalidVideo(id, `play_url 指向图片文件: ${relativePath}`, workerId)
+      throw new Error(`play_url 指向图片文件，已删除: ${relativePath}`)
+    }
     // 🎯 如果没有扩展名且路径看起来像 API 端点，删除记录
     if (!ext && (relativePath.includes('/aweme/') || relativePath.includes('/api/'))) {
       await deleteInvalidVideo(id, `无效的 API 路径: ${relativePath}`, workerId)
       throw new Error(`无效的 API 路径，已删除: ${relativePath}`)
     }
-    throw new Error(`跳过非视频文件: ${relativePath} (扩展名: ${ext})`)
+    // 🎯 其他未知格式也删除，避免重复处理
+    await deleteInvalidVideo(id, `非视频文件格式: ${relativePath} (扩展名: ${ext})`, workerId)
+    throw new Error(`非视频文件格式，已删除: ${relativePath} (扩展名: ${ext})`)
   }
 
   const folder = path.dirname(relativePath)
