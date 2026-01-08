@@ -213,9 +213,12 @@ async function startWorker(workerId) {
           errorMsg.includes('URL 解析失败') ||
           errorMsg.includes('play_url 为空') ||
           errorMsg.includes('已删除') ||
-          errorMsg.includes('无效的 API')
+          errorMsg.includes('无效的 API') ||
+          errorMsg.includes('R2 文件不存在')
         ) {
           logger(workerId, `跳过无效记录: ${fallback.id} - ${errorMsg}`, 'skip')
+          // 🎯 核心修复：更新数据库，标记为已处理，避免死循环
+          await supabase.from('videos').update({ is_hls: true }).eq('id', fallback.id)
           // 短暂休息后继续下一个
           await sleep(1000)
         } else {
@@ -234,9 +237,12 @@ async function startWorker(workerId) {
           errorMsg.includes('URL 解析失败') ||
           errorMsg.includes('play_url 为空') ||
           errorMsg.includes('已删除') ||
-          errorMsg.includes('无效的 API')
+          errorMsg.includes('无效的 API') ||
+          errorMsg.includes('R2 文件不存在')
         ) {
           logger(workerId, `跳过无效记录: ${video.id} - ${errorMsg}`, 'skip')
+          // 🎯 核心修复：更新数据库，标记为已处理（虽然是失败），避免死循环
+          await supabase.from('videos').update({ is_hls: true }).eq('id', video.id)
           // 短暂休息后继续下一个
           await sleep(1000)
         } else {
@@ -283,56 +289,67 @@ async function processCollection(video, workerId) {
   const videoItems = mediaList.filter((item) => item.type === 'video' && item.play_url)
   if (videoItems.length === 0) {
     logger(workerId, `Collection 中没有需要转换的视频`, 'skip')
+    // 即使没有视频项，如果是 collection 且 media_list 存在，也标记为处理过
+    const { error: dbErr } = await supabase.from('videos').update({ is_hls: true }).eq('id', id)
+    if (dbErr) throw dbErr
     return
   }
 
-  logger(workerId, `发现 ${videoItems.length} 个视频需要转换`, 'info')
+  logger(workerId, `发现 ${videoItems.length} 个视频需要处理`, 'info')
 
   // 遍历每个视频项，进行 HLS 转换
-  let convertedCount = 0
+  let processedCount = 0
+  let skipCount = 0
+
   for (let i = 0; i < videoItems.length; i++) {
     const item = videoItems[i]
     try {
+      // 🎯 如果已经是 HLS，跳过转换
+      if (item.is_hls || (item.play_url && item.play_url.includes('.m3u8'))) {
+        logger(workerId, `[${i + 1}/${videoItems.length}] ⏭️ 已经是 HLS，跳过`, 'skip')
+        item.is_hls = true
+        skipCount++
+        continue
+      }
+
       // 使用 processSingleVideo 函数处理单个视频
       const hlsUrl = await processSingleVideoForCollection(
         item.play_url,
         id,
-        item.file_id,
+        item.file_id || `v${i}`,
         workerId
       )
       if (hlsUrl) {
         // 更新 media_list 中对应项的 play_url
         item.play_url = hlsUrl
         item.is_hls = true
-        convertedCount++
+        processedCount++
         logger(workerId, `[${i + 1}/${videoItems.length}] ✅ 转换成功`, 'success')
       }
     } catch (e) {
-      logger(workerId, `[${i + 1}/${videoItems.length}] ❌ 转换失败: ${e.message}`, 'error')
-      // 继续处理下一个视频，不中断整个 collection
+      logger(workerId, `[${i + 1}/${videoItems.length}] ❌ 处理失败: ${e.message}`, 'error')
+      // 如果是文件不存在，标记一下，避免后续重复尝试
+      if (e.message.includes('R2 文件不存在')) {
+        item.error = 'R2_FILE_MISSING'
+      }
     }
   }
 
-  if (convertedCount === 0) {
-    throw new Error('Collection 中所有视频转换失败')
+  // 🎯 核心修复：无论是否成功，只要处理过，就更新数据库，避免死循环
+  const updatePayload = {
+    media_list: mediaList,
+    is_hls: true,
+    play_url: videoItems.find((v) => v.is_hls)?.play_url || video.play_url
   }
 
-  // 更新数据库
-  const { error: dbErr } = await supabase
-    .from('videos')
-    .update({
-      media_list: mediaList,
-      is_hls: true,
-      play_url: videoItems[0]?.play_url || video.play_url // 更新顶层 play_url 为第一个视频的 HLS 路径
-    })
-    .eq('id', id)
+  const { error: dbErr } = await supabase.from('videos').update(updatePayload).eq('id', id)
 
   if (dbErr) throw dbErr
 
   const totalTime = ((Date.now() - startTime) / 1000).toFixed(1)
   logger(
     workerId,
-    `✅ Collection 任务完成! 耗时: ${totalTime}s (转换了 ${convertedCount}/${videoItems.length} 个视频)`,
+    `✅ Collection 任务完成! 耗时: ${totalTime}s (成功: ${processedCount}, 跳过: ${skipCount}, 总计: ${videoItems.length})`,
     'success'
   )
 }
@@ -352,6 +369,11 @@ async function processSingleVideoForCollection(videoUrl, collectionId, fileId, w
 
   // 检查文件扩展名
   const ext = path.extname(relativePath).toLowerCase()
+  if (ext === '.m3u8') {
+    logger(workerId, `已经是 HLS: ${relativePath}`, 'skip')
+    return videoUrl.startsWith('http') ? new URL(videoUrl).pathname : videoUrl
+  }
+
   const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v']
   if (!videoExts.includes(ext)) {
     throw new Error(`非视频文件: ${relativePath}`)
@@ -545,6 +567,13 @@ async function processVideo(video, workerId) {
 
   // 🎯 检查文件扩展名，跳过非视频文件
   const ext = path.extname(relativePath).toLowerCase()
+  if (ext === '.m3u8') {
+    logger(workerId, `检测到已经是 HLS 路径，同步数据库状态: ${id}`, 'db')
+    const { error: dbErr } = await supabase.from('videos').update({ is_hls: true }).eq('id', id)
+    if (dbErr) throw dbErr
+    return
+  }
+
   const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v']
   if (!videoExts.includes(ext)) {
     // 🎯 如果是图片文件，且 content_type 是 video（说明数据错误），删除记录

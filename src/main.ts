@@ -1,4 +1,17 @@
 import { createApp } from 'vue'
+
+// ✅ 生产环境禁用控制台输出（除非 URL 包含 debug=1）
+if (import.meta.env.PROD && !window.location.search.includes('debug=1')) {
+  // 保存原始 console 引用，备用
+  if (typeof window !== 'undefined') {
+    ;(window as any).__rawConsole__ = { ...window.console }
+  }
+  console.log = () => {}
+  console.info = () => {}
+  console.debug = () => {}
+  // console.warn = () => {} // 建议保留 warn 和 error 用于捕获线上异常
+}
+
 import App from './App.vue'
 import './assets/less/index.less'
 import router from './router'
@@ -156,5 +169,3 @@ bus.on(EVENT_KEY.REMOVE_MUTED, () => {
 
 // ✅ Telegram WebApp 初始化已经在 index.html 中提前处理
 // 避免重复调用导致问题
-
-// 移除全局禁用 Console 输出的代码，以便调试

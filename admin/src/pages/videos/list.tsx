@@ -357,7 +357,7 @@ export const VideoList = () => {
   const handleDelete = (record: any) => {
     Modal.confirm({
       title: '确认删除',
-      content: `确定要删除这个${record.content_type === 'video' ? '视频' : record.content_type === 'album' ? '相册' : '图片'}吗？此操作不可恢复！`,
+      content: `确定要删除这个${record.content_type === 'video' ? '视频' : record.content_type === 'album' ? '相册' : record.content_type === 'collection' ? '合辑' : '图片'}吗？此操作不可恢复！`,
       okType: 'danger',
       onOk: () => {
         deleteVideo(

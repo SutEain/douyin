@@ -29,11 +29,6 @@ export function buildCdnUrl(pathOrUrl: string): string {
     result = `${base}${pathOrUrl}`
   }
 
-  // 🎯 强制诊断日志：在控制台打印最终转换结果
-  if (result) {
-    console.log(`[MediaFix] URL 转换: ${pathOrUrl} -> ${result}`)
-  }
-
   return result || pathOrUrl
 }
 
