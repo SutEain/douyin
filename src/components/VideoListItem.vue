@@ -157,7 +157,12 @@ const handleAvatarError = (e: Event) => {
 // 封面加载失败
 const handleCoverError = (e: Event) => {
   const target = e.target as HTMLImageElement
-  target.src = 'https://via.placeholder.com/300x400?text=No+Image'
+  // 使用 data URI 作为占位图，避免外部请求失败
+  const placeholderImage =
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7mmoLml6DlpLHotKU8L3RleHQ+PC9zdmc+'
+  if (target.src !== placeholderImage) {
+    target.src = placeholderImage
+  }
 }
 
 // 点击视频

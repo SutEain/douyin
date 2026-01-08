@@ -818,6 +818,10 @@ export const VideoList = () => {
               const contentType = record.content_type || 'video'
               const mediaItems = parseImages(record.media_list || record.images)
 
+              // 使用 data URI 作为占位图，避免外部请求失败
+              const placeholderImage =
+                'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAiIHk9IjQwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7mmoLml6DlpLHotKU8L3RleHQ+PC9zdmc+'
+
               return coverUrl ? (
                 <div style={{ position: 'relative' }}>
                   <img
@@ -835,8 +839,12 @@ export const VideoList = () => {
                       handlePreview(record)
                     }}
                     onError={(e) => {
-                      ;(e.target as HTMLImageElement).src =
-                        'https://via.placeholder.com/80x80?text=No+Image'
+                      const img = e.target as HTMLImageElement
+                      // 防止重复触发错误处理
+                      if (img.src !== placeholderImage) {
+                        img.src = placeholderImage
+                        img.style.objectFit = 'contain'
+                      }
                     }}
                   />
                   {/* 相册/合集显示媒体数量角标 */}
@@ -871,7 +879,9 @@ export const VideoList = () => {
                     borderRadius: 4,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    fontSize: 12,
+                    color: '#999'
                   }}
                 >
                   无封面
@@ -893,16 +903,23 @@ export const VideoList = () => {
                 avatar = avatar.url_list?.[0] || avatar.url
               }
 
+              // 使用 data URI 作为头像占位图
+              const avatarPlaceholder =
+                'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNmMGYwZjAiLz48Y2lyY2xlIGN4PSIxNiIgY3k9IjEyIiByPSI1IiBmaWxsPSIjOTk5OTk5Ii8+PHBhdGggZD0iTTggMjZjMC00IDMuNTgtNyA4LTdzOCAzIDggNyIgZmlsbD0iIzk5OTk5OSIvPjwvc3ZnPg=='
+
               return (
                 <Space direction="vertical" size={0}>
                   <Space>
                     <img
-                      src={avatar || 'https://via.placeholder.com/32'}
+                      src={avatar || avatarPlaceholder}
                       alt={nickname}
                       style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
-                      onError={(e) =>
-                        ((e.target as HTMLImageElement).src = 'https://via.placeholder.com/32')
-                      }
+                      onError={(e) => {
+                        const img = e.target as HTMLImageElement
+                        if (img.src !== avatarPlaceholder) {
+                          img.src = avatarPlaceholder
+                        }
+                      }}
                     />
                     <span style={{ fontWeight: 500 }}>{nickname}</span>
                   </Space>
@@ -1220,8 +1237,13 @@ export const VideoList = () => {
                   alt={`媒体 ${currentImageIndex + 1}`}
                   style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
                   onError={(e) => {
-                    ;(e.target as HTMLImageElement).src =
-                      'https://via.placeholder.com/400x400?text=加载失败'
+                    const img = e.target as HTMLImageElement
+                    // 使用 data URI 作为预览图占位图
+                    const previewPlaceholder =
+                      'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7mmoLml6DlpLHotKU8L3RleHQ+PC9zdmc+'
+                    if (img.src !== previewPlaceholder) {
+                      img.src = previewPlaceholder
+                    }
                   }}
                 />
               )}
