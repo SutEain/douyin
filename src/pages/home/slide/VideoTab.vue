@@ -1,6 +1,8 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import Hls from 'hls.js'
 import { _checkImgUrl, _duration, _formatNumber, _stopPropagation, _truncate } from '@/utils'
+import { buildCdnUrl } from '@/utils/media'
 import { recommendedVideoTab } from '@/api/videos'
 import ScrollList from '@/components/ScrollList.vue'
 import { useNav } from '@/utils/hooks/useNav'
@@ -47,9 +49,11 @@ watch(
 )
 
 const obList = []
+const hlsInstances = new Map()
 
 const vIsCanPlay = {
-  mounted(el) {
+  mounted(el, binding) {
+    const url = binding.value
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
@@ -61,7 +65,27 @@ const vIsCanPlay = {
             }
           })
           el.parentNode.parentNode.classList.remove('pause')
-          el.play()
+
+          // 🎯 HLS 初始化逻辑
+          if (url && url.includes('.m3u8')) {
+            if (Hls.isSupported()) {
+              let hls = hlsInstances.get(el)
+              if (hls) hls.destroy()
+              hls = new Hls({
+                capLevelToPlayerSize: true,
+                autoStartLoad: true
+              })
+              hls.loadSource(url)
+              hls.attachMedia(el)
+              hlsInstances.set(el, hls)
+            } else if (el.canPlayType('application/vnd.apple.mpegurl')) {
+              el.src = url
+            }
+          } else {
+            el.src = url
+          }
+
+          el.play().catch(() => {})
           playingEl.value = el
           // 🎯 当前视频默认倍速 1.0（仅对当前视频生效）
           try {
@@ -74,6 +98,12 @@ const vIsCanPlay = {
         } else {
           el.parentNode.parentNode.classList.add('pause')
           el.pause()
+          // 离开视图时销毁 HLS 实例释放资源
+          const hls = hlsInstances.get(el)
+          if (hls) {
+            hls.destroy()
+            hlsInstances.delete(el)
+          }
         }
       },
       { threshold: 0.5 }
@@ -81,7 +111,12 @@ const vIsCanPlay = {
     observer.observe(el)
     obList.push(observer)
   },
-  unmounted() {
+  unmounted(el) {
+    const hls = hlsInstances.get(el)
+    if (hls) {
+      hls.destroy()
+      hlsInstances.delete(el)
+    }
     obList.map((v) => v.disconnect())
   }
 }
@@ -166,7 +201,8 @@ function onAvatarError(e) {
             >
               <div class="video-wrapper" v-if="i % 9 === 0">
                 <video
-                  :muted="isMuted"
+                  muted
+                  autoplay
                   preload
                   loop
                   x5-video-player-type="h5-page"
@@ -175,9 +211,8 @@ function onAvatarError(e) {
                   :x5-playsinline="true"
                   :playsinline="true"
                   :fullscreen="false"
-                  v-is-can-play
-                  :poster="_checkImgUrl(item.video.cover.url_list[0])"
-                  :src="item.video.play_addr.url_list[0]"
+                  v-is-can-play="buildCdnUrl(item.video.play_addr.url_list[0])"
+                  :poster="buildCdnUrl(item.video.cover.url_list[0])"
                   @error="onVideoError"
                 ></video>
                 <div class="options">
@@ -210,7 +245,7 @@ function onAvatarError(e) {
 
               <img
                 v-else
-                v-lazy="_checkImgUrl(item.video.cover.url_list[0])"
+                v-lazy="buildCdnUrl(item.video.cover.url_list[0])"
                 alt=""
                 class="poster"
                 @error="onCoverError"

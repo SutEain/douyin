@@ -44,13 +44,22 @@ export function slideInit(el, state) {
 export function canSlide(state) {
   //每次按下都需要检测，up事件会重置为true
   if (state.needCheck) {
-    //判断move x和y的距离是否大于判断值，因为距离太小无法判断滑动方向
     if (Math.abs(state.move.x) > state.judgeValue || Math.abs(state.move.y) > state.judgeValue) {
-      //放大再相除，根据长宽比判断方向，angle大于1就是左右滑动，小于是上下滑动
       const angle = (Math.abs(state.move.x) * 10) / (Math.abs(state.move.y) * 10)
-      //根据当前slide的类型，判断能否滑动，并记录下来，后续不再判断，直接返回记录值
-      state.next = state.type === SlideType.HORIZONTAL ? angle > 1 : angle <= 1
-      // console.log('angle', angle, state.next)
+
+      // 🎯 极度激进的判定：在水平滑动组件中，如果 Y 的位移大于 X，或者角度不够大，直接锁死
+      if (state.type === SlideType.HORIZONTAL) {
+        // 如果垂直位移明显，或者角度小于 1.8（约 60度），都判定为纵向滚动意图
+        if (Math.abs(state.move.y) > Math.abs(state.move.x) || angle < 1.8) {
+          state.next = false
+          state.needCheck = false
+          return false
+        }
+        state.next = true
+      } else {
+        state.next = angle <= 1
+      }
+
       state.needCheck = false
     } else {
       return false
@@ -119,6 +128,13 @@ export function slideTouchMove(
   //检测能否滑动
   const canSlideRes = canSlide(state)
 
+  // 🎯 关键修复：如果在水平组件中检测到不能滑动（即判定为纵向滑动）
+  // 立即释放状态，让系统接管
+  if (state.type === SlideType.HORIZONTAL && !canSlideRes && state.needCheck === false) {
+    state.isDown = false
+    return
+  }
+
   //是否在往到头或尾滑动
   const isNext = state.type === SlideType.HORIZONTAL ? state.move.x < 0 : state.move.y < 0
 
@@ -136,11 +152,17 @@ export function slideTouchMove(
     if (!canNextCb) canNextCb = canNext
     if (canNextCb(state, isNext)) {
       window.isMoved = true
-      //能滑动，那就把事件捕获，不能给父组件处理
-      _stopPropagation(e)
+
+      // 🎯 只有在水平滑动组件中，且确定是横向位移时，才阻止冒泡和默认行为
       if (state.type === SlideType.HORIZONTAL) {
+        if (e.cancelable) e.preventDefault()
+        _stopPropagation(e)
         bus.emit(state.name + '-moveX', state.move.x)
+      } else {
+        // 垂直滑动组件依然保持原样
+        _stopPropagation(e)
       }
+
       //获取偏移量
       const t = getSlideOffset(state, el) + (isNext ? state.judgeValue : -state.judgeValue)
       let dx1 = 0,
@@ -178,7 +200,7 @@ export function slideTouchEnd(e, state, canNextCb = null, nextCb = null, notNext
   if (state.next) {
     const isHorizontal = state.type === SlideType.HORIZONTAL
     const isNext = isHorizontal ? state.move.x < 0 : state.move.y < 0
-    
+
     if (!canNextCb) canNextCb = canNext
     if (canNextCb(state, isNext)) {
       // 结合时间、距离来判断是否成功滑动
@@ -186,16 +208,16 @@ export function slideTouchEnd(e, state, canNextCb = null, nextCb = null, notNext
       const gapTime = endTime - state.start.time
       const distance = isHorizontal ? state.move.x : state.move.y
       const judgeValue = isHorizontal ? state.wrapper.width : state.wrapper.height
-      
+
       // ✅ 距离阈值（已调整：更容易切换视频）
       const MIN_DISTANCE = 15 // 从 30 改成 15，更容易触发
       const QUICK_SWIPE_MIN_DISTANCE = judgeValue / 6 // 从 1/5 改成 1/6，快速滑动更敏感
       const NORMAL_SWIPE_MIN_DISTANCE = judgeValue / 4 // 从 1/3 改成 1/4，普通滑动更容易
-      
+
       if (Math.abs(distance) < MIN_DISTANCE) {
         return // 距离太短，不切换
       }
-      
+
       if (Math.abs(distance) > NORMAL_SWIPE_MIN_DISTANCE) {
         // 距离很长，切换
         if (isNext) {
@@ -205,7 +227,7 @@ export function slideTouchEnd(e, state, canNextCb = null, nextCb = null, notNext
         }
         return nextCb?.(isNext)
       }
-      
+
       if (gapTime < 150 && Math.abs(distance) >= QUICK_SWIPE_MIN_DISTANCE) {
         // 快速滑动 + 中等距离，切换
         if (isNext) {
@@ -234,9 +256,9 @@ export function slideReset(e, el, state, emit = null) {
 
   // ✅ 记录切换前的 index，用于动画结束后验证
   const indexBeforeReset = state.localIndex
-  
+
   _css(el, 'transition-duration', `300ms`)
-  
+
   // ✅ 统一在这里计算并设置 offset（带动画）
   // handleSlideChange 只管理 DOM，不设置 transform
   const t = getSlideOffset(state, el)
@@ -250,21 +272,21 @@ export function slideReset(e, el, state, emit = null) {
     dx2 = t
   }
   _css(el, 'transform', `translate3d(${dx1}px, ${dx2}px, 0)`)
-  
+
   // VERTICAL_INFINITE 类型的虚拟列表，不需要特殊处理
-  
+
   state.start.x = state.start.y = state.start.time = state.move.x = state.move.y = 0
   state.next = false
   state.needCheck = true
   state.isDown = false
-  
+
   setTimeout(() => {
     window.isMoved = false
   }, 200)
-  
+
   // ✅ 立即发送 update:index
   emit?.('update:index', state.localIndex)
-  
+
   // ✅ 不再需要 DOM 同步检测，播放由 IntersectionObserver 控制
 }
 

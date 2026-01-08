@@ -1,0 +1,771 @@
+/**
+ * 🚀 R2 视频自动切片脚本 (最终稳定版 v5)
+ * 特性：
+ * 1. 3路并发转换：榨干 4核 CPU。
+ * 2. 10线程并发上传：利用 R2 极高并发带宽。
+ * 3. Buffer 上传模式：彻底解决跨境网络波动导致的 "non-retryable stream" 报错。
+ * 4. 指数退避重试：上传片段失败自动重试，最高 5 次。
+ * 5. 自动清理：成功后秒删 R2 原片，节省 TB 级空间。
+ */
+
+/* eslint-disable no-undef */
+/* eslint-disable no-constant-condition */
+
+import { createClient } from '@supabase/supabase-js'
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+  DeleteObjectCommand
+} from '@aws-sdk/client-s3'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+import fs from 'fs'
+import path from 'path'
+import os from 'os'
+import dotenv from 'dotenv'
+
+dotenv.config()
+
+// 🎯 包装 execPromise，默认使用更大的 maxBuffer（10MB），避免 "maxBuffer length exceeded" 错误
+const execPromiseRaw = promisify(exec)
+const execPromise = (command, options = {}) => {
+  return execPromiseRaw(command, {
+    maxBuffer: 10 * 1024 * 1024, // 10MB
+    ...options
+  })
+}
+
+const {
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
+  R2_ENDPOINT,
+  R2_ACCESS_KEY_ID,
+  R2_SECRET_ACCESS_KEY,
+  R2_BUCKET
+} = process.env
+
+// --- 性能与稳定性配置 ---
+const CONCURRENCY = 3 // 同时处理的视频数
+const UPLOAD_THREADS = 10 // 每个视频同时上传的切片数
+const MAX_RETRIES = 5 // 单个切片最大重试次数
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+const s3 = new S3Client({
+  endpoint: R2_ENDPOINT,
+  region: 'auto',
+  credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
+  // 🎯 增加超时设置，防止网络挂死
+  requestHandler: {
+    connectionTimeout: 30000,
+    socketTimeout: 30000
+  }
+})
+
+const TEMP_DIR = path.join(os.tmpdir(), 'hls-processor')
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR)
+
+// --- 日志美化助手 ---
+function formatSize(bytes) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+function getTS() {
+  return new Date().toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+function logger(workerId, msg, type = 'info') {
+  const icon = {
+    info: '💡',
+    start: '📦',
+    download: '⏳',
+    slice: '✂️',
+    upload: '☁️',
+    db: '💾',
+    clean: '🗑️',
+    success: '✅',
+    error: '💥',
+    wait: '😴',
+    skip: '⏭️'
+  }[type]
+  console.log(`[${getTS()}][W${workerId}] ${icon} ${msg}`)
+}
+
+async function main() {
+  console.log('------------------------------------------------------------')
+  console.log(`🚀 HLS 高可靠处理器启动 | 并发: ${CONCURRENCY} | 上传线程: ${UPLOAD_THREADS}`)
+  console.log(`📂 临时目录: ${TEMP_DIR}`)
+  console.log('------------------------------------------------------------')
+
+  const workers = Array(CONCURRENCY)
+    .fill(0)
+    .map((_, i) => startWorker(i))
+  await Promise.all(workers)
+}
+
+async function startWorker(workerId) {
+  // 初始错开，防止瞬间并发压力
+  await sleep(workerId * 2500)
+
+  while (true) {
+    // 随机偏移抓取，避免 Worker 冲突
+    const offset = Math.floor(Math.random() * 40)
+    // 🎯 查询条件：查询视频类型和 collection 类型（排除 album/image）
+    const { data: videos, error } = await supabase
+      .from('videos')
+      .select('id, play_url, content_type, media_list')
+      .eq('status', 'published')
+      .eq('is_hls', false)
+      .or('content_type.is.null,content_type.eq.video,content_type.eq.collection') // 🎯 处理视频类型和 collection 类型
+      .not('play_url', 'is', null) // 🎯 排除 play_url 为 null 的记录
+      .range(offset, offset)
+      .limit(20) // 🎯 查询更多条，然后在代码中过滤
+
+    // 🎯 过滤：只处理有效的视频文件路径
+    const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v']
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+    const validVideos = (videos || []).filter((v) => {
+      // 🎯 collection 类型：直接通过（会在 processVideo 中特殊处理 media_list）
+      if (v.content_type === 'collection') {
+        return true
+      }
+
+      // 🎯 双重检查：确保 content_type 是 video 或 null（排除 album/image）
+      if (v.content_type && v.content_type !== 'video') {
+        return false
+      }
+      if (!v.play_url) return false
+
+      // 🎯 排除 API 端点
+      if (/\/aweme\/v1\/play\/?/i.test(v.play_url)) {
+        return false
+      }
+
+      // 🎯 提取文件扩展名（支持相对路径和完整 URL）
+      const urlPath = v.play_url.includes('/')
+        ? v.play_url.substring(v.play_url.lastIndexOf('/'))
+        : v.play_url
+      const ext = urlPath.toLowerCase().substring(urlPath.lastIndexOf('.'))
+
+      // 排除图片文件
+      if (imageExts.includes(ext)) return false
+      // 只处理视频文件（有扩展名且是视频格式）
+      return videoExts.includes(ext)
+    })
+
+    const video = validVideos[0]
+
+    if (error || !video) {
+      const { data: fallbackList } = await supabase
+        .from('videos')
+        .select('id, play_url, content_type, media_list')
+        .eq('status', 'published')
+        .eq('is_hls', false)
+        .or('content_type.is.null,content_type.eq.video,content_type.eq.collection') // 🎯 处理视频类型和 collection 类型
+        .not('play_url', 'is', null) // 🎯 排除 play_url 为 null 的记录
+        .limit(20) // 🎯 查询更多条，然后在代码中过滤
+
+      // 🎯 过滤：只处理有效的视频文件路径
+      const validFallbacks = (fallbackList || []).filter((v) => {
+        // 🎯 collection 类型：直接通过（会在 processVideo 中特殊处理 media_list）
+        if (v.content_type === 'collection') {
+          return true
+        }
+
+        // 🎯 双重检查：确保 content_type 是 video 或 null（排除 album/image）
+        if (v.content_type && v.content_type !== 'video') {
+          return false
+        }
+        if (!v.play_url) return false
+
+        // 🎯 排除 API 端点
+        if (/\/aweme\/v1\/play\/?/i.test(v.play_url)) {
+          return false
+        }
+
+        // 🎯 提取文件扩展名（支持相对路径和完整 URL）
+        const urlPath = v.play_url.includes('/')
+          ? v.play_url.substring(v.play_url.lastIndexOf('/'))
+          : v.play_url
+        const ext = urlPath.toLowerCase().substring(urlPath.lastIndexOf('.'))
+
+        if (imageExts.includes(ext)) return false
+        return videoExts.includes(ext)
+      })
+
+      const fallback = validFallbacks[0]
+      if (!fallback) {
+        logger(workerId, '暂无待处理任务，休息 30s...', 'wait')
+        await sleep(30000)
+        continue
+      }
+      try {
+        await processVideo(fallback, workerId)
+      } catch (e) {
+        const errorMsg = e.message || String(e)
+        // 🎯 区分错误类型：无效 play_url 或已删除的记录，只记录日志，不重试
+        if (
+          errorMsg.includes('跳过非视频文件') ||
+          errorMsg.includes('URL 解析失败') ||
+          errorMsg.includes('play_url 为空') ||
+          errorMsg.includes('已删除') ||
+          errorMsg.includes('无效的 API')
+        ) {
+          logger(workerId, `跳过无效记录: ${fallback.id} - ${errorMsg}`, 'skip')
+          // 短暂休息后继续下一个
+          await sleep(1000)
+        } else {
+          logger(workerId, `视频处理异常: ${errorMsg}`, 'error')
+          await sleep(5000)
+        }
+      }
+    } else {
+      try {
+        await processVideo(video, workerId)
+      } catch (e) {
+        const errorMsg = e.message || String(e)
+        // 🎯 区分错误类型：无效 play_url 或已删除的记录，只记录日志，不重试
+        if (
+          errorMsg.includes('跳过非视频文件') ||
+          errorMsg.includes('URL 解析失败') ||
+          errorMsg.includes('play_url 为空') ||
+          errorMsg.includes('已删除') ||
+          errorMsg.includes('无效的 API')
+        ) {
+          logger(workerId, `跳过无效记录: ${video.id} - ${errorMsg}`, 'skip')
+          // 短暂休息后继续下一个
+          await sleep(1000)
+        } else {
+          logger(workerId, `视频处理异常: ${errorMsg}`, 'error')
+          await sleep(5000)
+        }
+      }
+    }
+  }
+}
+
+// 🗑️ 删除无效视频记录
+async function deleteInvalidVideo(videoId, reason, workerId) {
+  try {
+    const { error } = await supabase.from('videos').delete().eq('id', videoId)
+    if (error) {
+      logger(workerId, `删除失败 [${videoId.substring(0, 8)}]: ${error.message}`, 'error')
+    } else {
+      logger(workerId, `已删除无效记录 [${videoId.substring(0, 8)}]: ${reason}`, 'clean')
+    }
+  } catch (e) {
+    logger(workerId, `删除异常 [${videoId.substring(0, 8)}]: ${e.message}`, 'error')
+  }
+}
+
+// 🎯 处理 collection 类型：转换 media_list 中的所有视频为 HLS
+async function processCollection(video, workerId) {
+  const { id, media_list } = video
+  const startTime = Date.now()
+  logger(workerId, `📦 Collection 任务开始: ${id}`, 'start')
+
+  // 解析 media_list
+  let mediaList = []
+  try {
+    mediaList = typeof media_list === 'string' ? JSON.parse(media_list) : media_list || []
+    if (!Array.isArray(mediaList)) {
+      throw new Error('media_list 格式错误')
+    }
+  } catch (e) {
+    throw new Error(`media_list 解析失败: ${e.message}`)
+  }
+
+  // 过滤出所有视频项
+  const videoItems = mediaList.filter((item) => item.type === 'video' && item.play_url)
+  if (videoItems.length === 0) {
+    logger(workerId, `Collection 中没有需要转换的视频`, 'skip')
+    return
+  }
+
+  logger(workerId, `发现 ${videoItems.length} 个视频需要转换`, 'info')
+
+  // 遍历每个视频项，进行 HLS 转换
+  let convertedCount = 0
+  for (let i = 0; i < videoItems.length; i++) {
+    const item = videoItems[i]
+    try {
+      // 使用 processSingleVideo 函数处理单个视频
+      const hlsUrl = await processSingleVideoForCollection(
+        item.play_url,
+        id,
+        item.file_id,
+        workerId
+      )
+      if (hlsUrl) {
+        // 更新 media_list 中对应项的 play_url
+        item.play_url = hlsUrl
+        item.is_hls = true
+        convertedCount++
+        logger(workerId, `[${i + 1}/${videoItems.length}] ✅ 转换成功`, 'success')
+      }
+    } catch (e) {
+      logger(workerId, `[${i + 1}/${videoItems.length}] ❌ 转换失败: ${e.message}`, 'error')
+      // 继续处理下一个视频，不中断整个 collection
+    }
+  }
+
+  if (convertedCount === 0) {
+    throw new Error('Collection 中所有视频转换失败')
+  }
+
+  // 更新数据库
+  const { error: dbErr } = await supabase
+    .from('videos')
+    .update({
+      media_list: mediaList,
+      is_hls: true,
+      play_url: videoItems[0]?.play_url || video.play_url // 更新顶层 play_url 为第一个视频的 HLS 路径
+    })
+    .eq('id', id)
+
+  if (dbErr) throw dbErr
+
+  const totalTime = ((Date.now() - startTime) / 1000).toFixed(1)
+  logger(
+    workerId,
+    `✅ Collection 任务完成! 耗时: ${totalTime}s (转换了 ${convertedCount}/${videoItems.length} 个视频)`,
+    'success'
+  )
+}
+
+// 🎯 为 collection 中的单个视频进行 HLS 转换（复用 processVideo 的核心逻辑）
+async function processSingleVideoForCollection(videoUrl, collectionId, fileId, workerId) {
+  // 1. 路径解析
+  let relativePath = ''
+  if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
+    const urlObj = new URL(videoUrl)
+    relativePath = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname
+  } else if (videoUrl.startsWith('/')) {
+    relativePath = videoUrl.slice(1)
+  } else {
+    relativePath = videoUrl
+  }
+
+  // 检查文件扩展名
+  const ext = path.extname(relativePath).toLowerCase()
+  const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v']
+  if (!videoExts.includes(ext)) {
+    throw new Error(`非视频文件: ${relativePath}`)
+  }
+
+  // 构建输出路径：videos/{collectionId}/{fileId}/index.m3u8
+  const folder = `videos/${collectionId}/${fileId}`
+  const localMp4 = path.join(TEMP_DIR, `${collectionId}_${fileId}_in.mp4`)
+  const outputFolder = path.join(TEMP_DIR, `${collectionId}_${fileId}_out`)
+  if (!fs.existsSync(outputFolder)) fs.mkdirSync(outputFolder, { recursive: true })
+
+  try {
+    // 2. 下载原片
+    let Body, ContentLength
+    try {
+      const result = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: relativePath }))
+      Body = result.Body
+      ContentLength = result.ContentLength
+    } catch (s3Err) {
+      if (s3Err.name === 'NoSuchKey' || s3Err.$metadata?.httpStatusCode === 404) {
+        throw new Error(`R2 文件不存在: ${relativePath}`)
+      }
+      throw s3Err
+    }
+
+    const totalBytes = parseInt(ContentLength || '0')
+    logger(workerId, `下载: ${relativePath} (${formatSize(totalBytes)})`, 'download')
+
+    const writeStream = fs.createWriteStream(localMp4)
+    await new Promise((res, rej) => {
+      // @ts-ignore
+      Body.pipe(writeStream)
+      writeStream.on('finish', res)
+      writeStream.on('error', rej)
+      // @ts-ignore
+      Body.on('error', rej)
+    })
+
+    // 3. 切片（先尝试流复制，失败则重新编码）
+    logger(workerId, `切片中...`, 'slice')
+    let sliceSuccess = false
+    try {
+      await execPromise(
+        `ffmpeg -y -i "${localMp4}" -c copy -hls_time 5 -hls_list_size 0 -f hls "${path.join(outputFolder, 'index.m3u8')}"`,
+        { timeout: 300000 }
+      )
+      sliceSuccess = true
+    } catch (copyErr) {
+      const errMsg = copyErr.message || String(copyErr)
+      if (
+        errMsg.includes('Invalid data found') ||
+        errMsg.includes('Error applying bitstream filters')
+      ) {
+        logger(workerId, `流复制失败，尝试重新编码...`, 'slice')
+        try {
+          await execPromise(
+            `ffmpeg -y -err_detect ignore_err -i "${localMp4}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -hls_time 5 -hls_list_size 0 -f hls "${path.join(outputFolder, 'index.m3u8')}"`,
+            { timeout: 600000 }
+          )
+          sliceSuccess = true
+        } catch (reencodeErr) {
+          throw new Error(`视频切片失败: ${reencodeErr.message}`)
+        }
+      } else {
+        throw copyErr
+      }
+    }
+
+    if (!sliceSuccess) {
+      throw new Error('视频切片失败')
+    }
+
+    // 4. 上传切片
+    const files = fs.readdirSync(outputFolder)
+    logger(workerId, `上传切片 (共 ${files.length} 个文件)...`, 'upload')
+
+    for (let i = 0; i < files.length; i += UPLOAD_THREADS) {
+      const chunk = files.slice(i, i + UPLOAD_THREADS)
+      await Promise.all(
+        chunk.map(async (file) => {
+          const filePath = path.join(outputFolder, file)
+          const fileContent = fs.readFileSync(filePath)
+          const key = `${folder}/${file}`
+
+          let attempt = 0
+          while (attempt < MAX_RETRIES) {
+            try {
+              await s3.send(
+                new PutObjectCommand({
+                  Bucket: R2_BUCKET,
+                  Key: key,
+                  Body: fileContent,
+                  ContentType: file.endsWith('.m3u8')
+                    ? 'application/vnd.apple.mpegurl'
+                    : 'video/mp2t',
+                  CacheControl: 'public, max-age=31536000'
+                })
+              )
+              break
+            } catch (err) {
+              attempt++
+              if (attempt === MAX_RETRIES) throw new Error(`切片上传失败: ${file}`)
+              await sleep(Math.pow(2, attempt) * 500)
+            }
+          }
+        })
+      )
+    }
+
+    // 5. 清理 R2 原文件
+    await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: relativePath })).catch(() => {
+      // 忽略删除错误
+    })
+
+    // 返回新的 HLS URL
+    return `/${folder}/index.m3u8`
+  } finally {
+    // 清理本地文件
+    try {
+      if (fs.existsSync(localMp4)) fs.unlinkSync(localMp4)
+    } catch (e) {
+      // 忽略清理错误
+    }
+    try {
+      if (fs.existsSync(outputFolder)) {
+        const files = fs.readdirSync(outputFolder)
+        files.forEach((f) => {
+          try {
+            const filePath = path.join(outputFolder, f)
+            const stat = fs.statSync(filePath)
+            if (stat.isDirectory()) {
+              fs.readdirSync(filePath).forEach((subF) => fs.unlinkSync(path.join(filePath, subF)))
+              fs.rmdirSync(filePath)
+            } else {
+              fs.unlinkSync(filePath)
+            }
+          } catch (e) {
+            // 忽略清理错误
+          }
+        })
+        fs.rmdirSync(outputFolder)
+      }
+    } catch (e) {
+      // 忽略清理错误
+    }
+  }
+}
+
+async function processVideo(video, workerId) {
+  const { id, play_url, content_type } = video
+  const startTime = Date.now()
+  logger(workerId, `任务开始: ${id}`, 'start')
+
+  // 🎯 Collection 类型：特殊处理 media_list 中的所有视频
+  if (content_type === 'collection') {
+    await processCollection(video, workerId)
+    return
+  }
+
+  // 🎯 检查是否是无效的 API 端点（如 /aweme/v1/play/）
+  if (play_url && /\/aweme\/v1\/play\/?/i.test(play_url)) {
+    await deleteInvalidVideo(id, '无效的 API 端点', workerId)
+    throw new Error('无效的 API 端点，已删除')
+  }
+
+  // 1. 路径解析
+  let relativePath = ''
+  try {
+    if (!play_url) {
+      await deleteInvalidVideo(id, 'play_url 为空', workerId)
+      throw new Error('play_url 为空，已删除')
+    }
+
+    // 🎯 改进：更好地处理各种 URL 格式
+    if (play_url.startsWith('http://') || play_url.startsWith('https://')) {
+      const urlObj = new URL(play_url)
+      relativePath = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname
+    } else if (play_url.startsWith('/')) {
+      // 相对路径：直接使用
+      relativePath = play_url.slice(1)
+    } else {
+      // 没有前导斜杠的相对路径
+      relativePath = play_url
+    }
+  } catch (e) {
+    if (e.message.includes('URL 解析失败')) {
+      await deleteInvalidVideo(id, `URL 解析失败: ${play_url}`, workerId)
+    }
+    throw new Error(`URL 解析失败: ${play_url} - ${e.message}`)
+  }
+
+  // 🎯 检查文件扩展名，跳过非视频文件
+  const ext = path.extname(relativePath).toLowerCase()
+  const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v']
+  if (!videoExts.includes(ext)) {
+    // 🎯 如果是图片文件，且 content_type 是 video（说明数据错误），删除记录
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+    if (imageExts.includes(ext)) {
+      // 只有当 content_type 是 video 或 null 时才删除（图片类型的记录 play_url 指向图片是正常的）
+      if (!content_type || content_type === 'video') {
+        await deleteInvalidVideo(id, `视频记录的 play_url 指向图片文件: ${relativePath}`, workerId)
+        throw new Error(`视频记录的 play_url 指向图片文件，已删除: ${relativePath}`)
+      } else {
+        // 如果是图片类型记录，跳过即可（不应该被 HLS 转换脚本处理）
+        throw new Error(`跳过图片类型记录: ${relativePath} (content_type: ${content_type})`)
+      }
+    }
+    // 🎯 如果没有扩展名且路径看起来像 API 端点，删除记录
+    if (!ext && (relativePath.includes('/aweme/') || relativePath.includes('/api/'))) {
+      await deleteInvalidVideo(id, `无效的 API 路径: ${relativePath}`, workerId)
+      throw new Error(`无效的 API 路径，已删除: ${relativePath}`)
+    }
+    // 🎯 其他未知格式也删除，避免重复处理
+    await deleteInvalidVideo(id, `非视频文件格式: ${relativePath} (扩展名: ${ext})`, workerId)
+    throw new Error(`非视频文件格式，已删除: ${relativePath} (扩展名: ${ext})`)
+  }
+
+  const folder = path.dirname(relativePath)
+  const baseName = path.basename(relativePath, ext)
+  const localMp4 = path.join(TEMP_DIR, `${id}_in.mp4`)
+  const outputFolder = path.join(TEMP_DIR, `${id}_out`)
+  if (!fs.existsSync(outputFolder)) fs.mkdirSync(outputFolder)
+
+  let stageTime = Date.now()
+  try {
+    // 2. 下载原片
+    let Body, ContentLength
+    try {
+      const result = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: relativePath }))
+      Body = result.Body
+      ContentLength = result.ContentLength
+    } catch (s3Err) {
+      if (s3Err.name === 'NoSuchKey' || s3Err.$metadata?.httpStatusCode === 404) {
+        throw new Error(`R2 文件不存在: ${relativePath} (可能已被删除或路径错误)`)
+      }
+      throw s3Err
+    }
+
+    const totalBytes = parseInt(ContentLength || '0')
+    logger(workerId, `下载原片: ${relativePath} (${formatSize(totalBytes)})`, 'download')
+
+    const writeStream = fs.createWriteStream(localMp4)
+    let downloadedBytes = 0
+    let lastLogTime = Date.now()
+
+    // 🎯 优化：使用流式下载并手动计算进度
+    await new Promise((res, rej) => {
+      // @ts-ignore
+      Body.on('data', (chunk) => {
+        downloadedBytes += chunk.length
+        const now = Date.now()
+        if (now - lastLogTime > 5000) {
+          const percent = totalBytes > 0 ? ((downloadedBytes / totalBytes) * 100).toFixed(1) : '?'
+          logger(workerId, `下载进度: ${percent}% (${formatSize(downloadedBytes)})`, 'download')
+          lastLogTime = now
+        }
+      })
+      // @ts-ignore
+      Body.pipe(writeStream)
+      writeStream.on('finish', res)
+      writeStream.on('error', rej)
+      // @ts-ignore
+      Body.on('error', rej)
+    })
+    const downloadTime = ((Date.now() - stageTime) / 1000).toFixed(1)
+    stageTime = Date.now()
+
+    // 3. 极速切片（先尝试流复制，失败则重新编码）
+    logger(workerId, `FFmpeg 切片开始...`, 'slice')
+    let sliceSuccess = false
+    try {
+      // 🎯 先尝试流复制模式（最快，但可能遇到损坏的视频会失败）
+      await execPromise(
+        `ffmpeg -y -i "${localMp4}" -c copy -hls_time 5 -hls_list_size 0 -f hls "${path.join(outputFolder, 'index.m3u8')}"`,
+        { timeout: 300000 } // 5 分钟超时
+      )
+      sliceSuccess = true
+    } catch (copyErr) {
+      const errMsg = copyErr.message || String(copyErr)
+      // 🎯 如果遇到 "Invalid data found" 错误，尝试重新编码
+      if (
+        errMsg.includes('Invalid data found') ||
+        errMsg.includes('Error applying bitstream filters')
+      ) {
+        logger(workerId, `流复制失败，尝试重新编码...`, 'slice')
+        try {
+          // 重新编码模式：使用 libx264 和 aac，忽略错误继续处理
+          await execPromise(
+            `ffmpeg -y -err_detect ignore_err -i "${localMp4}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -hls_time 5 -hls_list_size 0 -f hls "${path.join(outputFolder, 'index.m3u8')}"`,
+            { timeout: 600000 } // 重新编码需要更长时间，10 分钟超时
+          )
+          sliceSuccess = true
+          logger(workerId, `重新编码成功`, 'slice')
+        } catch (reencodeErr) {
+          throw new Error(`视频切片失败（流复制和重新编码都失败）: ${reencodeErr.message}`)
+        }
+      } else {
+        // 其他错误直接抛出
+        throw copyErr
+      }
+    }
+
+    if (!sliceSuccess) {
+      throw new Error('视频切片失败')
+    }
+
+    const sliceTime = ((Date.now() - stageTime) / 1000).toFixed(1)
+    stageTime = Date.now()
+
+    // 4. 并发上传切片 (Buffer 模式 + 重试逻辑)
+    const files = fs.readdirSync(outputFolder)
+    logger(workerId, `并发上传切片 (共 ${files.length} 个文件)...`, 'upload')
+
+    let uploadedCount = 0
+    for (let i = 0; i < files.length; i += UPLOAD_THREADS) {
+      const chunk = files.slice(i, i + UPLOAD_THREADS)
+      await Promise.all(
+        chunk.map(async (file) => {
+          const filePath = path.join(outputFolder, file)
+          const fileContent = fs.readFileSync(filePath)
+          const key = `${folder}/${baseName}/${file}`
+
+          let attempt = 0
+          while (attempt < MAX_RETRIES) {
+            try {
+              await s3.send(
+                new PutObjectCommand({
+                  Bucket: R2_BUCKET,
+                  Key: key,
+                  Body: fileContent,
+                  ContentType: file.endsWith('.m3u8')
+                    ? 'application/vnd.apple.mpegurl'
+                    : 'video/mp2t',
+                  CacheControl: 'public, max-age=31536000'
+                })
+              )
+              uploadedCount++
+              break
+            } catch (err) {
+              attempt++
+              if (attempt === MAX_RETRIES) throw new Error(`切片上传失败: ${file}`)
+              await sleep(Math.pow(2, attempt) * 500) // 指数退避重试
+            }
+          }
+        })
+      )
+      // 每上传 50 个文件打一次日志
+      if (uploadedCount % 50 === 0 || uploadedCount === files.length) {
+        const percent = ((uploadedCount / files.length) * 100).toFixed(1)
+        logger(workerId, `上传进度: ${percent}% (${uploadedCount}/${files.length})`, 'upload')
+      }
+    }
+    const uploadTime = ((Date.now() - stageTime) / 1000).toFixed(1)
+    stageTime = Date.now()
+
+    // 5. 更新数据库
+    logger(workerId, `同步数据库状态...`, 'db')
+    const newUrl = `/${folder}/${baseName}/index.m3u8`
+    const { error: dbErr } = await supabase
+      .from('videos')
+      .update({ play_url: newUrl, is_hls: true })
+      .eq('id', id)
+    if (dbErr) throw dbErr
+
+    // 6. 安全清理 R2 原片
+    logger(workerId, `清理 R2 原文件 (MP4)`, 'clean')
+    await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: relativePath })).catch(() => {})
+
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1)
+    logger(
+      workerId,
+      `任务成功! 耗时: ${totalTime}s (下载:${downloadTime}s, 切片:${sliceTime}s, 上传:${uploadTime}s)`,
+      'success'
+    )
+  } finally {
+    // 7. 清理本地环境
+    try {
+      if (fs.existsSync(localMp4)) {
+        fs.unlinkSync(localMp4)
+      }
+    } catch (e) {
+      // 忽略删除文件错误
+    }
+
+    try {
+      if (fs.existsSync(outputFolder)) {
+        // 🎯 改进：递归删除目录中的所有文件
+        const files = fs.readdirSync(outputFolder)
+        files.forEach((f) => {
+          try {
+            const filePath = path.join(outputFolder, f)
+            const stat = fs.statSync(filePath)
+            if (stat.isDirectory()) {
+              // 如果是目录，递归删除
+              fs.readdirSync(filePath).forEach((subF) => {
+                fs.unlinkSync(path.join(filePath, subF))
+              })
+              fs.rmdirSync(filePath)
+            } else {
+              fs.unlinkSync(filePath)
+            }
+          } catch (e) {
+            // 忽略单个文件删除错误
+          }
+        })
+        fs.rmdirSync(outputFolder)
+      }
+    } catch (e) {
+      // 忽略删除目录错误（可能目录不为空或已被删除）
+    }
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+main()

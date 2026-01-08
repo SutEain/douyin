@@ -1009,10 +1009,12 @@ export async function handleBatchReview(req: Request): Promise<Response> {
 
   if (
     !action ||
-    !['approve', 'reject', 'set_adult', 'unset_adult', 'set_sea', 'unset_sea'].includes(action)
+    !['approve', 'reject', 'set_adult', 'unset_adult', 'set_sea', 'unset_sea', 'delete'].includes(
+      action
+    )
   ) {
     return errorResponse(
-      'action must be one of: approve, reject, set_adult, unset_adult, set_sea, unset_sea',
+      'action must be one of: approve, reject, set_adult, unset_adult, set_sea, unset_sea, delete',
       1,
       400
     )
@@ -1114,6 +1116,20 @@ export async function handleBatchReview(req: Request): Promise<Response> {
       return successResponse({
         success: true,
         updated: video_ids.length
+      })
+    } else if (action === 'delete') {
+      // 批量删除视频
+      const { error } = await supabaseAdmin.from('videos').delete().in('id', video_ids)
+
+      if (error) {
+        console.error('[batch-review] Batch delete error:', error)
+        return errorResponse('Failed to delete videos', 1, 500)
+      }
+
+      console.log(`[batch-review] Successfully deleted ${video_ids.length} videos`)
+      return successResponse({
+        success: true,
+        deleted: video_ids.length
       })
     } else {
       // 批量设置标记：set_adult, unset_adult, set_sea, unset_sea

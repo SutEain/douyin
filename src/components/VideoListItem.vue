@@ -48,7 +48,7 @@
         <div class="stats">
           <span class="stat-item">
             <i class="icon-play">▶</i>
-            {{ formatNumber(video.statistics?.digg_count || video.view_count || 0) }}
+            {{ formatNumber(video.view_count || video.statistics?.digg_count || 0) }}
           </span>
           <span class="stat-item">
             <i class="icon-like">❤</i>

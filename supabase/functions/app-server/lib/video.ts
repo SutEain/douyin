@@ -198,15 +198,74 @@ export async function buildCoverUrl(row: any, profile: any): Promise<string> {
       const first = media[0]
       // 🎯 优先使用 R2 直链 (封面或播放地址)
       const r2Target = first.cover_url || first.play_url || first.url
-      if (r2Target && /^https?:\/\//i.test(r2Target)) {
-        return r2Target
+      if (r2Target) {
+        // 完整 URL 或相对路径都可以直接返回
+        if (/^https?:\/\//i.test(r2Target) || r2Target.startsWith('/')) {
+          return r2Target
+        }
+        // 🎯 HLS 视频特殊处理：如果 cover_url 是 thumb_{file_id}.jpg 格式，需要根据 play_url 构建路径
+        if (
+          first.type === 'video' &&
+          first.play_url &&
+          r2Target.startsWith('thumb_') &&
+          r2Target.endsWith('.jpg')
+        ) {
+          const playUrl = first.play_url
+          // 从 play_url 提取路径：/videos/{uuid}/{file_id}/index.m3u8 -> /videos/{uuid}
+          const playUrlMatch = playUrl.match(/^(\/videos\/[^/]+)/)
+          if (playUrlMatch) {
+            const videoDir = playUrlMatch[1]
+            return `${videoDir}/${r2Target}`
+          }
+        }
       }
 
-      // 否则才用 file_id
-      if (first.file_id) {
-        const url = await buildTelegramFileUrl(first.file_id)
-        if (url) return url
+      // 🎯 Telegram file_id 不再支持，直接跳过
+      // 如果 media_list 中的 cover_url 是 file_id，会被跳过，继续检查 row.cover_url
+    }
+  }
+
+  // 🎯 HLS 视频特殊处理：如果 cover_url 是 thumb_{file_id}.jpg 格式，需要根据 play_url 或视频 ID 构建路径
+  // 🎯 也处理非 HLS 视频的 thumb_ 格式封面（可能是转换过程中的数据）
+  if (row.cover_url) {
+    const coverUrl = row.cover_url.trim()
+
+    // 🎯 如果 cover_url 是 thumb_{file_id}.jpg 格式（没有路径前缀）
+    if (coverUrl.startsWith('thumb_') && coverUrl.endsWith('.jpg') && !coverUrl.includes('/')) {
+      let videoDir = null
+
+      // 优先从 play_url 提取路径
+      if (row.play_url) {
+        const playUrlMatch = row.play_url.match(/^(\/videos\/[^/]+)/)
+        if (playUrlMatch) {
+          videoDir = playUrlMatch[1]
+        }
       }
+
+      // 如果 play_url 为空，从视频 ID 构建路径
+      if (!videoDir && row.id) {
+        videoDir = `/videos/${row.id}`
+      }
+
+      if (videoDir) {
+        return `${videoDir}/${coverUrl}`
+      }
+    }
+    // 情况2：cover_url 是 videos/{uuid}/thumb_{file_id}.jpg（没有前导斜杠）
+    if (
+      coverUrl.startsWith('videos/') &&
+      coverUrl.includes('/thumb_') &&
+      coverUrl.endsWith('.jpg')
+    ) {
+      return `/${coverUrl}`
+    }
+    // 情况3：cover_url 已经是完整路径 /videos/{uuid}/thumb_{file_id}.jpg
+    if (
+      coverUrl.startsWith('/videos/') &&
+      coverUrl.includes('/thumb_') &&
+      coverUrl.endsWith('.jpg')
+    ) {
+      return coverUrl
     }
   }
 
@@ -237,8 +296,12 @@ export async function buildTelegramFileUrl(fileId?: string): Promise<string | nu
 
 export async function convertMediaReferenceToUrl(value?: string): Promise<string | null> {
   if (!value) return null
+  // 🎯 完整 URL：直接返回
   if (/^https?:\/\//i.test(value)) return value
-  return buildTelegramFileUrl(value)
+  // 🎯 相对路径（R2 存储路径）：直接返回，前端会通过 buildCdnUrl 处理
+  if (value.startsWith('/')) return value
+  // 🎯 Telegram file_id：不再支持，返回 null
+  return null
 }
 
 export async function getVideoAuthorProfile(row: any, cache: Map<string, any>) {

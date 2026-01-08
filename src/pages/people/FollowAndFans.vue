@@ -16,7 +16,12 @@
     </BaseHeader>
 
     <!-- ✅ 双层滚动结构：防止下拉时关闭 miniApp -->
-    <div class="scroll-container" @scroll="handleScroll" ref="scrollContainer">
+    <div
+      class="scroll-container"
+      @scroll="handleScroll"
+      @touchstart="handleTouchStart"
+      ref="scrollContainer"
+    >
       <div class="main" ref="mainContent">
         <div class="content">
           <div class="indicator-wrapper">
@@ -27,7 +32,7 @@
             >
             </Indicator>
           </div>
-          <SlideHorizontal v-model:index="data.slideIndex">
+          <SlideHorizontal v-model:index="data.slideIndex" :disableSwipe="true">
             <SlideItem class="tab1">
               <Search
                 v-model="data.searchKey"
@@ -116,62 +121,49 @@ const data = reactive({
 // ✅ 双层滚动结构的 refs
 const scrollContainer = ref<HTMLElement | null>(null)
 const mainContent = ref<HTMLElement | null>(null)
-
-// ✅ 触摸事件状态
-const touchState = reactive({
-  startY: 0,
-  isTop: false
-})
-
-// ✅ 触摸开始
-function handleTouchStart(e: TouchEvent) {
-  touchState.startY = e.touches[0].clientY
-  touchState.isTop = (scrollContainer.value?.scrollTop || 0) === 0
-}
-
-// ✅ 触摸移动：在顶部下拉时阻止默认行为
-function handleTouchMove(e: TouchEvent) {
-  if (!touchState.isTop) return
-
-  const currentY = e.touches[0].clientY
-  const deltaY = currentY - touchState.startY
-
-  // 如果在顶部且向下拉（deltaY > 0），阻止默认行为
-  if (deltaY > 0 && scrollContainer.value?.scrollTop === 0) {
-    e.preventDefault()
-  }
-}
-
-// ✅ 触摸结束
-function handleTouchEnd() {
-  touchState.startY = 0
-  touchState.isTop = false
-}
+let startY = 0
 
 // ✅ 滚动事件（预留，可以用于其他逻辑）
 function handleScroll() {
   // 可以添加滚动相关的逻辑
 }
 
-onMounted(async () => {
-  // ✅ 添加触摸事件监听到 scroll-container
-  if (scrollContainer.value) {
-    scrollContainer.value.addEventListener('touchstart', handleTouchStart, { passive: true })
-    scrollContainer.value.addEventListener('touchmove', handleTouchMove, { passive: false })
-    scrollContainer.value.addEventListener('touchend', handleTouchEnd, { passive: true })
+// 🎯 处理触摸开始：记录起始位置
+function handleTouchStart(e: TouchEvent) {
+  startY = e.touches[0].clientY
+}
+
+// 🎯 处理触摸移动：阻止 Telegram WebApp 的下拉手势
+function handleTouchMove(e: TouchEvent) {
+  if (!scrollContainer.value) return
+
+  const currentY = e.touches[0].clientY
+  const deltaY = currentY - startY
+  const scrollTop = scrollContainer.value.scrollTop
+
+  // 🎯 如果用户在顶部且向下拉，阻止默认行为（防止 Telegram 下拉）
+  if (scrollTop <= 0 && deltaY > 0) {
+    e.preventDefault()
   }
 
+  // 🎯 其他情况允许滚动（不调用 preventDefault，让浏览器处理）
+}
+
+onMounted(async () => {
   data.slideIndex = ~~route.query.type
   await loadFollowing()
   await loadFollowers()
+
+  // 🎯 手动添加非 passive 的 touchmove 监听器（Vue 的 @touchmove 默认是 passive）
+  if (scrollContainer.value) {
+    scrollContainer.value.addEventListener('touchmove', handleTouchMove, { passive: false })
+  }
 })
 
 onUnmounted(() => {
-  // ✅ 清理触摸事件监听
+  // 🎯 清理事件监听器
   if (scrollContainer.value) {
-    scrollContainer.value.removeEventListener('touchstart', handleTouchStart)
     scrollContainer.value.removeEventListener('touchmove', handleTouchMove)
-    scrollContainer.value.removeEventListener('touchend', handleTouchEnd)
   }
 })
 
@@ -237,19 +229,17 @@ watch(
   top: 0;
   color: white;
   font-size: 14rem;
-  height: 100vh;
   overflow: hidden; // ✅ 外层禁止滚动
-  overscroll-behavior-y: contain; // ✅ 防止过度滚动传播
+  display: flex;
+  flex-direction: column;
 
   // ✅ 内层滚动容器
   .scroll-container {
-    height: 100vh;
+    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    overscroll-behavior-y: contain;
-    touch-action: pan-y; // ✅ 只允许垂直滚动
+    background: var(--main-bg);
 
     &::-webkit-scrollbar {
       display: none;
@@ -257,7 +247,7 @@ watch(
   }
 
   .main {
-    touch-action: pan-y; // ✅ 只允许垂直滚动
+    min-height: 100.1%; // ✅ 强制内容超出一点点，确保 iOS 下能触发滚动
   }
 
   .content {
@@ -265,6 +255,10 @@ watch(
 
     .indicator-wrapper {
       padding: 0 var(--page-padding);
+      background: var(--main-bg);
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
 
     .search-ctn {

@@ -7,10 +7,10 @@
     <!-- 视频元素 -->
     <video
       ref="videoRef"
-      :src="videoUrl"
       :poster="posterUrl"
-      :muted="state.isMuted"
-      :style="{ objectFit: videoFit }"
+      muted
+      autoplay
+      :style="{ objectFit: videoFit, backgroundColor: '#000' }"
       preload="auto"
       loop
       playsinline
@@ -63,12 +63,14 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, watch, provide } from 'vue'
+import Hls from 'hls.js'
 import { Icon } from '@iconify/vue'
 import Loading from '../Loading.vue'
 import ItemToolbar from '../slide/ItemToolbar.vue'
 import ItemDesc from '../slide/ItemDesc.vue'
 import { videoManager } from '@/utils/videoManager'
 import { useVideoStore } from '@/stores/video'
+import { buildCdnUrl } from '@/utils/media'
 import type { VideoItem } from '@/types'
 
 // ========== Props ==========
@@ -89,6 +91,7 @@ const videoStore = useVideoStore()
 const videoRef = ref<HTMLVideoElement>()
 const wrapperRef = ref<HTMLDivElement>()
 const progressRef = ref<HTMLDivElement>()
+let hls: Hls | null = null
 
 // 🎯 倍速播放：默认 1.0，仅对当前视频生效
 const playbackRate = ref<number>(1)
@@ -128,7 +131,8 @@ const state = reactive({
 // ========== Computed ==========
 const videoUrl = computed(() => {
   // 使用第一个可用的视频源
-  return props.item.video?.play_addr?.url_list?.[0] || ''
+  const rawUrl = props.item.video?.play_addr?.url_list?.[0] || ''
+  return buildCdnUrl(rawUrl)
 })
 
 const posterUrl = computed(() => {
@@ -181,6 +185,80 @@ provide('playbackRate', playbackRate)
 provide('setPlaybackRate', setPlaybackRate)
 
 // ========== Methods ==========
+function initVideo() {
+  const url = videoUrl.value
+  if (!videoRef.value || !url) return
+
+  // 1. 清理旧的 Hls 实例
+  if (hls) {
+    hls.destroy()
+    hls = null
+  }
+
+  // 2. 判断是否是 m3u8
+  if (url.includes('.m3u8')) {
+    if (Hls.isSupported()) {
+      hls = new Hls({
+        capLevelToPlayerSize: true,
+        autoStartLoad: true,
+        enableWorker: true, // 🎯 开启 Worker 线程提高性能
+        lowLatencyMode: false // 🎯 安卓端关闭低延迟模式更稳定
+      })
+      hls.loadSource(url)
+      hls.attachMedia(videoRef.value)
+
+      // 🎯 HLS 视频：监听第一个片段加载完成，确保有画面输出
+      hls.once(Hls.Events.FRAG_LOADED, () => {
+        // 延迟一帧确保画面已渲染，此时 poster 会被浏览器自动隐藏
+        requestAnimationFrame(() => {
+          if (videoRef.value && !videoRef.value.paused) {
+            // 强制清除 poster，避免闪烁
+            videoRef.value.poster = ''
+          }
+        })
+      })
+
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        console.error('[VideoPlayer] HLS 错误事件:', {
+          type: data.type,
+          details: data.details,
+          fatal: data.fatal,
+          url: url
+        })
+
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              console.error('[VideoPlayer] HLS 致命网络错误，尝试恢复...', data.details)
+              hls?.startLoad()
+              break
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              console.error('[VideoPlayer] HLS 致命媒体错误，尝试恢复...', data.details)
+              hls?.recoverMediaError()
+              break
+            default:
+              console.error('[VideoPlayer] HLS 致命不可恢复错误，尝试降级播放:', data.details)
+              hls?.destroy()
+              // 🎯 关键修复：Windows 端如果 MSE 报错，可能是因为缓存或格式，强制重置 src
+              if (videoRef.value) {
+                videoRef.value.removeAttribute('src')
+                videoRef.value.load()
+                videoRef.value.src = url
+              }
+              break
+          }
+        }
+      })
+    } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
+      // 原生支持 (Safari)
+      videoRef.value.src = url
+    }
+  } else {
+    // 普通 mp4
+    videoRef.value.src = url
+  }
+}
+
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60)
   const secs = Math.floor(seconds % 60)
@@ -228,6 +306,11 @@ function handlePlay() {
     readyState: videoRef.value?.readyState,
     paused: videoRef.value?.paused
   })
+
+  // 🎯 全局视频管理：通知 store 当前视频开始播放，自动暂停其他所有视频
+  if (videoRef.value) {
+    videoStore.setActiveVideo(videoRef.value)
+  }
 }
 
 function handlePause() {
@@ -354,19 +437,19 @@ function handleSeeked() {
 onMounted(() => {
   if (!videoRef.value) return
 
+  initVideo()
+
   // 注册到视频管理器
   videoManager.register(props.item.aweme_id, videoRef.value, props.page)
+
+  // 🎯 注册到全局视频管理器（新的统一管理）
+  videoStore.registerVideoElement(videoRef.value)
 
   console.log('[VideoPlayer] mounted', {
     videoId: props.item.aweme_id.substring(0, 8),
     page: props.page,
     autoplay: props.autoplay
   })
-
-  // 如果设置了自动播放
-  if (props.autoplay) {
-    setTimeout(() => play(), 100)
-  }
 })
 
 onUnmounted(() => {
@@ -375,8 +458,18 @@ onUnmounted(() => {
     page: props.page
   })
 
+  if (hls) {
+    hls.destroy()
+    hls = null
+  }
+
   // 从视频管理器注销
   videoManager.unregister(props.item.aweme_id)
+
+  // 🎯 从全局视频管理器注销
+  if (videoRef.value) {
+    videoStore.unregisterVideoElement(videoRef.value)
+  }
 })
 
 // 监听 item 变化
@@ -386,6 +479,8 @@ watch(
     state.localItem = newItem
     // 🎯 切换到新视频时，重置倍速为 1.0（仅对当前视频生效）
     setPlaybackRate(1)
+    // 重新初始化视频
+    initVideo()
   }
 )
 

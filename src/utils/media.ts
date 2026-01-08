@@ -4,31 +4,37 @@
  */
 
 // 1. 获取视频/图片的 R2 基础域名
-const VIDEO_BASE_URL = import.meta.env.VITE_APP_VIDEO_BASE_URL || ''
+const VIDEO_BASE_URL = import.meta.env.VITE_APP_VIDEO_BASE_URL || 'https://media.tgdouyin.com'
 
 /**
  * 将路径或 ID 转换为最终的可访问 URL
- * 🎯 逻辑：只处理 R2 直链和相对路径，不再代理 Telegram file_id
+ * 🎯 逻辑：确保所有相对路径都指向正确的媒体域名
  */
 export function buildCdnUrl(pathOrUrl: string): string {
   if (!pathOrUrl) return ''
 
+  let result = ''
   // 1. 如果是完整 URL (http/https)，直接返回
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
-    return pathOrUrl
+    result = pathOrUrl
   }
-
   // 2. 如果是相对路径 (R2 存储路径，如 /videos/xxx.mp4)
-  if (pathOrUrl.startsWith('/')) {
+  else if (pathOrUrl.startsWith('/')) {
     const base = VIDEO_BASE_URL.endsWith('/') ? VIDEO_BASE_URL.slice(0, -1) : VIDEO_BASE_URL
-    return `${base}${pathOrUrl}`
+    result = `${base}${pathOrUrl}`
+  }
+  // 3. 兼容没有前导斜杠的路径
+  else if (pathOrUrl.startsWith('videos/')) {
+    const base = VIDEO_BASE_URL.endsWith('/') ? VIDEO_BASE_URL : `${VIDEO_BASE_URL}/`
+    result = `${base}${pathOrUrl}`
   }
 
-  // 3. 🎯 如果是 Telegram file_id (不以 / 或 http 开头)
-  // 在纯 R2 架构下，前端不应该再通过代理去请求这些 ID
-  // 我们返回空，强制用户等待 Worker 处理完成后的 R2 地址
-  console.warn('[buildCdnUrl] 检测到未搬家的 Telegram file_id，请等待 Worker 处理:', pathOrUrl)
-  return ''
+  // 🎯 强制诊断日志：在控制台打印最终转换结果
+  if (result) {
+    console.log(`[MediaFix] URL 转换: ${pathOrUrl} -> ${result}`)
+  }
+
+  return result || pathOrUrl
 }
 
 /**

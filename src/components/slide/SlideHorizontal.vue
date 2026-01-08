@@ -34,6 +34,11 @@ const props = defineProps({
   changeActiveIndexUseAnim: {
     type: Boolean,
     default: true
+  },
+  // 🎯 禁用触摸滑动（仅保留点击切换）
+  disableSwipe: {
+    type: Boolean,
+    default: false
   }
 })
 const emit = defineEmits(['update:index'])
@@ -116,18 +121,21 @@ onUnmounted(() => {
 })
 
 function touchStart(e) {
+  if (props.disableSwipe) return // 🎯 禁用滑动时直接返回
   if (slideListEl.value) {
     slideTouchStart(e, slideListEl.value, state)
   }
 }
 
 function touchMove(e) {
+  if (props.disableSwipe) return // 🎯 禁用滑动时直接返回
   if (slideListEl.value) {
     slideTouchMove(e, slideListEl.value, state)
   }
 }
 
 function touchEnd(e) {
+  if (props.disableSwipe) return // 🎯 禁用滑动时直接返回
   slideTouchEnd(e, state)
   if (slideListEl.value) {
     slideReset(e, slideListEl.value, state, emit)
@@ -149,9 +157,10 @@ function touchEnd(e) {
     <div
       class="slide-list"
       ref="slideListEl"
-      @pointerdown.prevent="touchStart"
-      @pointermove.prevent="touchMove"
-      @pointerup.prevent="touchEnd"
+      @pointerdown="touchStart"
+      @pointermove="touchMove"
+      @pointerup="touchEnd"
+      style="touch-action: pan-y"
     >
       <slot></slot>
     </div>

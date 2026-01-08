@@ -12,15 +12,24 @@
             <!-- 🎬 视频类型 -->
             <video
               v-if="item.type === 'video'"
-              :src="_checkImgUrl(item.info_list?.[0]?.url)"
+              v-is-can-play="buildCdnUrl(item.info_list?.[0]?.url)"
               style="height: 100%; width: 100%; object-fit: contain"
               autoplay
               loop
               muted
               playsinline
+              webkit-playsinline
+              x5-playsinline
+              x5-video-player-type="h5-page"
             />
             <!-- 🖼️ 图片类型 -->
-            <img v-else :src="_checkImgUrl(item.info_list?.[0]?.url)" alt="" />
+            <img
+              v-else
+              :src="buildCdnUrl(item.info_list?.[0]?.url)"
+              alt=""
+              @error="handleImageError"
+              style="background-color: #000; min-height: 100%; object-fit: contain"
+            />
           </SlideItem>
         </SlideHorizontal>
 
@@ -37,7 +46,7 @@
       <div class="content">
         <div class="shop">
           <header>
-            <img class="avatar" :src="_checkImgUrl(props.detail.note_card?.user?.avatar)" />
+            <img class="avatar" :src="buildCdnUrl(props.detail.note_card?.user?.avatar)" />
             <div class="right">
               <div class="name">
                 {{
@@ -87,7 +96,7 @@
             >
               <div class="comment-main">
                 <img
-                  :src="_checkImgUrl(item.avatar)"
+                  :src="buildCdnUrl(item.avatar)"
                   class="avatar"
                   @click="handleAvatarClick(item)"
                 />
@@ -144,7 +153,7 @@
                   @mouseup="handleTouchEndLong"
                 >
                   <img
-                    :src="_checkImgUrl(child.avatar)"
+                    :src="buildCdnUrl(child.avatar)"
                     class="avatar"
                     @click="handleAvatarClick(child)"
                   />
@@ -340,9 +349,9 @@
 <script setup>
 import SlideHorizontal from '@/components/slide/SlideHorizontal.vue'
 import SlideItem from '@/components/slide/SlideItem.vue'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import Hls from 'hls.js'
+import { computed, onMounted, reactive, ref, watch, onUnmounted } from 'vue'
 import {
-  _checkImgUrl,
   _copy,
   _formatNumber,
   _notice,
@@ -351,6 +360,7 @@ import {
   _time,
   _truncate
 } from '@/utils'
+import { buildCdnUrl } from '@/utils/media'
 import {
   getCommentReplies,
   sendVideoComment,
@@ -390,6 +400,37 @@ const scrollEl = ref()
 const state = reactive({
   index: 0
 })
+
+const hlsInstances = new Map()
+const vIsCanPlay = {
+  mounted(el, binding) {
+    const url = binding.value
+    if (!url) return
+    if (url.includes('.m3u8')) {
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          capLevelToPlayerSize: true,
+          autoStartLoad: true
+        })
+        hls.loadSource(url)
+        hls.attachMedia(el)
+        hlsInstances.set(el, hls)
+      } else if (el.canPlayType('application/vnd.apple.mpegurl')) {
+        el.src = url
+      }
+    } else {
+      el.src = url
+    }
+    el.play().catch(() => {})
+  },
+  unmounted(el) {
+    const hls = hlsInstances.get(el)
+    if (hls) {
+      hls.destroy()
+      hlsInstances.delete(el)
+    }
+  }
+}
 
 const commentList = computed(() => {
   const list = props.detail?.note_card?.comment_list
@@ -446,6 +487,15 @@ const showRewardPanel = ref(false)
 const rewardAmount = ref('')
 const rewardPresets = [10, 50, 100, 500]
 const isRewarding = ref(false)
+
+// 🎯 图片加载错误处理
+function handleImageError(event) {
+  const img = event.target
+  if (img) {
+    // 如果图片加载失败，隐藏图片或显示占位符
+    img.style.display = 'none'
+  }
+}
 
 async function handleReward() {
   if (isRewarding.value) return

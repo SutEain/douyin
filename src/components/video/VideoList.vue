@@ -36,33 +36,38 @@
 
         <!-- 🎯 根据内容类型渲染不同组件 -->
         <template v-else-if="getSlotContentType(slot) === 'video'">
-          <!-- 视频元素 -->
-          <video
-            :ref="setSlotRef(slot.key)"
-            preload="auto"
-            loop
-            playsinline
-            webkit-playsinline
-            x5-playsinline
-            x5-video-player-type="h5-page"
-            :muted="slot.muted"
-            :style="{ objectFit: getSlotVideoFit(slot) }"
-            @play="onPlay(slot)"
-            @playing="onPlaying(slot)"
-            @pause="onPause(slot)"
-            @error="onError(slot)"
-            @click="togglePlay(slot)"
-          />
+          <!-- 🎯 视频容器：确保 poster 层始终覆盖 video -->
+          <div class="video-wrapper">
+            <!-- 视频元素 -->
+            <video
+              :ref="setSlotRef(slot.key)"
+              :poster="slot.posterUrl"
+              preload="auto"
+              loop
+              playsinline
+              webkit-playsinline
+              x5-playsinline
+              x5-video-player-type="h5-page"
+              :muted="true"
+              :autoplay="slot.role === 'current'"
+              :style="{ objectFit: getSlotVideoFit(slot), backgroundColor: '#000' }"
+              @play="onPlay(slot)"
+              @playing="onPlaying(slot)"
+              @pause="onPause(slot)"
+              @error="onError(slot)"
+              @click="togglePlay(slot)"
+            />
 
-          <!-- 自定义 poster 层：视频加载时显示缩略图 -->
-          <div
-            v-if="slot.posterUrl && !slot.isPlaying"
-            class="video-poster"
-            :style="{
-              backgroundImage: `url(${slot.posterUrl})`,
-              backgroundSize: getSlotVideoFit(slot) === 'cover' ? 'cover' : 'contain'
-            }"
-          ></div>
+            <!-- 🎯 完全覆盖层：彻底隐藏 Video 占位符，直到视频真正播放 -->
+            <div
+              class="video-poster"
+              :class="{ 'poster-hidden': slot.isPlaying }"
+              :style="{
+                backgroundImage: slot.posterUrl ? `url(${slot.posterUrl})` : 'none',
+                backgroundSize: getSlotVideoFit(slot) === 'cover' ? 'cover' : 'contain'
+              }"
+            ></div>
+          </div>
 
           <!-- 暂停图标 -->
           <div v-if="slot.role === 'current' && isPausedOverlay" class="pause-layer">
@@ -157,6 +162,8 @@ import {
   ref,
   watch
 } from 'vue'
+import { useRoute } from 'vue-router'
+import Hls from 'hls.js'
 import { Icon } from '@iconify/vue'
 import ItemToolbar from '../slide/ItemToolbar.vue'
 import ItemDesc from '../slide/ItemDesc.vue'
@@ -164,7 +171,6 @@ import ImageViewer from './ImageViewer.vue'
 import AlbumSwiper from './AlbumSwiper.vue'
 import type { VideoItem } from '../../types'
 import { useVideoStore } from '@/stores/video'
-import { useBaseStore } from '@/store/pinia'
 import { parseImages, getContentType, buildCdnUrl } from '@/utils/media'
 import { recordVideoView } from '@/api/videos'
 // import { _copy, _notice } from '@/utils'
@@ -260,6 +266,8 @@ const props = withDefaults(defineProps<Props>(), {
   hasMore: true,
   noMoreSubtext: '休息一下，稍后再来'
 })
+
+const route = useRoute()
 
 const emit = defineEmits<{
   'update:index': [index: number]
@@ -428,8 +436,45 @@ const slots = reactive<SlotState[]>([
     isPlaying: false
   }
 ])
+
 const slotRefs = new Map<string, HTMLVideoElement>()
+const hlsInstances = new Map<string, Hls>()
 const boundVideos = new WeakSet<HTMLVideoElement>()
+
+// 🎯 检查当前组件是否在活跃页面上
+const isPageActive = computed(() => {
+  // 详情页特殊处理：如果当前路由是 /video-detail，只有 page === 'detail' 的组件才是活跃的
+  if (route.path.startsWith('/video-detail')) {
+    return props.page === 'detail'
+  }
+  // 首页：只有 page === 'home' 且在首页路由下才活跃
+  if (props.page === 'home') {
+    return route.path === '/' || route.path.startsWith('/home')
+  }
+  // 我：只有 page === 'me' 且在 /me 路由下才活跃
+  if (props.page === 'me') {
+    return route.path.startsWith('/me')
+  }
+  return true
+})
+
+// 🎯 路由变化时，如果当前组件变为了非活跃页面，强制暂停所有 slot 中的视频
+// ⚠️ 移除 immediate: true，避免在 setup 阶段访问未完全初始化的变量
+watch(
+  () => route.path,
+  () => {
+    if (!isPageActive.value) {
+      console.log(`${DEBUG_PREFIX} [${props.page}] 页面切换，强制暂停非活跃页面的视频`)
+      slots.forEach((slot) => {
+        const video = slotRefs.get(slot.key)
+        if (video) {
+          video.pause()
+          slot.isPlaying = false
+        }
+      })
+    }
+  }
+)
 const progressRef = ref<HTMLElement | null>(null)
 const playState = reactive({
   duration: 0,
@@ -608,7 +653,7 @@ provide(
 provide(
   'position',
   computed(() => ({
-    uniqueId: props.page,
+    uniqueId: props.page as 'detail' | 'home' | 'me',
     index: currentIndex.value
   }))
 )
@@ -637,6 +682,10 @@ function setSlotRef(key: string) {
   return (el: HTMLVideoElement | null) => {
     if (el) {
       slotRefs.set(key, el)
+
+      // 🎯 注册到全局视频管理器
+      videoStore.registerVideoElement(el)
+
       // 防止重复绑定事件导致日志重复
       if (!boundVideos.has(el)) {
         const log = (event: string) => {
@@ -687,6 +736,7 @@ function setProgressRef(el: HTMLElement | null) {
   progressRef.value = el
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function updateSlotSource(slot: SlotState, preloadOnly = false) {
   const idx = slot.videoIndex
 
@@ -697,6 +747,12 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
   if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
     slot.posterUrl = ''
     slot.isPlaying = false
+    // 销毁可能存在的 HLS 实例
+    const oldHls = hlsInstances.get(slot.key)
+    if (oldHls) {
+      oldHls.destroy()
+      hlsInstances.delete(slot.key)
+    }
     // 这些类型交由 ImageViewer 或 AlbumSwiper 处理，不需要外层视频元素，直接返回
     return
   }
@@ -716,6 +772,14 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
   }
 
   if (idx == null || !props.items[idx]) {
+    // 销毁 HLS 实例
+    const oldHls = hlsInstances.get(slot.key)
+    if (oldHls) {
+      oldHls.destroy()
+      hlsInstances.delete(slot.key)
+    }
+    // 🎯 先设置 poster，再清空 src，避免显示 Video 占位符
+    video.poster = ''
     video.removeAttribute('src')
     video.load()
     slot.posterUrl = ''
@@ -726,27 +790,110 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
   const url = item.video?.play_addr?.url_list?.[0]
   const poster = item.video?.cover?.url_list?.[0] || ''
 
-  // 🎯 设置 poster URL 到 slot 状态
-  slot.posterUrl = poster
+  // 🎯 立即设置 poster URL（在切换视频源之前），避免显示 Video 占位符
+  const posterUrl = buildCdnUrl(poster)
+  slot.posterUrl = posterUrl
   slot.isPlaying = false
+
+  // 🎯 立即设置 video 元素的 poster 属性，确保切换时立即显示封面
+  if (posterUrl) {
+    video.poster = posterUrl
+  }
 
   if (!url) {
     console.warn(`${DEBUG_PREFIX} source:empty`, { slot: slot.role, key: slot.key, idx })
   }
   if (url) {
-    // 避免重复设置同一个 src 触发重新缓冲，导致切换时卡顿
-    const resolvedUrl = new URL(url, window.location.href).href
+    // 🎯 修复：使用 buildCdnUrl 转换 URL，确保指向 R2 域名而非主站
+    const resolvedUrl = buildCdnUrl(url)
     const isSameSrc = video.src === resolvedUrl
 
     if (!isSameSrc) {
-      video.src = resolvedUrl
-      if (poster) {
-        video.poster = poster
+      // 🎯 关键修复：在切换视频源之前，先暂停并确保 poster 显示
+      video.pause()
+      slot.isPlaying = false
+
+      // 销毁旧的 HLS 实例
+      const oldHls = hlsInstances.get(slot.key)
+      if (oldHls) {
+        oldHls.destroy()
+        hlsInstances.delete(slot.key)
+      }
+
+      if (resolvedUrl.includes('.m3u8')) {
+        if (Hls.isSupported()) {
+          // 🎯 关键修复：先创建并 attach HLS 实例，再清空 src，避免显示占位符
+          const hls = new Hls({
+            capLevelToPlayerSize: true,
+            autoStartLoad: slot.role === 'current', // 只有 current 才自动加载
+            enableWorker: true, // 🎯 开启 Worker 线程提高性能
+            lowLatencyMode: false // 🎯 安卓端关闭低延迟模式更稳定
+          })
+
+          // 🎯 先 attachMedia，确保 video 元素已准备好
+          hls.attachMedia(video)
+
+          // 🎯 仅在非 HLS 模式下才需要手动调用 load()，HLS 模式由 loadSource 触发
+          // video.load() 可能会导致某些浏览器（如 Windows Chrome）中断 HLS 加载
+
+          // 🎯 然后加载新的 HLS 源
+          hls.loadSource(resolvedUrl)
+          hlsInstances.set(slot.key, hls)
+
+          // 🎯 监听 HLS 准备就绪
+          hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+            console.log(`[VideoList] HLS Media Attached: ${slot.key}`)
+            if (slot.role === 'current' && props.autoplay) {
+              video.play().catch((e) => {
+                if (e.name !== 'AbortError') console.warn('[VideoList] HLS Play Error:', e)
+              })
+            }
+          })
+
+          // 🎯 错误处理
+          hls.on(Hls.Events.ERROR, (_, data) => {
+            if (data.fatal) {
+              console.error('[VideoList] HLS fatal error:', data.details)
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  hls.startLoad()
+                  break
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  hls.recoverMediaError()
+                  break
+                default:
+                  hls.destroy()
+                  hlsInstances.delete(slot.key)
+                  // 降级到普通播放
+                  video.src = resolvedUrl
+                  break
+              }
+            }
+          })
+
+          // 🎯 HLS 视频：监听第一个片段加载完成，确保有画面输出后再隐藏 poster
+          hls.once(Hls.Events.FRAG_LOADED, () => {
+            // 延迟一帧确保画面已渲染
+            requestAnimationFrame(() => {
+              if (slot.role === 'current' && !video.paused) {
+                slot.isPlaying = true
+              }
+            })
+          })
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Safari 原生 HLS：先设置 poster，再设置 src
+          video.removeAttribute('src')
+          video.load()
+          video.src = resolvedUrl
+        }
+      } else {
+        // MP4 视频：先设置 poster，再设置 src
+        video.removeAttribute('src')
+        video.load()
+        video.src = resolvedUrl
       }
       // 非 current 只预加载元数据，减少无谓缓冲
-      if (slot.role === 'current') {
-        video.load()
-      } else {
+      if (slot.role !== 'current') {
         video.preload = 'metadata'
       }
     }
@@ -754,10 +901,8 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     if (slot.role === 'current') {
       resetProgressState()
       bindCurrentVideoEvents(video)
-    }
-
-    if (!preloadOnly && slot.role === 'current') {
-      playCurrent()
+      // 🎯 统一管理：依靠 autoplay 属性，同时手动 play 确保成功率
+      video.play().catch(() => {})
     }
   }
 }
@@ -779,6 +924,12 @@ function playCurrent() {
   const slot = getSlotByRole('current')
   if (!slot) {
     console.warn(`${DEBUG_PREFIX} playCurrent:no-slot`)
+    return
+  }
+
+  // 🎯 核心修复：如果页面不活跃（用户已跳走），严禁播放
+  if (!isPageActive.value) {
+    console.log(`${DEBUG_PREFIX} [${props.page}] playCurrent: 拦截后台播放 - 页面不活跃`)
     return
   }
 
@@ -825,9 +976,10 @@ function playCurrent() {
     return
   }
 
-  // 🛡️ 避免空 src 或不支持的源导致 NotSupportedError
-  if (!video.src) {
-    console.warn(`${DEBUG_PREFIX} play:skip-no-src`, {
+  // 🛡️ 避免空 src。注意：HLS 模式下 video.src 可能为空，需要同时检查是否有 HLS 实例
+  const hasHls = hlsInstances.has(slot.key)
+  if (!video.src && !hasHls) {
+    console.warn(`${DEBUG_PREFIX} play:skip-no-src-and-no-hls`, {
       slotKey: slot.key,
       videoIndex: slot.videoIndex,
       role: slot.role
@@ -1508,6 +1660,20 @@ onMounted(() => {
     videoStore.setCurrentVideo(props.items[currentIndex.value], currentIndex.value)
     videoStore.setCurrentPlaying(props.items[currentIndex.value].aweme_id, props.page)
   }
+
+  // 🎯 初始化时检查页面活跃状态，如果不活跃则暂停所有视频
+  nextTick(() => {
+    if (!isPageActive.value) {
+      console.log(`${DEBUG_PREFIX} [${props.page}] 组件初始化时检测到页面不活跃，暂停所有视频`)
+      slots.forEach((slot) => {
+        const video = slotRefs.get(slot.key)
+        if (video) {
+          video.pause()
+          slot.isPlaying = false
+        }
+      })
+    }
+  })
 })
 
 onUnmounted(() => {
@@ -1516,6 +1682,17 @@ onUnmounted(() => {
     unbindVideoEvents(currentBoundVideo)
     currentBoundVideo = null
   }
+  // 清理 HLS 实例
+  hlsInstances.forEach((hls) => {
+    hls.destroy()
+  })
+  hlsInstances.clear()
+
+  // 🎯 从全局视频管理器中注销所有视频元素
+  slotRefs.forEach((video) => {
+    videoStore.unregisterVideoElement(video)
+  })
+
   // 确保清理拖动状态
   isDragging = false
   playState.isMoving = false
@@ -1535,6 +1712,12 @@ function onPlay(slot: SlotState) {
   // 🎯 onPlay 不隐藏 poster，等待 onPlaying 事件
 
   if (slot.role === 'current') {
+    // 🎯 全局视频管理：通知 store 当前视频开始播放，自动暂停其他所有视频
+    const video = slotRefs.get(slot.key)
+    if (video) {
+      videoStore.setActiveVideo(video)
+    }
+
     isPlaying.value = true
     playState.isMoving = false
   } else {
@@ -1552,7 +1735,7 @@ function onPlay(slot: SlotState) {
 
 // 🎯 视频真正开始播放（有画面输出）
 function onPlaying(slot: SlotState) {
-  // 🎯 视频真正播放时，隐藏 poster
+  // 🎯 视频真正播放时，隐藏 poster 层（此时 video 元素已经有画面，不需要遮罩了）
   slot.isPlaying = true
   // 🎯 同步倍速到“当前视频”
   if (slot.role === 'current') {
@@ -1598,18 +1781,34 @@ function togglePlay(slot: SlotState) {
 
 function handlePlayError(slot: SlotState, err: any) {
   const video = slotRefs.get(slot.key)
+  const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
+
   console.warn(`${DEBUG_PREFIX} play:error`, {
-    id: slot.videoIndex != null ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8) : 'none',
+    id: item?.aweme_id?.substring(0, 8),
     page: props.page,
-    error: err?.name
+    error: err?.name,
+    muted: video?.muted
   })
 
-  // 去掉自动重试：出错后停止当前的播放尝试，保持当前索引，等待用户滑动或手动操作
+  if (!video) return
+
+  // 🎯 核心修复：处理浏览器自动播放限制
+  if (err?.name === 'NotAllowedError') {
+    console.log(`${DEBUG_PREFIX} 自动播放被拦截，尝试静音播放`)
+    video.muted = true
+    slot.muted = true
+    video.play().catch((e) => {
+      console.error(`${DEBUG_PREFIX} 静音播放依然失败`, e)
+    })
+    return
+  }
+
+  // 🛡️ 只有在非 NotAllowedError 的致命错误时才清空 src
   if (video) {
     video.pause()
     // 清空 src 避免浏览器继续重试
-    video.removeAttribute('src')
-    video.load()
+    // video.removeAttribute('src') // 暂时注释掉，避免过于激进的清理导致无法手动点击播放
+    // video.load()
   }
 }
 
@@ -1839,13 +2038,34 @@ defineExpose({
   transform-style: preserve-3d;
   overflow: hidden;
 
+  .video-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
   video {
     width: 100%;
     height: 100%;
     object-fit: contain;
+    background-color: #000;
+    position: relative;
+    z-index: 0;
+    // 🎯 彻底删除 Video 文字：设置字体大小为 0，颜色透明
+    font-size: 0 !important;
+    color: transparent !important;
+    line-height: 0 !important;
+    // 🎯 确保 video 元素在加载时显示黑色背景，而不是默认占位符
+    &::-webkit-media-controls {
+      display: none !important;
+    }
+    // 🎯 隐藏所有浏览器默认控件和占位符
+    &::-webkit-media-controls-enclosure {
+      display: none !important;
+    }
   }
 
-  // 🎯 自定义 poster 层：视频加载时显示缩略图
+  // 🎯 完全覆盖层：彻底删除 Video 文字，显示封面图或黑色背景
   .video-poster {
     position: absolute;
     top: 0;
@@ -1855,8 +2075,21 @@ defineExpose({
     background-position: center;
     background-repeat: no-repeat;
     background-color: #000;
-    z-index: 1;
+    z-index: 99999; // 🎯 极高的 z-index，确保完全覆盖 video 元素和所有内容（包括 Video 文字）
     pointer-events: none;
+    // 🎯 确保 poster 层在视频加载时始终显示，播放时淡出
+    transition: opacity 0.15s ease-out;
+    opacity: 1;
+    // 🎯 强制 GPU 渲染，确保在最上层
+    transform: translateZ(0);
+    will-change: opacity;
+    // 🎯 关键：完全覆盖，即使 video 元素有任何文字也看不到
+    overflow: hidden;
+
+    &.poster-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
   }
 }
 

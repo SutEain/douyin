@@ -136,109 +136,26 @@ class VideoManager {
     // 设置当前视频
     this.currentVideo = { id, element, page }
 
-    // 播放前保证静音状态与全局一致，降低浏览器拦截概率
-    const globalMuted = typeof window !== 'undefined' ? (window as any)?.isMuted : undefined
-    const needForceMute = globalMuted === false && element.muted === false
-    if (typeof globalMuted !== 'undefined') {
-      element.muted = globalMuted
-    }
-    if (needForceMute) {
-      element.muted = true
-      console.log(`${this.DEBUG_PREFIX} play:force-mute-before`, {
-        id: id.substring(0, 8),
-        page,
-        muted: element.muted,
-        globalMuted,
-        readyState: element.readyState,
-        paused: element.paused
-      })
-    }
-
-    console.log(`${this.DEBUG_PREFIX} play:start`, {
-      id: id.substring(0, 8),
-      page,
-      muted: element.muted,
-      globalMuted,
-      readyState: element.readyState,
-      paused: element.paused
-    })
-
     // 播放
     try {
       await element.play()
-      console.log(`${this.DEBUG_PREFIX} play:success`, {
-        id: id.substring(0, 8),
-        page,
-        muted: element.muted,
-        globalMuted,
-        readyState: element.readyState,
-        paused: element.paused
-      })
-      // 如果是强制静音启动，且全局原本未静音，播放成功后尝试恢复
-      if (needForceMute) {
-        setTimeout(() => {
-          element.muted = false
-          console.log(`${this.DEBUG_PREFIX} play:restore-unmute`, {
-            id: id.substring(0, 8),
-            page,
-            muted: element.muted,
-            globalMuted
-          })
-        }, 0)
-      }
+      console.log(`${this.DEBUG_PREFIX} play:success`, { id: id.substring(0, 8) })
       this.scheduleStallCheck(id, page, element)
     } catch (error: any) {
-      // AbortError 是正常的（视频在播放前被暂停）
-      if (error.name === 'AbortError') {
-        console.log('[VideoManager] ⏸️ 播放被中止（正常）', { id: id.substring(0, 8) })
-        return
-      }
-
-      // 浏览器自动播放限制：自动切换为静音重试一次
-      if (error.name === 'NotAllowedError') {
-        console.warn(`${this.DEBUG_PREFIX} play:not-allowed`, {
-          id: id.substring(0, 8),
-          page,
-          muted: element.muted,
-          globalMuted: (window as any)?.isMuted,
-          readyState: element.readyState,
-          paused: element.paused,
-          error
-        })
+      // 🎯 终极容错：只要是自动播放限制或中止，立刻静音重试
+      if (error.name === 'NotAllowedError' || error.name === 'AbortError') {
+        console.warn(`${this.DEBUG_PREFIX} 播放被拦截，强制静音重试`)
+        element.muted = true
         try {
-          const prevMuted = element.muted
-          element.muted = true
           await element.play()
-          console.log('[VideoManager] ▶️ 静音重试成功', { id: id.substring(0, 8), page })
-          // 如果全局未静音，尽量恢复用户期望（已触发播放后恢复通常不会被拦截）
-          if (typeof window !== 'undefined' && !(window as any).isMuted && !prevMuted) {
-            setTimeout(() => {
-              element.muted = false
-            }, 0)
-          }
-          this.scheduleStallCheck(id, page, element)
           return
-        } catch (err) {
-          console.error(`${this.DEBUG_PREFIX} play:retry-muted-fail`, {
-            id: id.substring(0, 8),
-            page,
-            muted: element.muted,
-            globalMuted: (window as any)?.isMuted,
-            readyState: element.readyState,
-            paused: element.paused,
-            error: err
-          })
+        } catch (retryErr) {
+          console.error(`${this.DEBUG_PREFIX} 彻底失败`, retryErr)
         }
       }
-
-      console.error(`${this.DEBUG_PREFIX} play:fail`, {
+      console.error(`${this.DEBUG_PREFIX} play:failed`, {
         id: id.substring(0, 8),
-        page,
-        muted: element.muted,
-        globalMuted: (window as any)?.isMuted,
-        readyState: element.readyState,
-        paused: element.paused,
-        error
+        error: error.name
       })
     }
   }
