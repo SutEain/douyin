@@ -811,6 +811,7 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
                   break
                 default:
                   hls.destroy()
+                  hlsInstances.delete(slot.key)
                   // 降级到普通播放
                   video.src = resolvedUrl
                   break
@@ -917,9 +918,10 @@ function playCurrent() {
     return
   }
 
-  // 🛡️ 避免空 src 或不支持的源导致 NotSupportedError
-  if (!video.src) {
-    console.warn(`${DEBUG_PREFIX} play:skip-no-src`, {
+  // 🛡️ 避免空 src。注意：HLS 模式下 video.src 可能为空，需要同时检查是否有 HLS 实例
+  const hasHls = hlsInstances.has(slot.key)
+  if (!video.src && !hasHls) {
+    console.warn(`${DEBUG_PREFIX} play:skip-no-src-and-no-hls`, {
       slotKey: slot.key,
       videoIndex: slot.videoIndex,
       role: slot.role
