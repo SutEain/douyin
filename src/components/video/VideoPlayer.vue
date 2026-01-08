@@ -306,6 +306,11 @@ function handlePlay() {
     readyState: videoRef.value?.readyState,
     paused: videoRef.value?.paused
   })
+
+  // 🎯 全局视频管理：通知 store 当前视频开始播放，自动暂停其他所有视频
+  if (videoRef.value) {
+    videoStore.setActiveVideo(videoRef.value)
+  }
 }
 
 function handlePause() {
@@ -437,6 +442,9 @@ onMounted(() => {
   // 注册到视频管理器
   videoManager.register(props.item.aweme_id, videoRef.value, props.page)
 
+  // 🎯 注册到全局视频管理器（新的统一管理）
+  videoStore.registerVideoElement(videoRef.value)
+
   console.log('[VideoPlayer] mounted', {
     videoId: props.item.aweme_id.substring(0, 8),
     page: props.page,
@@ -457,6 +465,11 @@ onUnmounted(() => {
 
   // 从视频管理器注销
   videoManager.unregister(props.item.aweme_id)
+
+  // 🎯 从全局视频管理器注销
+  if (videoRef.value) {
+    videoStore.unregisterVideoElement(videoRef.value)
+  }
 })
 
 // 监听 item 变化

@@ -682,6 +682,10 @@ function setSlotRef(key: string) {
   return (el: HTMLVideoElement | null) => {
     if (el) {
       slotRefs.set(key, el)
+
+      // 🎯 注册到全局视频管理器
+      videoStore.registerVideoElement(el)
+
       // 防止重复绑定事件导致日志重复
       if (!boundVideos.has(el)) {
         const log = (event: string) => {
@@ -1684,6 +1688,11 @@ onUnmounted(() => {
   })
   hlsInstances.clear()
 
+  // 🎯 从全局视频管理器中注销所有视频元素
+  slotRefs.forEach((video) => {
+    videoStore.unregisterVideoElement(video)
+  })
+
   // 确保清理拖动状态
   isDragging = false
   playState.isMoving = false
@@ -1703,6 +1712,12 @@ function onPlay(slot: SlotState) {
   // 🎯 onPlay 不隐藏 poster，等待 onPlaying 事件
 
   if (slot.role === 'current') {
+    // 🎯 全局视频管理：通知 store 当前视频开始播放，自动暂停其他所有视频
+    const video = slotRefs.get(slot.key)
+    if (video) {
+      videoStore.setActiveVideo(video)
+    }
+
     isPlaying.value = true
     playState.isMoving = false
   } else {
