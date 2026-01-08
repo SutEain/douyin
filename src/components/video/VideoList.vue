@@ -437,6 +437,10 @@ const slots = reactive<SlotState[]>([
   }
 ])
 
+const slotRefs = new Map<string, HTMLVideoElement>()
+const hlsInstances = new Map<string, Hls>()
+const boundVideos = new WeakSet<HTMLVideoElement>()
+
 // 🎯 检查当前组件是否在活跃页面上
 const isPageActive = computed(() => {
   // 详情页特殊处理：如果当前路由是 /video-detail，只有 page === 'detail' 的组件才是活跃的
@@ -471,10 +475,6 @@ watch(
   },
   { immediate: true }
 )
-
-const slotRefs = new Map<string, HTMLVideoElement>()
-const hlsInstances = new Map<string, Hls>()
-const boundVideos = new WeakSet<HTMLVideoElement>()
 const progressRef = ref<HTMLElement | null>(null)
 const playState = reactive({
   duration: 0,

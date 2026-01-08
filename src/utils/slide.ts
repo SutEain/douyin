@@ -152,13 +152,17 @@ export function slideTouchMove(
     if (!canNextCb) canNextCb = canNext
     if (canNextCb(state, isNext)) {
       window.isMoved = true
-      //能滑动，那就把事件捕获，不能给父组件处理
-      _stopPropagation(e)
-      // 🎯 只在水平滑动时阻止默认行为，允许垂直滚动
+
+      // 🎯 只有在水平滑动组件中，且确定是横向位移时，才阻止冒泡和默认行为
       if (state.type === SlideType.HORIZONTAL) {
-        e.preventDefault()
+        if (e.cancelable) e.preventDefault()
+        _stopPropagation(e)
         bus.emit(state.name + '-moveX', state.move.x)
+      } else {
+        // 垂直滑动组件依然保持原样
+        _stopPropagation(e)
       }
+
       //获取偏移量
       const t = getSlideOffset(state, el) + (isNext ? state.judgeValue : -state.judgeValue)
       let dx1 = 0,
