@@ -790,13 +790,22 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
           // 🎯 先 attachMedia，确保 video 元素已准备好
           hls.attachMedia(video)
 
-          // 🎯 现在才清空旧的 src（此时 poster 已经设置，HLS 实例已 attach）
-          video.removeAttribute('src')
-          video.load()
+          // 🎯 仅在非 HLS 模式下才需要手动调用 load()，HLS 模式由 loadSource 触发
+          // video.load() 可能会导致某些浏览器（如 Windows Chrome）中断 HLS 加载
 
           // 🎯 然后加载新的 HLS 源
           hls.loadSource(resolvedUrl)
           hlsInstances.set(slot.key, hls)
+
+          // 🎯 监听 HLS 准备就绪
+          hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+            console.log(`[VideoList] HLS Media Attached: ${slot.key}`)
+            if (slot.role === 'current' && props.autoplay) {
+              video.play().catch((e) => {
+                if (e.name !== 'AbortError') console.warn('[VideoList] HLS Play Error:', e)
+              })
+            }
+          })
 
           // 🎯 错误处理
           hls.on(Hls.Events.ERROR, (_, data) => {

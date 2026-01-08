@@ -13,26 +13,28 @@ const VIDEO_BASE_URL = import.meta.env.VITE_APP_VIDEO_BASE_URL || 'https://media
 export function buildCdnUrl(pathOrUrl: string): string {
   if (!pathOrUrl) return ''
 
+  let result = ''
   // 1. 如果是完整 URL (http/https)，直接返回
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
-    return pathOrUrl
+    result = pathOrUrl
   }
-
   // 2. 如果是相对路径 (R2 存储路径，如 /videos/xxx.mp4)
-  if (pathOrUrl.startsWith('/')) {
+  else if (pathOrUrl.startsWith('/')) {
     const base = VIDEO_BASE_URL.endsWith('/') ? VIDEO_BASE_URL.slice(0, -1) : VIDEO_BASE_URL
-    return `${base}${pathOrUrl}`
+    result = `${base}${pathOrUrl}`
   }
-
   // 3. 兼容没有前导斜杠的路径
-  if (pathOrUrl.startsWith('videos/')) {
+  else if (pathOrUrl.startsWith('videos/')) {
     const base = VIDEO_BASE_URL.endsWith('/') ? VIDEO_BASE_URL : `${VIDEO_BASE_URL}/`
-    return `${base}${pathOrUrl}`
+    result = `${base}${pathOrUrl}`
   }
 
-  // 4. 🎯 如果是 Telegram file_id
-  console.warn('[buildCdnUrl] 检测到未搬家的 Telegram file_id:', pathOrUrl)
-  return ''
+  // 🎯 强制诊断日志：在控制台打印最终转换结果
+  if (result) {
+    console.log(`[MediaFix] URL 转换: ${pathOrUrl} -> ${result}`)
+  }
+
+  return result || pathOrUrl
 }
 
 /**
