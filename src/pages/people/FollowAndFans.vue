@@ -140,10 +140,19 @@ function handleTouchMove(e: TouchEvent) {
   const currentY = e.touches[0].clientY
   const deltaY = currentY - startY
   const scrollTop = scrollContainer.value.scrollTop
+  const scrollHeight = scrollContainer.value.scrollHeight
+  const clientHeight = scrollContainer.value.clientHeight
 
-  // 🎯 如果用户在顶部且向下拉，阻止默认行为（防止 Telegram 下拉）
+  // 🎯 如果用户在顶部且向下拉，阻止默认行为（防止 Telegram 下拉关闭 miniApp）
   if (scrollTop <= 0 && deltaY > 0) {
     e.preventDefault()
+    return
+  }
+
+  // 🎯 如果用户在底部且向上拉，也阻止（防止过度滚动）
+  if (scrollTop + clientHeight >= scrollHeight - 1 && deltaY < 0) {
+    e.preventDefault()
+    return
   }
 
   // 🎯 其他情况允许滚动（不调用 preventDefault，让浏览器处理）
@@ -230,6 +239,8 @@ watch(
   color: white;
   font-size: 14rem;
   overflow: hidden; // ✅ 外层禁止滚动
+  overscroll-behavior: contain; // ✅ 防止下拉时拉动整个 miniApp
+  overscroll-behavior-y: contain; // ✅ 明确指定 Y 轴
   display: flex;
   flex-direction: column;
 
@@ -239,6 +250,9 @@ watch(
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain; // ✅ 防止下拉时拉动整个 miniApp
+    overscroll-behavior-y: contain; // ✅ 明确指定 Y 轴
+    touch-action: pan-y; // ✅ 只允许垂直滚动
     background: var(--main-bg);
 
     &::-webkit-scrollbar {
@@ -248,6 +262,7 @@ watch(
 
   .main {
     min-height: 100.1%; // ✅ 强制内容超出一点点，确保 iOS 下能触发滚动
+    touch-action: pan-y; // ✅ 只允许垂直滚动
   }
 
   .content {
@@ -278,6 +293,7 @@ watch(
     overflow: visible;
     padding: 0 var(--page-padding);
     box-sizing: border-box;
+    touch-action: pan-y; // ✅ 只允许垂直滚动，避免与 SlideHorizontal 的水平滑动冲突
   }
 
   .tab1 {
