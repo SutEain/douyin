@@ -82,7 +82,8 @@ function logger(workerId, msg, type = 'info') {
     clean: '🗑️',
     success: '✅',
     error: '💥',
-    wait: '😴'
+    wait: '😴',
+    skip: '⏭️'
   }[type]
   console.log(`[${getTS()}][W${workerId}] ${icon} ${msg}`)
 }
@@ -111,6 +112,7 @@ async function startWorker(workerId) {
       .select('id, play_url')
       .eq('status', 'published')
       .eq('is_hls', false)
+      .like('play_url', '/videos/%') // 🎯 只查询有效的 R2 路径
       .range(offset, offset)
       .limit(1)
 
@@ -122,6 +124,7 @@ async function startWorker(workerId) {
         .select('id, play_url')
         .eq('status', 'published')
         .eq('is_hls', false)
+        .like('play_url', '/videos/%') // 🎯 只查询有效的 R2 路径
         .limit(1)
         .maybeSingle()
       if (!fallback) {
@@ -132,15 +135,39 @@ async function startWorker(workerId) {
       try {
         await processVideo(fallback, workerId)
       } catch (e) {
-        logger(workerId, `视频处理异常: ${e.message}`, 'error')
-        await sleep(5000)
+        const errorMsg = e.message || String(e)
+        // 🎯 区分错误类型：无效 play_url 只记录日志，不重试
+        if (
+          errorMsg.includes('跳过非视频文件') ||
+          errorMsg.includes('URL 解析失败') ||
+          errorMsg.includes('play_url 为空')
+        ) {
+          logger(workerId, `跳过无效记录: ${fallback.id} - ${errorMsg}`, 'skip')
+          // 短暂休息后继续下一个
+          await sleep(1000)
+        } else {
+          logger(workerId, `视频处理异常: ${errorMsg}`, 'error')
+          await sleep(5000)
+        }
       }
     } else {
       try {
         await processVideo(video, workerId)
       } catch (e) {
-        logger(workerId, `视频处理异常: ${e.message}`, 'error')
-        await sleep(5000)
+        const errorMsg = e.message || String(e)
+        // 🎯 区分错误类型：无效 play_url 只记录日志，不重试
+        if (
+          errorMsg.includes('跳过非视频文件') ||
+          errorMsg.includes('URL 解析失败') ||
+          errorMsg.includes('play_url 为空')
+        ) {
+          logger(workerId, `跳过无效记录: ${video.id} - ${errorMsg}`, 'skip')
+          // 短暂休息后继续下一个
+          await sleep(1000)
+        } else {
+          logger(workerId, `视频处理异常: ${errorMsg}`, 'error')
+          await sleep(5000)
+        }
       }
     }
   }
