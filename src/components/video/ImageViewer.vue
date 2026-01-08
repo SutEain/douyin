@@ -62,9 +62,11 @@ function openPreview() {
 const imageUrl = computed(() => {
   if (props.images && props.images.length > 0) {
     const first = props.images[0]
-    // 🎯 优先使用 R2 直链 (play_url 或 url)
-    if (first.play_url || first.url) return first.play_url || first.url
-    return buildCdnUrl(first.file_id)
+    // 🎯 优先使用 R2 直链 (play_url 或 url)，使用 buildCdnUrl 处理相对路径
+    const targetUrl = first.play_url || first.url
+    if (targetUrl) return buildCdnUrl(targetUrl)
+    // 如果没有 play_url 或 url，尝试使用 file_id（兼容旧数据）
+    if (first.file_id) return buildCdnUrl(first.file_id)
   }
   return ''
 })

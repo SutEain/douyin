@@ -180,9 +180,12 @@ const imageWrapperStyle = computed(() => {
 })
 
 function getImageUrl(image: ImageItem) {
-  // 🎯 优先使用 play_url 或 url (R2)
-  if (image.play_url || image.url) return image.play_url || image.url
-  return buildCdnUrl(image.file_id)
+  // 🎯 优先使用 play_url 或 url (R2)，使用 buildCdnUrl 处理相对路径
+  const targetUrl = image.play_url || image.url
+  if (targetUrl) return buildCdnUrl(targetUrl)
+  // 如果没有 play_url 或 url，尝试使用 file_id（兼容旧数据）
+  if (image.file_id) return buildCdnUrl(image.file_id)
+  return ''
 }
 
 function onImageLoad(index: number) {
