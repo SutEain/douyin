@@ -404,7 +404,7 @@ export const VideoList = () => {
 
   // 批量执行操作
   const handleBatchAction = (
-    action: 'approve' | 'set_adult' | 'unset_adult' | 'set_sea' | 'unset_sea',
+    action: 'approve' | 'set_adult' | 'unset_adult' | 'set_sea' | 'unset_sea' | 'delete',
     label: string
   ) => {
     if (selectedRowKeys.length === 0) {
@@ -414,7 +414,10 @@ export const VideoList = () => {
 
     Modal.confirm({
       title: `批量${label}`,
-      content: `确定对选中的 ${selectedRowKeys.length} 个视频执行“${label}”操作吗？`,
+      content: `确定对选中的 ${selectedRowKeys.length} 个视频执行"${label}"操作吗？${
+        action === 'delete' ? '此操作不可恢复！' : ''
+      }`,
+      okType: action === 'delete' ? 'danger' : 'primary',
       onOk: async () => {
         setBatchLoading(true)
         try {
@@ -812,6 +815,13 @@ export const VideoList = () => {
                   取消
                 </Button>
               </Button.Group>
+              <Button
+                danger
+                onClick={() => handleBatchAction('delete', '删除')}
+                loading={batchLoading}
+              >
+                批量删除 ({selectedRowKeys.length})
+              </Button>
               <Button onClick={() => setSelectedRowKeys([])}>取消选择</Button>
             </Space>
           </div>
