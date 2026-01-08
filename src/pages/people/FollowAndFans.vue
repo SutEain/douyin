@@ -16,7 +16,12 @@
     </BaseHeader>
 
     <!-- ✅ 双层滚动结构：防止下拉时关闭 miniApp -->
-    <div class="scroll-container" @scroll="handleScroll" ref="scrollContainer">
+    <div
+      class="scroll-container"
+      @scroll="handleScroll"
+      @touchstart="handleTouchStart"
+      ref="scrollContainer"
+    >
       <div class="main" ref="mainContent">
         <div class="content">
           <div class="indicator-wrapper">
@@ -116,16 +121,50 @@ const data = reactive({
 // ✅ 双层滚动结构的 refs
 const scrollContainer = ref<HTMLElement | null>(null)
 const mainContent = ref<HTMLElement | null>(null)
+let startY = 0
 
 // ✅ 滚动事件（预留，可以用于其他逻辑）
 function handleScroll() {
   // 可以添加滚动相关的逻辑
 }
 
+// 🎯 处理触摸开始：记录起始位置
+function handleTouchStart(e: TouchEvent) {
+  startY = e.touches[0].clientY
+}
+
+// 🎯 处理触摸移动：阻止 Telegram WebApp 的下拉手势
+function handleTouchMove(e: TouchEvent) {
+  if (!scrollContainer.value) return
+
+  const currentY = e.touches[0].clientY
+  const deltaY = currentY - startY
+  const scrollTop = scrollContainer.value.scrollTop
+
+  // 🎯 如果用户在顶部且向下拉，阻止默认行为（防止 Telegram 下拉）
+  if (scrollTop <= 0 && deltaY > 0) {
+    e.preventDefault()
+  }
+
+  // 🎯 其他情况允许滚动（不调用 preventDefault，让浏览器处理）
+}
+
 onMounted(async () => {
   data.slideIndex = ~~route.query.type
   await loadFollowing()
   await loadFollowers()
+
+  // 🎯 手动添加非 passive 的 touchmove 监听器（Vue 的 @touchmove 默认是 passive）
+  if (scrollContainer.value) {
+    scrollContainer.value.addEventListener('touchmove', handleTouchMove, { passive: false })
+  }
+})
+
+onUnmounted(() => {
+  // 🎯 清理事件监听器
+  if (scrollContainer.value) {
+    scrollContainer.value.removeEventListener('touchmove', handleTouchMove)
+  }
 })
 
 async function loadFollowing() {
