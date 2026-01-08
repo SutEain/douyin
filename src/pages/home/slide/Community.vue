@@ -5,14 +5,14 @@
         <WaterfallList :list="mergeOverrides(list)" class="list">
           <template v-slot="{ item }">
             <div class="card" @click="(e) => showDetail(e, item)">
-              <img class="poster" v-lazy="_checkImgUrl(item.note_card?.cover?.url_default)" />
+              <img class="poster" v-lazy="buildCdnUrl(item.note_card?.cover?.url_default)" />
               <div class="bottom">
                 <div class="title">
                   {{ truncateTitle(item.note_card?.display_title) }}
                 </div>
                 <div class="b2">
                   <div class="user">
-                    <img class="avatar" :src="_checkImgUrl(item.note_card?.user?.avatar)" />
+                    <img class="avatar" :src="buildCdnUrl(item.note_card?.user?.avatar)" />
                     <div class="name">{{ item.note_card?.user?.nickname }}</div>
                   </div>
                   <div class="star">
@@ -40,7 +40,8 @@
 
 <script setup>
 import { reactive, ref, watch } from 'vue'
-import { _checkImgUrl, _stopPropagation, cloneDeep } from '@/utils'
+import { _stopPropagation, cloneDeep } from '@/utils'
+import { buildCdnUrl } from '@/utils/media'
 import { recommendedPost } from '@/api/user'
 import WaterfallList from '@/components/WaterfallList.vue'
 import ScrollList from '@/components/ScrollList.vue'
