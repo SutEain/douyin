@@ -15,63 +15,64 @@
       </template>
     </BaseHeader>
 
-    <!-- ✅ 参考 Me 页面的滚动结构：直接使用 scroll-container，移除多余的包装层 -->
-    <div class="scroll-container" @scroll.passive="handleScroll" ref="scrollContainer">
-      <div class="content">
-        <div class="indicator-wrapper">
-          <Indicator
-            tabStyleWidth="50%"
-            :tabTexts="['关注', '粉丝']"
-            v-model:active-index="data.slideIndex"
-          >
-          </Indicator>
-        </div>
-        <SlideHorizontal v-model:index="data.slideIndex" :disableSwipe="true">
-          <SlideItem class="tab1">
-            <Search
-              v-model="data.searchKey"
-              placeholder="搜索用户备注或名字"
-              :is-show-right-text="false"
-            />
-            <div class="is-search" v-if="data.searchKey">
-              <div class="search-result" v-if="data.searchFollowing.length">
+    <div class="scroll-container" ref="scrollContainer">
+      <div class="main" ref="mainContent">
+        <div class="content">
+          <div class="indicator-wrapper">
+            <Indicator
+              tabStyleWidth="50%"
+              :tabTexts="['关注', '粉丝']"
+              v-model:active-index="data.slideIndex"
+            >
+            </Indicator>
+          </div>
+          <SlideHorizontal v-model:index="data.slideIndex" :disableSwipe="true" class="list-slider">
+            <SlideItem class="tab1">
+              <Search
+                v-model="data.searchKey"
+                placeholder="搜索用户备注或名字"
+                :is-show-right-text="false"
+              />
+              <div class="is-search" v-if="data.searchKey">
+                <div class="search-result" v-if="data.searchFollowing.length">
+                  <People
+                    :key="i"
+                    v-for="(item, i) in data.searchFollowing"
+                    :people="item"
+                    :show-unfollow="true"
+                    @unfollow="handleUnfollow(item.user_id)"
+                    @clickAvatar="handleClickAvatar(item)"
+                  ></People>
+                </div>
+                <div class="no-result" v-else>
+                  <img src="../../assets/img/icon/no-result.png" alt="" />
+                  <span class="n1">搜索结果为空</span>
+                  <span class="n2">没有搜索到相关内容</span>
+                </div>
+              </div>
+              <div class="no-search" v-else>
                 <People
                   :key="i"
-                  v-for="(item, i) in data.searchFollowing"
+                  v-for="(item, i) in data.following"
                   :people="item"
                   :show-unfollow="true"
                   @unfollow="handleUnfollow(item.user_id)"
                   @clickAvatar="handleClickAvatar(item)"
                 ></People>
+                <NoMore v-if="data.following.length" />
               </div>
-              <div class="no-result" v-else>
-                <img src="../../assets/img/icon/no-result.png" alt="" />
-                <span class="n1">搜索结果为空</span>
-                <span class="n2">没有搜索到相关内容</span>
-              </div>
-            </div>
-            <div class="no-search" v-else>
+            </SlideItem>
+            <SlideItem class="tab2">
               <People
                 :key="i"
-                v-for="(item, i) in data.following"
+                v-for="(item, i) in data.followers"
                 :people="item"
-                :show-unfollow="true"
-                @unfollow="handleUnfollow(item.user_id)"
                 @clickAvatar="handleClickAvatar(item)"
               ></People>
-              <NoMore v-if="data.following.length" />
-            </div>
-          </SlideItem>
-          <SlideItem class="tab2">
-            <People
-              :key="i"
-              v-for="(item, i) in data.followers"
-              :people="item"
-              @clickAvatar="handleClickAvatar(item)"
-            ></People>
-            <NoMore v-if="data.followers.length" />
-          </SlideItem>
-        </SlideHorizontal>
+              <NoMore v-if="data.followers.length" />
+            </SlideItem>
+          </SlideHorizontal>
+        </div>
       </div>
     </div>
   </div>
@@ -105,24 +106,43 @@ const data = reactive({
   searchFollowing: [] as any[]
 })
 
-// UserPanel 相关状态 (已移除，改用路由跳转)
-// const showUserPanel = ref(false)
-// const selectedUser = ref<any>(null)
-
-// ✅ 滚动容器 ref（参考 Me 页面）
 const scrollContainer = ref<HTMLElement | null>(null)
+const mainContent = ref<HTMLElement | null>(null)
+let startY = 0
 
-// 🎯 滚动事件（参考 Me 页面，使用 passive）
-function handleScroll(e: Event) {
-  const target = e.target as HTMLElement | null
-  if (!target) return
-  // 可以在这里添加加载更多的逻辑
+// ✅ 🎯 参考 UserPanel.vue 的拦截逻辑
+function touchStart(e: TouchEvent) {
+  startY = e.touches[0].pageY
+}
+
+function touchMove(e: TouchEvent) {
+  if (!scrollContainer.value) return
+  const moveY = e.touches[0].pageY - startY
+  const isTop = scrollContainer.value.scrollTop <= 0
+
+  // 如果在顶部且向下拉，拦截它，防止 Telegram 关闭 APP
+  if (isTop && moveY > 0) {
+    if (e.cancelable) e.preventDefault()
+  }
 }
 
 onMounted(async () => {
   data.slideIndex = ~~route.query.type
   await loadFollowing()
   await loadFollowers()
+
+  // ✅ 手动绑定非 passive 事件以允许 preventDefault
+  if (mainContent.value) {
+    mainContent.value.addEventListener('touchstart', touchStart, { passive: true })
+    mainContent.value.addEventListener('touchmove', touchMove, { passive: false })
+  }
+})
+
+onUnmounted(() => {
+  if (mainContent.value) {
+    mainContent.value.removeEventListener('touchstart', touchStart)
+    mainContent.value.removeEventListener('touchmove', touchMove)
+  }
 })
 
 async function loadFollowing() {
@@ -149,9 +169,7 @@ async function handleUnfollow(userId: string) {
   }
 }
 
-// ✅ 处理头像点击，打开用户资料页（路由跳转）
 function handleClickAvatar(user: any) {
-  console.log('[FollowAndFans] 点击头像:', user)
   const userId = user.user_id || user.uid
   if (userId) {
     router.push(`/user/${userId}`)
@@ -187,22 +205,26 @@ watch(
   top: 0;
   color: white;
   font-size: 14rem;
-  overflow: hidden; // ✅ 外层禁止滚动
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: var(--main-bg);
 
-  // ✅ 滚动容器（完全参考 Me 页面的样式）
   .scroll-container {
     height: 100vh;
     overflow-y: auto;
     overflow-x: hidden;
-    -webkit-overflow-scrolling: touch; // ✅ iOS 平滑滚动
-    padding-bottom: var(--footer-height); // ✅ 参考 Me 页面
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 80px;
 
     &::-webkit-scrollbar {
       display: none;
     }
+  }
+
+  .main {
+    width: 100%;
+    min-height: 100.1%; // ✅ 关键：强制激活 iOS 滚动
   }
 
   .content {
@@ -215,73 +237,30 @@ watch(
       top: 0;
       z-index: 10;
     }
-
-    .search-ctn {
-      z-index: 9;
-      left: 0;
-      background: var(--main-bg);
-      position: fixed;
-      width: 100vw;
-      box-sizing: border-box;
-      padding: 10rem var(--page-padding) 0 var(--page-padding);
-    }
   }
 
-  .tab1,
-  .tab2 {
-    padding: 0 var(--page-padding);
-    box-sizing: border-box;
-    min-height: 100%; // ✅ 确保内容至少占满视口，触发滚动
+  .list-slider {
+    height: auto !important; // ✅ 移除 100% 高度限制
+    overflow: visible !important;
 
-    // ✅ 确保 SlideItem 高度自适应内容（参考 Me 页面）
-    :deep(.slide-item) {
+    :deep(.slide-list) {
       height: auto !important;
-      min-height: 100%;
+      display: block !important; // ✅ 打破 flex 布局限制
+      touch-action: auto !important;
     }
 
-    // ✅ 移除 SlideHorizontal 的 touch-action 限制（当 disableSwipe 时）
-    :deep(.slide-list) {
-      touch-action: auto !important;
+    :deep(.slide-item) {
+      height: auto !important;
+      min-height: 50vh;
     }
   }
 
   .tab1 {
-    .title {
-      display: flex;
-      align-items: center;
-      margin-bottom: 10rem;
-      color: var(--second-text-color);
-      font-size: 12rem;
-    }
-
     .no-search {
       padding-top: 60rem;
     }
-
     .is-search {
       padding-top: 50rem;
-
-      .no-result {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-
-        img {
-          margin-top: 150rem;
-          height: 150rem;
-        }
-
-        .n1 {
-          margin-top: 40rem;
-          font-size: 16rem;
-        }
-
-        .n2 {
-          margin-top: 20rem;
-          font-size: 12rem;
-          color: var(--second-text-color);
-        }
-      }
     }
   }
 }
