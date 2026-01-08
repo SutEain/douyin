@@ -149,9 +149,9 @@ function touchEnd(e) {
     <div
       class="slide-list"
       ref="slideListEl"
-      @pointerdown.prevent="touchStart"
-      @pointermove.prevent="touchMove"
-      @pointerup.prevent="touchEnd"
+      @pointerdown="touchStart"
+      @pointermove="touchMove"
+      @pointerup="touchEnd"
     >
       <slot></slot>
     </div>

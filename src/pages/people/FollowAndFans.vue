@@ -117,62 +117,15 @@ const data = reactive({
 const scrollContainer = ref<HTMLElement | null>(null)
 const mainContent = ref<HTMLElement | null>(null)
 
-// ✅ 触摸事件状态
-const touchState = reactive({
-  startY: 0,
-  isTop: false
-})
-
-// ✅ 触摸开始
-function handleTouchStart(e: TouchEvent) {
-  touchState.startY = e.touches[0].clientY
-  touchState.isTop = (scrollContainer.value?.scrollTop || 0) === 0
-}
-
-// ✅ 触摸移动：在顶部下拉时阻止默认行为
-function handleTouchMove(e: TouchEvent) {
-  if (!touchState.isTop) return
-
-  const currentY = e.touches[0].clientY
-  const deltaY = currentY - touchState.startY
-
-  // 如果在顶部且向下拉（deltaY > 0），阻止默认行为
-  if (deltaY > 0 && scrollContainer.value?.scrollTop === 0) {
-    e.preventDefault()
-  }
-}
-
-// ✅ 触摸结束
-function handleTouchEnd() {
-  touchState.startY = 0
-  touchState.isTop = false
-}
-
 // ✅ 滚动事件（预留，可以用于其他逻辑）
 function handleScroll() {
   // 可以添加滚动相关的逻辑
 }
 
 onMounted(async () => {
-  // ✅ 添加触摸事件监听到 scroll-container
-  if (scrollContainer.value) {
-    scrollContainer.value.addEventListener('touchstart', handleTouchStart, { passive: true })
-    scrollContainer.value.addEventListener('touchmove', handleTouchMove, { passive: false })
-    scrollContainer.value.addEventListener('touchend', handleTouchEnd, { passive: true })
-  }
-
   data.slideIndex = ~~route.query.type
   await loadFollowing()
   await loadFollowers()
-})
-
-onUnmounted(() => {
-  // ✅ 清理触摸事件监听
-  if (scrollContainer.value) {
-    scrollContainer.value.removeEventListener('touchstart', handleTouchStart)
-    scrollContainer.value.removeEventListener('touchmove', handleTouchMove)
-    scrollContainer.value.removeEventListener('touchend', handleTouchEnd)
-  }
 })
 
 async function loadFollowing() {
@@ -249,7 +202,7 @@ watch(
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     overscroll-behavior-y: contain;
-    touch-action: pan-y; // ✅ 只允许垂直滚动
+    touch-action: pan-y pan-x; // ✅ 允许垂直和水平滚动（水平用于 SlideHorizontal）
 
     &::-webkit-scrollbar {
       display: none;
@@ -257,7 +210,7 @@ watch(
   }
 
   .main {
-    touch-action: pan-y; // ✅ 只允许垂直滚动
+    touch-action: pan-y pan-x; // ✅ 允许垂直和水平滚动
   }
 
   .content {
