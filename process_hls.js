@@ -444,7 +444,9 @@ async function processSingleVideoForCollection(videoUrl, collectionId, fileId, w
                   Bucket: R2_BUCKET,
                   Key: key,
                   Body: fileContent,
-                  ContentType: file.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t',
+                  ContentType: file.endsWith('.m3u8')
+                    ? 'application/vnd.apple.mpegurl'
+                    : 'video/mp2t',
                   CacheControl: 'public, max-age=31536000'
                 })
               )
@@ -680,7 +682,9 @@ async function processVideo(video, workerId) {
                   Bucket: R2_BUCKET,
                   Key: key,
                   Body: fileContent,
-                  ContentType: file.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t',
+                  ContentType: file.endsWith('.m3u8')
+                    ? 'application/vnd.apple.mpegurl'
+                    : 'video/mp2t',
                   CacheControl: 'public, max-age=31536000'
                 })
               )

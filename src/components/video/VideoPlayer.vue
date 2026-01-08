@@ -200,7 +200,9 @@ function initVideo() {
     if (Hls.isSupported()) {
       hls = new Hls({
         capLevelToPlayerSize: true,
-        autoStartLoad: true
+        autoStartLoad: true,
+        enableWorker: true, // 🎯 开启 Worker 线程提高性能
+        lowLatencyMode: false // 🎯 安卓端关闭低延迟模式更稳定
       })
       hls.loadSource(url)
       hls.attachMedia(videoRef.value)
@@ -217,19 +219,30 @@ function initVideo() {
       })
 
       hls.on(Hls.Events.ERROR, (_, data) => {
+        console.error('[VideoPlayer] HLS 错误事件:', {
+          type: data.type,
+          details: data.details,
+          fatal: data.fatal,
+          url: url
+        })
+
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.error('[VideoPlayer] HLS 网络错误，尝试恢复...')
+              console.error('[VideoPlayer] HLS 致命网络错误，尝试恢复...', data.details)
               hls?.startLoad()
               break
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.error('[VideoPlayer] HLS 媒体错误，尝试恢复...')
+              console.error('[VideoPlayer] HLS 致命媒体错误，尝试恢复...', data.details)
               hls?.recoverMediaError()
               break
             default:
-              console.error('[VideoPlayer] HLS 致命错误，无法恢复')
+              console.error('[VideoPlayer] HLS 致命不可恢复错误:', data.details)
               hls?.destroy()
+              // 🎯 致命错误后，尝试降级到普通播放（如果是安卓，hls.js 失败通常意味着 MSE 出了问题）
+              if (videoRef.value) {
+                videoRef.value.src = url
+              }
               break
           }
         }

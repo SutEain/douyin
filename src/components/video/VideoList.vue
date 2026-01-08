@@ -782,7 +782,9 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
           // 🎯 关键修复：先创建并 attach HLS 实例，再清空 src，避免显示占位符
           const hls = new Hls({
             capLevelToPlayerSize: true,
-            autoStartLoad: slot.role === 'current' // 只有 current 才自动加载
+            autoStartLoad: slot.role === 'current', // 只有 current 才自动加载
+            enableWorker: true, // 🎯 开启 Worker 线程提高性能
+            lowLatencyMode: false // 🎯 安卓端关闭低延迟模式更稳定
           })
 
           // 🎯 先 attachMedia，确保 video 元素已准备好
@@ -795,6 +797,26 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
           // 🎯 然后加载新的 HLS 源
           hls.loadSource(resolvedUrl)
           hlsInstances.set(slot.key, hls)
+
+          // 🎯 错误处理
+          hls.on(Hls.Events.ERROR, (_, data) => {
+            if (data.fatal) {
+              console.error('[VideoList] HLS fatal error:', data.details)
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  hls.startLoad()
+                  break
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  hls.recoverMediaError()
+                  break
+                default:
+                  hls.destroy()
+                  // 降级到普通播放
+                  video.src = resolvedUrl
+                  break
+              }
+            }
+          })
 
           // 🎯 HLS 视频：监听第一个片段加载完成，确保有画面输出后再隐藏 poster
           hls.once(Hls.Events.FRAG_LOADED, () => {

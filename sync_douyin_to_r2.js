@@ -259,7 +259,7 @@ async function processVideo(video) {
             Bucket: process.env.R2_BUCKET,
             Key: r2Key,
             Body: fileContent,
-            ContentType: file.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp2t',
+            ContentType: file.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t',
             CacheControl: 'public, max-age=31536000'
           })
         )
