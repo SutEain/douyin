@@ -12,7 +12,7 @@
             <!-- 🎬 视频类型 -->
             <video
               v-if="item.type === 'video'"
-              v-is-can-play="_checkImgUrl(item.info_list?.[0]?.url)"
+              v-is-can-play="buildCdnUrl(item.info_list?.[0]?.url)"
               style="height: 100%; width: 100%; object-fit: contain"
               autoplay
               loop
@@ -23,7 +23,7 @@
               x5-video-player-type="h5-page"
             />
             <!-- 🖼️ 图片类型 -->
-            <img v-else :src="_checkImgUrl(item.info_list?.[0]?.url)" alt="" />
+            <img v-else :src="buildCdnUrl(item.info_list?.[0]?.url)" alt="" />
           </SlideItem>
         </SlideHorizontal>
 
@@ -40,7 +40,7 @@
       <div class="content">
         <div class="shop">
           <header>
-            <img class="avatar" :src="_checkImgUrl(props.detail.note_card?.user?.avatar)" />
+            <img class="avatar" :src="buildCdnUrl(props.detail.note_card?.user?.avatar)" />
             <div class="right">
               <div class="name">
                 {{
@@ -90,7 +90,7 @@
             >
               <div class="comment-main">
                 <img
-                  :src="_checkImgUrl(item.avatar)"
+                  :src="buildCdnUrl(item.avatar)"
                   class="avatar"
                   @click="handleAvatarClick(item)"
                 />
@@ -147,7 +147,7 @@
                   @mouseup="handleTouchEndLong"
                 >
                   <img
-                    :src="_checkImgUrl(child.avatar)"
+                    :src="buildCdnUrl(child.avatar)"
                     class="avatar"
                     @click="handleAvatarClick(child)"
                   />
@@ -346,7 +346,6 @@ import SlideItem from '@/components/slide/SlideItem.vue'
 import Hls from 'hls.js'
 import { computed, onMounted, reactive, ref, watch, onUnmounted } from 'vue'
 import {
-  _checkImgUrl,
   _copy,
   _formatNumber,
   _notice,
@@ -355,6 +354,7 @@ import {
   _time,
   _truncate
 } from '@/utils'
+import { buildCdnUrl } from '@/utils/media'
 import {
   getCommentReplies,
   sendVideoComment,
