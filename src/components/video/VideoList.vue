@@ -614,7 +614,7 @@ provide(
 provide(
   'position',
   computed(() => ({
-    uniqueId: props.page,
+    uniqueId: props.page as 'detail' | 'home' | 'me',
     index: currentIndex.value
   }))
 )
