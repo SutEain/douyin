@@ -459,6 +459,7 @@ const isPageActive = computed(() => {
 })
 
 // 🎯 路由变化时，如果当前组件变为了非活跃页面，强制暂停所有 slot 中的视频
+// ⚠️ 移除 immediate: true，避免在 setup 阶段访问未完全初始化的变量
 watch(
   () => route.path,
   () => {
@@ -472,8 +473,7 @@ watch(
         }
       })
     }
-  },
-  { immediate: true }
+  }
 )
 const progressRef = ref<HTMLElement | null>(null)
 const playState = reactive({
@@ -1656,6 +1656,20 @@ onMounted(() => {
     videoStore.setCurrentVideo(props.items[currentIndex.value], currentIndex.value)
     videoStore.setCurrentPlaying(props.items[currentIndex.value].aweme_id, props.page)
   }
+
+  // 🎯 初始化时检查页面活跃状态，如果不活跃则暂停所有视频
+  nextTick(() => {
+    if (!isPageActive.value) {
+      console.log(`${DEBUG_PREFIX} [${props.page}] 组件初始化时检测到页面不活跃，暂停所有视频`)
+      slots.forEach((slot) => {
+        const video = slotRefs.get(slot.key)
+        if (video) {
+          video.pause()
+          slot.isPlaying = false
+        }
+      })
+    }
+  })
 })
 
 onUnmounted(() => {

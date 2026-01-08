@@ -27,7 +27,7 @@
             >
             </Indicator>
           </div>
-          <SlideHorizontal v-model:index="data.slideIndex">
+          <SlideHorizontal v-model:index="data.slideIndex" :disableSwipe="true">
             <SlideItem class="tab1">
               <Search
                 v-model="data.searchKey"
