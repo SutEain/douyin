@@ -1,9 +1,6 @@
 <template>
   <div class="FollowAndFans" id="FollowAndFans">
     <BaseHeader backMode="light">
-      <template v-slot:center>
-        <span class="f14">{{ store.userinfo.nickname }}</span>
-      </template>
       <template v-slot:right>
         <div>
           <img
@@ -20,11 +17,26 @@
       <div class="main" ref="mainContent">
         <div class="content">
           <div class="indicator-wrapper">
-            <Indicator
-              tabStyleWidth="50%"
-              :tabTexts="['关注', '粉丝']"
-              v-model:active-index="data.slideIndex"
-            />
+            <div class="custom-tabs">
+              <div
+                class="tab"
+                :class="{ active: data.slideIndex === 0 }"
+                @click="data.slideIndex = 0"
+              >
+                关注
+              </div>
+              <div
+                class="tab"
+                :class="{ active: data.slideIndex === 1 }"
+                @click="data.slideIndex = 1"
+              >
+                粉丝
+              </div>
+              <div
+                class="custom-indicator"
+                :style="{ transform: `translateX(${data.slideIndex * 100}%)` }"
+              ></div>
+            </div>
           </div>
 
           <!-- ✅ 彻底移除 SlideHorizontal 组建，改用纯 Vue 条件渲染 -->
@@ -85,7 +97,6 @@
 <script setup lang="ts">
 import People from './components/People.vue'
 import Search from '../../components/Search.vue'
-import Indicator from '../../components/slide/Indicator.vue'
 import { useBaseStore } from '@/store/pinia'
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -240,6 +251,41 @@ watch(
       position: sticky;
       top: 0;
       z-index: 10;
+
+      .custom-tabs {
+        display: flex;
+        position: relative;
+        height: 45px;
+        align-items: center;
+
+        .tab {
+          flex: 1;
+          text-align: center;
+          font-size: 16px;
+          color: #888;
+          cursor: pointer;
+          transition: color 0.3s;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          &.active {
+            color: #fff;
+            font-weight: bold;
+          }
+        }
+
+        .custom-indicator {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 50%;
+          height: 2px;
+          background: #face15;
+          transition: transform 0.3s ease;
+        }
+      }
     }
   }
 
