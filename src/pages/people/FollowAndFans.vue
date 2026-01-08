@@ -1,11 +1,11 @@
 <template>
   <div class="FollowAndFans" id="FollowAndFans">
-    <BaseHeader backMode="light">
+    <BaseHeader backMode="light" :isFixed="false">
       <template v-slot:right>
         <div>
           <img
             src="../../assets/img/icon/people/add-user.png"
-            style="width: 2rem"
+            style="width: 22rem"
             @click="nav('/people/find-acquaintance')"
           />
         </div>
