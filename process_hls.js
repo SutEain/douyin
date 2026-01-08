@@ -27,7 +27,14 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-const execPromise = promisify(exec)
+// 🎯 包装 execPromise，默认使用更大的 maxBuffer（10MB），避免 "maxBuffer length exceeded" 错误
+const execPromiseRaw = promisify(exec)
+const execPromise = (command, options = {}) => {
+  return execPromiseRaw(command, {
+    maxBuffer: 10 * 1024 * 1024, // 10MB
+    ...options
+  })
+}
 
 const {
   SUPABASE_URL,
