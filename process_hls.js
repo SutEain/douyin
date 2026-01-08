@@ -136,11 +136,13 @@ async function startWorker(workerId) {
         await processVideo(fallback, workerId)
       } catch (e) {
         const errorMsg = e.message || String(e)
-        // 🎯 区分错误类型：无效 play_url 只记录日志，不重试
+        // 🎯 区分错误类型：无效 play_url 或已删除的记录，只记录日志，不重试
         if (
           errorMsg.includes('跳过非视频文件') ||
           errorMsg.includes('URL 解析失败') ||
-          errorMsg.includes('play_url 为空')
+          errorMsg.includes('play_url 为空') ||
+          errorMsg.includes('已删除') ||
+          errorMsg.includes('无效的 API')
         ) {
           logger(workerId, `跳过无效记录: ${fallback.id} - ${errorMsg}`, 'skip')
           // 短暂休息后继续下一个
@@ -155,11 +157,13 @@ async function startWorker(workerId) {
         await processVideo(video, workerId)
       } catch (e) {
         const errorMsg = e.message || String(e)
-        // 🎯 区分错误类型：无效 play_url 只记录日志，不重试
+        // 🎯 区分错误类型：无效 play_url 或已删除的记录，只记录日志，不重试
         if (
           errorMsg.includes('跳过非视频文件') ||
           errorMsg.includes('URL 解析失败') ||
-          errorMsg.includes('play_url 为空')
+          errorMsg.includes('play_url 为空') ||
+          errorMsg.includes('已删除') ||
+          errorMsg.includes('无效的 API')
         ) {
           logger(workerId, `跳过无效记录: ${video.id} - ${errorMsg}`, 'skip')
           // 短暂休息后继续下一个
@@ -173,16 +177,37 @@ async function startWorker(workerId) {
   }
 }
 
+// 🗑️ 删除无效视频记录
+async function deleteInvalidVideo(videoId, reason, workerId) {
+  try {
+    const { error } = await supabase.from('videos').delete().eq('id', videoId)
+    if (error) {
+      logger(workerId, `删除失败 [${videoId.substring(0, 8)}]: ${error.message}`, 'error')
+    } else {
+      logger(workerId, `已删除无效记录 [${videoId.substring(0, 8)}]: ${reason}`, 'clean')
+    }
+  } catch (e) {
+    logger(workerId, `删除异常 [${videoId.substring(0, 8)}]: ${e.message}`, 'error')
+  }
+}
+
 async function processVideo(video, workerId) {
   const { id, play_url } = video
   const startTime = Date.now()
   logger(workerId, `任务开始: ${id}`, 'start')
 
+  // 🎯 检查是否是无效的 API 端点（如 /aweme/v1/play/）
+  if (play_url && /\/aweme\/v1\/play\/?/i.test(play_url)) {
+    await deleteInvalidVideo(id, '无效的 API 端点', workerId)
+    throw new Error('无效的 API 端点，已删除')
+  }
+
   // 1. 路径解析
   let relativePath = ''
   try {
     if (!play_url) {
-      throw new Error('play_url 为空')
+      await deleteInvalidVideo(id, 'play_url 为空', workerId)
+      throw new Error('play_url 为空，已删除')
     }
 
     // 🎯 改进：更好地处理各种 URL 格式
@@ -197,6 +222,9 @@ async function processVideo(video, workerId) {
       relativePath = play_url
     }
   } catch (e) {
+    if (e.message.includes('URL 解析失败')) {
+      await deleteInvalidVideo(id, `URL 解析失败: ${play_url}`, workerId)
+    }
     throw new Error(`URL 解析失败: ${play_url} - ${e.message}`)
   }
 
@@ -204,6 +232,11 @@ async function processVideo(video, workerId) {
   const ext = path.extname(relativePath).toLowerCase()
   const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v']
   if (!videoExts.includes(ext)) {
+    // 🎯 如果没有扩展名且路径看起来像 API 端点，删除记录
+    if (!ext && (relativePath.includes('/aweme/') || relativePath.includes('/api/'))) {
+      await deleteInvalidVideo(id, `无效的 API 路径: ${relativePath}`, workerId)
+      throw new Error(`无效的 API 路径，已删除: ${relativePath}`)
+    }
     throw new Error(`跳过非视频文件: ${relativePath} (扩展名: ${ext})`)
   }
 
