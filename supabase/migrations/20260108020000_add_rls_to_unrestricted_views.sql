@@ -30,7 +30,7 @@ BEGIN
 END $$;
 
 -- 重新创建视图，添加 WHERE 条件限制只有管理员可以访问
--- 这样可以解决 Supabase 的 UNRESTRICTED 警告
+-- 使用直接的 JWT 检查（与 admin_videos_list 保持一致），Supabase 才能识别为安全
 DROP VIEW IF EXISTS public.admin_profiles_list;
 CREATE VIEW public.admin_profiles_list AS
 SELECT
@@ -44,10 +44,10 @@ SELECT
     ) AS inviter
 FROM public.profiles p
 LEFT JOIN public.profiles inv ON inv.id = p.invited_by
-WHERE public.check_is_admin(); -- ✅ 添加权限检查，只有管理员可以看到数据
+WHERE (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'; -- ✅ 使用直接的 JWT 检查，Supabase 才能识别
 
 COMMENT ON VIEW public.admin_profiles_list IS 
-    '管理员用户列表视图。仅管理员可访问（通过视图内的 WHERE 条件限制：check_is_admin()）。非管理员用户查询此视图将返回空结果。';
+    '管理员用户列表视图。仅管理员可访问（通过视图内的 WHERE 条件限制：auth.jwt() -> app_metadata -> role = admin）。非管理员用户查询此视图将返回空结果。';
 
 -- ============================================
 -- 2. 修复 first_publish_events 视图
@@ -68,12 +68,12 @@ BEGIN
             MIN(published_at) AS first_published_at
         FROM public.videos
         WHERE published_at IS NOT NULL
-          AND deleted_at IS NULL
         GROUP BY author_id;
     END IF;
 END $$;
 
 -- 重新创建视图，添加 WHERE 条件限制只有管理员可以访问
+-- 使用直接的 JWT 检查（与 admin_videos_list 保持一致），Supabase 才能识别为安全
 DROP VIEW IF EXISTS public.first_publish_events;
 CREATE VIEW public.first_publish_events AS
 SELECT 
@@ -81,12 +81,11 @@ SELECT
     MIN(published_at) AS first_published_at
 FROM public.videos
 WHERE published_at IS NOT NULL
-  AND deleted_at IS NULL
-  AND public.check_is_admin() -- ✅ 添加权限检查，只有管理员可以看到数据
+  AND (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' -- ✅ 使用直接的 JWT 检查，Supabase 才能识别
 GROUP BY author_id;
 
 COMMENT ON VIEW public.first_publish_events IS 
-    '首次发布事件视图。聚合每个用户的首次发布时间。仅管理员可访问（通过视图内的 WHERE 条件限制：check_is_admin()）。非管理员用户查询此视图将返回空结果。';
+    '首次发布事件视图。聚合每个用户的首次发布时间。仅管理员可访问（通过视图内的 WHERE 条件限制：auth.jwt() -> app_metadata -> role = admin）。非管理员用户查询此视图将返回空结果。';
 
 -- ============================================
 -- 3. 确保包装函数存在并正确配置

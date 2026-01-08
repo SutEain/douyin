@@ -26,8 +26,8 @@ import { supabaseClient } from '../../supabaseClient'
 dayjs.extend(utc)
 dayjs.extend(timezone)
 
-// 🎯 HLS 视频播放组件
-const HlsVideo = ({ src, ...props }: any) => {
+// 🎯 HLS 视频播放组件（支持外部控制）
+const HlsVideo = ({ src, onVideoRef, ...props }: any) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
 
@@ -52,13 +52,18 @@ const HlsVideo = ({ src, ...props }: any) => {
       video.src = src
     }
 
+    // 🎯 将 video 和 hls 实例传递给父组件，以便外部控制
+    if (onVideoRef) {
+      onVideoRef({ video, hls: hlsRef.current })
+    }
+
     return () => {
       if (hlsRef.current) {
         hlsRef.current.destroy()
         hlsRef.current = null
       }
     }
-  }, [src])
+  }, [src, onVideoRef])
 
   return <video ref={videoRef} controls controlsList="nodownload" playsInline {...props} />
 }
@@ -105,6 +110,12 @@ export const VideoList = () => {
   >('video')
   const [previewMediaItems, setPreviewMediaItems] = useState<any[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+
+  // 🎯 视频播放控制 refs
+  const videoPlayerRefs = useRef<{
+    mainVideo?: { video: HTMLVideoElement; hls: Hls | null }
+    mediaVideo?: { video: HTMLVideoElement; hls: Hls | null }
+  }>({})
 
   const { tableProps, searchFormProps } = useTable({
     // ✅ 后台视频列表使用视图（支持业务优先级排序 + 用户多字段搜索）
@@ -282,21 +293,63 @@ export const VideoList = () => {
     }
   }
 
-  // 关闭预览
+  // 关闭预览（停止视频播放）
   const handleClosePreview = () => {
+    // 🎯 停止主视频播放
+    if (videoPlayerRefs.current.mainVideo) {
+      const { video, hls } = videoPlayerRefs.current.mainVideo
+      video.pause()
+      video.currentTime = 0
+      if (hls) {
+        hls.destroy()
+      }
+      videoPlayerRefs.current.mainVideo = undefined
+    }
+
+    // 🎯 停止相册/合集中的视频播放
+    if (videoPlayerRefs.current.mediaVideo) {
+      const { video, hls } = videoPlayerRefs.current.mediaVideo
+      video.pause()
+      video.currentTime = 0
+      if (hls) {
+        hls.destroy()
+      }
+      videoPlayerRefs.current.mediaVideo = undefined
+    }
+
     setPreviewModalVisible(false)
     setCurrentVideoUrl('')
     setPreviewMediaItems([])
     setCurrentImageIndex(0)
   }
 
-  // 相册/合集上一张
+  // 相册/合集上一张（停止当前视频）
   const handlePrevImage = () => {
+    // 🎯 切换前停止当前视频
+    if (videoPlayerRefs.current.mediaVideo) {
+      const { video, hls } = videoPlayerRefs.current.mediaVideo
+      video.pause()
+      video.currentTime = 0
+      if (hls) {
+        hls.destroy()
+      }
+      videoPlayerRefs.current.mediaVideo = undefined
+    }
     setCurrentImageIndex((prev) => (prev > 0 ? prev - 1 : previewMediaItems.length - 1))
   }
 
-  // 相册/合集下一张
+  // 相册/合集下一张（停止当前视频）
   const handleNextImage = () => {
+    // 🎯 切换前停止当前视频
+    if (videoPlayerRefs.current.mediaVideo) {
+      const { video, hls } = videoPlayerRefs.current.mediaVideo
+      video.pause()
+      video.currentTime = 0
+      if (hls) {
+        hls.destroy()
+      }
+      videoPlayerRefs.current.mediaVideo = undefined
+    }
     setCurrentImageIndex((prev) => (prev < previewMediaItems.length - 1 ? prev + 1 : 0))
   }
 
@@ -1222,6 +1275,9 @@ export const VideoList = () => {
               src={currentVideoUrl}
               style={{ width: '100%', maxHeight: '70vh' }}
               muted={false}
+              onVideoRef={(ref: any) => {
+                videoPlayerRefs.current.mainVideo = ref
+              }}
               onError={() => {
                 message.warning('预览播放失败（可能 403 防盗链）')
               }}
@@ -1245,6 +1301,7 @@ export const VideoList = () => {
                     </small>
                   </div>
                   <HlsVideo
+                    key={previewMediaItems[currentImageIndex].file_id}
                     src={buildCdnUrl(
                       previewMediaItems[currentImageIndex].play_url ||
                         previewMediaItems[currentImageIndex].url ||
@@ -1252,6 +1309,9 @@ export const VideoList = () => {
                     )}
                     autoPlay
                     style={{ maxWidth: '100%', maxHeight: '60vh' }}
+                    onVideoRef={(ref: any) => {
+                      videoPlayerRefs.current.mediaVideo = ref
+                    }}
                     onError={() => message.warning('视频加载失败')}
                   />
                 </div>
@@ -1324,7 +1384,19 @@ export const VideoList = () => {
                   {previewMediaItems.map((_, index) => (
                     <div
                       key={index}
-                      onClick={() => setCurrentImageIndex(index)}
+                      onClick={() => {
+                        // 🎯 切换前停止当前视频
+                        if (videoPlayerRefs.current.mediaVideo) {
+                          const { video, hls } = videoPlayerRefs.current.mediaVideo
+                          video.pause()
+                          video.currentTime = 0
+                          if (hls) {
+                            hls.destroy()
+                          }
+                          videoPlayerRefs.current.mediaVideo = undefined
+                        }
+                        setCurrentImageIndex(index)
+                      }}
                       style={{
                         width: 8,
                         height: 8,
