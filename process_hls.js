@@ -154,14 +154,34 @@ async function processVideo(video, workerId) {
   // 1. 路径解析
   let relativePath = ''
   try {
-    const urlObj = new URL(play_url.startsWith('http') ? play_url : `http://localhost${play_url}`)
-    relativePath = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname
+    if (!play_url) {
+      throw new Error('play_url 为空')
+    }
+
+    // 🎯 改进：更好地处理各种 URL 格式
+    if (play_url.startsWith('http://') || play_url.startsWith('https://')) {
+      const urlObj = new URL(play_url)
+      relativePath = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname
+    } else if (play_url.startsWith('/')) {
+      // 相对路径：直接使用
+      relativePath = play_url.slice(1)
+    } else {
+      // 没有前导斜杠的相对路径
+      relativePath = play_url
+    }
   } catch (e) {
-    throw new Error('URL 解析失败')
+    throw new Error(`URL 解析失败: ${play_url} - ${e.message}`)
+  }
+
+  // 🎯 检查文件扩展名，跳过非视频文件
+  const ext = path.extname(relativePath).toLowerCase()
+  const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v']
+  if (!videoExts.includes(ext)) {
+    throw new Error(`跳过非视频文件: ${relativePath} (扩展名: ${ext})`)
   }
 
   const folder = path.dirname(relativePath)
-  const baseName = path.basename(relativePath, path.extname(relativePath))
+  const baseName = path.basename(relativePath, ext)
   const localMp4 = path.join(TEMP_DIR, `${id}_in.mp4`)
   const outputFolder = path.join(TEMP_DIR, `${id}_out`)
   if (!fs.existsSync(outputFolder)) fs.mkdirSync(outputFolder)
@@ -169,9 +189,18 @@ async function processVideo(video, workerId) {
   let stageTime = Date.now()
   try {
     // 2. 下载原片
-    const { Body, ContentLength } = await s3.send(
-      new GetObjectCommand({ Bucket: R2_BUCKET, Key: relativePath })
-    )
+    let Body, ContentLength
+    try {
+      const result = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: relativePath }))
+      Body = result.Body
+      ContentLength = result.ContentLength
+    } catch (s3Err) {
+      if (s3Err.name === 'NoSuchKey' || s3Err.$metadata?.httpStatusCode === 404) {
+        throw new Error(`R2 文件不存在: ${relativePath} (可能已被删除或路径错误)`)
+      }
+      throw s3Err
+    }
+
     const totalBytes = parseInt(ContentLength || '0')
     logger(workerId, `下载原片: ${relativePath} (${formatSize(totalBytes)})`, 'download')
 
