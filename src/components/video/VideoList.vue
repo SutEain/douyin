@@ -269,41 +269,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const route = useRoute()
 
-// 🎯 检查当前组件是否在活跃页面上
-const isPageActive = computed(() => {
-  // 详情页特殊处理：如果当前路由是 /video-detail，只有 page === 'detail' 的组件才是活跃的
-  if (route.path.startsWith('/video-detail')) {
-    return props.page === 'detail'
-  }
-  // 首页：只有 page === 'home' 且在首页路由下才活跃
-  if (props.page === 'home') {
-    return route.path === '/' || route.path.startsWith('/home')
-  }
-  // 我：只有 page === 'me' 且在 /me 路由下才活跃
-  if (props.page === 'me') {
-    return route.path.startsWith('/me')
-  }
-  return true
-})
-
-// 🎯 路由变化时，如果当前组件变为了非活跃页面，强制暂停所有 slot 中的视频
-watch(
-  () => route.path,
-  () => {
-    if (!isPageActive.value) {
-      console.log(`${DEBUG_PREFIX} [${props.page}] 页面切换，强制暂停非活跃页面的视频`)
-      slots.forEach((slot) => {
-        const video = slotRefs.get(slot.key)
-        if (video) {
-          video.pause()
-          slot.isPlaying = false
-        }
-      })
-    }
-  },
-  { immediate: true }
-)
-
 const emit = defineEmits<{
   'update:index': [index: number]
   loadMore: []
@@ -471,6 +436,42 @@ const slots = reactive<SlotState[]>([
     isPlaying: false
   }
 ])
+
+// 🎯 检查当前组件是否在活跃页面上
+const isPageActive = computed(() => {
+  // 详情页特殊处理：如果当前路由是 /video-detail，只有 page === 'detail' 的组件才是活跃的
+  if (route.path.startsWith('/video-detail')) {
+    return props.page === 'detail'
+  }
+  // 首页：只有 page === 'home' 且在首页路由下才活跃
+  if (props.page === 'home') {
+    return route.path === '/' || route.path.startsWith('/home')
+  }
+  // 我：只有 page === 'me' 且在 /me 路由下才活跃
+  if (props.page === 'me') {
+    return route.path.startsWith('/me')
+  }
+  return true
+})
+
+// 🎯 路由变化时，如果当前组件变为了非活跃页面，强制暂停所有 slot 中的视频
+watch(
+  () => route.path,
+  () => {
+    if (!isPageActive.value) {
+      console.log(`${DEBUG_PREFIX} [${props.page}] 页面切换，强制暂停非活跃页面的视频`)
+      slots.forEach((slot) => {
+        const video = slotRefs.get(slot.key)
+        if (video) {
+          video.pause()
+          slot.isPlaying = false
+        }
+      })
+    }
+  },
+  { immediate: true }
+)
+
 const slotRefs = new Map<string, HTMLVideoElement>()
 const hlsInstances = new Map<string, Hls>()
 const boundVideos = new WeakSet<HTMLVideoElement>()
