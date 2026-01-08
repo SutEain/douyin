@@ -123,19 +123,31 @@ const scrollContainer = ref<HTMLElement | null>(null)
 const mainContent = ref<HTMLElement | null>(null)
 let startY = 0
 
-// ✅ 滚动事件（预留，可以用于其他逻辑）
-function handleScroll() {
-  // 可以添加滚动相关的逻辑
-}
+// ✅ 滚动事件已移到 handleTouchMove 下方
 
 // 🎯 处理触摸开始：记录起始位置
 function handleTouchStart(e: TouchEvent) {
   startY = e.touches[0].clientY
+  if (scrollContainer.value) {
+    const scrollTop = scrollContainer.value.scrollTop
+    const scrollHeight = scrollContainer.value.scrollHeight
+    const clientHeight = scrollContainer.value.clientHeight
+    console.log('[FollowAndFans] touchStart:', {
+      startY,
+      scrollTop,
+      scrollHeight,
+      clientHeight,
+      canScroll: scrollHeight > clientHeight
+    })
+  }
 }
 
-// 🎯 处理触摸移动：阻止 Telegram WebApp 的下拉手势
+// 🎯 处理触摸移动：只在顶部下拉时阻止默认行为，防止 Telegram 下拉关闭 miniApp
 function handleTouchMove(e: TouchEvent) {
-  if (!scrollContainer.value) return
+  if (!scrollContainer.value) {
+    console.log('[FollowAndFans] touchMove: scrollContainer is null')
+    return
+  }
 
   const currentY = e.touches[0].clientY
   const deltaY = currentY - startY
@@ -143,19 +155,55 @@ function handleTouchMove(e: TouchEvent) {
   const scrollHeight = scrollContainer.value.scrollHeight
   const clientHeight = scrollContainer.value.clientHeight
 
-  // 🎯 如果用户在顶部且向下拉，阻止默认行为（防止 Telegram 下拉关闭 miniApp）
-  if (scrollTop <= 0 && deltaY > 0) {
-    e.preventDefault()
-    return
-  }
+  // 🎯 调试日志
+  const isAtTop = scrollTop <= 0
+  const isPullingDown = deltaY > 0
+  const shouldPrevent = isAtTop && isPullingDown
 
-  // 🎯 如果用户在底部且向上拉，也阻止（防止过度滚动）
-  if (scrollTop + clientHeight >= scrollHeight - 1 && deltaY < 0) {
-    e.preventDefault()
-    return
-  }
+  console.log('[FollowAndFans] touchMove:', {
+    currentY,
+    deltaY,
+    scrollTop,
+    scrollHeight,
+    clientHeight,
+    isAtTop,
+    isPullingDown,
+    shouldPrevent,
+    canScroll: scrollHeight > clientHeight
+  })
 
-  // 🎯 其他情况允许滚动（不调用 preventDefault，让浏览器处理）
+  // 🎯 只在顶部且向下拉时阻止默认行为（防止 Telegram 下拉关闭 miniApp）
+  // 其他情况（包括正常滚动）都不阻止，让浏览器正常处理
+  if (shouldPrevent) {
+    console.log('[FollowAndFans] preventDefault: 阻止下拉关闭 miniApp')
+    e.preventDefault()
+  }
+  // 注意：不在底部阻止，允许正常滚动到底部
+}
+
+// 🎯 滚动事件调试
+function handleScroll() {
+  if (scrollContainer.value) {
+    const scrollTop = scrollContainer.value.scrollTop
+    const scrollHeight = scrollContainer.value.scrollHeight
+    const clientHeight = scrollContainer.value.clientHeight
+    const scrollPercent =
+      scrollHeight > clientHeight
+        ? ((scrollTop / (scrollHeight - clientHeight)) * 100).toFixed(1)
+        : '0'
+
+    // 只在关键位置打印日志，避免刷屏
+    if (scrollTop === 0 || scrollTop + clientHeight >= scrollHeight - 5) {
+      console.log('[FollowAndFans] scroll:', {
+        scrollTop,
+        scrollHeight,
+        clientHeight,
+        scrollPercent: scrollPercent + '%',
+        isAtTop: scrollTop <= 0,
+        isAtBottom: scrollTop + clientHeight >= scrollHeight - 5
+      })
+    }
+  }
 }
 
 onMounted(async () => {
@@ -163,9 +211,34 @@ onMounted(async () => {
   await loadFollowing()
   await loadFollowers()
 
-  // 🎯 手动添加非 passive 的 touchmove 监听器（Vue 的 @touchmove 默认是 passive）
+  // 🎯 等待 DOM 更新后检查滚动容器状态
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
   if (scrollContainer.value) {
+    const scrollHeight = scrollContainer.value.scrollHeight
+    const clientHeight = scrollContainer.value.clientHeight
+    const canScroll = scrollHeight > clientHeight
+
+    console.log('[FollowAndFans] mounted:', {
+      scrollHeight,
+      clientHeight,
+      canScroll,
+      computedStyle: {
+        overflowY: window.getComputedStyle(scrollContainer.value).overflowY,
+        touchAction: window.getComputedStyle(scrollContainer.value).touchAction,
+        webkitOverflowScrolling: window.getComputedStyle(scrollContainer.value)
+          .webkitOverflowScrolling,
+        overscrollBehavior: window.getComputedStyle(scrollContainer.value).overscrollBehavior
+      }
+    })
+
+    // 🎯 手动添加非 passive 的 touchmove 监听器（Vue 的 @touchmove 默认是 passive）
     scrollContainer.value.addEventListener('touchmove', handleTouchMove, { passive: false })
+
+    // 🎯 添加滚动事件监听
+    scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
+  } else {
+    console.error('[FollowAndFans] mounted: scrollContainer is null!')
   }
 })
 
@@ -173,6 +246,7 @@ onUnmounted(() => {
   // 🎯 清理事件监听器
   if (scrollContainer.value) {
     scrollContainer.value.removeEventListener('touchmove', handleTouchMove)
+    scrollContainer.value.removeEventListener('scroll', handleScroll)
   }
 })
 
@@ -249,10 +323,11 @@ watch(
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
+    -webkit-overflow-scrolling: touch; // ✅ iOS 平滑滚动
     overscroll-behavior: contain; // ✅ 防止下拉时拉动整个 miniApp
     overscroll-behavior-y: contain; // ✅ 明确指定 Y 轴
     touch-action: pan-y; // ✅ 只允许垂直滚动
+    will-change: scroll-position; // ✅ 优化 iOS 滚动性能
     background: var(--main-bg);
 
     &::-webkit-scrollbar {
@@ -262,7 +337,7 @@ watch(
 
   .main {
     min-height: 100.1%; // ✅ 强制内容超出一点点，确保 iOS 下能触发滚动
-    touch-action: pan-y; // ✅ 只允许垂直滚动
+    // 移除 touch-action，让滚动容器处理
   }
 
   .content {
@@ -293,7 +368,17 @@ watch(
     overflow: visible;
     padding: 0 var(--page-padding);
     box-sizing: border-box;
-    touch-action: pan-y; // ✅ 只允许垂直滚动，避免与 SlideHorizontal 的水平滑动冲突
+
+    // ✅ 覆盖 SlideHorizontal 的 touch-action，移除限制让滚动容器处理
+    :deep(.slide-list) {
+      touch-action: auto !important; // 移除 pan-y 限制，让父滚动容器处理
+    }
+
+    // ✅ 确保 SlideItem 高度自适应内容
+    :deep(.slide-item) {
+      height: auto !important;
+      min-height: 100%;
+    }
   }
 
   .tab1 {
