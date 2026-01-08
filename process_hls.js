@@ -109,10 +109,11 @@ async function startWorker(workerId) {
     const offset = Math.floor(Math.random() * 40)
     const { data: videos, error } = await supabase
       .from('videos')
-      .select('id, play_url')
+      .select('id, play_url, content_type')
       .eq('status', 'published')
       .eq('is_hls', false)
       .like('play_url', '/videos/%') // 🎯 只查询有效的 R2 路径
+      .or('content_type.is.null,content_type.eq.video') // 🎯 只处理视频类型（content_type 为 null 或 video）
       .range(offset, offset)
       .limit(1)
 
@@ -121,10 +122,11 @@ async function startWorker(workerId) {
     if (error || !video) {
       const { data: fallback } = await supabase
         .from('videos')
-        .select('id, play_url')
+        .select('id, play_url, content_type')
         .eq('status', 'published')
         .eq('is_hls', false)
         .like('play_url', '/videos/%') // 🎯 只查询有效的 R2 路径
+        .or('content_type.is.null,content_type.eq.video') // 🎯 只处理视频类型
         .limit(1)
         .maybeSingle()
       if (!fallback) {
@@ -192,7 +194,7 @@ async function deleteInvalidVideo(videoId, reason, workerId) {
 }
 
 async function processVideo(video, workerId) {
-  const { id, play_url } = video
+  const { id, play_url, content_type } = video
   const startTime = Date.now()
   logger(workerId, `任务开始: ${id}`, 'start')
 
@@ -232,11 +234,17 @@ async function processVideo(video, workerId) {
   const ext = path.extname(relativePath).toLowerCase()
   const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v']
   if (!videoExts.includes(ext)) {
-    // 🎯 如果是图片文件或其他非视频文件，删除记录（避免重复处理）
+    // 🎯 如果是图片文件，且 content_type 是 video（说明数据错误），删除记录
     const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
     if (imageExts.includes(ext)) {
-      await deleteInvalidVideo(id, `play_url 指向图片文件: ${relativePath}`, workerId)
-      throw new Error(`play_url 指向图片文件，已删除: ${relativePath}`)
+      // 只有当 content_type 是 video 或 null 时才删除（图片类型的记录 play_url 指向图片是正常的）
+      if (!content_type || content_type === 'video') {
+        await deleteInvalidVideo(id, `视频记录的 play_url 指向图片文件: ${relativePath}`, workerId)
+        throw new Error(`视频记录的 play_url 指向图片文件，已删除: ${relativePath}`)
+      } else {
+        // 如果是图片类型记录，跳过即可（不应该被 HLS 转换脚本处理）
+        throw new Error(`跳过图片类型记录: ${relativePath} (content_type: ${content_type})`)
+      }
     }
     // 🎯 如果没有扩展名且路径看起来像 API 端点，删除记录
     if (!ext && (relativePath.includes('/aweme/') || relativePath.includes('/api/'))) {
