@@ -283,14 +283,37 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  const { data, error, count } = await supabaseAdmin
+  // 🎯 获取用户最近观看历史（排除最近 300 条）
+  let excludeVideoIds: string[] = []
+  if (user?.id) {
+    const { data: historyData } = await supabaseAdmin
+      .from('watch_history')
+      .select('video_id')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(300)
+
+    if (historyData) {
+      excludeVideoIds = historyData.map((h: any) => h.video_id).filter(Boolean)
+      console.log(`[VideoTabFeed] 排除 ${excludeVideoIds.length} 条观看历史`)
+    }
+  }
+
+  let query = supabaseAdmin
     .from('videos')
     .select('*', { count: 'exact' })
     .eq('status', 'published')
     .eq('is_adult', false)
     .eq('content_type', 'video') // 🎯 只返回视频，排除合辑(collection)
     .eq('storage_type', 'r2') // 🎯 只返回已处理完成的视频（有 play_url）
-    // .eq('is_sea', false) // 🎯 允许东南亚内容
+  // .eq('is_sea', false) // 🎯 允许东南亚内容
+
+  // 🎯 排除已观看视频
+  if (excludeVideoIds.length > 0) {
+    query = query.not('id', 'in', `(${excludeVideoIds.join(',')})`)
+  }
+
+  const { data, error, count } = await query
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
     .range(from, to)
