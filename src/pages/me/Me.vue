@@ -66,6 +66,9 @@
               <span>编辑资料</span>
             </div>
             <div class="right">
+              <div class="item" @click.stop="handleRefresh" :class="{ loading: baseStore.loading }">
+                <Icon icon="mdi:refresh" />
+              </div>
               <div class="item" @click.stop="$nav('/message/visitors')">
                 <Icon icon="eva:people-outline" />
               </div>
@@ -220,75 +223,80 @@
               </div>
             </div>
             <div class="progress-section">
-              <div class="progress-info">
-                <div class="time-text">
-                  今日观看：<span class="highlight">{{
-                    state.watchTimeStatus.total_minutes || 0
-                  }}</span>
-                  分钟
-                </div>
-                <div class="reward-text" v-if="state.watchTimeStatus.can_claim">
-                  可领取：<span class="reward-amount"
-                    >+{{ state.watchTimeStatus.available_reward || 0 }}</span
-                  >
-                  抖币
-                </div>
-                <div
-                  class="reward-text claimed"
-                  v-else-if="state.watchTimeStatus.claimed_reward > 0"
-                >
-                  今日已领取：<span class="reward-amount"
-                    >+{{ state.watchTimeStatus.claimed_reward }}</span
-                  >
-                  抖币
-                </div>
-                <div class="reward-text" v-else>观看满5分钟可领取奖励</div>
+              <!-- 🎯 观看时间信息放在进度条上面 -->
+              <div class="time-text">
+                今日观看：<span class="highlight">{{
+                  state.watchTimeStatus?.total_minutes || 0
+                }}</span>
+                分钟
               </div>
+
+              <!-- 🎯 进度条和里程碑 -->
               <div class="progress-bar-wrapper">
                 <div class="progress-bar">
                   <div
                     class="progress-fill"
                     :style="{
-                      width: `${Math.min(((state.watchTimeStatus.total_seconds || 0) / 1800) * 100, 100)}%`
+                      width: `${Math.min(((state.watchTimeStatus?.total_seconds || 0) / 1800) * 100, 100)}%`
                     }"
                   ></div>
                 </div>
                 <div class="milestones">
                   <div
                     class="milestone"
-                    :class="{ reached: (state.watchTimeStatus.total_seconds || 0) >= 300 }"
+                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 300 }"
                   >
                     <div class="milestone-dot"></div>
                     <div class="milestone-label">5分钟<br />+5抖币</div>
                   </div>
                   <div
                     class="milestone"
-                    :class="{ reached: (state.watchTimeStatus.total_seconds || 0) >= 900 }"
+                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 900 }"
                   >
                     <div class="milestone-dot"></div>
                     <div class="milestone-label">15分钟<br />+20抖币</div>
                   </div>
                   <div
                     class="milestone"
-                    :class="{ reached: (state.watchTimeStatus.total_seconds || 0) >= 1800 }"
+                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 1800 }"
                   >
                     <div class="milestone-dot"></div>
                     <div class="milestone-label">30分钟<br />+50抖币</div>
                   </div>
                 </div>
               </div>
+
+              <!-- 🎯 奖励信息放在进度条下面 -->
+              <div class="reward-info">
+                <div class="reward-text" v-if="state.watchTimeStatus?.can_claim">
+                  可领取：<span class="reward-amount"
+                    >+{{ state.watchTimeStatus?.available_reward || 0 }}</span
+                  >
+                  抖币
+                </div>
+                <div
+                  class="reward-text claimed"
+                  v-else-if="state.watchTimeStatus?.claimed_reward > 0"
+                >
+                  今日已领取：<span class="reward-amount"
+                    >+{{ state.watchTimeStatus?.claimed_reward }}</span
+                  >
+                  抖币
+                </div>
+                <div class="reward-text" v-else>观看满5分钟可领取奖励</div>
+              </div>
             </div>
             <button
               class="claim-btn"
-              :class="{ disabled: !state.watchTimeStatus.can_claim }"
-              :disabled="!state.watchTimeStatus.can_claim || baseStore.loading"
+              :class="{ disabled: !state.watchTimeStatus?.can_claim }"
+              :disabled="!state.watchTimeStatus?.can_claim || baseStore.loading"
               @click.stop="handleClaimWatchTimeReward"
             >
               <Icon icon="mdi:gift" />
               <span>{{
-                state.watchTimeStatus.can_claim
+                state.watchTimeStatus?.can_claim
                   ? '立即领取'
-                  : state.watchTimeStatus.claimed_reward > 0
+                  : state.watchTimeStatus?.claimed_reward > 0
                     ? '今日已领取'
                     : '观看时长不足'
               }}</span>
@@ -404,7 +412,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, watch, ref } from 'vue'
+import { reactive, computed, watch, ref, onMounted, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
 import Posters from '@/components/Posters.vue'
 import Indicator from '@/components/slide/Indicator.vue'
@@ -521,6 +529,16 @@ const state = reactive({
     loading0: false,
     loading1: false,
     loading2: false
+  },
+
+  // 🎯 观看时长奖励状态
+  watchTimeStatus: {
+    total_seconds: 0,
+    total_minutes: 0,
+    claimed_reward: 0,
+    available_reward: 0,
+    reward_level: 'none',
+    can_claim: false
   }
 })
 
@@ -659,7 +677,7 @@ async function loadWatchTimeStatus() {
 
 // 🎯 领取观看时长奖励
 async function handleClaimWatchTimeReward() {
-  if (baseStore.loading || !state.watchTimeStatus.can_claim) return
+  if (baseStore.loading || !state.watchTimeStatus?.can_claim) return
 
   baseStore.loading = true
   try {
@@ -674,6 +692,23 @@ async function handleClaimWatchTimeReward() {
     }
   } catch (e: any) {
     _no(e.message || '领取失败，请稍后重试')
+  } finally {
+    baseStore.loading = false
+  }
+}
+
+// 🎯 刷新页面数据
+async function handleRefresh() {
+  if (baseStore.loading) return
+
+  baseStore.loading = true
+  try {
+    // 刷新用户信息、观看时长状态和视频列表
+    await Promise.all([baseStore.init(), loadWatchTimeStatus(), loadMyVideos()])
+    _no('刷新成功')
+  } catch (e: any) {
+    console.error('[handleRefresh] 刷新失败:', e)
+    _no('刷新失败，请稍后重试')
   } finally {
     baseStore.loading = false
   }
@@ -888,12 +923,12 @@ watch(
 )
 
 // 🎯 页面激活时刷新观看时长状态（每30秒刷新一次）
-let watchTimeRefreshTimer: ReturnType<typeof setInterval> | null = null
+const watchTimeRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null)
 onMounted(() => {
   if (userinfo.value.uid) {
     loadWatchTimeStatus()
     // 每30秒自动刷新一次观看时长状态
-    watchTimeRefreshTimer = setInterval(() => {
+    watchTimeRefreshTimer.value = setInterval(() => {
       if (userinfo.value.uid) {
         loadWatchTimeStatus()
       }
@@ -905,12 +940,20 @@ onMounted(() => {
 watch(
   () => userinfo.value.uid,
   (newUid) => {
-    if (!newUid && watchTimeRefreshTimer) {
-      clearInterval(watchTimeRefreshTimer)
-      watchTimeRefreshTimer = null
+    if (!newUid && watchTimeRefreshTimer.value) {
+      clearInterval(watchTimeRefreshTimer.value)
+      watchTimeRefreshTimer.value = null
     }
   }
 )
+
+// 组件卸载时清理定时器
+onBeforeUnmount(() => {
+  if (watchTimeRefreshTimer.value) {
+    clearInterval(watchTimeRefreshTimer.value)
+    watchTimeRefreshTimer.value = null
+  }
+})
 </script>
 
 <style scoped lang="less">
@@ -1170,6 +1213,21 @@ watch(
               font-size: 20px;
               color: white;
               cursor: pointer;
+              transition:
+                transform 0.3s,
+                opacity 0.3s;
+
+              &:hover {
+                opacity: 0.8;
+              }
+
+              &:active {
+                transform: scale(0.9);
+              }
+
+              &.loading {
+                animation: rotate 1s linear infinite;
+              }
             }
           }
         }
@@ -1299,6 +1357,9 @@ watch(
     // 🎯 签到区域样式
     .checkin-section {
       padding: 0 15px 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
 
       .checkin-card {
         background: rgba(255, 255, 255, 0.05);
@@ -1403,7 +1464,6 @@ watch(
 
       // 🎯 观看时长奖励卡片样式
       .watch-time-card {
-        margin-top: 15px;
         background: rgba(255, 255, 255, 0.05);
         border-radius: 12px;
         padding: 15px;
@@ -1431,23 +1491,26 @@ watch(
 
         .progress-section {
           margin-bottom: 15px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
 
-          .progress-info {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin-bottom: 12px;
+          // 🎯 观看时间信息
+          .time-text {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 4px;
 
-            .time-text {
-              font-size: 14px;
-              color: rgba(255, 255, 255, 0.7);
-
-              .highlight {
-                color: #face15;
-                font-weight: bold;
-                font-size: 16px;
-              }
+            .highlight {
+              color: #face15;
+              font-weight: bold;
+              font-size: 16px;
             }
+          }
+
+          // 🎯 奖励信息
+          .reward-info {
+            margin-top: 4px;
 
             .reward-text {
               font-size: 13px;
@@ -1467,6 +1530,7 @@ watch(
 
           .progress-bar-wrapper {
             position: relative;
+            margin-bottom: 50px; // 🎯 给里程碑标签留出空间，避免和按钮重叠
 
             .progress-bar {
               width: 100%;
@@ -1474,7 +1538,7 @@ watch(
               background: rgba(255, 255, 255, 0.1);
               border-radius: 3px;
               overflow: hidden;
-              margin-bottom: 30px;
+              margin-bottom: 0; // 🎯 移除 margin-bottom，改用父容器的 margin-bottom
 
               .progress-fill {
                 height: 100%;

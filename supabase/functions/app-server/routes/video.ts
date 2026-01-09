@@ -1334,12 +1334,12 @@ export async function handleRecordView(req: Request): Promise<Response> {
 /**
  * 累计观看时长
  * POST /video/watch-time
- * body: { seconds: number }
+ * body: { seconds: number, video_id?: string }
  */
 export async function handleIncrementWatchTime(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
   const body = await parseJsonBody(req)
-  const { seconds } = body
+  const { seconds, video_id } = body
 
   if (!seconds || seconds <= 0) {
     return errorResponse('seconds must be a positive number', 1, 400)
@@ -1348,7 +1348,8 @@ export async function handleIncrementWatchTime(req: Request): Promise<Response> 
   try {
     const { data, error } = await supabaseAdmin.rpc('increment_daily_watch_time', {
       p_user_id: user.id,
-      p_seconds: Math.floor(seconds)
+      p_seconds: Math.floor(seconds),
+      p_video_id: video_id || null // 🎯 传入视频ID用于去重
     })
 
     if (error) {

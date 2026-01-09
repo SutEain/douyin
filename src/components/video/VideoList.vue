@@ -187,6 +187,7 @@ let currentCompletionTimer: ReturnType<typeof setTimeout> | null = null // 当�
 // 🎯 观看时长累计追踪
 let watchTimeInterval: ReturnType<typeof setInterval> | null = null // 观看时长累计定时器
 let watchStartTime: number | null = null // 当前视频开始观看的时间戳
+let currentWatchVideoId: string | null = null // 🎯 当前正在累计的视频ID（用于去重）
 const WATCH_TIME_REPORT_INTERVAL = 10000 // 每10秒上报一次观看时长
 
 // 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
@@ -203,19 +204,20 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
   // 🎯 2. 开始累计观看时长（视频才累计，图片/相册不累计）
   if (contentType === 'video') {
     watchStartTime = Date.now()
+    currentWatchVideoId = item.aweme_id // 🎯 保存当前视频ID
     // 清除之前的定时器
     if (watchTimeInterval) {
       clearInterval(watchTimeInterval)
       watchTimeInterval = null
     }
-    // 立即上报一次（避免延迟）
-    incrementWatchTime(1).catch((e) => console.warn('[WatchTime] 首次上报失败:', e))
+    // 立即上报一次（避免延迟），传入视频ID用于去重
+    incrementWatchTime(1, item.aweme_id).catch((e) => console.warn('[WatchTime] 首次上报失败:', e))
     // 设置定期上报定时器（每10秒上报一次）
     watchTimeInterval = setInterval(() => {
-      if (watchStartTime) {
+      if (watchStartTime && currentWatchVideoId) {
         const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
         if (elapsedSeconds > 0) {
-          incrementWatchTime(elapsedSeconds).catch((e) =>
+          incrementWatchTime(elapsedSeconds, currentWatchVideoId).catch((e) =>
             console.warn('[WatchTime] 累计观看时长失败:', e)
           )
           watchStartTime = Date.now() // 重置开始时间
@@ -229,14 +231,16 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
       clearInterval(watchTimeInterval)
       watchTimeInterval = null
     }
-    if (watchStartTime) {
+    if (watchStartTime && currentWatchVideoId) {
       const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
       if (elapsedSeconds > 0) {
-        incrementWatchTime(elapsedSeconds).catch((e) =>
+        // 🎯 使用保存的视频ID
+        incrementWatchTime(elapsedSeconds, currentWatchVideoId).catch((e) =>
           console.warn('[WatchTime] 切换到图片时累计观看时长失败:', e)
         )
       }
       watchStartTime = null
+      currentWatchVideoId = null
     }
   }
 
@@ -290,14 +294,16 @@ function recordLeaveCurrent() {
     clearInterval(watchTimeInterval)
     watchTimeInterval = null
   }
-  if (watchStartTime) {
+  if (watchStartTime && currentWatchVideoId) {
     const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
     if (elapsedSeconds > 0) {
-      incrementWatchTime(elapsedSeconds).catch((e) =>
+      // 🎯 使用保存的视频ID
+      incrementWatchTime(elapsedSeconds, currentWatchVideoId).catch((e) =>
         console.warn('[WatchTime] 离开时累计观看时长失败:', e)
       )
     }
     watchStartTime = null
+    currentWatchVideoId = null
     console.log(`[WatchTime] 停止累计观看时长，已累计 ${elapsedSeconds} 秒`)
   }
 }
@@ -1743,14 +1749,16 @@ onUnmounted(() => {
     clearInterval(watchTimeInterval)
     watchTimeInterval = null
   }
-  if (watchStartTime) {
+  if (watchStartTime && currentWatchVideoId) {
     const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
     if (elapsedSeconds > 0) {
-      incrementWatchTime(elapsedSeconds).catch((e) =>
+      // 🎯 使用保存的视频ID
+      incrementWatchTime(elapsedSeconds, currentWatchVideoId).catch((e) =>
         console.warn('[WatchTime] 组件卸载时累计观看时长失败:', e)
       )
     }
     watchStartTime = null
+    currentWatchVideoId = null
   }
 
   // 清理进度条事件绑定

@@ -323,14 +323,14 @@ export async function getAdultQuota() {
 }
 
 // 🎯 累计观看时长（秒）
-export async function incrementWatchTime(seconds: number) {
+export async function incrementWatchTime(seconds: number, videoId?: string) {
   try {
     const token = await resolveAccessToken(false)
     if (!token) return { success: false }
 
     const data = await callAppServer('/video/watch-time', {
       method: 'POST',
-      body: { seconds },
+      body: { seconds, video_id: videoId }, // 🎯 传入视频ID用于去重
       requireAuth: true
     })
     return { success: true, data }
