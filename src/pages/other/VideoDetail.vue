@@ -147,17 +147,33 @@ const hasMore = computed(() => state.hasMore && !state.loadingMore)
 
 // 🎯 加载更多视频（从 videoTab 进入时）
 async function handleLoadMore() {
+  console.log('[VideoDetail] handleLoadMore 被触发', {
+    hasRouteData: !!baseStore.routeData?.items?.length,
+    loadingMore: state.loadingMore,
+    hasMore: state.hasMore,
+    currentPageNo: state.pageNo
+  })
+
   // 如果不是从 videoTab 进入（没有 routeData.items），不加载
   if (!baseStore.routeData?.items?.length) {
+    console.log('[VideoDetail] 不是从 videoTab 进入，跳过加载更多')
     return
   }
 
   if (state.loadingMore || !state.hasMore) {
+    console.log('[VideoDetail] 跳过加载更多', {
+      原因: state.loadingMore ? '正在加载中' : '没有更多数据'
+    })
     return
   }
 
   state.loadingMore = true
   state.pageNo++
+
+  console.log('[VideoDetail] 开始加载更多', {
+    请求pageNo: state.pageNo,
+    当前视频数: dynamicVideoItems.value.length
+  })
 
   try {
     const res = await recommendedVideoTab({
@@ -239,6 +255,19 @@ onMounted(() => {
   // 从路由数据获取单个视频
   if (baseStore.routeData?.items?.length) {
     state.videoItem = baseStore.routeData.items[initialIndex.value]
+    // 🎯 修复：根据已有数据量初始化 pageNo，确保加载更多时不会重复
+    // 假设每页 10 条，计算当前已加载的最大页数
+    // 公式：已加载页数 = ceil(count / pageSize)，最大 pageNo = 已加载页数 - 1
+    const currentItemsCount = baseStore.routeData.items.length
+    const pageSize = 10
+    const loadedPages = Math.ceil(currentItemsCount / pageSize)
+    state.pageNo = loadedPages - 1
+    console.log('[VideoDetail] 初始化 pageNo', {
+      已有视频数: currentItemsCount,
+      已加载页数: loadedPages,
+      初始pageNo: state.pageNo,
+      下次请求pageNo: state.pageNo + 1
+    })
   } else if (baseStore.routeData?.item) {
     state.videoItem = baseStore.routeData.item
   } else if (baseStore.startVideoData) {
