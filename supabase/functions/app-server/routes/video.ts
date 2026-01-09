@@ -316,6 +316,7 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
   const { data, error, count } = await query
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false }) // 🎯 添加 id 排序，确保排序稳定，避免分页重复
     .range(from, to)
 
   if (error) {

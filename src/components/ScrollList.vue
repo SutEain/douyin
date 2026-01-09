@@ -61,7 +61,22 @@ async function getData(refresh = false) {
       if (refresh) {
         state.list = res.data.list
       } else {
-        state.list = state.list.concat(res.data.list)
+        // 🎯 去重：防止分页边界重复（按 aweme_id 或 id 去重）
+        const existingIds = new Set(
+          state.list.map((item) => item.aweme_id || item.id).filter(Boolean)
+        )
+        const newItems = res.data.list.filter((item) => {
+          const itemId = item.aweme_id || item.id
+          return itemId && !existingIds.has(itemId)
+        })
+
+        if (newItems.length < res.data.list.length) {
+          console.warn(
+            `[ScrollList] 检测到 ${res.data.list.length - newItems.length} 条重复数据，已过滤`
+          )
+        }
+
+        state.list = state.list.concat(newItems)
       }
       state.total = res.data.total
     } else {
