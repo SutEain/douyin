@@ -322,6 +322,58 @@ export async function getAdultQuota() {
   }
 }
 
+// 🎯 累计观看时长（秒）
+export async function incrementWatchTime(seconds: number) {
+  try {
+    const token = await resolveAccessToken(false)
+    if (!token) return { success: false }
+
+    const data = await callAppServer('/video/watch-time', {
+      method: 'POST',
+      body: { seconds },
+      requireAuth: true
+    })
+    return { success: true, data }
+  } catch (error: any) {
+    console.warn('[incrementWatchTime] 累计观看时长失败:', error)
+    return { success: false, message: error?.message || '累计观看时长失败' }
+  }
+}
+
+// 🎯 获取观看时长奖励状态
+export async function getWatchTimeStatus() {
+  try {
+    const token = await resolveAccessToken(false)
+    if (!token) return { success: false }
+
+    const data = await callAppServer('/video/watch-time/status', {
+      method: 'GET',
+      requireAuth: true
+    })
+    return { success: true, data }
+  } catch (error: any) {
+    console.error('[getWatchTimeStatus] 获取观看时长状态失败:', error)
+    return { success: false, message: error?.message || '获取观看时长状态失败' }
+  }
+}
+
+// 🎯 领取观看时长奖励
+export async function claimWatchTimeReward() {
+  try {
+    const token = await resolveAccessToken(false)
+    if (!token) return { success: false, message: '未登录' }
+
+    const data = await callAppServer('/video/watch-time/claim', {
+      method: 'POST',
+      requireAuth: true
+    })
+    return { success: true, data }
+  } catch (error: any) {
+    console.error('[claimWatchTimeReward] 领取观看时长奖励失败:', error)
+    return { success: false, message: error?.message || '领取失败' }
+  }
+}
+
 export async function sendReward(payload: {
   receiver_id: string
   gift_amount: number

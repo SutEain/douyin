@@ -172,9 +172,9 @@ import AlbumSwiper from './AlbumSwiper.vue'
 import type { VideoItem } from '../../types'
 import { useVideoStore } from '@/stores/video'
 import { parseImages, getContentType, buildCdnUrl } from '@/utils/media'
-import { recordVideoView } from '@/api/videos'
+import { recordVideoView, incrementWatchTime } from '@/api/videos'
 // import { _copy, _notice } from '@/utils'
-// ✅ 避免循环依赖导致的 “Cannot access 'Y' before initialization”
+// ✅ 避免循环依赖导致的 "Cannot access 'Y' before initialization"
 // 只在需要打开图文详情时再异步加载
 const AlbumDetail = defineAsyncComponent(() => import('@/pages/other/AlbumDetail.vue'))
 
@@ -183,6 +183,11 @@ const DEBUG_PREFIX = '[AutoPlayDebug]'
 const recordedViews = new Set<string>() // 已记录开始观看
 const completedViews = new Set<string>() // 已记录完播
 let currentCompletionTimer: ReturnType<typeof setTimeout> | null = null // 当前视频的完播计时器
+
+// 🎯 观看时长累计追踪
+let watchTimeInterval: ReturnType<typeof setInterval> | null = null // 观看时长累计定时器
+let watchStartTime: number | null = null // 当前视频开始观看的时间戳
+const WATCH_TIME_REPORT_INTERVAL = 10000 // 每10秒上报一次观看时长
 
 // 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
 function recordEnterCurrent(item: VideoItem | null, contentType: string) {
@@ -195,7 +200,47 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
     console.log(`[ViewHistory] 记录播放: ${item.aweme_id.substring(0, 8)}`)
   }
 
-  // 2. 设置完播计时器
+  // 🎯 2. 开始累计观看时长（视频才累计，图片/相册不累计）
+  if (contentType === 'video') {
+    watchStartTime = Date.now()
+    // 清除之前的定时器
+    if (watchTimeInterval) {
+      clearInterval(watchTimeInterval)
+      watchTimeInterval = null
+    }
+    // 立即上报一次（避免延迟）
+    incrementWatchTime(1).catch((e) => console.warn('[WatchTime] 首次上报失败:', e))
+    // 设置定期上报定时器（每10秒上报一次）
+    watchTimeInterval = setInterval(() => {
+      if (watchStartTime) {
+        const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
+        if (elapsedSeconds > 0) {
+          incrementWatchTime(elapsedSeconds).catch((e) =>
+            console.warn('[WatchTime] 累计观看时长失败:', e)
+          )
+          watchStartTime = Date.now() // 重置开始时间
+        }
+      }
+    }, WATCH_TIME_REPORT_INTERVAL)
+    console.log(`[WatchTime] 开始累计观看时长: ${item.aweme_id.substring(0, 8)}`)
+  } else {
+    // 🎯 图片/相册/合集：停止累计观看时长
+    if (watchTimeInterval) {
+      clearInterval(watchTimeInterval)
+      watchTimeInterval = null
+    }
+    if (watchStartTime) {
+      const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
+      if (elapsedSeconds > 0) {
+        incrementWatchTime(elapsedSeconds).catch((e) =>
+          console.warn('[WatchTime] 切换到图片时累计观看时长失败:', e)
+        )
+      }
+      watchStartTime = null
+    }
+  }
+
+  // 3. 设置完播计时器
   if (completedViews.has(item.aweme_id)) return // 已完播过
 
   // 清除之前的计时器
@@ -232,12 +277,28 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
   }, completionTime)
 }
 
-// 🎯 离开 current（清除计时器）
+// 🎯 离开 current（清除计时器 + 停止累计观看时长）
 function recordLeaveCurrent() {
   if (currentCompletionTimer) {
     clearTimeout(currentCompletionTimer)
     currentCompletionTimer = null
     console.log(`[ViewHistory] 清除完播计时器（离开当前视频）`)
+  }
+
+  // 🎯 停止累计观看时长，并上报剩余时长
+  if (watchTimeInterval) {
+    clearInterval(watchTimeInterval)
+    watchTimeInterval = null
+  }
+  if (watchStartTime) {
+    const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
+    if (elapsedSeconds > 0) {
+      incrementWatchTime(elapsedSeconds).catch((e) =>
+        console.warn('[WatchTime] 离开时累计观看时长失败:', e)
+      )
+    }
+    watchStartTime = null
+    console.log(`[WatchTime] 停止累计观看时长，已累计 ${elapsedSeconds} 秒`)
   }
 }
 const SLOT_KEYS = ['slotA', 'slotB', 'slotC'] as const
@@ -1677,6 +1738,21 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  // 🎯 清理观看时长累计定时器
+  if (watchTimeInterval) {
+    clearInterval(watchTimeInterval)
+    watchTimeInterval = null
+  }
+  if (watchStartTime) {
+    const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
+    if (elapsedSeconds > 0) {
+      incrementWatchTime(elapsedSeconds).catch((e) =>
+        console.warn('[WatchTime] 组件卸载时累计观看时长失败:', e)
+      )
+    }
+    watchStartTime = null
+  }
+
   // 清理进度条事件绑定
   if (currentBoundVideo) {
     unbindVideoEvents(currentBoundVideo)

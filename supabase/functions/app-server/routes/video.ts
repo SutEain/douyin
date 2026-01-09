@@ -1173,10 +1173,10 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
   console.log(`[approve] Processing video: ${video_id}`)
 
   try {
-    // 1. 查询视频信息（包含描述，用于通知）
+    // 1. 查询视频信息（包含描述、is_auto_sync，用于通知）
     const { data: video, error: videoError } = await supabaseAdmin
       .from('videos')
-      .select('id, status, author_id, tg_user_id, description')
+      .select('id, status, author_id, tg_user_id, description, is_auto_sync')
       .eq('id', video_id)
       .single()
 
@@ -1209,7 +1209,7 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
     // 查询用户当前的 auto_approve 状态和昵称
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('id, auto_approve, nickname')
+      .select('id, auto_approve, nickname, tg_user_id')
       .eq(authorField, authorValue)
       .single()
 
@@ -1243,8 +1243,32 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
       }
     }
 
-    // 🎯 4. 审核通过并发布后，通知粉丝
+    // 🎯 4. 审核通过并发布后，发送通知
     if (shouldPublish && profile?.id) {
+      // 🎯 如果是频道同步视频，发送专门的频道同步通知（只有发布成功才通知）
+      if (video.is_auto_sync) {
+        // 优先使用 video.tg_user_id，如果没有则使用 profile.tg_user_id
+        const tgUserId = video.tg_user_id || profile.tg_user_id
+        if (tgUserId) {
+          const TG_BOT_TOKEN = Deno.env.get('TG_BOT_TOKEN')
+          if (TG_BOT_TOKEN) {
+            const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`
+            fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: tgUserId,
+                text: '同步成功 📢：检测到您的频道发布了新视频，已自动发布。',
+                parse_mode: 'HTML'
+              })
+            }).catch((e: any) => {
+              console.error('[approve] 发送频道同步通知失败:', e)
+            })
+          }
+        }
+      }
+
+      // 通知粉丝有新作品发布
       const { notifyFollowersNewPost } = await import('../lib/notification.ts')
       notifyFollowersNewPost(
         profile.id,
@@ -1304,5 +1328,89 @@ export async function handleRecordView(req: Request): Promise<Response> {
   } catch (error) {
     console.error('[view] Unexpected error:', error)
     return successResponse({ success: true }) // 即使失败也返回成功，不影响用户体验
+  }
+}
+
+/**
+ * 累计观看时长
+ * POST /video/watch-time
+ * body: { seconds: number }
+ */
+export async function handleIncrementWatchTime(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+  const body = await parseJsonBody(req)
+  const { seconds } = body
+
+  if (!seconds || seconds <= 0) {
+    return errorResponse('seconds must be a positive number', 1, 400)
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin.rpc('increment_daily_watch_time', {
+      p_user_id: user.id,
+      p_seconds: Math.floor(seconds)
+    })
+
+    if (error) {
+      console.error('[watch-time] RPC increment_daily_watch_time failed:', error)
+      return errorResponse('Failed to increment watch time', 1, 500)
+    }
+
+    return successResponse(data)
+  } catch (error) {
+    console.error('[watch-time] Unexpected error:', error)
+    return successResponse({ success: true }) // 即使失败也返回成功，不影响用户体验
+  }
+}
+
+/**
+ * 获取观看时长奖励状态
+ * GET /video/watch-time/status
+ */
+export async function handleGetWatchTimeStatus(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+
+  try {
+    const { data, error } = await supabaseAdmin.rpc('get_watch_time_reward_status', {
+      p_user_id: user.id
+    })
+
+    if (error) {
+      console.error('[watch-time] RPC get_watch_time_reward_status failed:', error)
+      return errorResponse('Failed to get watch time status', 1, 500)
+    }
+
+    return successResponse(data)
+  } catch (error) {
+    console.error('[watch-time] Unexpected error:', error)
+    return errorResponse('Internal server error', 1, 500)
+  }
+}
+
+/**
+ * 领取观看时长奖励
+ * POST /video/watch-time/claim
+ */
+export async function handleClaimWatchTimeReward(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+
+  try {
+    const { data, error } = await supabaseAdmin.rpc('claim_watch_time_reward', {
+      p_user_id: user.id
+    })
+
+    if (error) {
+      console.error('[watch-time] RPC claim_watch_time_reward failed:', error)
+      return errorResponse('Failed to claim reward', 1, 500)
+    }
+
+    if (data.success === false) {
+      return errorResponse(data.message || '领取失败', 1, 400)
+    }
+
+    return successResponse(data)
+  } catch (error) {
+    console.error('[watch-time] Unexpected error:', error)
+    return errorResponse('Internal server error', 1, 500)
   }
 }

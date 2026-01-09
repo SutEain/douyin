@@ -24,7 +24,10 @@ import {
   handleApproveVideo,
   handleRecordView,
   handleVideoAdultFeed,
-  handleGetAdultQuota
+  handleGetAdultQuota,
+  handleIncrementWatchTime,
+  handleGetWatchTimeStatus,
+  handleClaimWatchTimeReward
 } from './routes/video.ts'
 import {
   handleVideoComments,
@@ -142,6 +145,16 @@ serve(async (req) => {
     }
     if (route === '/video/adult-quota' && method === 'GET') {
       return handleGetAdultQuota(req)
+    }
+    // 🎯 观看时长奖励系统
+    if (route === '/video/watch-time' && method === 'POST') {
+      return handleIncrementWatchTime(req)
+    }
+    if (route === '/video/watch-time/status' && method === 'GET') {
+      return handleGetWatchTimeStatus(req)
+    }
+    if (route === '/video/watch-time/claim' && method === 'POST') {
+      return handleClaimWatchTimeReward(req)
     }
     if (route === '/video/comments' && method === 'GET') {
       return handleVideoComments(req)

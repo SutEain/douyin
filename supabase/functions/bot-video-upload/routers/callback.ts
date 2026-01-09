@@ -1200,6 +1200,7 @@ export async function handleCallback(
       }
 
       case 'publish':
+        // 🎯 频道同步视频不应该显示编辑菜单，但如果用户点击了发布按钮，publishVideo 内部会处理
         await answerCallbackQuery(callbackQueryId)
         await publishVideo(chatId, messageId, video.id, notifyFollowersNewPost)
         break

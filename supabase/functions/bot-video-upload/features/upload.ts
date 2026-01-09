@@ -200,7 +200,8 @@ export async function handlePhoto(
         p_author_id: profile.id,
         p_caption: description,
         p_tags: tags.length > 0 ? tags : null,
-        p_content_type: 'album' // 🎯 多图上传，初始类型设为相册 (album)
+        p_content_type: 'album', // 🎯 多图上传，初始类型设为相册 (album)
+        p_is_auto_sync: extraData?.is_auto_sync || false // 🎯 传递 is_auto_sync 参数
       })
 
       if (rpcError || result?.error) {
@@ -477,7 +478,8 @@ export async function handleVideo(
         p_author_id: profile.id,
         p_caption: description,
         p_tags: tags.length > 0 ? tags : null,
-        p_content_type: 'collection'
+        p_content_type: 'collection',
+        p_is_auto_sync: extraData?.is_auto_sync || false // 🎯 传递 is_auto_sync 参数
       })
 
       if (rpcError || result?.error) {

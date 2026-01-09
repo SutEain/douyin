@@ -235,34 +235,16 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
           }
 
-          // 🎯 频道同步：只有明确标记为 is_auto_sync 的视频，且处于已发布或待审核状态，才发送通知并直接退出
+          // 🎯 频道同步：只有明确标记为 is_auto_sync 的视频，且处于已发布状态，才发送通知
           // 🎯 频道同步用户严禁弹出编辑菜单
           if (video.is_auto_sync) {
             console.log(
               `[WorkerCallback] 检测到频道同步作品 (videoId=${videoId})，执行专用通知逻辑`
             )
 
-            // 🎯 如果状态是 ready（非免审用户），也发送通知但提示需要审核
-            if (video.status === 'ready') {
-              console.log(`[WorkerCallback] 频道同步非免审用户，状态为 ready，发送待审核通知`)
-              if (messageId && messageId > 0) await deleteTelegramMessage(chatId, messageId)
-
-              const videoCreatedAt = new Date(video.created_at).getTime()
-              const oneHourAgo = Date.now() - 60 * 60 * 1000
-              const isRescueScript = !messageId && videoCreatedAt < oneHourAgo
-
-              if (!isRescueScript) {
-                await sendMessage(
-                  chatId,
-                  `同步成功 📢：检测到您的频道发布了新视频，已自动搬运并进入待发布状态，等待管理员审核通过后自动发布。`
-                )
-              }
-              return new Response('OK', { status: 200 })
-            }
-
-            // 🎯 如果状态是 published（免审用户），发送已发布通知
+            // 🎯 如果状态是 published（已发布成功），发送已发布通知
             if (video.status === 'published') {
-              console.log(`[WorkerCallback] 频道同步免审用户，状态为 published，发送已发布通知`)
+              console.log(`[WorkerCallback] 频道同步作品已发布，发送已发布通知`)
               if (messageId && messageId > 0) await deleteTelegramMessage(chatId, messageId)
 
               const videoCreatedAt = new Date(video.created_at).getTime()
@@ -272,6 +254,15 @@ export async function handleRequest(req: Request): Promise<Response> {
               if (!isRescueScript) {
                 await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新视频，已自动发布。`)
               }
+              return new Response('OK', { status: 200 })
+            }
+
+            // 🎯 如果状态是 ready（非免审用户，待审核），静默处理，不发送通知
+            if (video.status === 'ready') {
+              console.log(
+                `[WorkerCallback] 频道同步非免审用户，状态为 ready，静默处理，等待审核通过后再通知`
+              )
+              if (messageId && messageId > 0) await deleteTelegramMessage(chatId, messageId)
               return new Response('OK', { status: 200 })
             }
 

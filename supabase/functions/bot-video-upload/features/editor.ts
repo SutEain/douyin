@@ -48,10 +48,16 @@ export function getEditKeyboard(video: any) {
     ])
   }
 
-  keyboard.push([
-    { text: '✅ 立即发布', callback_data: `publish:${vid}` },
-    { text: '💾 保存草稿', callback_data: `save_draft:${vid}` }
-  ])
+  // 🎯 频道同步视频不显示"立即发布"按钮（自动发布，无需手动操作）
+  if (!video.is_auto_sync) {
+    keyboard.push([
+      { text: '✅ 立即发布', callback_data: `publish:${vid}` },
+      { text: '💾 保存草稿', callback_data: `save_draft:${vid}` }
+    ])
+  } else {
+    // 频道同步视频只显示保存草稿按钮（虽然理论上不应该显示编辑菜单）
+    keyboard.push([{ text: '💾 保存草稿', callback_data: `save_draft:${vid}` }])
+  }
 
   keyboard.push([{ text: '🗑️ 删除视频', callback_data: `delete_video_${video.id}` }])
 

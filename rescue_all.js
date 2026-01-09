@@ -6,15 +6,21 @@ const axios = require('axios')
 const { createClient } = require('@supabase/supabase-js')
 
 /**
- * 补救脚本 v2.1
+ * 补救脚本 v3.0 - 持续运行模式
  *
  * 功能：
- * 1. 扫描所有 status = 'processing' 的视频/图片/相册
- * 2. 识别出其中的 Telegram file_id
- * 3. 触发 Worker 进行下载、处理并上传到 R2
+ * 1. 持续运行，每30分钟扫描一次
+ * 2. 扫描所有 status = 'processing' 的视频/图片/相册
+ * 3. 识别出其中的 Telegram file_id
+ * 4. 触发 Worker 进行下载、处理并上传到 R2
  *
  * 使用方式：
  * node rescue_all.js "你的机器人TOKEN"
+ *
+ * 环境变量：
+ * - SCAN_INTERVAL: 扫描间隔（分钟），默认 30
+ * - MAX_CONCURRENT: 并发提交数，默认 5
+ * - BATCH_DELAY: 批次延迟（毫秒），默认 200
  */
 
 // 1. 初始化 Supabase
@@ -38,123 +44,361 @@ const BOT_TOKEN = (
   ''
 ).trim()
 const WORKER_URL = process.env.BOT_WORKER_URL || 'http://localhost:3000/process'
+const SCAN_INTERVAL = parseInt(process.env.SCAN_INTERVAL || '30') // 默认30分钟
+
+// 🎯 运行状态
+let isRunning = false
+let isShuttingDown = false
 
 async function rescueAll() {
-  if (!BOT_TOKEN) {
-    console.error('❌ 错误: 未提供机器人 Token。')
-    console.log('使用方法: node rescue_all.js "你的TOKEN"')
-    process.exit(1)
-  }
-
-  console.log(`\n-----------------------------------------`)
-  console.log(`🤖 准备使用 Token: ${BOT_TOKEN.substring(0, 6)}... 进行补救`)
-  console.log(`🔗 Worker 地址: ${WORKER_URL}`)
-  console.log(`-----------------------------------------\n`)
-
-  console.log('🔍 正在扫描需要补救的作品 (processing 或存储在 Telegram)...')
-
-  // 查询所有需要修复的作品
-  const { data: videos, error } = await supabase
-    .from('videos')
-    .select(
-      'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type'
-    )
-    .or('status.eq.processing,storage_type.eq.telegram,storage_type.eq.r2_pending')
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('❌ 查询失败:', error.message)
+  if (isRunning) {
+    console.log('⏸️  上次扫描还在进行中，跳过本次扫描')
     return
   }
 
-  if (!videos || videos.length === 0) {
-    console.log('✨ 没有发现卡在 processing 状态的作品。')
-    return
-  }
+  isRunning = true
+  const startTime = Date.now()
 
-  console.log(`📊 发现 ${videos.length} 个作品需要处理...\n`)
+  try {
+    if (!BOT_TOKEN) {
+      console.error('❌ 错误: 未提供机器人 Token。')
+      console.log('使用方法: node rescue_all.js "你的TOKEN"')
+      process.exit(1)
+    }
 
-  let totalTasks = 0
-  for (const v of videos) {
-    const tasks = []
+    console.log(`\n-----------------------------------------`)
+    console.log(`🤖 准备使用 Token: ${BOT_TOKEN.substring(0, 6)}... 进行补救`)
+    console.log(`🔗 Worker 地址: ${WORKER_URL}`)
+    console.log(`-----------------------------------------\n`)
 
-    if (v.content_type === 'video' || v.content_type === 'image') {
-      // 单文件模式
-      if (v.tg_file_id) {
-        // 🎯 同样检查缩略图是否已是 URL
-        const thumbId =
-          v.tg_thumbnail_file_id && !String(v.tg_thumbnail_file_id).startsWith('http')
-            ? v.tg_thumbnail_file_id
-            : null
+    console.log('🔍 正在扫描需要补救的作品...')
 
-        tasks.push({ fileId: v.tg_file_id, thumbnailFileId: thumbId })
+    // 🎯 查询条件：
+    // 1. status = 'processing' 或 storage_type = 'telegram'/'r2_pending'（正在处理）
+    // 2. content_type = 'image' 且有 tg_file_id（单图，需要检查 play_url）
+    // 注意：单图即使 status 不是 processing，如果 play_url 无效也需要补救
+    const { data: videos, error } = await supabase
+      .from('videos')
+      .select(
+        'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type, play_url, cover_url'
+      )
+      .or('status.eq.processing,storage_type.eq.telegram,storage_type.eq.r2_pending')
+      .order('created_at', { ascending: false })
+
+    // 🎯 额外查询：单图但 play_url 无效的情况（即使 status 不是 processing）
+    // 包括：
+    // 1. play_url 为空、null、包含 undefined
+    // 2. play_url 指向 .m3u8 文件（图片不应该有视频格式的 play_url）
+    // 3. play_url 不是有效的图片路径（不是以 /videos/{id}/ 开头且是图片格式）
+    const { data: imageVideos, error: imageError } = await supabase
+      .from('videos')
+      .select(
+        'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type, play_url, cover_url'
+      )
+      .eq('content_type', 'image')
+      .or('play_url.is.null,play_url.eq.,play_url.like.%undefined%,play_url.like.%.m3u8%')
+      .not('status', 'eq', 'processing')
+      .not('storage_type', 'eq', 'telegram')
+      .not('storage_type', 'eq', 'r2_pending')
+      .order('created_at', { ascending: false })
+
+    if (imageError) {
+      console.warn('⚠️  查询单图失败:', imageError.message)
+    }
+
+    // 🎯 合并结果，去重
+    const allVideos = [...(videos || [])]
+    if (imageVideos && imageVideos.length > 0) {
+      const existingIds = new Set(allVideos.map((v) => v.id))
+      for (const img of imageVideos) {
+        if (!existingIds.has(img.id)) {
+          allVideos.push(img)
+        }
       }
+    }
+
+    if (error) {
+      console.error('❌ 查询失败:', error.message)
+      return
+    }
+
+    if (allVideos.length === 0) {
+      console.log('✨ 没有发现需要补救的作品。')
+      return
+    }
+
+    console.log(`📊 发现 ${allVideos.length} 个作品需要处理...`)
+    if (imageVideos && imageVideos.length > 0) {
+      console.log(`   📸 其中 ${imageVideos.length} 个是单图 play_url 无效的情况\n`)
     } else {
-      // 相册或合集模式：遍历 media_list，找出没有 play_url 的项
-      let list = []
-      try {
-        list = Array.isArray(v.media_list) ? v.media_list : JSON.parse(v.media_list || '[]')
-      } catch (e) {
-        console.warn(`   ⚠️ [${v.id}] media_list 解析失败`)
-        continue
-      }
+      console.log()
+    }
 
-      for (const item of list) {
-        // 🛡️ 防御性检查：确保 item 存在且 play_url 是字符串
-        const itemPlayUrl = String(item.play_url || '')
-        const itemCoverUrl = String(item.cover_url || '')
+    // 🎯 收集所有任务
+    const allTasks = []
+    for (const v of allVideos) {
+      const tasks = []
 
-        // 如果没有 play_url 或者 play_url 包含 undefined/telegram (旧格式)，则需要重刷
-        const needsUpload =
-          !itemPlayUrl ||
-          itemPlayUrl.includes('undefined') ||
-          item.storage_type === 'telegram' ||
-          !itemPlayUrl.startsWith('http')
+      if (v.content_type === 'video' || v.content_type === 'image') {
+        // 单文件模式
+        // 🎯 对于单图，如果没有 tg_file_id，尝试从 media_list 中获取 file_id
+        let fileId = v.tg_file_id
+        if (!fileId && v.content_type === 'image' && v.media_list) {
+          try {
+            const list = Array.isArray(v.media_list)
+              ? v.media_list
+              : JSON.parse(v.media_list || '[]')
+            if (list.length > 0 && list[0].file_id) {
+              fileId = list[0].file_id
+              console.log(
+                `   🔍 [${v.id}] 从 media_list 获取 file_id: ${fileId.substring(0, 20)}...`
+              )
+            }
+          } catch (e) {
+            console.warn(`   ⚠️ [${v.id}] media_list 解析失败`)
+          }
+        }
 
-        if (needsUpload && item.file_id) {
-          // 🎯 只有当 cover_url 不是 HTTP 链接时，才视其为 thumbnail_file_id
+        if (fileId) {
+          // 🎯 对于单图，额外检查 play_url 是否有效
+          if (v.content_type === 'image') {
+            const playUrl = String(v.play_url || '')
+            const coverUrl = String(v.cover_url || '')
+
+            // 🎯 如果 play_url 为空、包含 undefined、指向 .m3u8（视频格式），则需要重新处理
+            // 图片不应该有视频格式的 play_url
+            const hasInvalidPlayUrl =
+              !playUrl ||
+              playUrl.includes('undefined') ||
+              playUrl.includes('.m3u8') || // 🎯 图片不应该有视频格式的 play_url
+              (!playUrl.startsWith('http') && !playUrl.startsWith('/'))
+
+            // 🎯 如果 cover_url 也没有，也需要处理
+            const hasInvalidCoverUrl =
+              !coverUrl || (!coverUrl.startsWith('http') && !coverUrl.startsWith('/'))
+
+            const needsUpload = hasInvalidPlayUrl || hasInvalidCoverUrl
+
+            if (!needsUpload) {
+              console.log(`   ⏭️  [${v.id}] 单图已有有效 play_url，跳过`)
+              continue
+            }
+          }
+
+          // 🎯 同样检查缩略图是否已是 URL
           const thumbId =
-            itemCoverUrl && !itemCoverUrl.startsWith('http') ? itemCoverUrl : null
+            v.tg_thumbnail_file_id && !String(v.tg_thumbnail_file_id).startsWith('http')
+              ? v.tg_thumbnail_file_id
+              : null
 
           tasks.push({
-            fileId: item.file_id,
-            thumbnailFileId: thumbId
+            videoId: v.id,
+            fileId: fileId, // 🎯 使用从 media_list 获取的 file_id（如果有）
+            thumbnailFileId: thumbId,
+            chatId: v.tg_user_id,
+            contentType: v.content_type
           })
         }
-      }
-    }
-
-    if (tasks.length === 0) {
-      continue
-    }
-
-    console.log(`🚀 [${v.id}] (${v.content_type}) 发现 ${tasks.length} 个待上传项...`)
-    totalTasks += tasks.length
-
-    for (const t of tasks) {
-      try {
-        const payload = {
-          video_id: v.id,
-          file_id: t.fileId,
-          chat_id: v.tg_user_id,
-          bot_token: BOT_TOKEN,
-          message_id: 0,
-          thumbnail_file_id: t.thumbnailFileId
+      } else {
+        // 相册或合集模式：遍历 media_list，找出没有 play_url 的项
+        let list = []
+        try {
+          list = Array.isArray(v.media_list) ? v.media_list : JSON.parse(v.media_list || '[]')
+        } catch (e) {
+          console.warn(`   ⚠️ [${v.id}] media_list 解析失败`)
+          continue
         }
 
-        const resp = await axios.post(WORKER_URL, payload)
-        console.log(`   ✅ [${t.fileId.substring(0, 10)}...] -> Worker 已接收`)
+        for (const item of list) {
+          // 🛡️ 防御性检查：确保 item 存在且 play_url 是字符串
+          const itemPlayUrl = String(item.play_url || '')
+          const itemCoverUrl = String(item.cover_url || '')
 
-        // 每发送一个文件休息 1 秒，避免冲击 Worker
-        await new Promise((r) => setTimeout(r, 1000))
-      } catch (err) {
-        console.error(`   ❌ [${t.fileId.substring(0, 10)}...] 发送失败:`, err.message)
+          // 如果没有 play_url 或者 play_url 包含 undefined/telegram (旧格式)，则需要重刷
+          const needsUpload =
+            !itemPlayUrl ||
+            itemPlayUrl.includes('undefined') ||
+            item.storage_type === 'telegram' ||
+            !itemPlayUrl.startsWith('http')
+
+          if (needsUpload && item.file_id) {
+            // 🎯 只有当 cover_url 不是 HTTP 链接时，才视其为 thumbnail_file_id
+            const thumbId = itemCoverUrl && !itemCoverUrl.startsWith('http') ? itemCoverUrl : null
+
+            tasks.push({
+              videoId: v.id,
+              fileId: item.file_id,
+              thumbnailFileId: thumbId,
+              chatId: v.tg_user_id,
+              contentType: v.content_type
+            })
+          }
+        }
+      }
+
+      if (tasks.length > 0) {
+        console.log(`📝 [${v.id}] (${v.content_type}) 收集到 ${tasks.length} 个待上传项`)
+        allTasks.push(...tasks)
       }
     }
-  }
 
-  console.log(`\n✅ 所有补救指令已发出 (共计 ${totalTasks} 个文件任务)。`)
-  console.log('请观察 Worker 服务器的 PM2 日志确认进度。')
+    if (allTasks.length === 0) {
+      console.log('✨ 没有需要处理的任务。')
+      return
+    }
+
+    console.log(`\n🚀 总共收集到 ${allTasks.length} 个文件任务，开始并发提交...\n`)
+
+    // 🎯 并发控制：同时最多处理 N 个任务，避免冲击 Worker
+    const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT || '5') // 默认并发 5 个
+    const BATCH_DELAY = parseInt(process.env.BATCH_DELAY || '200') // 批次间延迟 200ms
+
+    let successCount = 0
+    let failCount = 0
+    let processedCount = 0
+
+    // 并发处理函数
+    async function processTask(task) {
+      try {
+        const payload = {
+          video_id: task.videoId,
+          file_id: task.fileId,
+          chat_id: task.chatId,
+          bot_token: BOT_TOKEN,
+          message_id: 0,
+          thumbnail_file_id: task.thumbnailFileId
+        }
+
+        await axios.post(WORKER_URL, payload, { timeout: 10000 })
+        successCount++
+        processedCount++
+        const progress = ((processedCount / allTasks.length) * 100).toFixed(1)
+        console.log(
+          `   ✅ [${processedCount}/${allTasks.length}] (${progress}%) [${task.fileId.substring(0, 10)}...] -> Worker 已接收`
+        )
+        return { success: true, task }
+      } catch (err) {
+        failCount++
+        processedCount++
+        const progress = ((processedCount / allTasks.length) * 100).toFixed(1)
+        console.error(
+          `   ❌ [${processedCount}/${allTasks.length}] (${progress}%) [${task.fileId.substring(0, 10)}...] 发送失败:`,
+          err.message
+        )
+        return { success: false, task, error: err.message }
+      }
+    }
+
+    // 分批并发处理
+    for (let i = 0; i < allTasks.length; i += MAX_CONCURRENT) {
+      const batch = allTasks.slice(i, i + MAX_CONCURRENT)
+      await Promise.all(batch.map(processTask))
+
+      // 批次间短暂延迟，避免过载
+      if (i + MAX_CONCURRENT < allTasks.length) {
+        await new Promise((r) => setTimeout(r, BATCH_DELAY))
+      }
+    }
+
+    console.log(`\n✅ 所有补救指令已发出！`)
+    console.log(
+      `📊 统计: 成功 ${successCount} 个，失败 ${failCount} 个，总计 ${allTasks.length} 个`
+    )
+    console.log('请观察 Worker 服务器的 PM2 日志确认处理进度。')
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1)
+    console.log(`⏱️  本次扫描耗时: ${duration} 秒`)
+  } catch (error) {
+    console.error('❌ 扫描过程发生错误:', error)
+  } finally {
+    isRunning = false
+  }
 }
 
-rescueAll().catch(console.error)
+// 🎯 执行一次扫描
+async function runScan() {
+  if (isShuttingDown) {
+    console.log('🛑 正在关闭，停止扫描')
+    return
+  }
+
+  const now = new Date().toLocaleString('zh-CN')
+  console.log(`\n${'='.repeat(60)}`)
+  console.log(`🕐 [${now}] 开始执行扫描任务...`)
+  console.log(`${'='.repeat(60)}\n`)
+
+  await rescueAll()
+
+  if (!isShuttingDown) {
+    const nextScanTime = new Date(Date.now() + SCAN_INTERVAL * 60 * 1000).toLocaleString('zh-CN')
+    console.log(`\n⏰ 下次扫描时间: ${nextScanTime} (${SCAN_INTERVAL} 分钟后)`)
+    console.log(`${'='.repeat(60)}\n`)
+  }
+}
+
+// 🎯 主循环
+async function startService() {
+  console.log(`\n${'='.repeat(60)}`)
+  console.log('🚀 补救服务已启动')
+  console.log(`📋 配置信息:`)
+  console.log(`   - 扫描间隔: ${SCAN_INTERVAL} 分钟`)
+  console.log(`   - Worker 地址: ${WORKER_URL}`)
+  console.log(`   - 并发数: ${process.env.MAX_CONCURRENT || '5'}`)
+  console.log(`   - 批次延迟: ${process.env.BATCH_DELAY || '200'}ms`)
+  console.log(`${'='.repeat(60)}\n`)
+
+  // 立即执行一次
+  await runScan()
+
+  // 设置定时器
+  const intervalId = setInterval(
+    async () => {
+      if (isShuttingDown) {
+        clearInterval(intervalId)
+        return
+      }
+      await runScan()
+    },
+    SCAN_INTERVAL * 60 * 1000
+  )
+
+  // 🎯 优雅退出处理
+  process.on('SIGTERM', () => {
+    console.log('\n🛑 收到 SIGTERM 信号，准备退出...')
+    isShuttingDown = true
+    clearInterval(intervalId)
+    if (!isRunning) {
+      console.log('✅ 服务已安全退出')
+      process.exit(0)
+    } else {
+      console.log('⏳ 等待当前扫描完成...')
+    }
+  })
+
+  process.on('SIGINT', () => {
+    console.log('\n🛑 收到 SIGINT 信号 (Ctrl+C)，准备退出...')
+    isShuttingDown = true
+    clearInterval(intervalId)
+    if (!isRunning) {
+      console.log('✅ 服务已安全退出')
+      process.exit(0)
+    } else {
+      console.log('⏳ 等待当前扫描完成...')
+    }
+  })
+
+  // 等待当前任务完成后退出
+  const checkExit = setInterval(() => {
+    if (isShuttingDown && !isRunning) {
+      clearInterval(checkExit)
+      console.log('✅ 服务已安全退出')
+      process.exit(0)
+    }
+  }, 1000)
+}
+
+// 🎯 启动服务
+startService().catch((error) => {
+  console.error('❌ 服务启动失败:', error)
+  process.exit(1)
+})

@@ -248,6 +248,33 @@ export async function publishVideo(
   notify: typeof notifyFollowersNewPost
 ) {
   try {
+    // 🎯 先查询视频信息，检查是否为频道同步视频
+    const { data: videoInfo } = await supabase
+      .from('videos')
+      .select('is_auto_sync, status, review_status')
+      .eq('id', videoId)
+      .single()
+
+    // 🎯 如果是频道同步视频，拒绝手动发布操作
+    if (videoInfo?.is_auto_sync) {
+      // 🎯 只有发布成功（published）时才发送通知，其他状态静默处理
+      if (videoInfo.status === 'published') {
+        await editMessage(
+          chatId,
+          messageId,
+          '同步成功 📢：检测到您的频道发布了新视频，已自动发布。'
+        )
+      } else {
+        // ready 或其他状态：静默处理，不发送通知
+        await editMessage(
+          chatId,
+          messageId,
+          '⏳ 这是频道同步的视频，系统会自动处理，无需手动操作。'
+        )
+      }
+      return
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('id, nickname, auto_approve')

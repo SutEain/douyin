@@ -210,6 +210,90 @@
               已连续签到 <span>{{ userinfo.checkin_streak }}</span> 天
             </div>
           </div>
+
+          <!-- 🎯 观看时长奖励卡片 -->
+          <div class="watch-time-card">
+            <div class="title-row">
+              <div class="left">
+                <Icon icon="mdi:play-circle" class="icon" />
+                <span class="text">观看时长奖励</span>
+              </div>
+            </div>
+            <div class="progress-section">
+              <div class="progress-info">
+                <div class="time-text">
+                  今日观看：<span class="highlight">{{
+                    state.watchTimeStatus.total_minutes || 0
+                  }}</span>
+                  分钟
+                </div>
+                <div class="reward-text" v-if="state.watchTimeStatus.can_claim">
+                  可领取：<span class="reward-amount"
+                    >+{{ state.watchTimeStatus.available_reward || 0 }}</span
+                  >
+                  抖币
+                </div>
+                <div
+                  class="reward-text claimed"
+                  v-else-if="state.watchTimeStatus.claimed_reward > 0"
+                >
+                  今日已领取：<span class="reward-amount"
+                    >+{{ state.watchTimeStatus.claimed_reward }}</span
+                  >
+                  抖币
+                </div>
+                <div class="reward-text" v-else>观看满5分钟可领取奖励</div>
+              </div>
+              <div class="progress-bar-wrapper">
+                <div class="progress-bar">
+                  <div
+                    class="progress-fill"
+                    :style="{
+                      width: `${Math.min(((state.watchTimeStatus.total_seconds || 0) / 1800) * 100, 100)}%`
+                    }"
+                  ></div>
+                </div>
+                <div class="milestones">
+                  <div
+                    class="milestone"
+                    :class="{ reached: (state.watchTimeStatus.total_seconds || 0) >= 300 }"
+                  >
+                    <div class="milestone-dot"></div>
+                    <div class="milestone-label">5分钟<br />+5抖币</div>
+                  </div>
+                  <div
+                    class="milestone"
+                    :class="{ reached: (state.watchTimeStatus.total_seconds || 0) >= 900 }"
+                  >
+                    <div class="milestone-dot"></div>
+                    <div class="milestone-label">15分钟<br />+20抖币</div>
+                  </div>
+                  <div
+                    class="milestone"
+                    :class="{ reached: (state.watchTimeStatus.total_seconds || 0) >= 1800 }"
+                  >
+                    <div class="milestone-dot"></div>
+                    <div class="milestone-label">30分钟<br />+50抖币</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button
+              class="claim-btn"
+              :class="{ disabled: !state.watchTimeStatus.can_claim }"
+              :disabled="!state.watchTimeStatus.can_claim || baseStore.loading"
+              @click.stop="handleClaimWatchTimeReward"
+            >
+              <Icon icon="mdi:gift" />
+              <span>{{
+                state.watchTimeStatus.can_claim
+                  ? '立即领取'
+                  : state.watchTimeStatus.claimed_reward > 0
+                    ? '今日已领取'
+                    : '观看时长不足'
+              }}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -330,7 +414,13 @@ import BaseFooter from '@/components/BaseFooter.vue'
 import Loading from '@/components/Loading.vue'
 import NoMore from '@/components/NoMore.vue'
 import { _checkImgUrl, _formatNumber, _no, _copy } from '@/utils'
-import { likeVideo, myVideo, collectedVideo } from '@/api/videos'
+import {
+  likeVideo,
+  myVideo,
+  collectedVideo,
+  getWatchTimeStatus,
+  claimWatchTimeReward
+} from '@/api/videos'
 import { checkIn } from '@/api/user'
 import { useBaseStore } from '@/store/pinia'
 import { useNav } from '@/utils/hooks/useNav'
@@ -498,6 +588,7 @@ async function handleRetryLogin() {
     await baseStore.init()
     if (userinfo.value.uid) {
       loadMyVideos() // 登录成功后立即加载数据
+      loadWatchTimeStatus() // 🎯 加载观看时长状态
     }
   } finally {
     baseStore.loading = false
@@ -548,6 +639,41 @@ async function handleCheckInClick() {
     }
   } catch (e: any) {
     _no(e.message || '签到失败，请稍后重试')
+  } finally {
+    baseStore.loading = false
+  }
+}
+
+// 🎯 加载观看时长奖励状态
+async function loadWatchTimeStatus() {
+  if (!userinfo.value.uid) return
+  try {
+    const res = await getWatchTimeStatus()
+    if (res.success && res.data) {
+      Object.assign(state.watchTimeStatus, res.data)
+    }
+  } catch (e: any) {
+    console.warn('[loadWatchTimeStatus] 加载观看时长状态失败:', e)
+  }
+}
+
+// 🎯 领取观看时长奖励
+async function handleClaimWatchTimeReward() {
+  if (baseStore.loading || !state.watchTimeStatus.can_claim) return
+
+  baseStore.loading = true
+  try {
+    const res = await claimWatchTimeReward()
+    if (res.success && res.data) {
+      const { reward_amount, reward_level } = res.data
+      _no(`✅ 领取成功！获得 ${reward_amount} 抖币`)
+      // 刷新用户信息和观看时长状态
+      await Promise.all([baseStore.init(), loadWatchTimeStatus()])
+    } else {
+      _no(res.message || '领取失败，请稍后重试')
+    }
+  } catch (e: any) {
+    _no(e.message || '领取失败，请稍后重试')
   } finally {
     baseStore.loading = false
   }
@@ -736,6 +862,7 @@ async function handleVerifyCode() {
       await baseStore.init()
       if (userinfo.value.uid) {
         loadMyVideos() // 登录成功后立即加载数据
+        loadWatchTimeStatus() // 🎯 加载观看时长状态
       }
       // 清空验证码
       verificationCode.value = ''
@@ -748,6 +875,42 @@ async function handleVerifyCode() {
     baseStore.loading = false
   }
 }
+
+// 🎯 监听用户信息变化，自动加载观看时长状态
+watch(
+  () => userinfo.value.uid,
+  (newUid) => {
+    if (newUid) {
+      loadWatchTimeStatus()
+    }
+  },
+  { immediate: true }
+)
+
+// 🎯 页面激活时刷新观看时长状态（每30秒刷新一次）
+let watchTimeRefreshTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  if (userinfo.value.uid) {
+    loadWatchTimeStatus()
+    // 每30秒自动刷新一次观看时长状态
+    watchTimeRefreshTimer = setInterval(() => {
+      if (userinfo.value.uid) {
+        loadWatchTimeStatus()
+      }
+    }, 30000)
+  }
+})
+
+// 清理定时器
+watch(
+  () => userinfo.value.uid,
+  (newUid) => {
+    if (!newUid && watchTimeRefreshTimer) {
+      clearInterval(watchTimeRefreshTimer)
+      watchTimeRefreshTimer = null
+    }
+  }
+)
 </script>
 
 <style scoped lang="less">
@@ -1234,6 +1397,173 @@ async function handleVerifyCode() {
           span {
             color: #face15;
             font-weight: bold;
+          }
+        }
+      }
+
+      // 🎯 观看时长奖励卡片样式
+      .watch-time-card {
+        margin-top: 15px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+
+        .title-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+
+          .left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #fff;
+            font-weight: bold;
+
+            .icon {
+              color: #face15;
+              font-size: 18px;
+            }
+          }
+        }
+
+        .progress-section {
+          margin-bottom: 15px;
+
+          .progress-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+
+            .time-text {
+              font-size: 14px;
+              color: rgba(255, 255, 255, 0.7);
+
+              .highlight {
+                color: #face15;
+                font-weight: bold;
+                font-size: 16px;
+              }
+            }
+
+            .reward-text {
+              font-size: 13px;
+              color: rgba(255, 255, 255, 0.5);
+
+              &.claimed {
+                color: rgba(255, 255, 255, 0.4);
+              }
+
+              .reward-amount {
+                color: #face15;
+                font-weight: bold;
+                font-size: 15px;
+              }
+            }
+          }
+
+          .progress-bar-wrapper {
+            position: relative;
+
+            .progress-bar {
+              width: 100%;
+              height: 6px;
+              background: rgba(255, 255, 255, 0.1);
+              border-radius: 3px;
+              overflow: hidden;
+              margin-bottom: 30px;
+
+              .progress-fill {
+                height: 100%;
+                background: linear-gradient(90deg, #face15 0%, #ffd700 100%);
+                border-radius: 3px;
+                transition: width 0.3s ease;
+              }
+            }
+
+            .milestones {
+              display: flex;
+              justify-content: space-between;
+              position: absolute;
+              top: 10px;
+              left: 0;
+              right: 0;
+
+              .milestone {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+                flex: 1;
+
+                .milestone-dot {
+                  width: 12px;
+                  height: 12px;
+                  border-radius: 50%;
+                  background: rgba(255, 255, 255, 0.2);
+                  border: 2px solid rgba(255, 255, 255, 0.3);
+                  transition: all 0.3s;
+                }
+
+                .milestone-label {
+                  font-size: 10px;
+                  color: rgba(255, 255, 255, 0.4);
+                  text-align: center;
+                  line-height: 1.3;
+                }
+
+                &.reached {
+                  .milestone-dot {
+                    background: #face15;
+                    border-color: #face15;
+                    box-shadow: 0 0 8px rgba(250, 206, 21, 0.5);
+                  }
+
+                  .milestone-label {
+                    color: #face15;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        .claim-btn {
+          width: 100%;
+          padding: 12px;
+          background: linear-gradient(135deg, #face15 0%, #ffd700 100%);
+          border: none;
+          border-radius: 8px;
+          color: #000;
+          font-weight: bold;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          cursor: pointer;
+          transition: all 0.3s;
+
+          &:hover:not(.disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(250, 206, 21, 0.4);
+          }
+
+          &:active:not(.disabled) {
+            transform: translateY(0);
+          }
+
+          &.disabled {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.4);
+            cursor: not-allowed;
+          }
+
+          .icon {
+            font-size: 16px;
           }
         }
       }
