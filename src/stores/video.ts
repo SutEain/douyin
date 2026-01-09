@@ -113,6 +113,19 @@ export const useVideoStore = defineStore('video', () => {
     isMuted.value = value !== undefined ? value : !isMuted.value
     // 同步到 window 对象（兼容旧代码）
     window.isMuted = isMuted.value
+
+    // 🎯 同步所有已注册的视频元素的静音状态
+    registeredVideos.forEach((video) => {
+      try {
+        video.muted = isMuted.value
+        console.log(`[VideoManager] 同步视频静音状态: ${isMuted.value}`)
+      } catch (err) {
+        console.warn(`[VideoManager] 同步视频静音状态失败:`, err)
+      }
+    })
+
+    // 🎯 发送事件通知所有组件（兼容旧代码）
+    bus.emit(isMuted.value ? EVENT_KEY.ADD_MUTED : EVENT_KEY.REMOVE_MUTED)
   }
 
   /**
@@ -136,7 +149,11 @@ export const useVideoStore = defineStore('video', () => {
   function registerVideoElement(video: HTMLVideoElement) {
     if (!registeredVideos.has(video)) {
       registeredVideos.add(video)
-      console.log(`[VideoManager] 注册视频元素，总计: ${registeredVideos.size}`)
+      // 🎯 注册时立即同步静音状态，确保新加载的视频与全局状态一致
+      video.muted = isMuted.value
+      console.log(
+        `[VideoManager] 注册视频元素，总计: ${registeredVideos.size}，静音状态: ${isMuted.value}`
+      )
     }
   }
 

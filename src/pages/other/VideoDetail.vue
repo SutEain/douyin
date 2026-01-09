@@ -34,10 +34,12 @@
       <!-- 正常详情播放 -->
       <VideoList
         v-else
-        :items="videoItems"
+        :items="dynamicVideoItems"
         page="detail"
         :initial-index="initialIndex"
         :autoplay="true"
+        :has-more="hasMore"
+        @load-more="handleLoadMore"
       />
     </div>
 
@@ -66,7 +68,7 @@
 </template>
 
 <script setup lang="jsx">
-import { reactive, onMounted, onUnmounted, onDeactivated, provide, computed, watch } from 'vue'
+import { reactive, ref, onMounted, onUnmounted, onDeactivated, provide, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import VideoList from '@/components/video/VideoList.vue'
@@ -78,7 +80,7 @@ import { _notice } from '@/utils'
 import { useBaseStore } from '@/store/pinia'
 import { videoPlaybackManager } from '@/utils/videoPlaybackManager'
 import bus, { EVENT_KEY } from '@/utils/bus'
-import { getAdultQuota, getVideoById } from '@/api/videos'
+import { getAdultQuota, getVideoById, recommendedVideoTab } from '@/api/videos'
 
 defineOptions({
   name: 'VideoDetail'
@@ -99,7 +101,11 @@ const state = reactive({
   startY: 0,
   startX: 0,
   translateY: 0,
-  isDragging: false
+  isDragging: false,
+  // 加载更多相关
+  pageNo: 0,
+  hasMore: true,
+  loadingMore: false
 })
 
 // ✅ 提供 item 和 position 给子组件（BaseVideo, ItemDesc, ItemToolbar）
@@ -118,12 +124,77 @@ const videoItems = computed(() => {
   }
   return state.videoItem ? [state.videoItem] : []
 })
+
+// 🎯 动态更新 videoItems（支持追加新数据）
+const dynamicVideoItems = ref([...videoItems.value])
+
+watch(
+  videoItems,
+  (newItems) => {
+    dynamicVideoItems.value = [...newItems]
+  },
+  { immediate: true }
+)
+
 const initialIndex = computed(() => {
   if (Number.isInteger(baseStore.routeData?.index)) {
     return baseStore.routeData.index
   }
   return 0
 })
+
+const hasMore = computed(() => state.hasMore && !state.loadingMore)
+
+// 🎯 加载更多视频（从 videoTab 进入时）
+async function handleLoadMore() {
+  // 如果不是从 videoTab 进入（没有 routeData.items），不加载
+  if (!baseStore.routeData?.items?.length) {
+    return
+  }
+
+  if (state.loadingMore || !state.hasMore) {
+    return
+  }
+
+  state.loadingMore = true
+  state.pageNo++
+
+  try {
+    const res = await recommendedVideoTab({
+      pageNo: state.pageNo,
+      pageSize: 10
+    })
+
+    if (res.success && res.data?.list?.length > 0) {
+      // 🎯 去重：避免重复添加已存在的视频
+      const existingIds = new Set(dynamicVideoItems.value.map((v) => v.aweme_id || v.id))
+      const newItems = res.data.list.filter((v) => !existingIds.has(v.aweme_id || v.id))
+
+      if (newItems.length > 0) {
+        dynamicVideoItems.value.push(...newItems)
+        // 🎯 同步更新 baseStore.routeData.items，确保数据一致
+        if (baseStore.routeData?.items) {
+          baseStore.routeData.items.push(...newItems)
+        }
+      }
+
+      // 🎯 判断是否还有更多
+      state.hasMore = res.data.list.length >= 10
+
+      console.log('[VideoDetail] 加载更多成功', {
+        新增: newItems.length,
+        总数: dynamicVideoItems.value.length,
+        hasMore: state.hasMore
+      })
+    } else {
+      state.hasMore = false
+    }
+  } catch (error) {
+    console.error('[VideoDetail] 加载更多失败:', error)
+  } finally {
+    state.loadingMore = false
+  }
+}
 
 function handleShowShare() {
   state.isSharing = true
@@ -182,8 +253,8 @@ onMounted(() => {
       fetchVideoDetail(videoId)
     } else {
       console.error('[VideoDetail] 未找到视频数据且无 ID')
-    router.back()
-    return
+      router.back()
+      return
     }
   }
 
@@ -195,12 +266,12 @@ onMounted(() => {
     () => state.videoItem,
     (item) => {
       if (item?.is_adult) {
-    getAdultQuota().then((res) => {
-      if (res.success && !res.data.unlimited && res.data.remaining <= 0) {
-        state.showAdultRules = true
+        getAdultQuota().then((res) => {
+          if (res.success && !res.data.unlimited && res.data.remaining <= 0) {
+            state.showAdultRules = true
+          }
+        })
       }
-    })
-  }
     },
     { immediate: true }
   )

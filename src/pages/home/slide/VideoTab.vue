@@ -54,6 +54,10 @@ const hlsInstances = new Map()
 const vIsCanPlay = {
   mounted(el, binding) {
     const url = binding.value
+
+    // 🎯 注册视频元素到全局管理器，并立即同步静音状态
+    videoStore.registerVideoElement(el)
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
@@ -85,6 +89,9 @@ const vIsCanPlay = {
             el.src = url
           }
 
+          // 🎯 确保播放前同步静音状态
+          el.muted = videoStore.isMuted
+
           el.play().catch(() => {})
           playingEl.value = el
           // 🎯 当前视频默认倍速 1.0（仅对当前视频生效）
@@ -112,6 +119,9 @@ const vIsCanPlay = {
     obList.push(observer)
   },
   unmounted(el) {
+    // 🎯 注销视频元素
+    videoStore.unregisterVideoElement(el)
+
     const hls = hlsInstances.get(el)
     if (hls) {
       hls.destroy()
@@ -132,19 +142,8 @@ function getDurationSeconds(item) {
 }
 
 function toggleMute() {
-  const next = !videoStore.isMuted
-  videoStore.toggleMuted(next)
-  window.isMuted = next
-  bus.emit(next ? EVENT_KEY.ADD_MUTED : EVENT_KEY.REMOVE_MUTED)
-
-  const videoEls = document.querySelectorAll('.video-tab video')
-  videoEls.forEach((v) => {
-    try {
-      v.muted = next
-    } catch {
-      // ignore
-    }
-  })
+  // 🎯 直接使用 videoStore.toggleMuted，它会自动同步所有已注册的视频
+  videoStore.toggleMuted()
 }
 
 const speedOptions = [0.5, 1.0, 1.25, 1.5, 2.0]
@@ -252,7 +251,7 @@ function onAvatarError(e) {
               />
               <div class="duration">{{ _duration(getDurationSeconds(item)) }}</div>
               <div class="title">
-                {{ item.desc }}
+                {{ _truncate(item.desc, 30) }}
               </div>
               <div class="bottom">
                 <div class="l">
@@ -262,7 +261,7 @@ function onAvatarError(e) {
                     class="avatar"
                     @error="onAvatarError"
                   />
-                  <div class="name">{{ _truncate(item.author.nickname, 15) }}</div>
+                  <div class="name">{{ _truncate(item.author.nickname, 10) }}</div>
                 </div>
                 <div class="r">
                   <Icon icon="icon-park-outline:like" />
@@ -431,6 +430,7 @@ function onAvatarError(e) {
       display: -webkit-box;
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
+      word-break: break-word;
     }
 
     .f {
@@ -452,17 +452,20 @@ function onAvatarError(e) {
       color: gray;
       .f;
       font-size: 13rem;
+      align-items: center;
 
       .l {
         .f;
         justify-content: flex-start;
+        flex: 1;
+        min-width: 0;
+        gap: 6rem;
 
         .name {
           overflow: hidden;
           text-overflow: ellipsis;
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 1;
+          white-space: nowrap;
+          max-width: 100rem;
         }
 
         .avatar {
@@ -471,15 +474,23 @@ function onAvatarError(e) {
           height: @w;
           object-fit: cover;
           border-radius: 50%;
+          flex-shrink: 0;
         }
       }
 
       .r {
         word-break: keep-all;
         .f;
+        flex-shrink: 0;
+        gap: 4rem;
 
         svg {
           font-size: 16rem;
+          flex-shrink: 0;
+        }
+
+        .num {
+          white-space: nowrap;
         }
       }
     }

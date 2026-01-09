@@ -861,7 +861,7 @@ function setSlotRef(key: string) {
     if (el) {
       slotRefs.set(key, el)
 
-      // 🎯 注册到全局视频管理器
+      // 🎯 注册到全局视频管理器（会自动同步静音状态）
       videoStore.registerVideoElement(el)
 
       // 防止重复绑定事件导致日志重复
@@ -901,6 +901,11 @@ function setSlotRef(key: string) {
         boundVideos.add(el)
       }
     } else {
+      // 🎯 注销时从全局管理器移除
+      const oldEl = slotRefs.get(key)
+      if (oldEl) {
+        videoStore.unregisterVideoElement(oldEl)
+      }
       slotRefs.delete(key)
     }
   }
