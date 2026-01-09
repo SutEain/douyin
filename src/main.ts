@@ -1,16 +1,18 @@
 import { createApp } from 'vue'
 
+// 🔍 调试：暂时禁用 console 屏蔽，方便排查登录问题
 // ✅ 生产环境禁用控制台输出（除非 URL 包含 debug=1）
-if (import.meta.env.PROD && !window.location.search.includes('debug=1')) {
-  // 保存原始 console 引用，备用
-  if (typeof window !== 'undefined') {
-    ;(window as any).__rawConsole__ = { ...window.console }
-  }
-  console.log = () => {}
-  console.info = () => {}
-  console.debug = () => {}
-  // console.warn = () => {} // 建议保留 warn 和 error 用于捕获线上异常
-}
+// if (import.meta.env.PROD && !window.location.search.includes('debug=1')) {
+//   // 保存原始 console 引用，备用
+//   if (typeof window !== 'undefined') {
+//     ;(window as any).__rawConsole__ = { ...window.console }
+//   }
+//   console.log = () => {}
+//   console.info = () => {}
+//   console.debug = () => {}
+//   // console.warn = () => {} // 建议保留 warn 和 error 用于捕获线上异常
+// }
+console.log('[Main] 🚀 应用启动，console 日志已启用')
 
 import App from './App.vue'
 import './assets/less/index.less'

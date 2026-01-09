@@ -94,16 +94,40 @@
 
         // 🚀 如果不是 Telegram 环境，立即创建降级对象，不加载脚本（节省时间）
         if (!isTelegramEnv) {
-          console.log('[Init] 浏览器环境，跳过 Telegram SDK 加载')
+          console.log('[Init] 🌐 浏览器环境，创建 Telegram 降级对象')
+          console.log('[Init] 环境检测结果:', {
+            hasTgData,
+            uaTelegram,
+            userAgent: navigator.userAgent,
+            url: window.location.href
+          })
+
           window.Telegram = {
             WebApp: {
-              ready: function () {},
+              ready: function () {
+                console.log('[Init] 降级对象 ready() 被调用')
+              },
               initData: '',
               initDataUnsafe: {},
               version: 'fallback',
-              platform: 'unknown'
+              platform: 'unknown',
+              // 🎯 添加更多兼容属性，避免某些代码报错
+              isVersionAtLeast: function () {
+                return false
+              },
+              sendData: function () {
+                console.warn('[Init] 降级对象 sendData() 被调用')
+              },
+              close: function () {
+                console.warn('[Init] 降级对象 close() 被调用')
+              },
+              expand: function () {
+                console.warn('[Init] 降级对象 expand() 被调用')
+              }
             }
           }
+
+          console.log('[Init] ✅ Telegram 降级对象已创建:', window.Telegram)
           return
         }
 

@@ -235,22 +235,58 @@ export const useBaseStore = defineStore('base', {
         }
 
         // 3. 处理身份验证逻辑
+        console.log('[Store.init] 📋 开始获取用户 profile...')
         let profile = await getCurrentProfile()
+        console.log(
+          '[Store.init] 📊 getCurrentProfile() 结果:',
+          profile
+            ? {
+                id: profile.id,
+                nickname: profile.nickname,
+                username: profile.username,
+                tg_user_id: profile.tg_user_id
+              }
+            : '无 profile'
+        )
 
-        // 🎯 自动登录与“防串号”校验逻辑
+        // 🎯 自动登录与"防串号"校验逻辑
         // @ts-ignore
         const tg = window.Telegram?.WebApp
+        console.log('[Store.init] 🔍 Telegram WebApp 对象:', {
+          exists: !!tg,
+          version: tg?.version,
+          platform: tg?.platform,
+          hasInitData: !!tg?.initData,
+          initDataLength: tg?.initData?.length || 0
+        })
+
         if (tg) {
           tg.expand()
         }
 
         const tgUser = tg?.initDataUnsafe?.user
+        console.log(
+          '[Store.init] 👤 Telegram 用户信息:',
+          tgUser
+            ? {
+                id: tgUser.id,
+                first_name: tgUser.first_name,
+                username: tgUser.username
+              }
+            : '无 TG 用户信息'
+        )
 
         // 🚨 核心漏洞修复：检测 Telegram 当前用户与本地缓存用户是否一致
         if (profile && tgUser) {
           // 🎯 强制转字符串对比，防止大整数精度丢失导致的误判
           const cachedTgId = String(profile.tg_user_id || '')
           const currentTgId = String(tgUser.id || '')
+
+          console.log('[Store.init] 🔐 账号校验:', {
+            cached: cachedTgId,
+            current: currentTgId,
+            match: cachedTgId === currentTgId
+          })
 
           if (cachedTgId && currentTgId && cachedTgId !== currentTgId) {
             console.warn(`[Auth] 📢 检测到账号切换: ${cachedTgId} -> ${currentTgId}，强制重新登录`)
@@ -268,20 +304,32 @@ export const useBaseStore = defineStore('base', {
               console.log(`[Auth] 🚀 正在执行 Telegram 自动登录 (第 ${this._authRetryCount} 次)...`)
               await loginWithTelegram(tg.initData)
               profile = await getCurrentProfile()
+              console.log('[Auth] ✅ 自动登录完成，profile:', profile ? '成功' : '失败')
             } catch (e) {
               console.error('[Auth] ❌ 自动登录失败:', e)
             }
           } else {
             console.error('[Auth] 🛑 自动登录尝试次数过多，停止重试，防止 WebView 崩溃')
           }
+        } else if (!profile && !tg?.initData) {
+          console.log(
+            '[Store.init] ℹ️ 无 profile 且无 TG initData，跳过自动登录（可能是验证码登录）'
+          )
         }
 
         if (profile) {
+          console.log('[Store.init] ✅ 应用 profile 到 userinfo...')
           this.userinfo = mapProfileToUserinfo(profile, this.userinfo)
           const lang = normalizeLang(this.userinfo.lang)
           this.userinfo.lang = lang
           i18n.global.locale.value = lang
+          console.log('[Store.init] 🎉 用户信息已设置:', {
+            uid: this.userinfo.uid,
+            nickname: this.userinfo.nickname,
+            unique_id: this.userinfo.unique_id
+          })
         } else {
+          console.warn('[Store.init] ⚠️ 最终没有 profile，用户未登录')
           // 如果最终没有 profile (未登录)，尝试使用 Telegram 语言设置
           const tgLang = tg?.initDataUnsafe?.user?.language_code
           const lang = normalizeLang(tgLang)
