@@ -882,25 +882,52 @@ async function handleVerifyCode() {
     baseStore.loading = true
     errorMessage.value = ''
 
+    console.log('[Me] 🔐 开始验证码登录流程...')
+
     const { loginWithVerificationCode } = await import('@/api/auth')
     const result = await loginWithVerificationCode(verificationCode.value)
 
+    console.log('[Me] ✅ API 调用成功，返回结果:', result)
+
     if (result?.user) {
+      console.log('[Me] 📝 应用用户信息到 baseStore...')
       baseStore.applyProfile(result.user)
     }
 
     // 等待 session 写入
+    console.log('[Me] ⏳ 等待 session 写入...')
     await new Promise((resolve) => setTimeout(resolve, 100))
+
     const { data } = await supabase.auth.getSession()
+    console.log('[Me] 🔍 获取 session 结果:', {
+      hasSession: !!data.session,
+      userId: data.session?.user?.id
+    })
+
     if (data.session) {
       // 重新初始化 store
+      console.log('[Me] 🔄 重新初始化 baseStore...')
       await baseStore.init()
+
+      console.log('[Me] 📊 baseStore.init() 完成，userinfo:', {
+        uid: userinfo.value.uid,
+        unique_id: userinfo.value.unique_id,
+        nickname: userinfo.value.nickname
+      })
+
       if (userinfo.value.uid) {
+        console.log('[Me] 🎉 登录成功！加载用户数据...')
         loadMyVideos() // 登录成功后立即加载数据
         loadWatchTimeStatus() // 🎯 加载观看时长状态
+      } else {
+        console.warn('[Me] ⚠️ session 存在但 userinfo.uid 为空，可能初始化失败')
+        errorMessage.value = '登录成功但获取用户信息失败，请刷新页面重试'
       }
       // 清空验证码
       verificationCode.value = ''
+    } else {
+      console.error('[Me] ❌ session 不存在，登录失败')
+      errorMessage.value = '登录失败，请重试'
     }
   } catch (error: any) {
     console.error('[Me] ❌ 验证码登录失败:', error)
