@@ -7,6 +7,7 @@ import {
   handleRpsChoice,
   handleCancelRpsRoom
 } from './features/rpsGame.ts'
+import { checkRpsTimeout } from './features/rpsTimeout.ts'
 
 // 主服务（由 index.ts 作为入口调用）
 export async function handleRequest(req: Request): Promise<Response> {
@@ -21,6 +22,22 @@ export async function handleRequest(req: Request): Promise<Response> {
       })
     }
 
+    // 🎯 手动触发超时检查（管理端调用）
+    if (url.pathname.includes('/check-timeout')) {
+      try {
+        await checkRpsTimeout()
+        return new Response(JSON.stringify({ success: true, message: '超时检查已完成' }), {
+          headers: { 'Content-Type': 'application/json' }
+        })
+      } catch (e) {
+        console.error('[RPS-TIMEOUT] 检查异常:', e)
+        return new Response(JSON.stringify({ error: String(e) }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+    }
+
     // 处理 Webhook
     if (req.method === 'POST') {
       let update: any
@@ -32,6 +49,11 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
 
       console.log('[DICE-BOT-APP] Update received:', JSON.stringify(update).substring(0, 500))
+
+      // 🎯 自动检查超时房间（后台异步执行，不阻塞主流程）
+      checkRpsTimeout().catch((e) => {
+        console.error('[RPS-TIMEOUT] 自动检查异常:', e)
+      })
 
       // 🎯 1. 提取用户 ID 进行黑名单检查
       const userIdToCheck =
