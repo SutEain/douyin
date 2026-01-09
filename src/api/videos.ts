@@ -324,28 +324,26 @@ export async function getAdultQuota() {
 
 // 🎯 累计观看时长（秒）
 export async function incrementWatchTime(seconds: number, videoId?: string) {
-  console.log(
-    `[WatchTime] 🔵 开始上报观看时长: ${seconds}秒, videoId: ${videoId?.substring(0, 8) || 'null'}`
-  )
   try {
+    // 🎯 静默检查 token，未登录用户不打印任何日志（避免刷屏）
     const token = await resolveAccessToken(false)
     if (!token) {
-      console.warn('[WatchTime] ❌ 未获取到 token，无法上报')
-      return { success: false }
+      return { success: false, silent: true } // 标记为静默失败
     }
 
     console.log(
-      `[WatchTime] 📤 发送请求到 /video/watch-time, seconds: ${seconds}, video_id: ${videoId?.substring(0, 8) || 'null'}`
+      `[WatchTime] 📤 上报观看时长: ${seconds}秒, videoId: ${videoId?.substring(0, 8) || 'null'}`
     )
     const data = await callAppServer('/video/watch-time', {
       method: 'POST',
       body: { seconds, video_id: videoId }, // 🎯 传入视频ID用于去重
       requireAuth: true
     })
-    console.log(`[WatchTime] ✅ 上报成功:`, data)
+    console.log(`[WatchTime] ✅ 上报成功`)
     return { success: true, data }
   } catch (error: any) {
-    console.error('[WatchTime] ❌ 累计观看时长失败:', error)
+    // 🎯 仅在真正的网络错误时打印警告（避免未登录时刷屏）
+    console.warn('[WatchTime] ⚠️ 上报失败:', error?.message || error)
     return { success: false, message: error?.message || '累计观看时长失败' }
   }
 }

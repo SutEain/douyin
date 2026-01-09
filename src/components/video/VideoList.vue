@@ -2038,8 +2038,15 @@ function handlePlayError(slot: SlotState, err: any) {
   console.warn(`${DEBUG_PREFIX} play:error`, {
     id: item?.aweme_id?.substring(0, 8),
     page: props.page,
-    error: err?.name,
-    muted: video?.muted
+    slotKey: slot.key,
+    role: slot.role,
+    errorName: err?.name,
+    errorMessage: err?.message,
+    errorCode: err?.code,
+    muted: video?.muted,
+    videoSrc: video?.currentSrc?.substring(0, 50) || 'no src',
+    readyState: video?.readyState,
+    networkState: video?.networkState
   })
 
   if (!video) return

@@ -110,22 +110,30 @@ export const useVideoStore = defineStore('video', () => {
    * 切换静音
    */
   function toggleMuted(value?: boolean) {
+    const oldValue = isMuted.value
     isMuted.value = value !== undefined ? value : !isMuted.value
+
+    // 🎯 防止无限递归：如果值没有变化，直接返回
+    if (oldValue === isMuted.value) {
+      console.log(`[VideoManager] 静音状态未变化，跳过处理: ${isMuted.value}`)
+      return
+    }
+
     // 同步到 window 对象（兼容旧代码）
     window.isMuted = isMuted.value
 
     // 🎯 同步所有已注册的视频元素的静音状态
+    console.log(`[VideoManager] 同步 ${registeredVideos.size} 个视频的静音状态: ${isMuted.value}`)
     registeredVideos.forEach((video) => {
       try {
         video.muted = isMuted.value
-        console.log(`[VideoManager] 同步视频静音状态: ${isMuted.value}`)
       } catch (err) {
         console.warn(`[VideoManager] 同步视频静音状态失败:`, err)
       }
     })
 
-    // 🎯 发送事件通知所有组件（兼容旧代码）
-    bus.emit(isMuted.value ? EVENT_KEY.ADD_MUTED : EVENT_KEY.REMOVE_MUTED)
+    // 🎯 注意：不在这里发送 bus 事件，避免与 ItemToolbar 形成循环
+    // ItemToolbar.toggleMute() 会同时调用 store.toggleMuted() 和 bus.emit()
   }
 
   /**
