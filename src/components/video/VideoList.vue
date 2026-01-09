@@ -189,6 +189,7 @@ let watchTimeInterval: ReturnType<typeof setInterval> | null = null // 观看时
 let watchStartTime: number | null = null // 当前视频开始观看的时间戳
 let currentWatchVideoId: string | null = null // 🎯 当前正在累计的视频ID（用于去重）
 const WATCH_TIME_REPORT_INTERVAL = 10000 // 每10秒上报一次观看时长
+const watchedVideoIds = new Set<string>() // 🎯 已累计过时长的视频ID（防止重复播放累计）
 
 // 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
 function recordEnterCurrent(item: VideoItem | null, contentType: string) {
@@ -230,14 +231,28 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
         const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
         if (elapsedSeconds > 0) {
           console.log(`[WatchTime] 📤 切换视频，上报旧视频剩余时长: ${elapsedSeconds}秒`)
-          incrementWatchTime(elapsedSeconds, currentWatchVideoId).catch((e) =>
-            console.warn('[WatchTime] 切换视频时累计观看时长失败:', e)
-          )
+          incrementWatchTime(elapsedSeconds, currentWatchVideoId)
+            .then(() => {
+              // 🎯 上报成功后，标记该视频已累计过
+              if (currentWatchVideoId) {
+                watchedVideoIds.add(currentWatchVideoId)
+              }
+            })
+            .catch((e) => console.warn('[WatchTime] 切换视频时累计观看时长失败:', e))
         }
       } else {
         // 🎯 如果是同一个视频（页面切换回来），不上报，继续计时
         console.log(`[WatchTime] 🔄 切换回同一个视频，继续计时，不上报`)
       }
+    }
+
+    // 🎯 检查该视频是否已经累计过时长（防止重复播放累计）
+    if (watchedVideoIds.has(item.aweme_id)) {
+      console.log(`[WatchTime] ⏸️ 该视频已累计过时长，不再累计: ${item.aweme_id.substring(0, 8)}`)
+      // 清空当前累计状态
+      watchStartTime = null
+      currentWatchVideoId = null
+      return // 直接返回，不开始累计
     }
 
     // 🎯 开始新的视频累计（或继续之前的计时）
@@ -255,6 +270,9 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
       incrementWatchTime(1, item.aweme_id)
         .then((result) => {
           console.log(`[WatchTime] ✅ 首次上报结果:`, result)
+          // 🎯 首次上报成功后，标记该视频已累计过
+          watchedVideoIds.add(item.aweme_id)
+          console.log(`[WatchTime] ✅ 标记视频已累计: ${item.aweme_id.substring(0, 8)}`)
         })
         .catch((e) => {
           console.error('[WatchTime] ❌ 首次上报失败:', e)
@@ -292,6 +310,10 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
           incrementWatchTime(elapsedSeconds, currentWatchVideoId)
             .then((result) => {
               console.log(`[WatchTime] ✅ 定时上报结果:`, result)
+              // 🎯 上报成功后，确保该视频已标记为已累计（防止重复播放）
+              if (currentWatchVideoId) {
+                watchedVideoIds.add(currentWatchVideoId)
+              }
             })
             .catch((e) => {
               console.error('[WatchTime] ❌ 定时上报失败:', e)
@@ -326,9 +348,14 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
       const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
       if (elapsedSeconds > 0) {
         // 🎯 使用保存的视频ID
-        incrementWatchTime(elapsedSeconds, currentWatchVideoId).catch((e) =>
-          console.warn('[WatchTime] 切换到图片时累计观看时长失败:', e)
-        )
+        incrementWatchTime(elapsedSeconds, currentWatchVideoId)
+          .then(() => {
+            // 🎯 上报成功后，标记该视频已累计过
+            if (currentWatchVideoId) {
+              watchedVideoIds.add(currentWatchVideoId)
+            }
+          })
+          .catch((e) => console.warn('[WatchTime] 切换到图片时累计观看时长失败:', e))
       }
       watchStartTime = null
       currentWatchVideoId = null
@@ -1839,9 +1866,14 @@ onUnmounted(() => {
     if (elapsedSeconds > 0) {
       console.log(`[WatchTime] 📤 组件卸载，上报剩余观看时长: ${elapsedSeconds}秒`)
       // 🎯 使用保存的视频ID
-      incrementWatchTime(elapsedSeconds, currentWatchVideoId).catch((e) =>
-        console.warn('[WatchTime] 组件卸载时累计观看时长失败:', e)
-      )
+      incrementWatchTime(elapsedSeconds, currentWatchVideoId)
+        .then(() => {
+          // 🎯 上报成功后，标记该视频已累计过
+          if (currentWatchVideoId) {
+            watchedVideoIds.add(currentWatchVideoId)
+          }
+        })
+        .catch((e) => console.warn('[WatchTime] 组件卸载时累计观看时长失败:', e))
     }
     watchStartTime = null
     currentWatchVideoId = null

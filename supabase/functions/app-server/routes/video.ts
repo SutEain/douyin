@@ -289,6 +289,7 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
     .eq('status', 'published')
     .eq('is_adult', false)
     .eq('content_type', 'video') // 🎯 只返回视频，排除合辑(collection)
+    .eq('storage_type', 'r2') // 🎯 只返回已处理完成的视频（有 play_url）
     // .eq('is_sea', false) // 🎯 允许东南亚内容
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -1335,6 +1336,9 @@ export async function handleRecordView(req: Request): Promise<Response> {
  * 累计观看时长
  * POST /video/watch-time
  * body: { seconds: number, video_id?: string }
+ *
+ * 注意：去重逻辑已移到前端，后端不再做去重
+ * video_id 仅用于统计记录，不影响累计逻辑
  */
 export async function handleIncrementWatchTime(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
@@ -1349,7 +1353,7 @@ export async function handleIncrementWatchTime(req: Request): Promise<Response> 
     const { data, error } = await supabaseAdmin.rpc('increment_daily_watch_time', {
       p_user_id: user.id,
       p_seconds: Math.floor(seconds),
-      p_video_id: video_id || null // 🎯 传入视频ID用于去重
+      p_video_id: video_id || null // 🎯 仅用于统计记录，不做去重
     })
 
     if (error) {
