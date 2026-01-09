@@ -151,9 +151,19 @@ export const useVideoStore = defineStore('video', () => {
       registeredVideos.add(video)
       // 🎯 注册时立即同步静音状态，确保新加载的视频与全局状态一致
       video.muted = isMuted.value
-      console.log(
-        `[VideoManager] 注册视频元素，总计: ${registeredVideos.size}，静音状态: ${isMuted.value}`
-      )
+      console.log(`[VideoManager] 注册视频元素`, {
+        totalCount: registeredVideos.size,
+        muted: isMuted.value,
+        videoSrc: video.currentSrc?.substring(0, 50) || 'no src',
+        videoPoster: video.poster?.substring(0, 50) || 'no poster',
+        readyState: video.readyState,
+        paused: video.paused
+      })
+    } else {
+      console.log(`[VideoManager] 视频元素已存在，跳过重复注册`, {
+        totalCount: registeredVideos.size,
+        videoSrc: video.currentSrc?.substring(0, 50) || 'no src'
+      })
     }
   }
 
@@ -162,11 +172,22 @@ export const useVideoStore = defineStore('video', () => {
    */
   function unregisterVideoElement(video: HTMLVideoElement) {
     if (registeredVideos.has(video)) {
+      const wasActive = activeVideoElement.value === video
       registeredVideos.delete(video)
-      if (activeVideoElement.value === video) {
+      if (wasActive) {
         activeVideoElement.value = null
       }
-      console.log(`[VideoManager] 注销视频元素，剩余: ${registeredVideos.size}`)
+      console.log(`[VideoManager] 注销视频元素`, {
+        remainingCount: registeredVideos.size,
+        wasActive,
+        videoSrc: video.currentSrc?.substring(0, 50) || 'no src',
+        paused: video.paused
+      })
+    } else {
+      console.log(`[VideoManager] 视频元素不存在，跳过注销`, {
+        totalCount: registeredVideos.size,
+        videoSrc: video.currentSrc?.substring(0, 50) || 'no src'
+      })
     }
   }
 

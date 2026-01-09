@@ -1,15 +1,25 @@
 import { createApp } from 'vue'
 
-// ✅ 生产环境禁用控制台输出（除非 URL 包含 debug=1）
-if (import.meta.env.PROD && !window.location.search.includes('debug=1')) {
-  // 保存原始 console 引用，备用
-  if (typeof window !== 'undefined') {
-    ;(window as any).__rawConsole__ = { ...window.console }
+// 🎯 Console 输出控制：默认启用，生产环境可通过 URL 参数 debug=0 禁用
+// 保存原始 console 引用，备用
+if (typeof window !== 'undefined') {
+  ;(window as any).__rawConsole__ = { ...window.console }
+
+  // 🎯 只有在生产环境且明确指定 debug=0 时才禁用 console
+  if (import.meta.env.PROD && window.location.search.includes('debug=0')) {
+    console.log = () => {}
+    console.info = () => {}
+    console.debug = () => {}
+    console.log('[Main] Console 输出已禁用（生产环境 + debug=0）')
+  } else {
+    // 🎯 开发环境或生产环境（未指定 debug=0）时，启用 console
+    console.log('[Main] Console 输出已启用', {
+      env: import.meta.env.MODE,
+      isProd: import.meta.env.PROD,
+      hasDebugParam: window.location.search.includes('debug=1'),
+      hasDisableParam: window.location.search.includes('debug=0')
+    })
   }
-  console.log = () => {}
-  console.info = () => {}
-  console.debug = () => {}
-  // console.warn = () => {} // 建议保留 warn 和 error 用于捕获线上异常
 }
 
 import App from './App.vue'

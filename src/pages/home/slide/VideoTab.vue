@@ -55,6 +55,12 @@ const vIsCanPlay = {
   mounted(el, binding) {
     const url = binding.value
 
+    console.log('[VideoTab] v-is-can-play mounted', {
+      url: url?.substring(0, 50) || 'no url',
+      videoSrc: el.currentSrc?.substring(0, 50) || 'no src',
+      videoPoster: el.poster?.substring(0, 50) || 'no poster'
+    })
+
     // 🎯 注册视频元素到全局管理器，并立即同步静音状态
     videoStore.registerVideoElement(el)
 
@@ -119,6 +125,11 @@ const vIsCanPlay = {
     obList.push(observer)
   },
   unmounted(el) {
+    console.log('[VideoTab] v-is-can-play unmounted', {
+      videoSrc: el.currentSrc?.substring(0, 50) || 'no src',
+      hasHls: hlsInstances.has(el)
+    })
+
     // 🎯 注销视频元素
     videoStore.unregisterVideoElement(el)
 

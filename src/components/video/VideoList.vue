@@ -862,8 +862,26 @@ function setSlotRef(key: string) {
       const oldEl = slotRefs.get(key)
       // 🎯 如果元素已经存在且是同一个元素，不重复注册（避免 slot 轮转时的重复操作）
       if (oldEl === el) {
+        console.log(`${DEBUG_PREFIX} setSlotRef: 元素已存在且相同，跳过重复注册`, {
+          key,
+          slot: slots.find((s) => s.key === key)?.role,
+          videoIndex: slots.find((s) => s.key === key)?.videoIndex
+        })
         return
       }
+
+      const slot = slots.find((s) => s.key === key)
+      console.log(`${DEBUG_PREFIX} setSlotRef: 注册视频元素`, {
+        key,
+        slot: slot?.role,
+        videoIndex: slot?.videoIndex,
+        videoId:
+          slot?.videoIndex != null
+            ? props.items[slot.videoIndex]?.aweme_id?.substring(0, 8)
+            : 'none',
+        hasOldEl: !!oldEl,
+        oldElSame: oldEl === el
+      })
 
       slotRefs.set(key, el)
 
@@ -906,9 +924,19 @@ function setSlotRef(key: string) {
         })
         boundVideos.add(el)
       }
+    } else {
+      // 🎯 ref(null) 被调用，记录但不做任何操作，避免 Vue 响应式更新或 slot 轮转时的误操作
+      const slot = slots.find((s) => s.key === key)
+      console.log(
+        `${DEBUG_PREFIX} setSlotRef: ref(null) 被调用，跳过操作（统一在组件卸载时清理）`,
+        {
+          key,
+          slot: slot?.role,
+          videoIndex: slot?.videoIndex,
+          hasSlotRef: slotRefs.has(key)
+        }
+      )
     }
-    // 🎯 不在 ref(null) 时做任何操作，避免 Vue 响应式更新或 slot 轮转时的误操作
-    // 统一在组件卸载时清理（onUnmounted 中处理）
   }
 }
 
@@ -1897,7 +1925,19 @@ onUnmounted(() => {
   hlsInstances.clear()
 
   // 🎯 从全局视频管理器中注销所有视频元素
-  slotRefs.forEach((video) => {
+  console.log(`${DEBUG_PREFIX} onUnmounted: 开始清理组件资源`, {
+    page: props.page,
+    slotRefsCount: slotRefs.size,
+    hlsInstancesCount: hlsInstances.size
+  })
+
+  slotRefs.forEach((video, key) => {
+    const slot = slots.find((s) => s.key === key)
+    console.log(`${DEBUG_PREFIX} onUnmounted: 注销视频元素`, {
+      key,
+      slot: slot?.role,
+      videoIndex: slot?.videoIndex
+    })
     videoStore.unregisterVideoElement(video)
   })
 
@@ -1905,6 +1945,10 @@ onUnmounted(() => {
   isDragging = false
   playState.isMoving = false
   slotRefs.clear()
+
+  console.log(`${DEBUG_PREFIX} onUnmounted: 组件资源清理完成`, {
+    page: props.page
+  })
 })
 
 function onPlay(slot: SlotState) {
