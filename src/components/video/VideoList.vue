@@ -859,6 +859,12 @@ watch(
 function setSlotRef(key: string) {
   return (el: HTMLVideoElement | null) => {
     if (el) {
+      const oldEl = slotRefs.get(key)
+      // 🎯 如果元素已经存在且是同一个元素，不重复注册（避免 slot 轮转时的重复操作）
+      if (oldEl === el) {
+        return
+      }
+
       slotRefs.set(key, el)
 
       // 🎯 注册到全局视频管理器（会自动同步静音状态）
@@ -900,14 +906,9 @@ function setSlotRef(key: string) {
         })
         boundVideos.add(el)
       }
-    } else {
-      // 🎯 注销时从全局管理器移除
-      const oldEl = slotRefs.get(key)
-      if (oldEl) {
-        videoStore.unregisterVideoElement(oldEl)
-      }
-      slotRefs.delete(key)
     }
+    // 🎯 不在 ref(null) 时做任何操作，避免 Vue 响应式更新或 slot 轮转时的误操作
+    // 统一在组件卸载时清理（onUnmounted 中处理）
   }
 }
 
