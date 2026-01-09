@@ -192,7 +192,16 @@ const WATCH_TIME_REPORT_INTERVAL = 10000 // 每10秒上报一次观看时长
 
 // 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
 function recordEnterCurrent(item: VideoItem | null, contentType: string) {
-  if (!item?.aweme_id) return
+  console.log(`[WatchTime] 🎬 recordEnterCurrent 被调用:`, {
+    itemId: item?.aweme_id?.substring(0, 8) || 'null',
+    contentType,
+    hasItem: !!item
+  })
+
+  if (!item?.aweme_id) {
+    console.warn('[WatchTime] ⚠️ item 或 aweme_id 为空，退出')
+    return
+  }
 
   // 1. 立即记录播放
   if (!recordedViews.has(item.aweme_id)) {
@@ -202,29 +211,111 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
   }
 
   // 🎯 2. 开始累计观看时长（视频才累计，图片/相册不累计）
+  console.log(
+    `[WatchTime] 📋 检查 contentType: ${contentType}, 是否为视频: ${contentType === 'video'}`
+  )
   if (contentType === 'video') {
-    watchStartTime = Date.now()
-    currentWatchVideoId = item.aweme_id // 🎯 保存当前视频ID
-    // 清除之前的定时器
+    // 🎯 先停止之前的累计（如果有）
     if (watchTimeInterval) {
       clearInterval(watchTimeInterval)
       watchTimeInterval = null
     }
-    // 立即上报一次（避免延迟），传入视频ID用于去重
-    incrementWatchTime(1, item.aweme_id).catch((e) => console.warn('[WatchTime] 首次上报失败:', e))
-    // 设置定期上报定时器（每10秒上报一次）
-    watchTimeInterval = setInterval(() => {
-      if (watchStartTime && currentWatchVideoId) {
+
+    // 🎯 检查是否是切换回同一个视频（页面切换场景）
+    const isSameVideo = currentWatchVideoId === item.aweme_id
+
+    if (watchStartTime && currentWatchVideoId) {
+      if (currentWatchVideoId !== item.aweme_id) {
+        // 🎯 如果之前在看其他视频，先上报剩余时长
         const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
         if (elapsedSeconds > 0) {
+          console.log(`[WatchTime] 📤 切换视频，上报旧视频剩余时长: ${elapsedSeconds}秒`)
           incrementWatchTime(elapsedSeconds, currentWatchVideoId).catch((e) =>
-            console.warn('[WatchTime] 累计观看时长失败:', e)
+            console.warn('[WatchTime] 切换视频时累计观看时长失败:', e)
           )
+        }
+      } else {
+        // 🎯 如果是同一个视频（页面切换回来），不上报，继续计时
+        console.log(`[WatchTime] 🔄 切换回同一个视频，继续计时，不上报`)
+      }
+    }
+
+    // 🎯 开始新的视频累计（或继续之前的计时）
+    if (!isSameVideo) {
+      // 🎯 新视频：重置开始时间
+      watchStartTime = Date.now()
+      currentWatchVideoId = item.aweme_id
+      console.log(`[WatchTime] 🟢 开始新视频累计观看时长:`, {
+        videoId: item.aweme_id.substring(0, 8),
+        watchStartTime
+      })
+
+      // 立即上报一次（避免延迟），传入视频ID用于去重
+      console.log(`[WatchTime] 📤 立即上报首次观看时长: 1秒`)
+      incrementWatchTime(1, item.aweme_id)
+        .then((result) => {
+          console.log(`[WatchTime] ✅ 首次上报结果:`, result)
+        })
+        .catch((e) => {
+          console.error('[WatchTime] ❌ 首次上报失败:', e)
+        })
+    } else {
+      // 🎯 同一个视频：继续之前的计时，不重置 watchStartTime
+      console.log(`[WatchTime] 🔄 继续累计同一个视频的观看时长:`, {
+        videoId: item.aweme_id.substring(0, 8),
+        watchStartTime,
+        elapsedSeconds: watchStartTime ? Math.floor((Date.now() - watchStartTime) / 1000) : 0
+      })
+      // watchStartTime 保持不变，currentWatchVideoId 也保持不变
+    }
+
+    // 设置定期上报定时器（每10秒上报一次）
+    console.log(`[WatchTime] ⏰ 设置定时器，间隔: ${WATCH_TIME_REPORT_INTERVAL}ms`)
+    const currentVideoIdForTimer = item.aweme_id // 🎯 保存当前视频ID到闭包中
+    watchTimeInterval = setInterval(() => {
+      console.log(`[WatchTime] ⏰ 定时器触发:`, {
+        watchStartTime,
+        currentWatchVideoId: currentWatchVideoId?.substring(0, 8) || 'null',
+        expectedVideoId: currentVideoIdForTimer.substring(0, 8),
+        isMatch: currentWatchVideoId === currentVideoIdForTimer,
+        hasWatchStartTime: !!watchStartTime
+      })
+
+      if (watchStartTime && currentWatchVideoId === currentVideoIdForTimer) {
+        // 🎯 确保当前视频ID匹配，避免切换视频后定时器还在运行
+        const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
+        console.log(`[WatchTime] 📊 计算已观看时长: ${elapsedSeconds}秒`)
+        if (elapsedSeconds > 0) {
+          console.log(
+            `[WatchTime] 📤 定时上报观看时长: ${elapsedSeconds}秒, videoId: ${currentWatchVideoId?.substring(0, 8)}`
+          )
+          incrementWatchTime(elapsedSeconds, currentWatchVideoId)
+            .then((result) => {
+              console.log(`[WatchTime] ✅ 定时上报结果:`, result)
+            })
+            .catch((e) => {
+              console.error('[WatchTime] ❌ 定时上报失败:', e)
+            })
           watchStartTime = Date.now() // 重置开始时间
+          console.log(`[WatchTime] 🔄 重置 watchStartTime: ${watchStartTime}`)
+        } else {
+          console.log(`[WatchTime] ⏸️ 已观看时长不足1秒，跳过上报`)
+        }
+      } else {
+        // 🎯 如果视频ID不匹配或 watchStartTime 为空，清除定时器（可能已经切换到其他视频）
+        console.warn(`[WatchTime] ⚠️ 条件不满足，清除定时器:`, {
+          hasWatchStartTime: !!watchStartTime,
+          currentWatchVideoId: currentWatchVideoId?.substring(0, 8) || 'null',
+          expectedVideoId: currentVideoIdForTimer.substring(0, 8),
+          isMatch: currentWatchVideoId === currentVideoIdForTimer
+        })
+        if (watchTimeInterval) {
+          clearInterval(watchTimeInterval)
+          watchTimeInterval = null
         }
       }
     }, WATCH_TIME_REPORT_INTERVAL)
-    console.log(`[WatchTime] 开始累计观看时长: ${item.aweme_id.substring(0, 8)}`)
+    console.log(`[WatchTime] ✅ 定时器已设置，watchTimeInterval:`, watchTimeInterval)
   } else {
     // 🎯 图片/相册/合集：停止累计观看时长
     if (watchTimeInterval) {
@@ -281,7 +372,7 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
   }, completionTime)
 }
 
-// 🎯 离开 current（清除计时器 + 停止累计观看时长）
+// 🎯 离开 current（清除计时器 + 暂停累计观看时长，但不立即上报）
 function recordLeaveCurrent() {
   if (currentCompletionTimer) {
     clearTimeout(currentCompletionTimer)
@@ -289,23 +380,16 @@ function recordLeaveCurrent() {
     console.log(`[ViewHistory] 清除完播计时器（离开当前视频）`)
   }
 
-  // 🎯 停止累计观看时长，并上报剩余时长
+  // 🎯 暂停累计观看时长定时器，但不立即上报（避免页面切换时重复累计）
+  // 只有在真正切换到其他视频时，才会在 recordEnterCurrent 中上报
   if (watchTimeInterval) {
     clearInterval(watchTimeInterval)
     watchTimeInterval = null
+    console.log(`[WatchTime] ⏸️ 暂停累计观看时长定时器（离开当前视频）`)
   }
-  if (watchStartTime && currentWatchVideoId) {
-    const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
-    if (elapsedSeconds > 0) {
-      // 🎯 使用保存的视频ID
-      incrementWatchTime(elapsedSeconds, currentWatchVideoId).catch((e) =>
-        console.warn('[WatchTime] 离开时累计观看时长失败:', e)
-      )
-    }
-    watchStartTime = null
-    currentWatchVideoId = null
-    console.log(`[WatchTime] 停止累计观看时长，已累计 ${elapsedSeconds} 秒`)
-  }
+  // 🎯 注意：不立即上报，也不清空 watchStartTime 和 currentWatchVideoId
+  // 这样切换回来时，如果是同一个视频，可以继续计时
+  // 只有在切换到其他视频时，才会在 recordEnterCurrent 中上报并清空
 }
 const SLOT_KEYS = ['slotA', 'slotB', 'slotC'] as const
 
@@ -1745,6 +1829,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   // 🎯 清理观看时长累计定时器
+  // 🎯 组件卸载时才上报剩余时长（真正的离开，不是页面切换）
   if (watchTimeInterval) {
     clearInterval(watchTimeInterval)
     watchTimeInterval = null
@@ -1752,6 +1837,7 @@ onUnmounted(() => {
   if (watchStartTime && currentWatchVideoId) {
     const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
     if (elapsedSeconds > 0) {
+      console.log(`[WatchTime] 📤 组件卸载，上报剩余观看时长: ${elapsedSeconds}秒`)
       // 🎯 使用保存的视频ID
       incrementWatchTime(elapsedSeconds, currentWatchVideoId).catch((e) =>
         console.warn('[WatchTime] 组件卸载时累计观看时长失败:', e)

@@ -106,6 +106,23 @@ async function rescueAll() {
       console.warn('⚠️  查询单图失败:', imageError.message)
     }
 
+    // 🎯 额外查询：已发布的合辑（collection），检查 media_list 中是否有需要处理的项
+    // 老合辑的问题：media_list 中的视频 play_url 可能是 null 或 .mp4 格式（不是 HLS）
+    const { data: publishedCollections, error: collectionError } = await supabase
+      .from('videos')
+      .select(
+        'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type, play_url, cover_url'
+      )
+      .eq('content_type', 'collection')
+      .eq('status', 'published')
+      .eq('storage_type', 'r2')
+      .order('created_at', { ascending: false })
+      .limit(1000) // 🎯 限制查询数量，避免一次性查询太多
+
+    if (collectionError) {
+      console.warn('⚠️  查询已发布合辑失败:', collectionError.message)
+    }
+
     // 🎯 合并结果，去重
     const allVideos = [...(videos || [])]
     if (imageVideos && imageVideos.length > 0) {
@@ -113,6 +130,41 @@ async function rescueAll() {
       for (const img of imageVideos) {
         if (!existingIds.has(img.id)) {
           allVideos.push(img)
+        }
+      }
+    }
+    // 🎯 添加已发布的合辑，但需要检查 media_list 中是否有需要处理的项
+    if (publishedCollections && publishedCollections.length > 0) {
+      const existingIds = new Set(allVideos.map((v) => v.id))
+      for (const coll of publishedCollections) {
+        if (!existingIds.has(coll.id)) {
+          // 🎯 检查 media_list 中是否有需要处理的项
+          try {
+            const list = Array.isArray(coll.media_list)
+              ? coll.media_list
+              : JSON.parse(coll.media_list || '[]')
+            let hasInvalidItems = false
+            for (const item of list) {
+              const itemPlayUrl = item.play_url ? String(item.play_url) : ''
+              const isNullOrEmpty =
+                !itemPlayUrl || itemPlayUrl === 'null' || itemPlayUrl.includes('undefined')
+              const isMp4Format = itemPlayUrl && itemPlayUrl.endsWith('.mp4')
+              const isNotHls =
+                itemPlayUrl &&
+                !itemPlayUrl.endsWith('.m3u8') &&
+                !itemPlayUrl.includes('/index.m3u8')
+              const missingIsHlsFlag = item.type === 'video' && !item.is_hls && isNotHls
+              if (isNullOrEmpty || isMp4Format || missingIsHlsFlag) {
+                hasInvalidItems = true
+                break
+              }
+            }
+            if (hasInvalidItems) {
+              allVideos.push(coll)
+            }
+          } catch (e) {
+            console.warn(`   ⚠️ [${coll.id}] media_list 解析失败，跳过`)
+          }
         }
       }
     }
@@ -129,10 +181,19 @@ async function rescueAll() {
 
     console.log(`📊 发现 ${allVideos.length} 个作品需要处理...`)
     if (imageVideos && imageVideos.length > 0) {
-      console.log(`   📸 其中 ${imageVideos.length} 个是单图 play_url 无效的情况\n`)
-    } else {
-      console.log()
+      console.log(`   📸 其中 ${imageVideos.length} 个是单图 play_url 无效的情况`)
     }
+    if (publishedCollections && publishedCollections.length > 0) {
+      const collectionCount = allVideos.filter(
+        (v) => v.content_type === 'collection' && v.status === 'published'
+      ).length
+      if (collectionCount > 0) {
+        console.log(
+          `   🎬 其中 ${collectionCount} 个是已发布合辑需要重新处理（media_list 中有无效 play_url）`
+        )
+      }
+    }
+    console.log()
 
     // 🎯 收集所有任务
     const allTasks = []
@@ -211,15 +272,26 @@ async function rescueAll() {
 
         for (const item of list) {
           // 🛡️ 防御性检查：确保 item 存在且 play_url 是字符串
-          const itemPlayUrl = String(item.play_url || '')
+          const itemPlayUrl = item.play_url ? String(item.play_url) : ''
           const itemCoverUrl = String(item.cover_url || '')
 
-          // 如果没有 play_url 或者 play_url 包含 undefined/telegram (旧格式)，则需要重刷
+          // 🎯 检测需要重新处理的情况：
+          // 1. play_url 为 null、空字符串或包含 undefined
+          // 2. play_url 是 .mp4 格式（不是 HLS，老合辑的问题）
+          // 3. 缺少 is_hls 标记且 play_url 不是 .m3u8 格式
+          // 4. storage_type 是 telegram（未上传）
+          const isNullOrEmpty =
+            !itemPlayUrl || itemPlayUrl === 'null' || itemPlayUrl.includes('undefined')
+          const isMp4Format = itemPlayUrl && itemPlayUrl.endsWith('.mp4')
+          const isNotHls =
+            itemPlayUrl && !itemPlayUrl.endsWith('.m3u8') && !itemPlayUrl.includes('/index.m3u8')
+          const missingIsHlsFlag = item.type === 'video' && !item.is_hls && isNotHls
           const needsUpload =
-            !itemPlayUrl ||
-            itemPlayUrl.includes('undefined') ||
+            isNullOrEmpty ||
+            isMp4Format ||
+            missingIsHlsFlag ||
             item.storage_type === 'telegram' ||
-            !itemPlayUrl.startsWith('http')
+            (itemPlayUrl && !itemPlayUrl.startsWith('http') && !itemPlayUrl.startsWith('/'))
 
           if (needsUpload && item.file_id) {
             // 🎯 只有当 cover_url 不是 HTTP 链接时，才视其为 thumbnail_file_id

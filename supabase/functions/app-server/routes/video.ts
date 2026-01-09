@@ -288,7 +288,7 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
     .select('*', { count: 'exact' })
     .eq('status', 'published')
     .eq('is_adult', false)
-    .in('content_type', ['video', 'collection']) // 🎯 允许视频和合集
+    .eq('content_type', 'video') // 🎯 只返回视频，排除合辑(collection)
     // .eq('is_sea', false) // 🎯 允许东南亚内容
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
