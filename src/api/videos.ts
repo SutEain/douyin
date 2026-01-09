@@ -46,6 +46,17 @@ export function recommendedVideoTab(params?: any) {
   )
 }
 
+// 短剧 Tab：只返回 tags 包含"短剧"的已发布内容，按 published_at 倒序
+export function shortDramaVideoTab(params?: any) {
+  const pageNo = params?.pageNo ?? 0
+  const pageSize = params?.pageSize ?? 10
+  return requestSupabaseVideoList(
+    `${getAppServerBase()}/video/short-drama-feed`,
+    { pageNo, pageSize },
+    { requireAuth: false, includeAuthIfAvailable: true }
+  )
+}
+
 // 成人内容视频列表（仅 is_adult = true）
 export function adultVideoFeed(params?: any) {
   const pageSize = params?.pageSize ?? 10

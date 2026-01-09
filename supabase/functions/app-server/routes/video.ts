@@ -347,6 +347,58 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
 }
 
 /**
+ * 短剧 Tab：只返回 tags 包含"短剧"的已发布作品，按发布时间倒序
+ * GET /video/short-drama-feed?pageNo=&pageSize=
+ *
+ * 说明：
+ * - 🎯 单独接口，根据标签筛选
+ * - 不过滤观看历史
+ * - 允许未登录访问；如已登录则附加 like/collect/follow 等标记
+ */
+export async function handleShortDramaFeed(req: Request): Promise<Response> {
+  const url = new URL(req.url)
+  const { pageNo, pageSize, from, to } = parsePagination(url)
+  const { user } = await tryGetAuth(req)
+
+  const { data, error, count } = await supabaseAdmin
+    .from('videos')
+    .select('*', { count: 'exact' })
+    .eq('status', 'published')
+    .eq('is_adult', false)
+    .contains('tags', ['短剧']) // 🎯 查询包含"短剧"标签的视频
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(from, to)
+
+  if (error) {
+    console.error('[ShortDramaFeed] 查询短剧失败:', error)
+    return errorResponse('Failed to load short drama feed', 1, 500)
+  }
+
+  await attachUserFlags(data ?? [], user?.id ?? null)
+
+  const profileCache = new Map<string, any>()
+  const list: any[] = []
+  for (const row of data ?? []) {
+    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+    const mapped = await mapVideoRow(row, authorProfile)
+    if (mapped) {
+      applyRowFlags(mapped, row)
+      list.push(mapped)
+    }
+  }
+
+  return successResponse({
+    list,
+    total: count ?? 0,
+    pageNo,
+    pageSize,
+    hasMore: list.length >= pageSize
+  })
+}
+
+/**
  * 图文 Tab：只返回 content_type in ('image','album') 且 is_sea = false 且 is_adult = false 的已发布作品，按发布时间倒序
  * GET /video/graphic-feed?pageNo=&pageSize=
  *

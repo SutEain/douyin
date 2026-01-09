@@ -21,23 +21,28 @@
             <span>视频</span>
           </div>
 
-          <!-- 东南亚 Tab -->
+          <!-- 短剧 Tab -->
           <div class="tab" :class="{ active: index === 3 }" @click.stop="change(3)">
+            <span>短剧</span>
+          </div>
+
+          <!-- 东南亚 Tab -->
+          <div class="tab" :class="{ active: index === 4 }" @click.stop="change(4)">
             <span>东南亚</span>
           </div>
 
           <!-- 直播 Tab -->
-          <div class="tab" :class="{ active: index === 4 }" @click.stop="change(4)">
+          <div class="tab" :class="{ active: index === 5 }" @click.stop="change(5)">
             <span>直播</span>
           </div>
 
           <!-- 成人内容 Tab -->
-          <div class="tab" :class="{ active: index === 5 }" @click.stop="change(5)">
+          <div class="tab" :class="{ active: index === 6 }" @click.stop="change(6)">
             <span>成人</span>
           </div>
 
           <!-- 推荐 -->
-          <div class="tab" :class="{ active: index === 6 }" @click.stop="change(6)">
+          <div class="tab" :class="{ active: index === 7 }" @click.stop="change(7)">
             <span>{{ $t('home.recommended') }}</span>
           </div>
         </div>

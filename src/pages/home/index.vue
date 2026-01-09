@@ -9,7 +9,7 @@
         v-model:index="state.navIndex"
       />
 
-      <!-- ✅ 视频内容区域：关注 / 图文 / 视频 / 东南亚 / 直播 / 成人 / 推荐 -->
+      <!-- ✅ 视频内容区域：关注 / 图文 / 视频 / 短剧 / 东南亚 / 直播 / 成人 / 推荐 -->
       <div class="video-content">
         <!-- 0=关注 -->
         <SlideFollow v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
@@ -20,20 +20,25 @@
         />
         <!-- 2=视频 -->
         <VideoTab v-else-if="state.navIndex === 2" :active="state.active && state.navIndex === 2" />
-        <!-- 3=东南亚 -->
-        <LongVideo
+        <!-- 3=短剧 -->
+        <ShortDramaTab
           v-else-if="state.navIndex === 3"
           :active="state.active && state.navIndex === 3"
         />
-        <!-- 4=直播 -->
-        <LiveTab v-else-if="state.navIndex === 4" :active="state.active && state.navIndex === 4" />
-        <!-- 5=成人 -->
-        <SlideAdult
-          v-else-if="state.navIndex === 5"
-          :active="state.active && state.navIndex === 5"
+        <!-- 4=东南亚 -->
+        <LongVideo
+          v-else-if="state.navIndex === 4"
+          :active="state.active && state.navIndex === 4"
         />
-        <!-- 6=推荐 -->
-        <Slide4 v-else :active="state.active && state.navIndex === 6" />
+        <!-- 5=直播 -->
+        <LiveTab v-else-if="state.navIndex === 5" :active="state.active && state.navIndex === 5" />
+        <!-- 6=成人 -->
+        <SlideAdult
+          v-else-if="state.navIndex === 6"
+          :active="state.active && state.navIndex === 6"
+        />
+        <!-- 7=推荐 -->
+        <Slide4 v-else :active="state.active && state.navIndex === 7" />
       </div>
 
       <!-- 底部导航栏 -->
@@ -109,6 +114,7 @@ import SlideAdult from './slide/SlideAdult.vue'
 import SlideFollow from './slide/SlideFollow.vue'
 import LongVideo from './slide/LongVideo.vue'
 import VideoTab from './slide/VideoTab.vue'
+import ShortDramaTab from './slide/ShortDramaTab.vue'
 import Community from './slide/Community.vue'
 import LiveTab from './slide/LiveTab.vue'
 import BaseFooter from '@/components/BaseFooter.vue'
@@ -135,7 +141,7 @@ const router = useRouter()
 const share = ref()
 
 const state = reactive({
-  navIndex: 6, // 默认显示"推荐" tab (0=视频, 1=图文, 2=直播, 3=东南亚, 4=成人, 5=关注, 6=推荐)
+  navIndex: 7, // 默认显示"推荐" tab (0=关注, 1=图文, 2=视频, 3=短剧, 4=东南亚, 5=直播, 6=成人, 7=推荐)
   test: '',
   isSharing: false,
   shareType: -1,
