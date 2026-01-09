@@ -1,6 +1,12 @@
 import { supabase } from './supabaseClient.ts'
 import { sendMessage } from './telegram.ts'
 import { handleDiceCommand, handleJoinDiceGame, handleCancelDiceGame } from './features/diceGame.ts'
+import {
+  handleRpsCommand,
+  handleJoinRpsGame,
+  handleRpsChoice,
+  handleCancelRpsRoom
+} from './features/rpsGame.ts'
 
 // 主服务（由 index.ts 作为入口调用）
 export async function handleRequest(req: Request): Promise<Response> {
@@ -87,11 +93,23 @@ export async function handleRequest(req: Request): Promise<Response> {
           return new Response('OK', { status: 200 })
         }
 
-        // 只处理文本消息（骰子游戏指令）
+        // 只处理文本消息（游戏指令）
         if (message.text) {
           const text = message.text.trim().toLowerCase()
+
+          // 🎯 猜拳指令
+          const isRpsCmd =
+            text === 'cq' || text.startsWith('cq ') || text === '/cq' || text.startsWith('/cq ')
+
+          // 🎯 骰子指令
           const isDiceCmd =
             text === 'tz' || text.startsWith('tz ') || text === '/tz' || text.startsWith('/tz ')
+
+          if (isRpsCmd) {
+            console.log(`[RPS-BOT] 匹配到猜拳指令，准备执行...`)
+            await handleRpsCommand(chatId, message.text, message)
+            return new Response('OK', { status: 200 })
+          }
 
           if (isDiceCmd) {
             console.log(`[DICE-BOT] 匹配到骰子指令，准备执行...`)
@@ -119,6 +137,37 @@ export async function handleRequest(req: Request): Promise<Response> {
             messageId,
             data
           })
+
+          // 处理猜拳游戏回调
+          if (data.startsWith('rps_join_')) {
+            const roomId = data.replace('rps_join_', '')
+            await handleJoinRpsGame(chatId, messageId, callback.id, roomId, callback.from.id)
+            return new Response('OK', { status: 200 })
+          }
+
+          if (data.startsWith('rps_cancel_')) {
+            const roomId = data.replace('rps_cancel_', '')
+            await handleCancelRpsRoom(chatId, messageId, callback.id, roomId, callback.from.id)
+            return new Response('OK', { status: 200 })
+          }
+
+          if (data.startsWith('rps_choice_')) {
+            // rps_choice_{roomId}_{choice}
+            const parts = data.replace('rps_choice_', '').split('_')
+            if (parts.length >= 2) {
+              const choice = parts.pop() // 最后一个是选择 (rock/paper/scissors)
+              const roomId = parts.join('_') // 剩余部分是 roomId (可能包含下划线)
+              await handleRpsChoice(
+                chatId,
+                messageId,
+                callback.id,
+                roomId,
+                choice!,
+                callback.from.id
+              )
+            }
+            return new Response('OK', { status: 200 })
+          }
 
           // 处理骰子游戏回调
           if (data.startsWith('dice_join_')) {
