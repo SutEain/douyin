@@ -39,9 +39,11 @@ export function recommendedLongVideo(params?: any) {
 export function recommendedVideoTab(params?: any) {
   const pageNo = params?.pageNo ?? 0
   const pageSize = params?.pageSize ?? 10
+  const seed = params?.seed ?? 0.5
+
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/video-tab-feed`,
-    { pageNo, pageSize },
+    { pageNo, pageSize, seed },
     { requireAuth: false, includeAuthIfAvailable: true }
   )
 }
