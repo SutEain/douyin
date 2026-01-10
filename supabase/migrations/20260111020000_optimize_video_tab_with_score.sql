@@ -38,7 +38,7 @@ BEGIN
     v.description::TEXT,
     v.cover_url::TEXT,
     v.play_url::TEXT,
-    v.duration,
+    v.duration::FLOAT,
     v.content_type::TEXT,
     v.tags,
     v.status::TEXT,
