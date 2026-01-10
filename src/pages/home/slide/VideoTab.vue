@@ -23,12 +23,20 @@ const state = reactive({
 
 const videoStore = useVideoStore()
 const isMuted = computed(() => videoStore.isMuted)
+const scrollListRef = ref(null) // 🎯 引用 ScrollList 实例
 
 watch(
   () => props.active,
   (n) => {
     if (n) {
       if (state.show) {
+        // 🎯 核心逻辑：每次切回该 Tab 时，自动刷新种子并换一批内容
+        // 增加一个小小的防抖，避免高频切换导致请求过多
+        if (scrollListRef.value && typeof scrollListRef.value.getData === 'function') {
+          console.log('[VideoTab] 切回 Tab，触发强力洗牌...')
+          scrollListRef.value.getData(true)
+        }
+
         const el = playingEl.value
         if (el) {
           el.parentNode.parentNode.classList.remove('pause')
@@ -194,7 +202,7 @@ function onAvatarError(e) {
 
 <template>
   <div class="video-tab" @dragstart="(e) => _stopPropagation(e)">
-    <ScrollList class="Scroll" v-if="state.show" :api="recommendedVideoTab">
+    <ScrollList ref="scrollListRef" class="Scroll" v-if="state.show" :api="recommendedVideoTab">
       <template v-slot="{ list, loading }">
         <template v-if="list?.length">
           <div class="list">

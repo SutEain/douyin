@@ -99,10 +99,10 @@ BEGIN
     COALESCE(sv.published_at, sv.created_at),
     sv.raw_score::FLOAT
   FROM scored_videos sv
-  WHERE sv.author_rank <= 2  -- 🎯 更严格的作者分散，每个作者只取2个
-  -- 🎯 加权随机算法 (WRS)：POWER(RANDOM(), 1.0 / score)
-  -- 分数越高，结果越接近 1.0，越容易排在前面
-  ORDER BY POWER(RANDOM(), 1.0 / GREATEST(sv.raw_score, 0.01)) DESC
+  WHERE sv.author_rank <= 2  -- 🎯 每个作者只取2个
+  -- 🎯 强力随机算法：降低分数权重(30%)，提高随机权重(70%)
+  -- 这样即使分数差距大，低分视频也有很大概率排到前面
+  ORDER BY (sv.raw_score * 0.3 + RANDOM() * 0.7) DESC
   LIMIT p_limit
   OFFSET p_offset;
 END;

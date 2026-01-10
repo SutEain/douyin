@@ -96,4 +96,9 @@ onMounted(() => {
   // 🎯 确保在挂载后执行，且 list 为空时能通过 loading 锁
   getData()
 })
+
+// 🎯 暴露方法给父组件
+defineExpose({
+  getData
+})
 </script>
