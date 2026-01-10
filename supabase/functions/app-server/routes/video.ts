@@ -280,8 +280,10 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
  */
 export async function handleVideoTabFeed(req: Request): Promise<Response> {
   const url = new URL(req.url)
-  const { pageNo, pageSize, from, to } = parsePagination(url)
+  const { pageNo, pageSize, from } = parsePagination(url)
   const { user } = await tryGetAuth(req)
+
+  console.log('[VideoTabFeed] 请求参数:', { pageNo, pageSize, userId: user?.id })
 
   // 🎯 获取用户最近观看历史（排除最近 300 条）
   let excludeVideoIds: string[] = []
@@ -299,33 +301,29 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
     }
   }
 
-  let query = supabaseAdmin
-    .from('videos')
-    .select('*', { count: 'exact' })
-    .eq('status', 'published')
-    .eq('is_adult', false)
-    .eq('content_type', 'video') // 🎯 只返回视频，排除合辑(collection)
-    .eq('storage_type', 'r2') // 🎯 只返回已处理完成的视频（有 play_url）
-  // .eq('is_sea', false) // 🎯 允许东南亚内容
-
-  // 🎯 排除已观看视频
-  if (excludeVideoIds.length > 0) {
-    query = query.not('id', 'in', `(${excludeVideoIds.join(',')})`)
-  }
-
-  const { data, error, count } = await query
-    .order('published_at', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false }) // 🎯 添加 id 排序，确保排序稳定，避免分页重复
-    .range(from, to)
+  // 🎯 使用新的推荐算法RPC（热度+时间混合排序）
+  const { data, error } = await supabaseAdmin.rpc('get_video_tab_feed', {
+    p_user_id: user?.id || null,
+    p_exclude_ids: excludeVideoIds,
+    p_limit: pageSize,
+    p_offset: from
+  })
 
   if (error) {
-    console.error('[VideoTabFeed] 查询视频失败:', error)
+    console.error('[VideoTabFeed] RPC调用失败:', error)
     return errorResponse('Failed to load video tab feed', 1, 500)
   }
 
+  console.log('[VideoTabFeed] RPC返回:', {
+    count: data?.length || 0,
+    firstScore: data?.[0]?.score,
+    lastScore: data?.[data?.length - 1]?.score
+  })
+
+  // 附加用户标记（点赞、收藏、关注状态）
   await attachUserFlags(data ?? [], user?.id ?? null)
 
+  // 映射视频数据格式
   const profileCache = new Map<string, any>()
   const list: any[] = []
   for (const row of data ?? []) {
@@ -337,12 +335,16 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
     }
   }
 
+  // 🎯 获取总数（用于判断hasMore）
+  // 注意：RPC不返回count，这里简化为根据返回数量判断
+  const hasMore = list.length >= pageSize
+
   return successResponse({
     list,
-    total: count ?? 0,
+    total: null, // RPC模式下不返回总数，避免额外查询
     pageNo,
     pageSize,
-    hasMore: list.length >= pageSize
+    hasMore
   })
 }
 
