@@ -74,15 +74,17 @@ export async function handleAdminAutoWithdraw(req: Request): Promise<Response> {
     })
 
     // 5. 执行转账 (USDT TRC20)
-    // 汇率：100 抖币 = 1 USDT
+    // 🎯 使用实际到账金额（已扣除手续费）
     const amountCoins = parseFloat(order.amount)
-    if (isNaN(amountCoins) || amountCoins <= 0) {
+    const feeAmount = parseFloat(order.fee_amount || 0)
+    const usdtAmount = parseFloat(order.actual_amount || (amountCoins - feeAmount) / 100)
+
+    if (isNaN(usdtAmount) || usdtAmount <= 0) {
       return errorResponse('无效金额', 1, 400)
     }
-    const usdtAmount = amountCoins / 100
 
     console.log(
-      `[AutoWithdraw] Starting payout: order=${order.order_no}, coins=${amountCoins}, usdt=${usdtAmount}, to=${order.address}`
+      `[AutoWithdraw] Starting payout: order=${order.order_no}, amount=${amountCoins}抖币, fee=${feeAmount}抖币, actual=${usdtAmount}USDT, to=${order.address}`
     )
 
     try {
@@ -143,7 +145,8 @@ export async function handleAdminAutoWithdraw(req: Request): Promise<Response> {
       const notificationMsg =
         `✅ <b>自动提现已成功出款！</b>\n\n` +
         `💰 <b>提现金额：</b> ${amountCoins} 抖币\n` +
-        `💵 <b>折合金额：</b> ${usdtAmount.toFixed(2)} USDT\n` +
+        (feeAmount > 0 ? `📌 <b>手续费：</b> -${feeAmount} 抖币\n` : '') +
+        `💵 <b>实际到账：</b> ${usdtAmount.toFixed(2)} USDT\n` +
         `📍 <b>收款地址：</b> <code>${order.address}</code>\n` +
         `🔗 <b>交易哈希：</b> <code>${tx}</code>\n\n` +
         `您的资金已通过 TRC20 网络汇出，请注意查收。`

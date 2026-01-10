@@ -39,16 +39,21 @@ export async function handleAdminProcessWithdraw(req: Request): Promise<Response
     // 2. 成功后发送通知给用户
     const { data: order } = await supabaseAdmin
       .from('withdraw_orders')
-      .select('user_id, amount, order_no, address')
+      .select('user_id, amount, fee_amount, actual_amount, order_no, address')
       .eq('id', order_id)
       .single()
 
     if (order) {
+      const feeAmount = parseFloat(order.fee_amount || 0)
+      const actualAmount = parseFloat(order.actual_amount || (order.amount - feeAmount) / 100)
+
       let notificationMsg = ''
       if (action === 'approve') {
         notificationMsg =
           `✅ <b>提现已处理成功！</b>\n\n` +
           `💰 <b>提现金额：</b> ${order.amount} 抖币\n` +
+          (feeAmount > 0 ? `📌 <b>手续费：</b> -${feeAmount} 抖币\n` : '') +
+          `💵 <b>实际到账：</b> ${actualAmount.toFixed(2)} USDT\n` +
           `📍 <b>收款地址：</b> <code>${order.address}</code>\n` +
           `📑 <b>订单编号：</b> <code>${order.order_no || '-'}</code>\n\n` +
           `管理员已完成汇款，请注意查收。`

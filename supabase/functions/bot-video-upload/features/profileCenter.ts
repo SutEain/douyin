@@ -852,13 +852,15 @@ export async function handleWithdrawStart(chatId: number, messageId?: number) {
       .single()
 
     const balance = Math.floor(profile?.balance_coins || 0)
-    const minWithdraw = 1000 // 10U = 1000 抖币
+    const minWithdraw = 1000 // 最低1000抖币
+    const fee = 50 // 手续费50抖币
 
     if (balance < minWithdraw) {
       const errorText =
         `❌ <b>提现金额不足</b>\n\n` +
         `当前余额：<code>${balance}</code> 抖币\n` +
-        `最低提现额度为 <code>${minWithdraw}</code> 抖币 (10 USDT)。\n\n` +
+        `最低提现额度为 <code>${minWithdraw}</code> 抖币\n` +
+        `（扣除${fee}抖币手续费后到账 ${(minWithdraw - fee) / 100} USDT）\n\n` +
         `💡 您可以通过邀请好友或作品打赏获取更多抖币。`
 
       const keyboard = {
@@ -884,7 +886,9 @@ export async function handleWithdrawStart(chatId: number, messageId?: number) {
       `💰 <b>抖币提现</b>\n\n` +
       `当前可提现余额：<code>${balance}</code> 抖币\n\n` +
       `请输入您要提现的金额 (仅输入数字)：\n` +
-      `<i>💡 最低提现额度为 1000 抖币</i>\n\n` +
+      `<i>💡 最低提现额度为 1000 抖币</i>\n` +
+      `<i>📌 手续费：50抖币</i>\n` +
+      `<i>💵 实际到账：(金额-50)/100 USDT</i>\n\n` +
       `发送 /cancel 可取消操作。`
 
     const keyboard = {
@@ -909,11 +913,15 @@ export async function handleWithdrawConfirmPage(
   amount: number,
   address: string
 ) {
-  const usdt = (amount / 100).toFixed(2)
+  const fee = 50 // 手续费
+  const afterFee = amount - fee // 扣除手续费后
+  const usdt = (afterFee / 100).toFixed(2) // 实际到账USDT
+
   const text =
     `⚠️ <b>请确认提现信息</b>\n\n` +
     `💰 <b>提现金额：</b> <code>${amount}</code> 抖币\n` +
-    `💵 <b>折合金额：</b> <code>${usdt}</code> USDT\n` +
+    `📌 <b>手续费：</b> <code>-${fee}</code> 抖币\n` +
+    `💵 <b>实际到账：</b> <code>${usdt}</code> USDT\n` +
     `📍 <b>提现地址 (TRC20)：</b>\n<code>${address}</code>\n\n` +
     `<b>注意：</b>\n` +
     `1. 提交后金额将立即进入冻结状态。\n` +
@@ -977,10 +985,16 @@ export async function handleWithdrawSubmit(chatId: number, messageId: number) {
       context: { ...ctx, withdraw_amount: null, withdraw_address: null }
     })
 
+    // 从RPC返回值中获取手续费和实际到账金额
+    const fee = res.fee || 50
+    const actualUsdt = res.actual_usdt || ((amount - fee) / 100).toFixed(2)
+
     const successText =
       `✅ <b>提现申请已提交！</b>\n\n` +
       `🔢 <b>订单编号：</b> <code>${orderNo}</code>\n` +
       `💰 <b>提现金额：</b> <code>${amount}</code> 抖币\n` +
+      `📌 <b>手续费：</b> <code>-${fee}</code> 抖币\n` +
+      `💵 <b>实际到账：</b> <code>${actualUsdt}</code> USDT\n` +
       `📍 <b>提现地址：</b> <code>${address}</code>\n\n` +
       `管理员将1小时内完成审核并处理汇款，请耐心等待。您可以在「账单记录」中查看进度。`
 

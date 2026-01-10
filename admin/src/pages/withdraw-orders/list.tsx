@@ -43,7 +43,7 @@ export const WithdrawOrderList = () => {
       initial: [{ field: 'created_at', order: 'desc' }]
     },
     meta: {
-      select: '*, profiles:user_id(nickname, numeric_id, tg_user_id)'
+      select: '*, fee_amount, actual_amount, profiles:user_id(nickname, numeric_id, tg_user_id)'
     },
     onSearch: (params: Record<string, any>) => {
       const filters: any[] = []
@@ -258,14 +258,19 @@ export const WithdrawOrderList = () => {
           )}
         />
         <Table.Column
-          title="提现金额 (抖币)"
+          title="提现金额"
           render={(_, record: any) => (
             <Space direction="vertical" size={0}>
               <span style={{ fontWeight: 'bold', color: '#cf1322' }}>
-                {Number(record.amount).toLocaleString()}
+                {Number(record.amount).toLocaleString()} 抖币
               </span>
-              <span style={{ fontSize: '12px', color: '#8c8c8c' }}>
-                ≈ {(record.amount / 100).toFixed(2)} USDT
+              {record.fee_amount > 0 && (
+                <span style={{ fontSize: '12px', color: '#faad14' }}>
+                  - {Number(record.fee_amount).toFixed(0)} 手续费
+                </span>
+              )}
+              <span style={{ fontSize: '12px', color: '#52c41a', fontWeight: 'bold' }}>
+                ≈ {Number(record.actual_amount || record.amount / 100).toFixed(2)} USDT
               </span>
             </Space>
           )}

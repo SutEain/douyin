@@ -271,7 +271,10 @@ export async function handleText(
 
     const amount = parseInt(text.trim())
     if (isNaN(amount) || amount < 1000) {
-      await sendSelfDestructMessage(chatId, '❌ 请输入有效的提现金额 (最少 1000 抖币)')
+      await sendSelfDestructMessage(
+        chatId,
+        '❌ 请输入有效的提现金额\n最少 1000 抖币 (扣除50抖币手续费后到账9.5 USDT)'
+      )
       return
     }
 
@@ -294,10 +297,15 @@ export async function handleText(
       context: { ...ctx, withdraw_amount: amount }
     })
 
+    const fee = 50
+    const actualUsdt = ((amount - fee) / 100).toFixed(2)
+
     await editMessage(
       chatId,
       userState.current_message_id,
-      `💰 <b>提现金额：</b> <code>${amount}</code> 抖币\n\n` +
+      `💰 <b>提现金额：</b> <code>${amount}</code> 抖币\n` +
+        `📌 <b>手续费：</b> <code>-${fee}</code> 抖币\n` +
+        `💵 <b>实际到账：</b> <code>${actualUsdt}</code> USDT\n\n` +
         `请发送您的 <b>USDT-TRC20</b> 收款地址：\n\n` +
         `💡 发送 /cancel 可取消操作。`,
       {
