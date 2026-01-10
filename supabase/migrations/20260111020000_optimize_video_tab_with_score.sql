@@ -112,11 +112,14 @@ BEGIN
     sv.score::FLOAT
   FROM scored_videos sv
   WHERE sv.author_rank <= 3  -- 🎯 每个作者最多3个视频参与排序
-  ORDER BY sv.score DESC, sv.published_at DESC, sv.id DESC
+  -- 🎯 随机排序：分数作为权重基础，加入随机扰动
+  -- 公式：score * (0.7 + RANDOM() * 0.6) = score * [0.7, 1.3]
+  -- 高分视频仍有更高概率排前面，但每次结果不同，避免列表固化
+  ORDER BY (sv.score * (0.7 + RANDOM() * 0.6)) DESC, RANDOM()
   LIMIT p_limit
   OFFSET p_offset;
 END;
-$$ LANGUAGE plpgsql STABLE;
+$$ LANGUAGE plpgsql VOLATILE;  -- 🎯 改为 VOLATILE 因为使用了 RANDOM()
 
 -- 🎯 添加复合索引优化查询性能
 CREATE INDEX IF NOT EXISTS idx_videos_tab_feed_optimized 
@@ -260,11 +263,12 @@ BEGIN
     sv.score::FLOAT
   FROM scored_videos sv
   WHERE sv.author_rank <= 3  -- 🎯 每个作者最多3个视频参与排序
-  ORDER BY sv.score DESC, sv.published_at DESC, sv.id DESC
+  -- 🎯 随机排序：分数作为权重基础，加入随机扰动
+  ORDER BY (sv.score * (0.7 + RANDOM() * 0.6)) DESC, RANDOM()
   LIMIT p_limit
   OFFSET p_offset;
 END;
-$$ LANGUAGE plpgsql STABLE;
+$$ LANGUAGE plpgsql VOLATILE;  -- 🎯 改为 VOLATILE 因为使用了 RANDOM()
 
 -- 🎯 添加索引优化成人内容查询
 CREATE INDEX IF NOT EXISTS idx_videos_adult_feed_optimized 
@@ -396,11 +400,12 @@ BEGIN
     sv.score::FLOAT
   FROM scored_videos sv
   WHERE sv.author_rank <= 3  -- 🎯 每个作者最多3个视频参与排序
-  ORDER BY sv.score DESC, sv.published_at DESC, sv.id DESC
+  -- 🎯 随机排序：分数作为权重基础，加入随机扰动
+  ORDER BY (sv.score * (0.7 + RANDOM() * 0.6)) DESC, RANDOM()
   LIMIT p_limit
   OFFSET p_offset;
 END;
-$$ LANGUAGE plpgsql STABLE;
+$$ LANGUAGE plpgsql VOLATILE;  -- 🎯 改为 VOLATILE 因为使用了 RANDOM()
 
 -- 🎯 添加索引优化东南亚内容查询
 CREATE INDEX IF NOT EXISTS idx_videos_sea_feed_optimized 
