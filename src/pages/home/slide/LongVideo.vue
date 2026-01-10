@@ -43,6 +43,7 @@ const state = reactive({
   list: [] as VideoItem[],
   page: 0,
   pageSize: 10,
+  seed: Math.random(), // 🎯 进场生成随机种子
   hasMore: true,
   loading: false // 🎯 恢复为 false
 })
@@ -73,7 +74,8 @@ async function loadMore() {
     // 💡 未登录用户则正常按 pageNo 分页
     const res = await recommendedLongVideo({
       pageNo: store.userinfo.uid ? 0 : state.page,
-      pageSize: state.pageSize
+      pageSize: state.pageSize,
+      seed: state.seed // 🎯 传递种子
     })
 
     if (res.success) {

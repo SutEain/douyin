@@ -47,6 +47,7 @@ const state = reactive({
   list: [] as VideoItem[],
   page: 0,
   pageSize: 10,
+  seed: Math.random(), // 🎯 进场生成随机种子
   hasMore: true,
   loading: false // 🎯 恢复为 false，配合模板逻辑处理闪现
 })
@@ -77,7 +78,8 @@ async function loadMore() {
     // 💡 如果未登录，后端是简单时间倒序，此时需要正常分页
     const res = await adultVideoFeed({
       start: store.userinfo.uid ? 0 : state.page * state.pageSize,
-      pageSize: state.pageSize
+      pageSize: state.pageSize,
+      seed: state.seed // 🎯 传递种子
     })
 
     if (res.success) {

@@ -13,11 +13,12 @@ export function recommendedVideo(params?: any) {
   const pageSize = params?.pageSize ?? 10
   const start = params?.start ?? 0
   const pageNo = Math.floor(start / pageSize)
+  const seed = params?.seed ?? 0.5
 
   // 🎯 深链接由后端自动处理（通过 Telegram initData）
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/feed`,
-    { pageNo, pageSize },
+    { pageNo, pageSize, seed },
     {
       requireAuth: false,
       includeAuthIfAvailable: true
@@ -28,9 +29,10 @@ export function recommendedVideo(params?: any) {
 export function recommendedLongVideo(params?: any) {
   const pageNo = params?.pageNo ?? 0
   const pageSize = params?.pageSize ?? 10
+  const seed = params?.seed ?? 0.5
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/long-feed`,
-    { pageNo, pageSize },
+    { pageNo, pageSize, seed },
     { requireAuth: false, includeAuthIfAvailable: true }
   )
 }
@@ -64,10 +66,11 @@ export function adultVideoFeed(params?: any) {
   const pageSize = params?.pageSize ?? 10
   const start = params?.start ?? 0
   const pageNo = Math.floor(start / pageSize)
+  const seed = params?.seed ?? 0.5
 
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/adult-feed`,
-    { pageNo, pageSize },
+    { pageNo, pageSize, seed },
     { requireAuth: false, includeAuthIfAvailable: true }
   )
 }

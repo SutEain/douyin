@@ -59,12 +59,13 @@ export async function handleVideoMy(req: Request): Promise<Response> {
 export async function handleVideoFeed(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const { pageNo, pageSize } = parsePagination(url)
+  const seed = parseFloat(url.searchParams.get('seed') || '0.5')
   const { user } = await tryGetAuth(req)
 
   // 🔍 诊断日志
   console.log('[Feed] ========== 请求开始 ==========')
   console.log('[Feed] 用户认证:', user ? `✅ ${user.id}` : '❌ 未登录')
-  console.log('[Feed] 分页参数:', { pageNo, pageSize })
+  console.log('[Feed] 参数:', { pageNo, pageSize, seed })
 
   let startVideo: any = null
   let startVideoId: string | null = null
@@ -117,7 +118,8 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
   const { data, error } = await supabaseAdmin.rpc('get_optimized_video_feed', {
     p_user_id: user?.id || null,
     p_type: 'recommend',
-    p_limit: targetCount
+    p_limit: targetCount,
+    p_seed: seed
   })
 
   if (error) {

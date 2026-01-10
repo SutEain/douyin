@@ -35,6 +35,7 @@ const state = reactive({
   totalSize: 0,
   pageSize: 10,
   currentIndex: 0,
+  seed: Math.random(), // 🎯 进场生成随机种子
   hasMore: true,
   initialIndex: 0 // 🎯 动态计算初始索引（用于深链视频）
 })
@@ -52,7 +53,8 @@ async function loadMore() {
 
   console.log('[MainFeed] 加载更多视频', {
     current: state.list.length,
-    total: state.totalSize
+    total: state.totalSize,
+    seed: state.seed
   })
 
   baseStore.loading = true
@@ -60,7 +62,8 @@ async function loadMore() {
   try {
     const res = await recommendedVideo({
       start: state.list.length,
-      pageSize: state.pageSize
+      pageSize: state.pageSize,
+      seed: state.seed // 🎯 传递种子
     })
 
     if (res.success) {
