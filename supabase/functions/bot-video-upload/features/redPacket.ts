@@ -142,7 +142,7 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
     let keyboard: any = null
 
     if (type === 'single') {
-      // 🎯 专属红包：使用 @ 提及，直接点击领取（不需要答题）
+      // 🎯 专属红包：使用 @ 提及，直接点击领取（不需要答题），使用图片发送
       const targetMention = targetTgUserId
         ? `<a href="tg://user?id=${targetTgUserId}">${escapeHTML(targetNickname || '未知')}</a>`
         : escapeHTML(targetNickname || '未知')
@@ -166,6 +166,44 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
             }
           ]
         ]
+      }
+
+      // 🎯 使用图片发送（专属红包）
+      // 图片 URL：https://zhlkanxfucnsatafeqdp.supabase.co/storage/v1/object/public/user-content/zshb.jpg
+      try {
+        const { SUPABASE_URL } = await import('../env.ts')
+
+        // 构建图片 URL：优先使用环境变量配置的 CDN URL，否则使用 Supabase Storage
+        // @ts-ignore: Deno 在 Edge Function 环境中可用
+        const cdnBaseUrl = Deno.env.get('PUBLIC_ASSETS_CDN_URL') || Deno.env.get('CDN_BASE_URL')
+        let imageUrl: string
+
+        if (cdnBaseUrl) {
+          // 方式1：使用环境变量配置的 CDN URL
+          imageUrl = `${cdnBaseUrl.replace(/\/$/, '')}/storage/v1/object/public/user-content/zshb.jpg`
+        } else {
+          // 方式2：使用 Supabase Storage 公开 URL
+          const supabaseProjectRef = SUPABASE_URL.replace('https://', '').split('.')[0]
+          imageUrl = `https://${supabaseProjectRef}.supabase.co/storage/v1/object/public/user-content/zshb.jpg`
+        }
+
+        console.log(`[RedPacket] 专属红包尝试发送图片: ${imageUrl}`)
+        const sentMsg = await sendPhoto(chatId, imageUrl, hbText, { reply_markup: keyboard })
+
+        if (sentMsg.ok) {
+          console.log(`[RedPacket] ✅ 专属红包图片发送成功`)
+          // 更新原始消息 ID
+          await supabase
+            .from('group_red_packets')
+            .update({ origin_message_id: sentMsg.result.message_id })
+            .eq('id', res.packet_id)
+          return
+        } else {
+          console.warn(`[RedPacket] 专属红包图片发送失败:`, sentMsg)
+        }
+      } catch (photoError) {
+        console.warn('[RedPacket] 专属红包发送图片异常，回退到文本消息:', photoError)
+        // 回退到文本消息
       }
     } else {
       // 🎯 普通红包/拼手气红包：按钮模式，点击后私聊发送计算题，使用图片发送
