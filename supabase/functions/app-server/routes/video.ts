@@ -414,45 +414,53 @@ export async function handleShortDramaFeed(req: Request): Promise<Response> {
  */
 export async function handleVideoAdultFeed(req: Request): Promise<Response> {
   const url = new URL(req.url)
-  const { pageNo, pageSize, from, to } = parsePagination(url)
+  const { pageNo, pageSize, from } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  // 使用优化的 RPC 获取成人流（排除历史，时间倒序）
-  let rows: any[] = []
-  let total: number | null = null
+  console.log('[AdultFeed] 请求参数:', { pageNo, pageSize, userId: user?.id })
 
-  const { data, error } = await supabaseAdmin.rpc('get_optimized_video_feed', {
+  // 🎯 获取用户最近观看历史（排除最近 300 条）
+  let excludeVideoIds: string[] = []
+  if (user?.id) {
+    const { data: historyData } = await supabaseAdmin
+      .from('watch_history')
+      .select('video_id')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(300)
+
+    if (historyData) {
+      excludeVideoIds = historyData.map((h: any) => h.video_id).filter(Boolean)
+      console.log(`[AdultFeed] 排除 ${excludeVideoIds.length} 条观看历史`)
+    }
+  }
+
+  // 🎯 使用新的推荐算法RPC（热度+时间混合排序）
+  const { data, error } = await supabaseAdmin.rpc('get_adult_feed', {
     p_user_id: user?.id || null,
-    p_type: 'adult',
-    p_limit: pageSize
+    p_exclude_ids: excludeVideoIds,
+    p_limit: pageSize,
+    p_offset: from
   })
 
   if (error) {
-    console.error('[AdultFeed] get_optimized_video_feed 失败，降级为简单查询:', error)
-    const fallback = await supabaseAdmin
-      .from('videos')
-      .select('*', { count: 'exact' })
-      .eq('status', 'published')
-      .eq('is_adult', true)
-      .order('created_at', { ascending: false })
-      .range(from, to)
-
-    if (fallback.error) {
-      console.error('[AdultFeed] 简单查询也失败:', fallback.error)
-      return errorResponse('Failed to load adult feed', 1, 500)
-    }
-
-    rows = fallback.data || []
-    total = fallback.count ?? null
-  } else {
-    rows = data || []
+    console.error('[AdultFeed] RPC调用失败:', error)
+    return errorResponse('Failed to load adult feed', 1, 500)
   }
 
-  await attachUserFlags(rows ?? [], user?.id || null)
+  console.log('[AdultFeed] RPC返回:', {
+    count: data?.length || 0,
+    firstScore: data?.[0]?.score,
+    lastScore: data?.[data?.length - 1]?.score
+  })
 
+  // 附加用户标记（点赞、收藏、关注状态）
+  await attachUserFlags(data ?? [], user?.id ?? null)
+
+  // 映射视频数据格式
   const profileCache = new Map<string, any>()
   const list: any[] = []
-  for (const row of rows ?? []) {
+  for (const row of data ?? []) {
     const authorProfile = await getVideoAuthorProfile(row, profileCache)
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
@@ -461,13 +469,15 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
     }
   }
 
+  // 🎯 获取总数（用于判断hasMore）
+  const hasMore = list.length >= pageSize
+
   return successResponse({
     list,
-    total:
-      total ?? (list.length >= pageSize ? (pageNo + 2) * pageSize : (pageNo + 1) * list.length),
+    total: null, // RPC模式下不返回总数，避免额外查询
     pageNo,
     pageSize,
-    hasMore: list.length >= pageSize
+    hasMore
   })
 }
 
