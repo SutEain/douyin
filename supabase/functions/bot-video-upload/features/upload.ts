@@ -85,6 +85,92 @@ export async function triggerWorker(
   }
 }
 
+// 🎯 检查上传频率限制：每5分钟只能上传5部作品（视频或图片）
+async function checkUploadRateLimit(
+  chatId: number,
+  profile: any,
+  mediaGroupId?: string
+): Promise<boolean> {
+  // 如果是媒体组上传，检查这个组是否已经存在（正在往现有的组里加内容，不计入频率限制）
+  if (mediaGroupId) {
+    const { data: existingGroup } = await supabase
+      .from('videos')
+      .select('id')
+      .eq('author_id', profile.id)
+      .eq('media_group_id', mediaGroupId)
+      .maybeSingle()
+
+    if (existingGroup) {
+      // 正在往现有的组里加内容，不计入频率限制
+      return true
+    }
+  }
+
+  // 查询用户在过去5分钟内上传的作品数量（包括视频和图片）
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+
+  const { data: recentVideos, error } = await supabase
+    .from('videos')
+    .select('id')
+    .eq('author_id', profile.id)
+    .gte('created_at', fiveMinutesAgo)
+    .not('status', 'eq', 'deleted') // 排除已删除的作品
+
+  if (error) {
+    console.error('[checkUploadRateLimit] 查询最近上传记录失败:', error)
+    return true // 容错，允许上传
+  }
+
+  const recentCount = recentVideos?.length || 0
+  const MAX_UPLOADS_PER_5MIN = 5
+
+  if (recentCount >= MAX_UPLOADS_PER_5MIN) {
+    // 计算还需要等待的时间（找到最早的那个作品）
+    const { data: oldestVideoData } = await supabase
+      .from('videos')
+      .select('created_at')
+      .eq('author_id', profile.id)
+      .gte('created_at', fiveMinutesAgo)
+      .not('status', 'eq', 'deleted')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    let waitMessage = ''
+    if (oldestVideoData?.created_at) {
+      const oldestTime = new Date(oldestVideoData.created_at).getTime()
+      const now = Date.now()
+      const elapsed = now - oldestTime
+      const remainingMs = 5 * 60 * 1000 - elapsed
+
+      if (remainingMs > 0) {
+        const waitMinutes = Math.ceil(remainingMs / 1000 / 60)
+        const waitSeconds = Math.ceil(remainingMs / 1000)
+
+        if (waitMinutes > 1) {
+          waitMessage = `请等待约 ${waitMinutes} 分钟后再继续上传`
+        } else {
+          waitMessage = `请等待约 ${waitSeconds} 秒后再继续上传`
+        }
+      } else {
+        waitMessage = '请稍后再试'
+      }
+    } else {
+      waitMessage = '请稍后再试'
+    }
+
+    await sendMessage(
+      chatId,
+      `⚠️ <b>上传频率限制</b>\n\n` +
+        `您在过去5分钟内已上传 ${recentCount} 部作品，已达到上限（5部/5分钟）。\n\n` +
+        `${waitMessage}，感谢您的理解！`
+    )
+    return false
+  }
+
+  return true
+}
+
 // 🎯 检查发布限制：新用户首个作品通过前限发 1 个
 async function checkUploadLimit(
   chatId: number,
@@ -168,6 +254,11 @@ export async function handlePhoto(
     const profile = await getOrCreateProfile(chatId, from)
     if (!profile) {
       await sendMessage(chatId, '❌ 账号初始化失败\n\n请先发送 /start 命令初始化账号')
+      return
+    }
+
+    // 🎯 上传频率限制检查（每5分钟最多5部）
+    if (!(await checkUploadRateLimit(chatId, profile, mediaGroupId))) {
       return
     }
 
@@ -418,6 +509,11 @@ export async function handleVideo(
     if (!profile) {
       console.error('无法创建或获取用户 profile')
       await sendMessage(chatId, '❌ 账号初始化失败\n\n' + '请先发送 /start 命令初始化账号')
+      return
+    }
+
+    // 🎯 上传频率限制检查（每5分钟最多5部）
+    if (!(await checkUploadRateLimit(chatId, profile, mediaGroupId))) {
       return
     }
 

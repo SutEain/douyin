@@ -63,7 +63,7 @@ export default {
   width: 100%;
   height: var(--footer-height);
   //border-top: 1px solid #7b7878;
-  z-index: 2;
+  z-index: 100; /* 提高层级，确保在所有tab之上 */
   //不用bottom：0是因为，在进行页面切换的时候，vue的transition
   // 会使footer的bottom：0失效，不能准确定位
   top: calc(var(--vh, 1vh) * 100 - var(--footer-height));

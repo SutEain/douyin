@@ -194,17 +194,17 @@
             </div>
             <div class="days-row">
               <div
-                v-for="day in 7"
-                :key="day"
+                v-for="(day, index) in displayDays"
+                :key="index"
                 class="day-item"
                 :class="{
-                  active: day <= currentCycleDay,
-                  today: !isCheckedInToday && day === currentCycleDay + 1
+                  active: day <= currentDisplayDay,
+                  today: !isCheckedInToday && day === currentDisplayDay + 1
                 }"
               >
                 <div class="coin">
-                  <Icon v-if="day <= currentCycleDay" icon="mdi:check-circle" />
-                  <span v-else>+{{ day === 7 ? 10 : 3 + day }}</span>
+                  <Icon v-if="day <= currentDisplayDay" icon="mdi:check-circle" />
+                  <span v-else>+{{ getDayReward(day) }}</span>
                 </div>
                 <div class="label">{{ day }}天</div>
               </div>
@@ -564,14 +564,40 @@ const isCheckedInToday = computed(() => {
   return toBeijingDate(lastCheckin) === toBeijingDate(now)
 })
 
-// 计算当前 7 天周期内点亮到第几天
-const currentCycleDay = computed(() => {
+// 计算显示的7天范围
+const displayDays = computed(() => {
   const streak = userinfo.value.checkin_streak || 0
-  if (isCheckedInToday.value) {
-    return streak % 7 || 7
+
+  // 如果连续签到 <= 7天，显示周期内的天数（1-7）
+  if (streak <= 7) {
+    return [1, 2, 3, 4, 5, 6, 7]
   }
-  return streak % 7
+
+  // 如果连续签到 > 7天，显示总天数（从 streak-6 到 streak）
+  // 例如：第8天显示 [2, 3, 4, 5, 6, 7, 8]
+  // 例如：第9天显示 [3, 4, 5, 6, 7, 8, 9]
+  const startDay = streak - 6
+  return Array.from({ length: 7 }, (_, i) => startDay + i)
 })
+
+// 计算当前应该点亮到第几天
+const currentDisplayDay = computed(() => {
+  const streak = userinfo.value.checkin_streak || 0
+  // 如果今天已签到，返回当前连续签到天数
+  // 如果今天未签到，返回昨天的连续签到天数
+  return streak
+})
+
+// 获取某天的奖励金额
+const getDayReward = (day: number) => {
+  const streak = userinfo.value.checkin_streak || 0
+  // 如果连续签到 > 7天，每天奖励都是满的（10抖币）
+  if (streak > 7) {
+    return 10
+  }
+  // 如果连续签到 <= 7天，按周期内的奖励规则
+  return day === 7 ? 10 : day + 3
+}
 
 const headerBackgroundStyle = computed(() => {
   const userCoverUrl = userinfo.value.cover_url?.[0]?.url_list?.[0]
