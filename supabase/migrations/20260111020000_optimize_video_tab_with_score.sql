@@ -230,3 +230,115 @@ WHERE status = 'published' AND is_adult = true AND content_type = 'video' AND st
 
 COMMENT ON FUNCTION get_adult_feed IS '成人内容推荐算法：时间(30%) + 互动数(50%) + 互动率(20%)混合排序，优质内容优先';
 
+-- ========================================
+-- 🌏 东南亚内容优化排序
+-- ========================================
+
+-- 先删除旧函数
+DO $$ 
+BEGIN
+  EXECUTE (
+    SELECT string_agg('DROP FUNCTION IF EXISTS ' || oid::regprocedure || ' CASCADE;', E'\n')
+    FROM pg_proc
+    WHERE proname = 'get_sea_feed'
+  );
+EXCEPTION
+  WHEN OTHERS THEN NULL;
+END $$;
+
+CREATE OR REPLACE FUNCTION get_sea_feed(
+  p_user_id UUID DEFAULT NULL,
+  p_exclude_ids UUID[] DEFAULT ARRAY[]::UUID[],
+  p_limit INT DEFAULT 20,
+  p_offset INT DEFAULT 0
+)
+RETURNS TABLE(
+  id UUID,
+  title TEXT,
+  description TEXT,
+  cover_url TEXT,
+  play_url TEXT,
+  duration FLOAT,
+  content_type TEXT,
+  tags TEXT[],
+  status TEXT,
+  is_adult BOOLEAN,
+  is_sea BOOLEAN,
+  storage_type TEXT,
+  author_id UUID,
+  view_count INT,
+  like_count INT,
+  comment_count INT,
+  collect_count INT,
+  share_count INT,
+  created_at TIMESTAMPTZ,
+  published_at TIMESTAMPTZ,
+  score FLOAT
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    v.id,
+    v.title::TEXT,
+    v.description::TEXT,
+    v.cover_url::TEXT,
+    v.play_url::TEXT,
+    v.duration::FLOAT,
+    v.content_type::TEXT,
+    v.tags,
+    v.status::TEXT,
+    v.is_adult,
+    v.is_sea,
+    v.storage_type::TEXT,
+    v.author_id,
+    COALESCE(v.view_count, 0)::INT,
+    COALESCE(v.like_count, 0)::INT,
+    COALESCE(v.comment_count, 0)::INT,
+    COALESCE(v.collect_count, 0)::INT,
+    COALESCE(v.share_count, 0)::INT,
+    v.created_at,
+    v.published_at,
+    -- 🎯 计算推荐分数（东南亚内容没有推荐加权）
+    -- 公式：时间分(30%) + 互动分(50%) + 互动率(20%)
+    (
+      -- 1️⃣ 时间分：最近7天满分1.0，之后逐渐衰减到0.1
+      GREATEST(0.1, 1.0 - EXTRACT(EPOCH FROM (NOW() - COALESCE(v.published_at, v.created_at))) / (7 * 86400)) * 0.3 +
+      
+      -- 2️⃣ 互动分：点赞、评论、收藏的绝对数量
+      LEAST(1.0, (
+        COALESCE(v.like_count, 0)::FLOAT / 100.0 +
+        COALESCE(v.comment_count, 0)::FLOAT / 20.0 +
+        COALESCE(v.collect_count, 0)::FLOAT / 50.0
+      )) * 0.5 +
+      
+      -- 3️⃣ 互动率：互动数/观看数，反映内容质量
+      CASE 
+        WHEN COALESCE(v.view_count, 0) > 10 THEN
+          LEAST(1.0, (
+            COALESCE(v.like_count, 0)::FLOAT + 
+            COALESCE(v.comment_count, 0)::FLOAT + 
+            COALESCE(v.collect_count, 0)::FLOAT
+          ) / NULLIF(v.view_count, 0) * 10)
+        ELSE 
+          0.5
+      END * 0.2
+    ) as score
+  FROM videos v
+  WHERE v.status = 'published'
+    AND v.is_adult = false
+    AND v.is_sea = true  -- 🌏 只返回东南亚内容
+    AND v.storage_type = 'r2'
+    AND (p_exclude_ids IS NULL OR cardinality(p_exclude_ids) = 0 OR NOT (v.id = ANY(p_exclude_ids)))
+  ORDER BY score DESC, v.published_at DESC, v.id DESC
+  LIMIT p_limit
+  OFFSET p_offset;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- 🎯 添加索引优化东南亚内容查询
+CREATE INDEX IF NOT EXISTS idx_videos_sea_feed_optimized 
+ON videos(status, is_adult, is_sea, storage_type, published_at DESC, id DESC)
+WHERE status = 'published' AND is_adult = false AND is_sea = true AND storage_type = 'r2';
+
+COMMENT ON FUNCTION get_sea_feed IS '东南亚内容推荐算法：时间(30%) + 互动数(50%) + 互动率(20%)混合排序，优质内容优先';
+

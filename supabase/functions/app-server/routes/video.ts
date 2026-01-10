@@ -189,70 +189,53 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
  */
 export async function handleVideoLongFeed(req: Request): Promise<Response> {
   const url = new URL(req.url)
-  const { pageNo, pageSize, from, to } = parsePagination(url)
+  const { pageNo, pageSize, from } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  let rows: any[] = []
-  let totalCount = 0
+  console.log('[LongFeed] 请求参数:', { pageNo, pageSize, userId: user?.id })
 
+  // 🎯 获取用户最近观看历史（排除最近 300 条）
+  let excludeVideoIds: string[] = []
   if (user?.id) {
-    // 🎯 已登录用户：排除已观看历史，按发布时间倒序
-    const { data, error } = await supabaseAdmin.rpc('get_sea_feed', {
-      p_user_id: user.id,
-      p_page_no: pageNo,
-      p_page_size: pageSize
-    })
+    const { data: historyData } = await supabaseAdmin
+      .from('watch_history')
+      .select('video_id')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(300)
 
-    if (error) {
-      console.error('[LongFeed] get_sea_feed RPC 失败:', error)
-      // 降级到普通查询
-      const fallback = await supabaseAdmin
-        .from('videos')
-        .select('*', { count: 'exact' })
-        .eq('status', 'published')
-        .eq('is_adult', false)
-        .eq('is_sea', true)
-        .order('published_at', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false })
-        .range(from, to)
-      rows = fallback.data || []
-      totalCount = fallback.count ?? 0
-    } else {
-      rows = data || []
-      // 这里的 total 可能需要单独查一次，或者由 RPC 返回
-      const { count } = await supabaseAdmin
-        .from('videos')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'published')
-        .eq('is_adult', false)
-        .eq('is_sea', true)
-      totalCount = count ?? 0
+    if (historyData) {
+      excludeVideoIds = historyData.map((h: any) => h.video_id).filter(Boolean)
+      console.log(`[LongFeed] 排除 ${excludeVideoIds.length} 条观看历史`)
     }
-  } else {
-    // 未登录用户：普通查询
-    const { data, error, count } = await supabaseAdmin
-      .from('videos')
-      .select('*', { count: 'exact' })
-      .eq('status', 'published')
-      .eq('is_adult', false)
-      .eq('is_sea', true)
-      .order('published_at', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false })
-      .range(from, to)
-
-    if (error) {
-      console.error('[LongFeed] 查询视频失败:', error)
-      return errorResponse('Failed to load long feed', 1, 500)
-    }
-    rows = data || []
-    totalCount = count ?? 0
   }
 
-  await attachUserFlags(rows, user?.id ?? null)
+  // 🎯 使用新的推荐算法RPC（热度+时间混合排序）
+  const { data, error } = await supabaseAdmin.rpc('get_sea_feed', {
+    p_user_id: user?.id || null,
+    p_exclude_ids: excludeVideoIds,
+    p_limit: pageSize,
+    p_offset: from
+  })
 
+  if (error) {
+    console.error('[LongFeed] RPC调用失败:', error)
+    return errorResponse('Failed to load long feed', 1, 500)
+  }
+
+  console.log('[LongFeed] RPC返回:', {
+    count: data?.length || 0,
+    firstScore: data?.[0]?.score,
+    lastScore: data?.[data?.length - 1]?.score
+  })
+
+  // 附加用户标记（点赞、收藏、关注状态）
+  await attachUserFlags(data ?? [], user?.id ?? null)
+
+  // 映射视频数据格式
   const profileCache = new Map<string, any>()
   const list: any[] = []
-  for (const row of rows) {
+  for (const row of data ?? []) {
     const authorProfile = await getVideoAuthorProfile(row, profileCache)
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
@@ -261,12 +244,15 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
     }
   }
 
+  // 🎯 获取总数（用于判断hasMore）
+  const hasMore = list.length >= pageSize
+
   return successResponse({
     list,
-    total: totalCount,
+    total: null, // RPC模式下不返回总数，避免额外查询
     pageNo,
     pageSize,
-    hasMore: list.length >= pageSize
+    hasMore
   })
 }
 
