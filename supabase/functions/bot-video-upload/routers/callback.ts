@@ -353,6 +353,14 @@ export async function handleCallback(
       return
     }
 
+    // 🎯 专属红包领取处理（新格式：claim_hb:packetId）
+    if (data.startsWith('claim_hb:')) {
+      const packetId = data.split(':')[1]
+      const { handleClaimRedPacket } = await import('../features/redPacket.ts')
+      await handleClaimRedPacket(chatId, messageId, callbackQueryId, packetId, tgUserId)
+      return
+    }
+
     // 🎯 骰子游戏处理
     if (data.startsWith('dice_join_')) {
       // 🎯 如果是在 dice 群，主机器人不处理骰子回调，交给骰子机器人处理

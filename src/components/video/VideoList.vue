@@ -178,7 +178,15 @@ import { recordVideoView, incrementWatchTime } from '@/api/videos'
 // 只在需要打开图文详情时再异步加载
 const AlbumDetail = defineAsyncComponent(() => import('@/pages/other/AlbumDetail.vue'))
 
+// 🎯 调试开关：设置为 false 关闭视频播放调试日志
+const ENABLE_VIDEO_DEBUG = false
 const DEBUG_PREFIX = '[AutoPlayDebug]'
+// 🎯 条件日志函数：只在调试开关打开时输出
+const debugLog = (...args: any[]) => {
+  if (ENABLE_VIDEO_DEBUG) {
+    console.log(...args)
+  }
+}
 // 🎯 观看历史记录追踪（避免重复记录）
 const recordedViews = new Set<string>() // 已记录开始观看
 const completedViews = new Set<string>() // 已记录完播
@@ -862,7 +870,7 @@ function setSlotRef(key: string) {
       const oldEl = slotRefs.get(key)
       // 🎯 如果元素已经存在且是同一个元素，不重复注册（避免 slot 轮转时的重复操作）
       if (oldEl === el) {
-        console.log(`${DEBUG_PREFIX} setSlotRef: 元素已存在且相同，跳过重复注册`, {
+        debugLog(`${DEBUG_PREFIX} setSlotRef: 元素已存在且相同，跳过重复注册`, {
           key,
           slot: slots.find((s) => s.key === key)?.role,
           videoIndex: slots.find((s) => s.key === key)?.videoIndex
@@ -871,7 +879,7 @@ function setSlotRef(key: string) {
       }
 
       const slot = slots.find((s) => s.key === key)
-      console.log(`${DEBUG_PREFIX} setSlotRef: 注册视频元素`, {
+      debugLog(`${DEBUG_PREFIX} setSlotRef: 注册视频元素`, {
         key,
         slot: slot?.role,
         videoIndex: slot?.videoIndex,
@@ -892,7 +900,7 @@ function setSlotRef(key: string) {
       if (!boundVideos.has(el)) {
         const log = (event: string) => {
           const slot = slots.find((s) => s.key === key)
-          console.log(`${DEBUG_PREFIX} video:${event}`, {
+          debugLog(`${DEBUG_PREFIX} video:${event}`, {
             slot: slot?.role,
             key,
             videoIndex: slot?.videoIndex,
@@ -1996,7 +2004,7 @@ function onPlaying(slot: SlotState) {
 }
 
 function onPause(slot: SlotState) {
-  console.log('[视频事件] onPause', {
+  debugLog('[视频事件] onPause', {
     slotKey: slot.key,
     role: slot.role,
     videoIndex: slot.videoIndex,

@@ -373,11 +373,16 @@ export const useBaseStore = defineStore('base', {
     },
 
     // 🎯 解析 Telegram 启动参数
-    parseStartParam() {
+    async parseStartParam() {
       try {
+        console.log('[parseStartParam] ========== 开始解析启动参数 ==========')
+        console.log('[parseStartParam] window.location.href:', window.location.href)
+        console.log('[parseStartParam] window.location.search:', window.location.search)
+
         // 🎯 Windows 修复：优先从 URL 中解析 startapp 参数（适用于通知链接）
         const urlParams = new URLSearchParams(window.location.search)
         const startappParam = urlParams.get('startapp')
+        console.log('[parseStartParam] startappParam from URL:', startappParam)
 
         if (startappParam) {
           // 解析格式：video_xxxxx[_iyyyyy] 或 live_xxxxx[_iyyyyy]
@@ -388,7 +393,7 @@ export const useBaseStore = defineStore('base', {
               videoId = videoId.split('_i')[0]
             }
             this.startVideoId = videoId
-            console.log('[parseStartParam] 🎯 从 URL startapp 参数解析到视频 ID:', videoId)
+            console.log('[parseStartParam] ✅ 从 URL startapp 参数解析到视频 ID:', videoId)
             return
           } else if (startappParam.startsWith('live_')) {
             let roomId = startappParam.replace('live_', '')
@@ -397,20 +402,42 @@ export const useBaseStore = defineStore('base', {
               roomId = roomId.split('_i')[0]
             }
             this.startLiveId = roomId
-            console.log('[parseStartParam] 🎯 从 URL startapp 参数解析到直播间 ID:', roomId)
+            console.log('[parseStartParam] ✅ 从 URL startapp 参数解析到直播间 ID:', roomId)
+            console.log('[parseStartParam] ✅ store.startLiveId 已设置为:', this.startLiveId)
             return
           }
         }
 
+        // 🎯 等待 Telegram WebApp 初始化（最多等待 3 秒）
         // @ts-ignore
-        const tg = window.Telegram?.WebApp
+        let tg = window.Telegram?.WebApp
+        console.log('[parseStartParam] Telegram WebApp 初始状态:', tg ? '存在' : '不存在')
 
         if (!tg) {
+          console.log('[parseStartParam] ⏳ Telegram WebApp 未初始化，等待最多 3 秒...')
+          for (let i = 0; i < 30; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 100))
+            // @ts-ignore
+            tg = window.Telegram?.WebApp
+            if (tg) {
+              console.log(
+                '[parseStartParam] ✅ Telegram WebApp 已初始化（等待了',
+                (i + 1) * 100,
+                'ms）'
+              )
+              break
+            }
+          }
+        }
+
+        if (!tg) {
+          console.log('[parseStartParam] ⚠️ Telegram WebApp 仍未初始化，跳过 TG 参数解析')
           return
         }
 
         // 方式1: 从 start_param 获取（格式：video_xxxxx）
         const startParam = tg.initDataUnsafe?.start_param
+        console.log('[parseStartParam] Telegram start_param:', startParam)
 
         if (startParam) {
           // 解析格式：video_xxxxx[_iyyyyy]
@@ -421,7 +448,7 @@ export const useBaseStore = defineStore('base', {
               videoId = videoId.split('_i')[0]
             }
             this.startVideoId = videoId
-            console.log('[parseStartParam] 🎯 从 Telegram start_param 解析到视频 ID:', videoId)
+            console.log('[parseStartParam] ✅ 从 Telegram start_param 解析到视频 ID:', videoId)
             return
           } else if (startParam.startsWith('live_')) {
             let roomId = startParam.replace('live_', '')
@@ -430,7 +457,8 @@ export const useBaseStore = defineStore('base', {
               roomId = roomId.split('_i')[0]
             }
             this.startLiveId = roomId
-            console.log('[parseStartParam] 🎯 从 Telegram start_param 解析到直播间 ID:', roomId)
+            console.log('[parseStartParam] ✅ 从 Telegram start_param 解析到直播间 ID:', roomId)
+            console.log('[parseStartParam] ✅ store.startLiveId 已设置为:', this.startLiveId)
             return
           }
         }
@@ -440,7 +468,7 @@ export const useBaseStore = defineStore('base', {
 
         if (videoId) {
           this.startVideoId = videoId
-          console.log('[parseStartParam] 🎯 从 URL video_id 参数解析到视频 ID:', videoId)
+          console.log('[parseStartParam] ✅ 从 URL video_id 参数解析到视频 ID:', videoId)
           return
         }
 
@@ -451,12 +479,14 @@ export const useBaseStore = defineStore('base', {
 
           if (hashVideoId) {
             this.startVideoId = hashVideoId
-            console.log('[parseStartParam] 🎯 从 URL hash 解析到视频 ID:', hashVideoId)
+            console.log('[parseStartParam] ✅ 从 URL hash 解析到视频 ID:', hashVideoId)
             return
           }
         }
+
+        console.log('[parseStartParam] ⚠️ 没有找到任何启动参数')
       } catch (error) {
-        console.error('[parseStartParam] 解析失败:', error)
+        console.error('[parseStartParam] ❌ 解析失败:', error)
       }
     },
     // 🎯 设置深链接视频数据

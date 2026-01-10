@@ -5,7 +5,9 @@
         <Icon icon="solar:danger-bold" class="icon" />
       </div>
       <div class="title">账号已被封禁</div>
-      <div class="reason">{{ store.userinfo.ban_reason || '由于违反社区规范，您的账号已被封禁。' }}</div>
+      <div class="reason">
+        {{ store.userinfo.ban_reason || '由于违反社区规范，您的账号已被封禁。' }}
+      </div>
       <div class="tip">如有疑问，请通过 Telegram 联系管理员</div>
     </div>
   </div>
@@ -38,24 +40,40 @@ const transitionName = ref('go')
 
 // 🎯 全局深链接处理
 async function handleDeepLink() {
+  console.log('[App.handleDeepLink] ========== 调用深链接处理 ==========')
+  console.log('[App.handleDeepLink] store.startLiveId:', store.startLiveId)
+
   if (store.startLiveId) {
     const roomId = store.startLiveId
+    console.log('[App.handleDeepLink] ✅ 检测到直播间 ID:', roomId)
     store.clearStartLiveId()
+    console.log('[App.handleDeepLink] 已清除 store.startLiveId')
 
     await router.isReady()
+    console.log('[App.handleDeepLink] 路由已就绪')
 
     // 延迟一小会儿确保稳定
     setTimeout(() => {
+      console.log('[App.handleDeepLink] 🚀 准备跳转到直播间:', `/home/live?id=${roomId}`)
       router.push({ path: '/home/live', query: { id: roomId } })
+      console.log('[App.handleDeepLink] ✅ router.push 已调用')
     }, 100)
+  } else {
+    console.log('[App.handleDeepLink] ⚠️ 没有 startLiveId，跳过处理')
   }
 }
 
 // 🎯 监听 Store 中的深链接参数 (仅直播需要重定向，视频由首页 Feed 自动处理)
 watch(
   () => store.startLiveId,
-  (newId) => {
-    if (newId) handleDeepLink()
+  (newId, oldId) => {
+    console.log('[App.watch] startLiveId 变化:', { oldId, newId })
+    if (newId) {
+      console.log('[App.watch] ✅ 检测到新的直播间 ID，调用 handleDeepLink')
+      handleDeepLink()
+    } else {
+      console.log('[App.watch] ⚠️ startLiveId 为空，不处理')
+    }
   },
   { immediate: true }
 )
@@ -94,8 +112,12 @@ function resetVhAndPx() {
 }
 
 onMounted(() => {
+  console.log('[App.onMounted] ========== App 组件已挂载 ==========')
   // 🎯 初始化应用（登录时自动创建用户，无需额外调用）
+  console.log('[App.onMounted] 开始调用 store.init()')
   store.init()
+  console.log('[App.onMounted] store.init() 已调用')
+
   resetVhAndPx()
 
   // 监听resize事件 视图大小发生变化就重新计算1vh的值

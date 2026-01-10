@@ -39,7 +39,9 @@ export async function handleRequest(req: Request): Promise<Response> {
         return new Response('Invalid JSON', { status: 400 })
       }
 
-      console.log('[BOT-APP] Update received:', JSON.stringify(update).substring(0, 500))
+      // 🎯 优化：只打印消息类型，不序列化完整内容（高频消息影响性能）
+      const updateType = Object.keys(update).find((k) => k !== 'update_id') || 'unknown'
+      console.log('[BOT-APP] Update type:', updateType)
 
       // 🎯 1. 提取用户 ID 进行黑名单检查 (注意：在群组中 chat.id 是群 ID，from.id 才是用户 ID)
       const userIdToCheck =

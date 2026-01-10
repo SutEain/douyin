@@ -2,6 +2,9 @@ import { supabase } from '../supabaseClient.ts'
 import { sendMessage, answerCallbackQuery, editMessage } from '../telegram.ts'
 import { escapeHTML, sanitizeError } from '../utils/text.ts'
 
+// 🎯 批量更新机制：通过数据库控制更新频率（Edge Function 无状态，不能用内存变量）
+const UPDATE_INTERVAL_MS = 5000 // 每5秒更新一次
+
 /**
  * 处理红包指令: hb 100 [份数] [sq]
  * 或者在回复某人时输入: hb 100
@@ -59,6 +62,7 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
     let count = 1
     let targetUserId: string | null = null
     let targetNickname: string | null = null
+    let targetTgUserId: number | null = null // 🎯 保存目标用户的 TG ID，用于 @ 提及
 
     // 3. 判断红包类型
     const replyTo = message.reply_to_message
@@ -66,6 +70,7 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
       // 回复某人 -> 指定红包
       type = 'single'
       count = 1
+      targetTgUserId = replyTo.from.id // 🎯 保存 TG ID
       const { data: target } = await supabase
         .from('profiles')
         .select('id, nickname')
@@ -102,7 +107,9 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
     }
 
     // 4. 调用 RPC 创建红包 (先不传 origin_message_id)
-    const { question, answer: verificationAnswer } = generateMathQuestion()
+    // 🎯 专属红包不需要验证码，普通/拼手气红包需要验证码
+    const { question, answer: verificationAnswer } =
+      type === 'single' ? { question: '', answer: '' } : generateMathQuestion()
 
     const { data: res, error } = await supabase.rpc('create_group_red_packet', {
       p_sender_id: sender.id,
@@ -122,26 +129,62 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
     }
 
     // 5. 发送红包消息
-    let hbTitle = ''
+    let hbText = ''
+    let keyboard: any = null
+
     if (type === 'single') {
-      hbTitle = `🧧 <b>${escapeHTML(sender.nickname)}</b> 给 <b>${escapeHTML(targetNickname || '')}</b> 发了一个专属红包`
+      // 🎯 专属红包：使用 @ 提及，添加领取按钮
+      const targetMention = targetTgUserId
+        ? `<a href="tg://user?id=${targetTgUserId}">${escapeHTML(targetNickname || '未知')}</a>`
+        : escapeHTML(targetNickname || '未知')
+
+      hbText =
+        `🧧 <b>${escapeHTML(sender.nickname)}</b> 给 ${targetMention} 发了一个专属红包\n` +
+        `💰 金额：<b>${amount}</b> 抖币\n` +
+        `⏳ 状态：<b>待领取</b>\n\n` +
+        `👉 <b>点击下方按钮领取</b>\n\n` +
+        `📜 <b>红包规则：</b>\n` +
+        `• 仅指定用户可领取\n` +
+        `• 24小时内未领取将自动退回\n\n` +
+        `📢 祝你：好运连连，万事如意！`
+
+      // 🎯 添加领取按钮（仅专属红包有按钮）
+      keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: '🎁 点击领取红包',
+              callback_data: `claim_hb:${res.packet_id}`
+            }
+          ]
+        ]
+      }
     } else if (type === 'lucky') {
-      hbTitle = `🧧 <b>${escapeHTML(sender.nickname)}</b> 发了一个拼手气红包 (${count}份)`
+      hbText =
+        `🧧 <b>${escapeHTML(sender.nickname)}</b> 发了一个拼手气红包 (${count}份)\n` +
+        `💰 总金额：<b>${amount}</b> 抖币\n` +
+        `⏳ 剩余 <b>${count}</b>/${count} 份\n\n` +
+        `👉 <b>领取方式：回复本消息并输入正确答案</b>\n` +
+        `验证题目：<b>${question}</b>\n\n` +
+        `📜 <b>红包规则：</b>\n` +
+        `• 退款：24小时内未领完将自动退回余额\n\n` +
+        `📢 祝大家：好运连连，万事如意！`
     } else {
-      hbTitle = `🧧 <b>${escapeHTML(sender.nickname)}</b> 发了一个普通红包 (${count}份)`
+      hbText =
+        `🧧 <b>${escapeHTML(sender.nickname)}</b> 发了一个普通红包 (${count}份)\n` +
+        `💰 总金额：<b>${amount}</b> 抖币\n` +
+        `⏳ 剩余 <b>${count}</b>/${count} 份\n\n` +
+        `👉 <b>领取方式：回复本消息并输入正确答案</b>\n` +
+        `验证题目：<b>${question}</b>\n\n` +
+        `📜 <b>红包规则：</b>\n` +
+        `• 退款：24小时内未领完将自动退回余额\n\n` +
+        `📢 祝大家：好运连连，万事如意！`
     }
 
-    const hbText =
-      `${hbTitle}\n` +
-      `💰 总金额：<b>${amount}</b> 抖币\n` +
-      `⏳ 剩余 <b>${count}</b>/${count} 份\n\n` +
-      `👉 <b>领取方式：回复本消息并输入正确答案</b>\n` +
-      `验证题目：<b>${question}</b>\n\n` +
-      `📜 <b>红包规则：</b>\n` +
-      `• 退款：24小时内未领完将自动退回余额\n\n` +
-      `📢 祝大家：好运连连，万事如意！`
+    const sentMsg = keyboard
+      ? await sendMessage(chatId, hbText, { reply_markup: keyboard })
+      : await sendMessage(chatId, hbText)
 
-    const sentMsg = await sendMessage(chatId, hbText)
     if (sentMsg.ok) {
       // 更新原始消息 ID
       await supabase
@@ -220,10 +263,78 @@ export async function handleReplyClaimRedPacket(
       return
     }
 
-    // 4. 抢成功，静默更新红包主消息，不再发送新消息
-    await updateRedPacketMessage(chatId, replyToMessageId, packet.id)
+    console.log(
+      `[ReplyClaim] ✅ 抢包成功: userId=${user.id.substring(0, 8)}, amount=${res.amount}, packetId=${packet.id.substring(0, 8)}`
+    )
+
+    // 4. 抢成功，使用批量更新机制（基于剩余数量）
+    // 重新获取最新红包状态来判断是否需要更新
+    const { data: latestPacket } = await supabase
+      .from('group_red_packets')
+      .select('status, remaining_count, total_count')
+      .eq('id', packet.id)
+      .single()
+
+    const isCompleted = latestPacket?.status === 'completed'
+    const remainingCount = latestPacket?.remaining_count || 0
+    const totalCount = latestPacket?.total_count || 1
+
+    console.log(
+      `[ReplyClaim] 📊 红包状态: 剩余=${remainingCount}/${totalCount}, 已完成=${isCompleted}`
+    )
+
+    await scheduleUpdateRedPacketMessage(
+      chatId,
+      replyToMessageId,
+      packet.id,
+      isCompleted,
+      remainingCount,
+      totalCount
+    )
   } catch (err) {
     console.error('ReplyClaim Error:', err)
+  }
+}
+
+/**
+ * 🎯 批量更新红包消息（基于剩余数量）
+ * Edge Function 是无状态的，不能用内存变量（Map）来控制更新频率
+ * 改为基于剩余数量：每减少 N 个人更新一次
+ * - 每20个人更新一次
+ * - 红包抢完立即更新
+ */
+async function scheduleUpdateRedPacketMessage(
+  chatId: number,
+  messageId: number,
+  packetId: string,
+  isCompleted: boolean,
+  remainingCount: number,
+  totalCount: number
+) {
+  const key = `${chatId}_${messageId}`
+
+  // 🎯 如果红包已抢完，立即更新
+  if (isCompleted) {
+    console.log(`[RedPacket] 🎉 红包抢完，立即更新: ${key}`)
+    await updateRedPacketMessage(chatId, messageId, packetId)
+    return
+  }
+
+  // 🎯 计算已领取人数
+  const claimedCount = totalCount - remainingCount
+
+  // 🎯 更新条件：
+  // 1. 每20个人更新一次（claimed 是 20 的倍数）
+  // 2. 第一个人抢到时也更新（claimedCount === 1）
+  const shouldUpdate = claimedCount === 1 || claimedCount % 20 === 0
+
+  if (shouldUpdate) {
+    console.log(`[RedPacket] 📊 触发更新: ${key}, 已领=${claimedCount}/${totalCount}`)
+    await updateRedPacketMessage(chatId, messageId, packetId)
+  } else {
+    console.log(
+      `[RedPacket] ⏭️ 跳过更新: ${key}, 已领=${claimedCount}/${totalCount}，等待下一个批次`
+    )
   }
 }
 
@@ -232,25 +343,93 @@ export async function handleReplyClaimRedPacket(
  */
 async function updateRedPacketMessage(chatId: number, messageId: number, packetId: string) {
   try {
+    console.log(`[RedPacket] 📊 开始更新红包消息: packetId=${packetId.substring(0, 8)}`)
+
+    // 🎯 强制刷新查询，添加时间戳避免缓存
+    const timestamp = Date.now()
     const { data: packet } = await supabase
       .from('group_red_packets')
-      .select('*, sender:profiles!group_red_packets_sender_id_fkey(nickname)')
+      .select(
+        `
+        *, 
+        sender:profiles!group_red_packets_sender_id_fkey(nickname),
+        target:profiles!group_red_packets_target_user_id_fkey(nickname, tg_user_id)
+      `
+      )
       .eq('id', packetId)
       .single()
 
-    if (!packet) return
+    if (!packet) {
+      console.log(`[RedPacket] ⚠️ 未找到红包: ${packetId.substring(0, 8)}`)
+      return
+    }
 
-    const { data: claims } = await supabase
+    const { data: claims, error: claimsError } = await supabase
       .from('group_red_packet_claims')
       .select('amount, created_at, user:profiles!group_red_packet_claims_user_id_fkey(nickname)')
       .eq('packet_id', packetId)
       .order('created_at', { ascending: true })
 
+    console.log(
+      `[RedPacket] 📊 查询结果: 已领取=${claims?.length || 0}人, 剩余=${packet.remaining_count}/${packet.total_count}, 状态=${packet.status}`
+    )
+
+    if (claimsError) {
+      console.error(`[RedPacket] ❌ 查询领取记录失败:`, claimsError)
+    }
+
     const senderName = packet.sender?.nickname || '未知'
-    let hbTitle = ''
+
+    // 🎯 专属红包单独处理（不显示验证题目和领取记录列表）
     if (packet.type === 'single') {
-      hbTitle = `🧧 <b>${escapeHTML(senderName)}</b> 的专属红包`
-    } else if (packet.type === 'lucky') {
+      const isCompleted = packet.status === 'completed'
+      const claimInfo = claims && claims.length > 0 ? claims[0] : null
+      const claimerName = claimInfo?.user?.nickname || '未知'
+
+      // 🎯 获取目标用户信息用于 @ 提及
+      const targetUser = packet.target as any
+      const targetNickname = targetUser?.nickname || '未知'
+      const targetTgUserId = targetUser?.tg_user_id
+      const targetMention = targetTgUserId
+        ? `<a href="tg://user?id=${targetTgUserId}">${escapeHTML(targetNickname)}</a>`
+        : escapeHTML(targetNickname)
+
+      let hbText = ''
+      let keyboard: any = null
+
+      if (isCompleted) {
+        // 已领取：移除按钮
+        hbText =
+          `🧧 <b>${escapeHTML(senderName)}</b> 给 ${targetMention} 的专属红包\n` +
+          `💰 金额：<b>${packet.total_amount}</b> 抖币\n` +
+          `📊 状态：✨ <b>已被领取</b> ✨\n\n` +
+          `🎉 <b>${escapeHTML(claimerName)}</b> 领了 <code>${claimInfo?.amount || packet.total_amount}</code> 抖币`
+        keyboard = { inline_keyboard: [] } // 🎯 移除所有按钮
+      } else {
+        // 待领取：保留按钮
+        hbText =
+          `🧧 <b>${escapeHTML(senderName)}</b> 给 ${targetMention} 的专属红包\n` +
+          `💰 金额：<b>${packet.total_amount}</b> 抖币\n` +
+          `📊 状态：<b>待领取</b>`
+        keyboard = {
+          inline_keyboard: [
+            [
+              {
+                text: '🎁 点击领取红包',
+                callback_data: `claim_hb:${packetId}`
+              }
+            ]
+          ]
+        }
+      }
+
+      await editMessage(chatId, messageId, hbText, { reply_markup: keyboard })
+      return
+    }
+
+    // 🎯 普通红包和拼手气红包的处理逻辑
+    let hbTitle = ''
+    if (packet.type === 'lucky') {
       hbTitle = `🧧 <b>${escapeHTML(senderName)}</b> 的拼手气红包`
     } else {
       hbTitle = `🧧 <b>${escapeHTML(senderName)}</b> 的普通红包`
@@ -263,31 +442,75 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
       statusText = `⏳ 剩余 <b>${packet.remaining_count}</b>/${packet.total_count} 份`
     }
 
-    let claimListText = ''
-    if (claims && claims.length > 0) {
-      claimListText =
-        '\n\n<b>领取记录：</b>\n' +
-        claims
-          .map((c: any, index: number) => {
-            const name = c.user?.nickname || '匿名'
-            return `${index + 1}. ${escapeHTML(name)} 领了 <code>${c.amount}</code> 币`
-          })
-          .join('\n')
-    }
-
-    // 💡 保持显示验证题目逻辑
+    // 💡 保持显示验证题目逻辑（只对未完成的普通/拼手气红包）
     let questionText = ''
     if (packet.status !== 'completed' && packet.verification_question) {
       questionText = `\n\n验证题目：<b>${packet.verification_question}</b>\n👉 <b>领取方式：回复本消息输入答案</b>`
     }
 
-    const hbText =
+    // 🎯 智能分割消息：如果领取记录太多，分多条消息发送
+    const baseText =
       `${hbTitle}\n` +
       `💰 总金额：<b>${packet.total_amount}</b> 抖币\n` +
-      `📊 状态：${statusText}${questionText}` +
-      `${claimListText}`
+      `📊 状态：${statusText}${questionText}`
 
-    await editMessage(chatId, messageId, hbText)
+    if (claims && claims.length > 0) {
+      const MAX_MESSAGE_LENGTH = 4000 // 留96字符余量
+      const currentText = baseText + '\n\n<b>领取记录：</b>\n'
+
+      // 逐条添加领取记录
+      const recordTexts: string[] = []
+      for (let i = 0; i < claims.length; i++) {
+        const c = claims[i]
+        const name = c.user?.nickname || '匿名'
+        const recordLine = `${i + 1}. ${escapeHTML(name)} 领了 <code>${c.amount}</code> 币\n`
+        recordTexts.push(recordLine)
+      }
+
+      // 第一条消息：尽可能多地包含记录
+      let firstMessageRecords = ''
+      let splitIndex = 0
+
+      for (let i = 0; i < recordTexts.length; i++) {
+        const testText = currentText + firstMessageRecords + recordTexts[i]
+        if (testText.length > MAX_MESSAGE_LENGTH) {
+          // 超过限制，停止添加
+          splitIndex = i
+          break
+        }
+        firstMessageRecords += recordTexts[i]
+        splitIndex = i + 1
+      }
+
+      // 编辑原消息
+      const firstMessage = currentText + firstMessageRecords
+      await editMessage(chatId, messageId, firstMessage)
+
+      // 如果还有剩余记录，发送新消息
+      if (splitIndex < recordTexts.length) {
+        let additionalText = `<b>领取记录（续）：</b>\n`
+
+        for (let i = splitIndex; i < recordTexts.length; i++) {
+          const testText = additionalText + recordTexts[i]
+
+          // 如果这条消息也快满了，先发送当前的，再开始新的
+          if (testText.length > MAX_MESSAGE_LENGTH) {
+            await sendMessage(chatId, additionalText, { reply_to_message_id: messageId })
+            additionalText = `<b>领取记录（续${Math.floor(i / 50) + 1}）：</b>\n` + recordTexts[i]
+          } else {
+            additionalText += recordTexts[i]
+          }
+        }
+
+        // 发送最后一批
+        if (additionalText.length > 20) {
+          await sendMessage(chatId, additionalText, { reply_to_message_id: messageId })
+        }
+      }
+    } else {
+      // 没有领取记录，直接编辑原消息
+      await editMessage(chatId, messageId, baseText)
+    }
   } catch (e) {
     console.error('Update HB Msg Error:', e)
   }
@@ -358,8 +581,25 @@ export async function handleClaimRedPacket(
     const amount = res.amount
     await answerCallbackQuery(callbackQueryId, `🎊 恭喜！你抢到了 ${amount} 抖币！`, true)
 
-    // 4. 更新红包主消息展示领取情况
-    await updateRedPacketMessage(chatId, messageId, packetId)
+    // 4. 使用批量更新机制（基于剩余数量）
+    const { data: latestPacket } = await supabase
+      .from('group_red_packets')
+      .select('status, remaining_count, total_count')
+      .eq('id', packetId)
+      .single()
+
+    const isCompleted = latestPacket?.status === 'completed'
+    const remainingCount = latestPacket?.remaining_count || 0
+    const totalCount = latestPacket?.total_count || 1
+
+    await scheduleUpdateRedPacketMessage(
+      chatId,
+      messageId,
+      packetId,
+      isCompleted,
+      remainingCount,
+      totalCount
+    )
   } catch (err: any) {
     console.error('Claim RedPacket Error:', err)
     await answerCallbackQuery(callbackQueryId, `❌ 抢红包异常: ${sanitizeError(err.message)}`, true)

@@ -103,8 +103,6 @@ export async function handleText(
   userMessageId: number,
   rawMessage: any
 ) {
-  const userState = await getUserState(chatId)
-
   // ✅ 指令匹配
   const lowerText = text.trim().toLowerCase()
   const isRedPacketCmd =
@@ -121,9 +119,11 @@ export async function handleText(
   const isCleanCmd = lowerText === '/clean_keyboard'
 
   // 🎯 严格控制：群组中仅允许指定指令，其他文本直接忽略
+  // 🎯 优化：提前返回，避免不必要的 getUserState 数据库查询
   if (chatId < 0 && !isRedPacketCmd && !isDiceCmd && !isBalanceCmd && !isCleanCmd) {
-    // 检查是否是红包回复
-    if (rawMessage.reply_to_message) {
+    // 🎯 优化：只有回复消息 + 文本是1-2位数字（验证码格式）才处理红包领取
+    // 避免所有回复消息都触发数据库查询
+    if (rawMessage.reply_to_message && /^\d{1,2}$/.test(text.trim())) {
       const { handleReplyClaimRedPacket } = await import('../features/redPacket.ts')
       await handleReplyClaimRedPacket(
         chatId,
@@ -133,8 +133,12 @@ export async function handleText(
         rawMessage.from.id
       )
     }
+    // 🎯 其他消息直接忽略，不做任何处理
     return
   }
+
+  // 🎯 优化：只在需要时才查询 userState（私聊或指令消息）
+  const userState = await getUserState(chatId)
 
   // 1. 处理清除键盘
   if (chatId < 0 && isCleanCmd) {
