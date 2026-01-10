@@ -779,7 +779,22 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
 
       // 编辑原消息（保留按钮）
       const firstMessage = currentText + firstMessageRecords
-      await editMessage(chatId, messageId, firstMessage, { reply_markup: keyboard })
+      // 🎯 尝试编辑消息：先尝试文本消息，如果失败则尝试图片消息的 caption
+      let editResult = await editMessage(chatId, messageId, firstMessage, {
+        reply_markup: keyboard
+      })
+
+      if (!editResult.ok) {
+        // 如果编辑文本消息失败，可能是图片消息，尝试编辑 caption
+        console.log(`[RedPacket] 文本消息编辑失败，尝试编辑图片 caption...`)
+        editResult = await editMessageCaption(chatId, messageId, firstMessage, {
+          reply_markup: keyboard
+        })
+
+        if (!editResult.ok) {
+          console.error(`[RedPacket] ❌ 编辑消息失败:`, editResult)
+        }
+      }
 
       // 如果还有剩余记录，发送新消息
       if (splitIndex < recordTexts.length) {
@@ -804,7 +819,20 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
       }
     } else {
       // 没有领取记录，直接编辑原消息（保留按钮）
-      await editMessage(chatId, messageId, baseText, { reply_markup: keyboard })
+      // 🎯 尝试编辑消息：先尝试文本消息，如果失败则尝试图片消息的 caption
+      let editResult = await editMessage(chatId, messageId, baseText, { reply_markup: keyboard })
+
+      if (!editResult.ok) {
+        // 如果编辑文本消息失败，可能是图片消息，尝试编辑 caption
+        console.log(`[RedPacket] 文本消息编辑失败，尝试编辑图片 caption...`)
+        editResult = await editMessageCaption(chatId, messageId, baseText, {
+          reply_markup: keyboard
+        })
+
+        if (!editResult.ok) {
+          console.error(`[RedPacket] ❌ 编辑消息失败:`, editResult)
+        }
+      }
     }
   } catch (e) {
     console.error('Update HB Msg Error:', e)

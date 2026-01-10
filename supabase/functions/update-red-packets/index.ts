@@ -203,7 +203,20 @@ async function updateSingleRedPacket(packetId: string, groupId: number, messageI
       `💰 总金额：<b>${packet.total_amount}</b> 抖币\n` +
       `${statusText}${bestLuckText}${claimsText}`
 
-    await editMessage(groupId, messageId, hbText, keyboard)
+    // 🎯 尝试编辑消息：先尝试文本消息，如果失败则尝试图片消息的 caption
+    let editResult = await editMessage(groupId, messageId, hbText, keyboard)
+
+    if (!editResult.ok) {
+      // 如果编辑文本消息失败，可能是图片消息，尝试编辑 caption
+      console.log(`[Update] 文本消息编辑失败，尝试编辑图片 caption...`)
+      const { editMessageCaption } = await import('../bot-video-upload/telegram.ts')
+      editResult = await editMessageCaption(groupId, messageId, hbText, keyboard)
+
+      if (!editResult.ok) {
+        console.error(`[Update] ❌ 编辑消息失败:`, editResult)
+        return false
+      }
+    }
 
     console.log(`[Update] ✅ 更新成功: ${packetId}`)
     return true
