@@ -1,6 +1,12 @@
 /// <reference types="https://deno.land/x/types/index.d.ts" />
 import { supabase } from '../supabaseClient.ts'
-import { sendMessage, answerCallbackQuery, editMessage, sendPhoto } from '../telegram.ts'
+import {
+  sendMessage,
+  answerCallbackQuery,
+  editMessage,
+  editMessageCaption,
+  sendPhoto
+} from '../telegram.ts'
 import { escapeHTML, sanitizeError } from '../utils/text.ts'
 
 // 🎯 批量更新机制：通过数据库控制更新频率（Edge Function 无状态，不能用内存变量）
@@ -1279,7 +1285,20 @@ async function updateRedPacketMessageNow(chatId: number, messageId: number, pack
     }
 
     console.log(`[RedPacket-Update] 📤 发送编辑消息请求...`)
-    await editMessage(chatId, messageId, hbText, { reply_markup: keyboard })
+
+    // 🎯 尝试编辑消息：先尝试文本消息，如果失败则尝试图片消息的 caption
+    let editResult = await editMessage(chatId, messageId, hbText, { reply_markup: keyboard })
+
+    if (!editResult.ok) {
+      // 如果编辑文本消息失败，可能是图片消息，尝试编辑 caption
+      console.log(`[RedPacket-Update] 文本消息编辑失败，尝试编辑图片 caption...`)
+      editResult = await editMessageCaption(chatId, messageId, hbText, { reply_markup: keyboard })
+
+      if (!editResult.ok) {
+        console.error(`[RedPacket-Update] ❌ 编辑消息失败:`, editResult)
+        return
+      }
+    }
 
     console.log(`[RedPacket-Update] ✅ 消息更新成功`)
 

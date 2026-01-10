@@ -80,7 +80,52 @@ export async function editMessage(
   }
 }
 
-// ✅ 仅更新消息键盘（不改文本），用于“loading/禁用按钮”等场景
+// 🎯 编辑图片消息的 caption（用于图片消息）
+export async function editMessageCaption(
+  chatId: number,
+  messageId: number,
+  caption: string,
+  options: any = {}
+) {
+  console.log(
+    '[editMessageCaption] chatId:',
+    chatId,
+    'messageId:',
+    messageId,
+    'captionLength:',
+    caption.length
+  )
+  const url = `${TG_API_BASE}/bot${BOT_TOKEN}/editMessageCaption`
+  try {
+    const payload = {
+      chat_id: chatId,
+      message_id: messageId,
+      caption,
+      parse_mode: 'HTML',
+      ...options
+    }
+    console.log('[editMessageCaption] payload键盘:', options.reply_markup ? 'yes' : 'no')
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const result = await response.json()
+    if (!result.ok) {
+      console.error('[editMessageCaption] 失败:', JSON.stringify(result))
+      console.error('[editMessageCaption] 请求payload:', JSON.stringify(payload).substring(0, 500))
+    } else {
+      console.log('[editMessageCaption] 成功')
+    }
+    return result
+  } catch (error) {
+    console.error('[editMessageCaption] 异常:', error)
+    throw error
+  }
+}
+
+// ✅ 仅更新消息键盘（不改文本），用于"loading/禁用按钮"等场景
 export async function editMessageReplyMarkup(chatId: number, messageId: number, replyMarkup: any) {
   const url = `${TG_API_BASE}/bot${BOT_TOKEN}/editMessageReplyMarkup`
   try {
