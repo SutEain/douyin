@@ -17,7 +17,6 @@ DECLARE
   v_recommend_count INT;
   v_normal_count INT;
   v_rec_fetched INT := 0;
-  v_history_limit INT := 500; -- 排除最近 500 条观看历史
 BEGIN
   -- 🎯 设置随机种子（基于传入的 seed + 当前时间微秒，确保每次都不同）
   PERFORM setseed((p_seed + EXTRACT(EPOCH FROM clock_timestamp()))::DOUBLE PRECISION - FLOOR((p_seed + EXTRACT(EPOCH FROM clock_timestamp()))::DOUBLE PRECISION));
@@ -38,12 +37,11 @@ BEGIN
       AND v.is_recommended = true
       AND (
         p_user_id IS NULL
-        OR NOT EXISTS (
-          SELECT 1 FROM watch_history wh
+        OR v.id NOT IN (
+          SELECT wh.video_id FROM watch_history wh
           WHERE wh.user_id = p_user_id
-            AND wh.video_id = v.id
           ORDER BY wh.updated_at DESC
-          LIMIT v_history_limit
+          LIMIT 500
         )
       )
     ORDER BY 
@@ -62,12 +60,11 @@ BEGIN
       AND v.is_recommended = false
       AND (
         p_user_id IS NULL
-        OR NOT EXISTS (
-          SELECT 1 FROM watch_history wh
+        OR v.id NOT IN (
+          SELECT wh.video_id FROM watch_history wh
           WHERE wh.user_id = p_user_id
-            AND wh.video_id = v.id
           ORDER BY wh.updated_at DESC
-          LIMIT v_history_limit
+          LIMIT 500
         )
       )
     ORDER BY 
@@ -83,12 +80,11 @@ BEGIN
       AND v.is_adult = true
       AND (
         p_user_id IS NULL
-        OR NOT EXISTS (
-          SELECT 1 FROM watch_history wh
+        OR v.id NOT IN (
+          SELECT wh.video_id FROM watch_history wh
           WHERE wh.user_id = p_user_id
-            AND wh.video_id = v.id
           ORDER BY wh.updated_at DESC
-          LIMIT v_history_limit
+          LIMIT 500
         )
       )
     ORDER BY (random() * 0.7 + EXTRACT(EPOCH FROM (NOW() - v.published_at)) / 86400.0 * 0.3)
@@ -103,12 +99,11 @@ BEGIN
       AND v.is_sea = true
       AND (
         p_user_id IS NULL
-        OR NOT EXISTS (
-          SELECT 1 FROM watch_history wh
+        OR v.id NOT IN (
+          SELECT wh.video_id FROM watch_history wh
           WHERE wh.user_id = p_user_id
-            AND wh.video_id = v.id
           ORDER BY wh.updated_at DESC
-          LIMIT v_history_limit
+          LIMIT 500
         )
       )
     ORDER BY (random() * 0.7 + EXTRACT(EPOCH FROM (NOW() - v.published_at)) / 86400.0 * 0.3)
@@ -123,12 +118,11 @@ BEGIN
       AND v.is_sea = false
       AND (
         p_user_id IS NULL
-        OR NOT EXISTS (
-          SELECT 1 FROM watch_history wh
+        OR v.id NOT IN (
+          SELECT wh.video_id FROM watch_history wh
           WHERE wh.user_id = p_user_id
-            AND wh.video_id = v.id
           ORDER BY wh.updated_at DESC
-          LIMIT v_history_limit
+          LIMIT 500
         )
       )
     ORDER BY (random() * 0.7 + EXTRACT(EPOCH FROM (NOW() - v.published_at)) / 86400.0 * 0.3)
