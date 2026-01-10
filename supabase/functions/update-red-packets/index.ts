@@ -113,7 +113,24 @@ async function updateSingleRedPacket(packetId: string, groupId: number, messageI
         hbText += `🎁 <b>${escapeHTML(claimerName)}</b> 已领取红包`
       }
 
-      await editMessage(groupId, messageId, hbText)
+      // 🎯 专属红包按钮逻辑
+      let keyboard: any = null
+      if (!isCompleted) {
+        keyboard = {
+          inline_keyboard: [
+            [
+              {
+                text: '🎁 点击领取红包',
+                callback_data: `claim_hb:${packetId}`
+              }
+            ]
+          ]
+        }
+      } else {
+        keyboard = { inline_keyboard: [] }
+      }
+
+      await editMessage(groupId, messageId, hbText, keyboard)
       return true
     }
 
@@ -159,20 +176,34 @@ async function updateSingleRedPacket(packetId: string, groupId: number, messageI
       }
     }
 
-    // 题目显示（未完成时显示）
-    let questionText = ''
+    // 🎯 普通/手气红包不再显示题目（题目在私聊发送）
 
-    if (packet.status === 'active' && packet.verification_question) {
-      questionText = `\n❓ <b>验证题目：${packet.verification_question}</b>\n👉 <b>领取方式：回复本消息并输入正确答案</b>\n`
+    // 🎯 根据红包状态决定是否显示按钮
+    let keyboard: any = null
+    if (packet.status === 'active' && packet.remaining_count > 0) {
+      // 红包未完成且有剩余，保留按钮
+      keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: '🎁 点击领取红包',
+              callback_data: `claim_hb:${packetId}`
+            }
+          ]
+        ]
+      }
+    } else {
+      // 红包已完成，移除按钮
+      keyboard = { inline_keyboard: [] }
     }
 
     // 组合最终消息
     hbText =
       `🧧 <b>${escapeHTML(senderName)}</b> 的${typeText} (${packet.total_count}份)\n` +
       `💰 总金额：<b>${packet.total_amount}</b> 抖币\n` +
-      `${statusText}${bestLuckText}${questionText}${claimsText}`
+      `${statusText}${bestLuckText}${claimsText}`
 
-    await editMessage(groupId, messageId, hbText)
+    await editMessage(groupId, messageId, hbText, keyboard)
 
     console.log(`[Update] ✅ 更新成功: ${packetId}`)
     return true

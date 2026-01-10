@@ -47,6 +47,19 @@ BEGIN
     RETURN;
   END IF;
 
+  -- 3.1 🎯 检查是否是发送者（发送者不能领取自己的红包）
+  v_sender_id := v_packet.sender_id;
+  IF v_sender_id = p_user_id THEN
+    RETURN QUERY SELECT false, '😅 不能领取自己发的红包哦', 0::DECIMAL(10,2), false;
+    RETURN;
+  END IF;
+
+  -- 3.2 🎯 专属红包权限检查（只有指定用户可以领取）
+  IF v_packet.type = 'single' AND v_packet.target_user_id IS NOT NULL AND v_packet.target_user_id <> p_user_id THEN
+    RETURN QUERY SELECT false, '❌ 这是给别人的专属红包哦', 0::DECIMAL(10,2), false;
+    RETURN;
+  END IF;
+
   -- 4. 检查剩余数量
   IF v_packet.remaining_count <= 0 THEN
     -- 更新状态为已抢完

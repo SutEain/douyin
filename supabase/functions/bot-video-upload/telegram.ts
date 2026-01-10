@@ -158,3 +158,85 @@ export async function answerCallbackQuery(
     })
   })
 }
+
+// 🎯 发送图片（支持本地文件路径或URL）
+export async function sendPhoto(
+  chatId: number,
+  photo: string | File,
+  caption?: string,
+  options: any = {}
+) {
+  const url = `${TG_API_BASE}/bot${BOT_TOKEN}/sendPhoto`
+  console.log('[sendPhoto] chatId:', chatId, 'photo:', typeof photo === 'string' ? photo : 'File')
+
+  try {
+    // 如果是文件路径或URL，使用multipart/form-data
+    if (typeof photo === 'string') {
+      const formData = new FormData()
+      formData.append('chat_id', String(chatId))
+
+      // 判断是URL还是本地路径
+      if (photo.startsWith('http://') || photo.startsWith('https://')) {
+        // URL：使用photo参数
+        formData.append('photo', photo)
+      } else {
+        // 本地路径：需要读取文件（在Deno中使用fetch读取）
+        const fileResponse = await fetch(photo)
+        if (!fileResponse.ok) {
+          throw new Error(`无法读取文件: ${photo}`)
+        }
+        const blob = await fileResponse.blob()
+        formData.append('photo', blob, photo.split('/').pop() || 'photo.jpg')
+      }
+
+      if (caption) {
+        formData.append('caption', caption)
+        formData.append('parse_mode', 'HTML')
+      }
+
+      // 添加其他选项（如reply_markup）
+      if (options.reply_markup) {
+        formData.append('reply_markup', JSON.stringify(options.reply_markup))
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData
+      })
+      const result = await response.json()
+      if (!result.ok) {
+        console.error('[sendPhoto] 失败:', result)
+      } else {
+        console.log('[sendPhoto] 成功, message_id:', result.result?.message_id)
+      }
+      return result
+    } else {
+      // File对象
+      const formData = new FormData()
+      formData.append('chat_id', String(chatId))
+      formData.append('photo', photo)
+      if (caption) {
+        formData.append('caption', caption)
+        formData.append('parse_mode', 'HTML')
+      }
+      if (options.reply_markup) {
+        formData.append('reply_markup', JSON.stringify(options.reply_markup))
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData
+      })
+      const result = await response.json()
+      if (!result.ok) {
+        console.error('[sendPhoto] 失败:', result)
+      } else {
+        console.log('[sendPhoto] 成功, message_id:', result.result?.message_id)
+      }
+      return result
+    }
+  } catch (error) {
+    console.error('[sendPhoto] 异常:', error)
+    throw error
+  }
+}

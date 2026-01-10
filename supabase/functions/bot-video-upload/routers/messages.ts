@@ -140,6 +140,13 @@ export async function handleText(
   // 🎯 优化：只在需要时才查询 userState（私聊或指令消息）
   const userState = await getUserState(chatId)
 
+  // 🎯 处理红包答案回复（私聊中）
+  if (chatId > 0 && userState.state === 'waiting_red_packet_answer') {
+    const { handleRedPacketAnswer } = await import('../features/redPacket.ts')
+    await handleRedPacketAnswer(chatId, text, rawMessage.from.id)
+    return
+  }
+
   // 1. 处理清除键盘
   if (chatId < 0 && isCleanCmd) {
     await sendMessage(chatId, '🧹 正在清理群组菜单...', {

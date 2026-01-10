@@ -1,5 +1,6 @@
+/// <reference types="https://deno.land/x/types/index.d.ts" />
 import { supabase } from '../supabaseClient.ts'
-import { sendMessage, answerCallbackQuery, editMessage } from '../telegram.ts'
+import { sendMessage, answerCallbackQuery, editMessage, sendPhoto } from '../telegram.ts'
 import { escapeHTML, sanitizeError } from '../utils/text.ts'
 
 // 🎯 批量更新机制：通过数据库控制更新频率（Edge Function 无状态，不能用内存变量）
@@ -88,6 +89,12 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
       count = parseInt(parts[2] || '1')
       if (isNaN(count) || count <= 0) count = 1
 
+      // 🎯 人数限制：最多999人
+      if (count > 999) {
+        await sendMessage(chatId, '❌ 红包人数不能超过 999 人')
+        return
+      }
+
       if (parts[3]?.toLowerCase() === 'sq' || parts[2]?.toLowerCase() === 'sq') {
         type = 'lucky'
       } else if (count > 1) {
@@ -107,10 +114,9 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
     }
 
     // 4. 调用 RPC 创建红包 (先不传 origin_message_id)
-    // 🎯 专属红包不需要验证码，普通/拼手气红包需要验证码（按钮模式）
-    const mathQuestion = type === 'single' ? null : generateMathQuestion()
-    const verificationAnswer = mathQuestion ? String(mathQuestion.answer) : ''
-    const question = mathQuestion ? mathQuestion.question : ''
+    // 🎯 专属红包不需要验证码，普通/拼手气红包需要验证码（按钮模式，题目在私聊发送）
+    const verificationAnswer = type === 'single' ? '' : ''
+    const question = type === 'single' ? '' : ''
 
     const { data: res, error } = await supabase.rpc('create_group_red_packet', {
       p_sender_id: sender.id,
@@ -162,21 +168,68 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
         ]
       }
     } else {
-      // 🎯 普通红包/拼手气红包：回复消息答题模式
+      // 🎯 普通红包/拼手气红包：按钮模式，点击后私聊发送计算题，使用图片发送
       const typeText = type === 'lucky' ? '拼手气红包' : '普通红包'
 
       hbText =
         `🧧 <b>${escapeHTML(sender.nickname)}</b> 发了一个${typeText} (${count}份)\n` +
         `💰 总金额：<b>${amount}</b> 抖币\n` +
         `⏳ 剩余 <b>${count}</b>/${count} 份\n\n` +
-        `❓ <b>验证题目：${question}</b>\n` +
-        `👉 <b>领取方式：回复本消息并输入正确答案</b>\n\n` +
+        `👉 <b>点击下方按钮领取红包</b>\n` +
+        `💡 点击后会私聊发送计算题，30秒内回答正确即可领取\n\n` +
         `📜 <b>红包规则：</b>\n` +
         `• 24小时内未领完将自动退回\n\n` +
         `📢 祝大家：好运连连，万事如意！`
 
-      // 不使用按钮，用户需要回复消息
-      keyboard = null
+      // 🎯 使用按钮，点击后私聊发送计算题
+      keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: '🎁 点击领取红包',
+              callback_data: `claim_hb:${packetId}`
+            }
+          ]
+        ]
+      }
+
+      // 🎯 使用图片发送（普通/手气红包）
+      // 图片 URL：https://zhlkanxfucnsatafeqdp.supabase.co/storage/v1/object/public/user-content/hb.jpg
+      try {
+        const { SUPABASE_URL } = await import('../env.ts')
+
+        // 构建图片 URL：优先使用环境变量配置的 CDN URL，否则使用 Supabase Storage
+        // @ts-ignore: Deno 在 Edge Function 环境中可用
+        const cdnBaseUrl = Deno.env.get('PUBLIC_ASSETS_CDN_URL') || Deno.env.get('CDN_BASE_URL')
+        let imageUrl: string
+
+        if (cdnBaseUrl) {
+          // 方式1：使用环境变量配置的 CDN URL
+          imageUrl = `${cdnBaseUrl.replace(/\/$/, '')}/storage/v1/object/public/user-content/hb.jpg`
+        } else {
+          // 方式2：使用 Supabase Storage 公开 URL
+          const supabaseProjectRef = SUPABASE_URL.replace('https://', '').split('.')[0]
+          imageUrl = `https://${supabaseProjectRef}.supabase.co/storage/v1/object/public/user-content/hb.jpg`
+        }
+
+        console.log(`[RedPacket] 尝试发送图片: ${imageUrl}`)
+        const sentMsg = await sendPhoto(chatId, imageUrl, hbText, { reply_markup: keyboard })
+
+        if (sentMsg.ok) {
+          console.log(`[RedPacket] ✅ 图片发送成功`)
+          // 更新原始消息 ID
+          await supabase
+            .from('group_red_packets')
+            .update({ origin_message_id: sentMsg.result.message_id })
+            .eq('id', res.packet_id)
+          return
+        } else {
+          console.warn(`[RedPacket] 图片发送失败:`, sentMsg)
+        }
+      } catch (photoError) {
+        console.warn('[RedPacket] 发送图片异常，回退到文本消息:', photoError)
+        // 回退到文本消息
+      }
     }
 
     const sentMsg = keyboard
@@ -197,7 +250,84 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
 }
 
 /**
- * 生成数学题（加减乘除，结果0-100）
+ * 🎯 Emoji数字映射表（0-9）
+ */
+const EMOJI_NUMBERS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣']
+
+/**
+ * 将数字转换为emoji数字字符串
+ */
+function numberToEmoji(num: number): string {
+  if (num < 0) return '❌'
+  if (num === 0) return EMOJI_NUMBERS[0]
+
+  const digits = num.toString().split('')
+  return digits.map((d) => EMOJI_NUMBERS[parseInt(d)]).join('')
+}
+
+/**
+ * 将emoji数字字符串转换为数字
+ */
+function emojiToNumber(emojiStr: string): number | null {
+  const emojiMap: Record<string, number> = {}
+  EMOJI_NUMBERS.forEach((emoji, idx) => {
+    emojiMap[emoji] = idx
+  })
+
+  const digits = emojiStr.split('').filter((c) => emojiMap[c] !== undefined)
+  if (digits.length === 0) return null
+
+  const numStr = digits.map((c) => emojiMap[c]).join('')
+  return parseInt(numStr, 10)
+}
+
+/**
+ * 🎯 生成emoji数学题（加减法，结果0-99，使用emoji数字）
+ */
+function generateEmojiMathQuestion() {
+  const operators = ['➕', '➖'] // 只用加法和减法，更简单
+  let a: number, b: number, op: string, correctAnswer: number
+  let attempts = 0
+
+  do {
+    attempts++
+    if (attempts > 100) {
+      // 防止死循环，给个默认简单题
+      a = 5
+      b = 3
+      op = '➕'
+      correctAnswer = 8
+      break
+    }
+
+    op = operators[Math.floor(Math.random() * operators.length)]
+
+    if (op === '➕') {
+      // 加法：确保结果不超过99
+      a = Math.floor(Math.random() * 50) + 1 // 1-50
+      b = Math.floor(Math.random() * Math.min(50, 99 - a)) + 1 // 1 到 (99-a)
+      correctAnswer = a + b
+    } else {
+      // 减法：确保结果为正数且不超过99
+      a = Math.floor(Math.random() * 90) + 10 // 10-99
+      b = Math.floor(Math.random() * Math.min(a - 1, 50)) + 1 // 1 到 min(a-1, 50)
+      correctAnswer = a - b
+    }
+  } while (correctAnswer < 0 || correctAnswer > 99)
+
+  const aEmoji = numberToEmoji(a)
+  const bEmoji = numberToEmoji(b)
+  const questionEmoji = `${aEmoji} ${op} ${bEmoji} = ?`
+
+  return {
+    question: questionEmoji,
+    questionText: `${a} ${op === '➕' ? '+' : '-'} ${b} = ?`, // 用于存储正确答案
+    answer: correctAnswer
+  }
+}
+
+/**
+ * 生成数学题（加减乘除，结果0-100）- 保留用于兼容
  */
 function generateMathQuestion() {
   const operators = ['+', '-', '×', '÷']
@@ -549,17 +679,30 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
       statusText = `⏳ 剩余 <b>${packet.remaining_count}</b>/${packet.total_count} 份`
     }
 
-    // 💡 保持显示验证题目逻辑（只对未完成的普通/拼手气红包）
-    let questionText = ''
-    if (packet.status !== 'completed' && packet.verification_question) {
-      questionText = `\n\n验证题目：<b>${packet.verification_question}</b>\n👉 <b>领取方式：回复本消息输入答案</b>`
+    // 🎯 普通/手气红包不再显示题目（题目在私聊发送）
+
+    // 🎯 根据红包状态决定是否显示按钮
+    let keyboard: any = null
+    if (packet.status === 'active' && packet.remaining_count > 0) {
+      // 红包未完成且有剩余，保留按钮
+      keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: '🎁 点击领取红包',
+              callback_data: `claim_hb:${packetId}`
+            }
+          ]
+        ]
+      }
+    } else {
+      // 红包已完成，移除按钮
+      keyboard = { inline_keyboard: [] }
     }
 
     // 🎯 智能分割消息：如果领取记录太多，分多条消息发送
     const baseText =
-      `${hbTitle}\n` +
-      `💰 总金额：<b>${packet.total_amount}</b> 抖币\n` +
-      `📊 状态：${statusText}${questionText}`
+      `${hbTitle}\n` + `💰 总金额：<b>${packet.total_amount}</b> 抖币\n` + `📊 状态：${statusText}`
 
     if (claims && claims.length > 0) {
       const MAX_MESSAGE_LENGTH = 4000 // 留96字符余量
@@ -570,7 +713,8 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
       for (let i = 0; i < claims.length; i++) {
         const c = claims[i]
         const name = c.user?.nickname || '匿名'
-        const recordLine = `${i + 1}. ${escapeHTML(name)} 领了 <code>${c.amount}</code> 币\n`
+        // 🎯 用🧧 emoji替代数字ID
+        const recordLine = `🧧 ${escapeHTML(name)} 领了 <code>${c.amount}</code> 币\n`
         recordTexts.push(recordLine)
       }
 
@@ -589,9 +733,9 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
         splitIndex = i + 1
       }
 
-      // 编辑原消息
+      // 编辑原消息（保留按钮）
       const firstMessage = currentText + firstMessageRecords
-      await editMessage(chatId, messageId, firstMessage)
+      await editMessage(chatId, messageId, firstMessage, { reply_markup: keyboard })
 
       // 如果还有剩余记录，发送新消息
       if (splitIndex < recordTexts.length) {
@@ -615,8 +759,8 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
         }
       }
     } else {
-      // 没有领取记录，直接编辑原消息
-      await editMessage(chatId, messageId, baseText)
+      // 没有领取记录，直接编辑原消息（保留按钮）
+      await editMessage(chatId, messageId, baseText, { reply_markup: keyboard })
     }
   } catch (e) {
     console.error('Update HB Msg Error:', e)
@@ -624,7 +768,9 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
 }
 
 /**
- * 处理抢红包回调（新版：按钮模式 + 10秒冷却机制）
+ * 🎯 处理抢红包回调（新版：按钮模式 + 私聊答题）
+ * - 专属红包：直接领取
+ * - 普通/手气红包：点击按钮后私聊发送计算题，30秒内回答
  */
 export async function handleClaimRedPacket(
   chatId: number,
@@ -662,36 +808,11 @@ export async function handleClaimRedPacket(
       return
     }
 
-    // 2. 🎯 检查冷却期（答错后10秒内不能再点）
-    console.log(`[RedPacket] 步骤2: 检查冷却期 packetId=${packetId}, userId=${user.id}`)
-    const { data: wrongAttempt } = await supabase
-      .from('red_packet_wrong_attempts')
-      .select('can_retry_at, attempt_count')
-      .eq('packet_id', packetId)
-      .eq('user_id', user.id)
-      .single()
-
-    if (wrongAttempt) {
-      const now = new Date()
-      const canRetryAt = new Date(wrongAttempt.can_retry_at)
-      if (now < canRetryAt) {
-        const waitSeconds = Math.ceil((canRetryAt.getTime() - now.getTime()) / 1000)
-        console.log(`[RedPacket] ⏳ 用户在冷却期: userId=${user.id}, 剩余${waitSeconds}秒`)
-        await answerCallbackQuery(
-          callbackQueryId,
-          `⏳ 答案错误！请等待 ${waitSeconds} 秒后重试`,
-          true
-        )
-        return
-      }
-      console.log(`[RedPacket] ✅ 冷却期已过`)
-    }
-
-    // 3. 获取红包信息
-    console.log(`[RedPacket] 步骤3: 查询红包信息 packetId=${packetId}`)
+    // 2. 获取红包信息
+    console.log(`[RedPacket] 步骤2: 查询红包信息 packetId=${packetId}`)
     const { data: packet, error: packetError } = await supabase
       .from('group_red_packets')
-      .select('verification_answer, status, remaining_count, type, target_user_id')
+      .select('status, remaining_count, type, target_user_id, group_id')
       .eq('id', packetId)
       .single()
 
@@ -708,7 +829,7 @@ export async function handleClaimRedPacket(
     }
 
     console.log(
-      `[RedPacket] ✅ 红包信息: type=${packet.type}, status=${packet.status}, remaining=${packet.remaining_count}, target_user_id=${packet.target_user_id}`
+      `[RedPacket] ✅ 红包信息: type=${packet.type}, status=${packet.status}, remaining=${packet.remaining_count}`
     )
 
     if (packet.status !== 'active') {
@@ -718,135 +839,243 @@ export async function handleClaimRedPacket(
       return
     }
 
-    // 4. 🎯 验证答案（专属红包不需要验证）
-    console.log(
-      `[RedPacket] 步骤4: 验证答案 type=${packet.type}, correctAnswer=${packet.verification_answer}, userAnswer=${userAnswer}`
-    )
+    // 2.1 🎯 检查是否已经领取过（普通/手气红包）
+    if (packet.type !== 'single') {
+      const { data: existingClaim } = await supabase
+        .from('group_red_packet_claims')
+        .select('id')
+        .eq('packet_id', packetId)
+        .eq('user_id', user.id)
+        .maybeSingle()
 
-    if (
-      packet.type !== 'single' &&
-      packet.verification_answer &&
-      packet.verification_answer !== userAnswer
-    ) {
-      // 答案错误，记录冷却时间
-      console.log(`[RedPacket] ❌ 答案错误! userId=${user.id}, 记录冷却10秒`)
-      await supabase.from('red_packet_wrong_attempts').upsert(
-        {
-          packet_id: packetId,
-          user_id: user.id,
-          tg_user_id: tgUserId,
-          wrong_at: new Date().toISOString(),
-          can_retry_at: new Date(Date.now() + 10000).toISOString(), // 10秒后
-          attempt_count: (wrongAttempt?.attempt_count || 0) + 1
-        },
-        {
-          onConflict: 'packet_id,user_id'
-        }
-      )
+      if (existingClaim) {
+        console.log(`[RedPacket] ❌ 用户已领取过: userId=${user.id}`)
+        await answerCallbackQuery(callbackQueryId, '❌ 你已经领取过这个红包了', true)
+        return
+      }
+    }
 
-      await answerCallbackQuery(callbackQueryId, '❌ 答案错误！请等待10秒后重试', true)
+    // 3. 🎯 专属红包：直接领取（不需要答题）
+    if (packet.type === 'single') {
+      // 检查是否是目标用户
+      if (packet.target_user_id && packet.target_user_id !== user.id) {
+        await answerCallbackQuery(callbackQueryId, '❌ 这是给别人的专属红包哦', true)
+        return
+      }
+
+      // 直接调用 RPC 领取
+      const { data: rpcResult, error } = await supabase.rpc('claim_group_red_packet', {
+        p_packet_id: packetId,
+        p_user_id: user.id
+      })
+
+      if (error) {
+        console.error(`[RedPacket] ❌ RPC 调用失败:`, error)
+        throw error
+      }
+
+      const res = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
+
+      if (!res || !res.success) {
+        await answerCallbackQuery(callbackQueryId, res?.message || '领取失败', true)
+        return
+      }
+
+      await answerCallbackQuery(callbackQueryId, `🎊 恭喜！抢到 ${res.amount} 抖币！`, true)
+
+      // 更新群组消息
+      if (packet.remaining_count - 1 <= 0) {
+        await updateRedPacketMessageNow(packet.group_id, messageId, packetId)
+      }
+
       return
     }
 
-    console.log(`[RedPacket] ✅ 答案验证通过，开始调用 RPC 领取红包`)
+    // 4. 🎯 普通/手气红包：私聊发送计算题
+    console.log(`[RedPacket] 步骤3: 生成计算题并私聊发送 packetId=${packetId}, userId=${user.id}`)
 
-    // 5. 答案正确，调用 RPC 领取红包
-    console.log(
-      `[RedPacket] 步骤5: 调用 RPC claim_group_red_packet packetId=${packetId}, userId=${user.id}`
-    )
+    // 生成emoji计算题
+    const mathQuestion = generateEmojiMathQuestion()
+    const expiresAt = new Date(Date.now() + 30000) // 30秒后过期
+
+    // 保存到用户状态（等待答案）
+    const { updateUserState } = await import('../state.ts')
+    await updateUserState(tgUserId, {
+      state: 'waiting_red_packet_answer',
+      context: {
+        packet_id: packetId,
+        group_id: packet.group_id,
+        message_id: messageId,
+        question: mathQuestion.questionText,
+        answer: String(mathQuestion.answer),
+        expires_at: expiresAt.toISOString()
+      }
+    })
+
+    // 私聊发送计算题
+    const questionMsg =
+      `🧧 <b>红包领取验证</b>\n\n` +
+      `📝 <b>计算题：</b>\n` +
+      `${mathQuestion.question}\n\n` +
+      `⏰ <b>请在30秒内回复答案</b>\n` +
+      `💡 可以直接输入数字，也可以用emoji数字回答`
+
+    await sendMessage(tgUserId, questionMsg)
+
+    await answerCallbackQuery(callbackQueryId, '✅ 已私聊发送计算题，请在30秒内回复答案', true)
+
+    console.log(`[RedPacket] ✅ 已发送计算题，等待用户回答`)
+  } catch (err: any) {
+    console.error('[RedPacket] ❌ 领取异常:', err)
+    await answerCallbackQuery(callbackQueryId, `❌ ${sanitizeError(err.message)}`, true)
+  }
+}
+
+/**
+ * 🎯 处理私聊中的红包答案回复
+ */
+export async function handleRedPacketAnswer(chatId: number, text: string, tgUserId: number) {
+  console.log(`[RedPacket-Answer] 📝 收到答案回复: tgUserId=${tgUserId}, answer=${text.trim()}`)
+
+  try {
+    // 1. 获取用户状态
+    const { getUserState, updateUserState } = await import('../state.ts')
+    const userState = await getUserState(tgUserId)
+
+    if (userState.state !== 'waiting_red_packet_answer') {
+      return // 不是等待答案状态
+    }
+
+    const context = userState.context || {}
+    const packetId = context.packet_id
+    const groupId = context.group_id
+    const messageId = context.message_id
+    const correctAnswer = context.answer
+    const expiresAt = context.expires_at
+
+    if (!packetId || !groupId || !messageId) {
+      console.log(`[RedPacket-Answer] ❌ 缺少必要信息`)
+      await updateUserState(tgUserId, { state: 'idle' })
+      return
+    }
+
+    // 2. 检查是否超时
+    if (expiresAt && new Date(expiresAt) < new Date()) {
+      console.log(`[RedPacket-Answer] ⏰ 答案超时`)
+      await sendMessage(chatId, '⏰ 答题时间已过期，请重新点击红包按钮')
+      await updateUserState(tgUserId, { state: 'idle' })
+      return
+    }
+
+    // 3. 解析答案（支持数字和emoji）
+    const userAnswerStr = text.trim()
+    let userAnswer: number | null = null
+
+    // 尝试解析为数字
+    const numAnswer = parseInt(userAnswerStr, 10)
+    if (!isNaN(numAnswer)) {
+      userAnswer = numAnswer
+    } else {
+      // 尝试解析为emoji数字
+      userAnswer = emojiToNumber(userAnswerStr)
+    }
+
+    if (userAnswer === null) {
+      await sendMessage(chatId, '❌ 答案格式错误，请输入数字或emoji数字')
+      return
+    }
+
+    // 4. 验证答案
+    if (String(userAnswer) !== correctAnswer) {
+      console.log(`[RedPacket-Answer] ❌ 答案错误: 用户=${userAnswer}, 正确答案=${correctAnswer}`)
+      await sendMessage(chatId, `❌ 答案错误！正确答案是 ${correctAnswer}\n请重新点击红包按钮`)
+      await updateUserState(tgUserId, { state: 'idle' })
+      return
+    }
+
+    console.log(`[RedPacket-Answer] ✅ 答案正确，开始领取红包`)
+
+    // 5. 获取用户信息
+    const { data: user } = await supabase
+      .from('profiles')
+      .select('id, nickname')
+      .eq('tg_user_id', tgUserId)
+      .single()
+
+    if (!user) {
+      await sendMessage(chatId, '❌ 用户信息不存在')
+      await updateUserState(tgUserId, { state: 'idle' })
+      return
+    }
+
+    // 6. 调用 RPC 领取红包
     const { data: rpcResult, error } = await supabase.rpc('claim_group_red_packet', {
       p_packet_id: packetId,
       p_user_id: user.id
     })
 
     if (error) {
-      console.error(`[RedPacket] ❌ RPC 调用失败:`, error)
-      throw error
-    }
-
-    console.log(`[RedPacket] RPC 返回结果:`, rpcResult)
-
-    // 🎯 RPC 返回的是数组，需要取第一个元素
-    const res = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
-
-    if (!res || !res.success) {
-      const errorMsg = res?.message || '领取失败'
-      console.log(`[RedPacket] ❌ 领取失败: ${errorMsg}`)
-      await answerCallbackQuery(callbackQueryId, errorMsg, true)
+      console.error(`[RedPacket-Answer] ❌ RPC 调用失败:`, error)
+      await sendMessage(chatId, `❌ 领取失败: ${error.message}`)
+      await updateUserState(tgUserId, { state: 'idle' })
       return
     }
 
-    // 6. 领取成功
+    const res = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
+
+    if (!res || !res.success) {
+      await sendMessage(chatId, res?.message || '领取失败')
+      await updateUserState(tgUserId, { state: 'idle' })
+      return
+    }
+
+    // 7. 领取成功
     const amount = res.amount
     const isBestLuck = res.is_best_luck || false
-
-    console.log(
-      `[RedPacket] 🎊 领取成功! userId=${user.id}, amount=${amount}, isBestLuck=${isBestLuck}`
-    )
 
     let successMsg = `🎊 恭喜！抢到 ${amount} 抖币！`
     if (isBestLuck) {
       successMsg = `🏆 恭喜！抢到 ${amount} 抖币！\n🎉 你是手气最佳！`
     }
 
-    await answerCallbackQuery(callbackQueryId, successMsg, true)
+    await sendMessage(chatId, successMsg)
 
-    // 7. 删除错误记录（答对了就清除冷却）
-    console.log(`[RedPacket] 步骤7: 清除冷却记录 userId=${user.id}`)
-    await supabase
-      .from('red_packet_wrong_attempts')
-      .delete()
-      .eq('packet_id', packetId)
-      .eq('user_id', user.id)
+    // 8. 清除用户状态
+    await updateUserState(tgUserId, { state: 'idle' })
 
-    // 8. 🎯 标记需要更新（加入更新队列，不立即更新）
-    const newRemaining = packet.remaining_count - 1
-    console.log(
-      `[RedPacket] 步骤8: 加入更新队列 oldRemaining=${packet.remaining_count}, newRemaining=${newRemaining}`
-    )
+    // 9. 更新群组红包消息
+    const { data: latestPacket } = await supabase
+      .from('group_red_packets')
+      .select('remaining_count, status')
+      .eq('id', packetId)
+      .single()
 
-    await supabase.from('red_packet_update_queue').upsert(
-      {
-        packet_id: packetId,
-        needs_update: true,
-        remaining_count: newRemaining,
-        total_count: packet.remaining_count
-      },
-      {
-        onConflict: 'packet_id'
-      }
-    )
-
-    // 9. 🎯 如果红包抢完了，立即更新消息
-    console.log(
-      `[RedPacket] 步骤9: 检查是否需要立即更新 newRemaining=${newRemaining}, isZero=${newRemaining <= 0}, isLessThan10=${packet.remaining_count <= 10}`
-    )
-
-    if (newRemaining <= 0) {
-      console.log(`[RedPacket] 🎉 红包已抢完，立即更新消息 chatId=${chatId}, msgId=${messageId}`)
-      try {
-        await updateRedPacketMessageNow(chatId, messageId, packetId)
-        console.log(`[RedPacket] ✅ 立即更新完成`)
-      } catch (updateErr) {
-        console.error(`[RedPacket] ❌ 立即更新失败:`, updateErr)
-      }
-    } else if (packet.remaining_count <= 10) {
-      console.log(`[RedPacket] 📊 剩余<10份，立即更新消息`)
-      try {
-        await updateRedPacketMessageNow(chatId, messageId, packetId)
-        console.log(`[RedPacket] ✅ 立即更新完成`)
-      } catch (updateErr) {
-        console.error(`[RedPacket] ❌ 立即更新失败:`, updateErr)
-      }
+    if (
+      latestPacket &&
+      (latestPacket.remaining_count <= 0 || latestPacket.status === 'completed')
+    ) {
+      await updateRedPacketMessageNow(groupId, messageId, packetId)
     } else {
-      console.log(`[RedPacket] ⏳ 不触发立即更新，等待批量更新`)
+      // 加入更新队列
+      await supabase.from('red_packet_update_queue').upsert(
+        {
+          packet_id: packetId,
+          needs_update: true,
+          remaining_count: latestPacket?.remaining_count || 0,
+          total_count: latestPacket?.remaining_count || 0
+        },
+        {
+          onConflict: 'packet_id'
+        }
+      )
     }
 
-    console.log(`[RedPacket] ✅ 领取流程完成 userId=${user.id}`)
+    console.log(`[RedPacket-Answer] ✅ 领取成功: userId=${user.id}, amount=${amount}`)
   } catch (err: any) {
-    console.error('[RedPacket] ❌ 领取异常:', err)
-    console.error('[RedPacket] 错误详情:', JSON.stringify(err, null, 2))
-    await answerCallbackQuery(callbackQueryId, `❌ ${sanitizeError(err.message)}`, true)
+    console.error('[RedPacket-Answer] ❌ 处理异常:', err)
+    const { updateUserState } = await import('../state.ts')
+    await updateUserState(tgUserId, { state: 'idle' })
+    await sendMessage(chatId, `❌ 处理异常: ${sanitizeError(err.message)}`)
   }
 }
 
@@ -968,7 +1197,8 @@ async function updateRedPacketMessageNow(chatId: number, messageId: number, pack
         const c = packet.claims[i]
         const name = c.user?.nickname || '未知'
         const isBest = c.is_best_luck ? ' 🏆' : ''
-        const line = `${i + 1}. ${escapeHTML(name)} - ${c.amount}抖币${isBest}\n`
+        // 🎯 用🧧 emoji替代数字ID
+        const line = `🧧 ${escapeHTML(name)} - ${c.amount}抖币${isBest}\n`
 
         if (currentLength + line.length > MAX_CHARS) {
           // 超过限制，显示还有多少人
@@ -983,21 +1213,35 @@ async function updateRedPacketMessageNow(chatId: number, messageId: number, pack
       }
     }
 
-    // 🎯 题目显示（未完成时显示）
-    let questionText = ''
-
-    if (packet.status === 'active' && packet.verification_question) {
-      questionText = `\n❓ <b>验证题目：${packet.verification_question}</b>\n👉 <b>领取方式：回复本消息并输入正确答案</b>\n`
-    }
+    // 🎯 普通/手气红包不再显示题目（题目在私聊发送）
 
     // 组合最终消息
     hbText =
       `🧧 <b>${escapeHTML(senderName)}</b> 的${typeText} (${packet.total_count}份)\n` +
       `💰 总金额：<b>${packet.total_amount}</b> 抖币\n` +
-      `${statusText}${bestLuckText}${questionText}${claimsText}`
+      `${statusText}${bestLuckText}${claimsText}`
+
+    // 🎯 根据红包状态决定是否显示按钮
+    let keyboard: any = null
+    if (packet.status === 'active' && packet.remaining_count > 0) {
+      // 红包未完成且有剩余，保留按钮
+      keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: '🎁 点击领取红包',
+              callback_data: `claim_hb:${packetId}`
+            }
+          ]
+        ]
+      }
+    } else {
+      // 红包已完成，移除按钮
+      keyboard = { inline_keyboard: [] }
+    }
 
     console.log(`[RedPacket-Update] 📤 发送编辑消息请求...`)
-    await editMessage(chatId, messageId, hbText)
+    await editMessage(chatId, messageId, hbText, { reply_markup: keyboard })
 
     console.log(`[RedPacket-Update] ✅ 消息更新成功`)
 
