@@ -304,7 +304,7 @@ async function processVideo(video) {
       })
       .eq('id', videoId)
 
-    console.log(`   ✅ 成功: ${newUrl}`)
+    console.log(`   ✅ 成功: ${finalPlayUrl}`)
   } catch (err) {
     console.error(`   ❌ 失败 [${videoId}]:`, err.message)
   } finally {
