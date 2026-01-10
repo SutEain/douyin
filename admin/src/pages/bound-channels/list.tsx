@@ -14,7 +14,8 @@ export const BoundChannelList = () => {
       initial: [{ field: 'created_at', order: 'desc' }]
     },
     meta: {
-      select: '*, profiles:user_id(nickname, numeric_id)'
+      // 🎯 使用 !inner 强制内联连接 profiles，确保关联查询能正常工作
+      select: '*, profiles:user_id!inner(nickname, numeric_id)'
     },
     queryOptions: {
       staleTime: 0,

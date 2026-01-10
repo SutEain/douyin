@@ -15,6 +15,8 @@ const typeColors: Record<string, string> = {
   withdraw: 'volcano',
   red_packet_send: 'pink',
   red_packet_claim: 'cyan',
+  hb_in: 'cyan', // 🎯 群红包领取
+  hb_out: 'pink', // 🎯 群红包发送
   adjustment: 'geekblue',
   task_reward: 'gold',
   inheritance_in: 'lime',
@@ -29,6 +31,8 @@ const typeLabels: Record<string, string> = {
   withdraw: '提现',
   red_packet_send: '发红包',
   red_packet_claim: '抢红包',
+  hb_in: '群红包领取', // 🎯 群红包领取
+  hb_out: '群红包发送', // 🎯 群红包发送
   adjustment: '手动调整',
   task_reward: '任务奖励',
   inheritance_in: '资产继承(入)',
@@ -41,7 +45,8 @@ export const CoinTransactionList = () => {
     syncWithLocation: true,
     meta: {
       // 🎯 使用 !inner 强制内联连接 profiles，并可选连接 counterparty
-      select: '*, profiles:user_id!inner(nickname,numeric_id), counterparty:counterparty_id(nickname,numeric_id)'
+      select:
+        '*, profiles:user_id!inner(nickname,numeric_id), counterparty:counterparty_id(nickname,numeric_id)'
     },
     sorters: {
       initial: [{ field: 'created_at', order: 'desc' }]
@@ -209,9 +214,9 @@ export const CoinTransactionList = () => {
           width={120}
           render={(v) => <span style={{ fontFamily: 'monospace' }}>{v}</span>}
         />
-        <Table.Column 
-          dataIndex="description" 
-          title="备注" 
+        <Table.Column
+          dataIndex="description"
+          title="备注"
           render={(v, record: any) => (
             <Space direction="vertical" size={0}>
               <span>{v || '-'}</span>
@@ -222,7 +227,7 @@ export const CoinTransactionList = () => {
                 </small>
               )}
             </Space>
-          )} 
+          )}
         />
         <Table.Column
           dataIndex="created_at"
