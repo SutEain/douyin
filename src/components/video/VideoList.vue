@@ -192,10 +192,8 @@ const recordedViews = new Set<string>() // 已记录开始观看
 const completedViews = new Set<string>() // 已记录完播
 let currentCompletionTimer: ReturnType<typeof setTimeout> | null = null // 当前视频的完播计时器
 
-// 🎯 观看时长累计追踪（极简版本）
-let watchStartTime: number | null = null // 当前视频开始观看的时间戳
-let currentWatchVideoId: string | null = null // 当前正在观看的视频ID
-let currentVideoDuration: number = 0 // 当前视频的时长（秒）
+// 🎯 观看时长心跳记录（简化版：只要在播放就累计）
+let watchTimeHeartbeatTimer: ReturnType<typeof setInterval> | null = null // 心跳定时器
 
 // 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
 function recordEnterCurrent(item: VideoItem | null, contentType: string) {
@@ -217,51 +215,7 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
     console.log(`[ViewHistory] 记录播放: ${item.aweme_id.substring(0, 8)}`)
   }
 
-  // 🎯 2. 开始累计观看时长（极简版本：只对视频累计）
-  if (contentType === 'video') {
-    // 🎯 如果之前有视频在观看，先上报时长
-    if (watchStartTime && currentWatchVideoId && currentWatchVideoId !== item.aweme_id) {
-      const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
-      // 🎯 限制最多不超过视频实际时长
-      const cappedSeconds = Math.min(elapsedSeconds, currentVideoDuration)
-      if (cappedSeconds > 0) {
-        console.log(
-          `[WatchTime] 📤 切换视频，上报旧视频时长: ${cappedSeconds}秒 (实际: ${elapsedSeconds}秒, 视频时长: ${currentVideoDuration}秒)`
-        )
-        incrementWatchTime(cappedSeconds, currentWatchVideoId).catch((e) =>
-          console.warn('[WatchTime] 上报失败:', e)
-        )
-      }
-    }
-
-    // 🎯 开始新视频的计时（或继续同一视频的计时）
-    if (currentWatchVideoId !== item.aweme_id) {
-      watchStartTime = Date.now()
-      currentWatchVideoId = item.aweme_id
-      currentVideoDuration = Math.ceil(item.video?.duration || 15) // 默认15秒
-      console.log(`[WatchTime] 🟢 开始新视频计时:`, {
-        videoId: item.aweme_id.substring(0, 8),
-        duration: currentVideoDuration
-      })
-    } else {
-      console.log(`[WatchTime] 🔄 继续同一视频计时`)
-    }
-  } else {
-    // 🎯 切换到图片/相册：上报之前视频的时长
-    if (watchStartTime && currentWatchVideoId) {
-      const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
-      const cappedSeconds = Math.min(elapsedSeconds, currentVideoDuration)
-      if (cappedSeconds > 0) {
-        console.log(`[WatchTime] 📤 切换到图片，上报视频时长: ${cappedSeconds}秒`)
-        incrementWatchTime(cappedSeconds, currentWatchVideoId).catch((e) =>
-          console.warn('[WatchTime] 上报失败:', e)
-        )
-      }
-      watchStartTime = null
-      currentWatchVideoId = null
-      currentVideoDuration = 0
-    }
-  }
+  // 🎯 2. 观看时长由心跳定时器统一处理，这里不需要额外逻辑
 
   // 3. 设置完播计时器
   if (completedViews.has(item.aweme_id)) return // 已完播过
@@ -1779,25 +1733,56 @@ onMounted(() => {
       })
     }
   })
+
+  // 🎯 启动观看时长心跳（每10秒检查一次，只在视频播放时上报）
+  watchTimeHeartbeatTimer = setInterval(() => {
+    try {
+      // 检查是否正在播放视频
+      if (!isPlaying.value) {
+        return // 未播放，跳过本次心跳
+      }
+
+      // 获取当前视频
+      const currentItem = props.items[currentIndex.value]
+      if (!currentItem?.aweme_id) {
+        return // 没有当前视频
+      }
+
+      // 检查内容类型，只对视频进行时长累计
+      const contentType = getContentType(currentItem)
+      if (contentType !== 'video') {
+        return // 非视频内容，不累计时长
+      }
+
+      // 获取当前视频元素，确认真的在播放
+      const currentSlot = slots.find((s) => s.role === 'current')
+      if (!currentSlot) {
+        return
+      }
+      const video = slotRefs.get(currentSlot.key)
+      if (!video || video.paused) {
+        return // 视频元素不存在或已暂停
+      }
+
+      // ✅ 发送心跳：累计10秒观看时长
+      console.log(`[WatchTime] 💓 心跳上报: 10秒, videoId=${currentItem.aweme_id.substring(0, 8)}`)
+      incrementWatchTime(10, currentItem.aweme_id).catch((e) =>
+        console.warn('[WatchTime] 心跳上报失败:', e)
+      )
+    } catch (error) {
+      console.error('[WatchTime] 心跳处理异常:', error)
+    }
+  }, 10000) // 每10秒触发一次
+
+  console.log('[WatchTime] ✅ 心跳定时器已启动')
 })
 
 onUnmounted(() => {
-  // 🎯 页面卸载时上报剩余观看时长
-  if (watchStartTime && currentWatchVideoId) {
-    const elapsedSeconds = Math.floor((Date.now() - watchStartTime) / 1000)
-    // 🎯 限制最多不超过视频实际时长
-    const cappedSeconds = Math.min(elapsedSeconds, currentVideoDuration)
-    if (cappedSeconds > 0) {
-      console.log(
-        `[WatchTime] 📤 页面卸载，上报剩余时长: ${cappedSeconds}秒 (实际: ${elapsedSeconds}秒)`
-      )
-      incrementWatchTime(cappedSeconds, currentWatchVideoId).catch((e) =>
-        console.warn('[WatchTime] 上报失败:', e)
-      )
-    }
-    watchStartTime = null
-    currentWatchVideoId = null
-    currentVideoDuration = 0
+  // 🎯 清除观看时长心跳定时器
+  if (watchTimeHeartbeatTimer) {
+    clearInterval(watchTimeHeartbeatTimer)
+    watchTimeHeartbeatTimer = null
+    console.log('[WatchTime] ✅ 心跳定时器已清除')
   }
 
   // 清理进度条事件绑定

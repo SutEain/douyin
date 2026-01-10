@@ -952,6 +952,18 @@ export async function handleWithdrawSubmit(chatId: number, messageId: number) {
       return
     }
 
+    // 🔒 防重复提交：检查是否正在处理中
+    if (ctx.withdraw_processing) {
+      console.log(`[Withdraw] ⚠️ 重复提交被拦截 chatId=${chatId}`)
+      return // 静默返回，不提示用户
+    }
+
+    // 立即标记为处理中，防止重复提交
+    await updateUserState(chatId, {
+      state: userState.state,
+      context: { ...ctx, withdraw_processing: true }
+    })
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('id')
@@ -975,6 +987,11 @@ export async function handleWithdrawSubmit(chatId: number, messageId: number) {
 
     if (rpcError) throw rpcError
     if (!res.success) {
+      // 失败时恢复状态，允许重试
+      await updateUserState(chatId, {
+        state: userState.state,
+        context: { ...ctx, withdraw_processing: false }
+      })
       await answerWithdrawError(chatId, messageId, res.message || '提交失败')
       return
     }
@@ -982,7 +999,7 @@ export async function handleWithdrawSubmit(chatId: number, messageId: number) {
     // 成功后清空状态
     await updateUserState(chatId, {
       state: 'idle',
-      context: { ...ctx, withdraw_amount: null, withdraw_address: null }
+      context: { ...ctx, withdraw_amount: null, withdraw_address: null, withdraw_processing: false }
     })
 
     // 从RPC返回值中获取手续费和实际到账金额
