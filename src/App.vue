@@ -1,10 +1,5 @@
 <template>
-  <!-- 🎯 增加全局初始化 Loading，防止加载期间黑屏 -->
-  <div v-if="!store.isAppReady" class="app-loading">
-    <div class="loading-spinner"></div>
-  </div>
-
-  <div v-else-if="store.userinfo.is_banned" class="banned-overlay">
+  <div v-if="store.userinfo.is_banned" class="banned-overlay">
     <div class="banned-box">
       <div class="icon-wrap">
         <Icon icon="solar:danger-bold" class="icon" />
@@ -152,34 +147,6 @@ onMounted(() => {
     position: relative;
     left: 50%;
     transform: translateX(-50%);
-  }
-}
-
-.app-loading {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: #161823;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-
-  .loading-spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid rgba(255, 255, 255, 0.1);
-    border-top-color: #fe2c55;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
   }
 }
 
