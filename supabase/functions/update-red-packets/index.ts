@@ -43,6 +43,24 @@ async function editMessage(chatId: number, messageId: number, text: string, repl
 }
 
 /**
+ * 编辑图片消息的 caption
+ */
+async function editMessageCaption(
+  chatId: number,
+  messageId: number,
+  caption: string,
+  replyMarkup?: any
+) {
+  return await telegramRequest('editMessageCaption', {
+    chat_id: chatId,
+    message_id: messageId,
+    caption,
+    parse_mode: 'HTML',
+    reply_markup: replyMarkup
+  })
+}
+
+/**
  * HTML 转义
  */
 function escapeHTML(str: string): string {
