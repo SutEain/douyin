@@ -656,7 +656,8 @@ function handleAlbumComplete(slot: SlotState) {
 const albumSync = reactive({
   currentTime: 0,
   duration: 0,
-  onSeek: null as ((time: number) => void) | null
+  onSeek: null as ((time: number) => void) | null,
+  onPause: null as (() => void) | null // 🎯 暂停合辑视频
 })
 
 provide('albumSync', albumSync)
@@ -2017,7 +2018,12 @@ function handleProgressStart(e: PointerEvent) {
     timeHintTimer = null
   }
 
-  if (!isAlbum && video) video.pause()
+  if (!isAlbum && video) {
+    video.pause()
+  } else if (isAlbum && albumSync.onPause) {
+    // 🎯 拖动开始时暂停合辑视频
+    albumSync.onPause()
+  }
 
   updateProgressFromPointer(e, track)
 

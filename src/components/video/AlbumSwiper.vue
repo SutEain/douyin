@@ -163,12 +163,63 @@ const albumSync = inject<any>('albumSync', null)
 
 if (albumSync) {
   albumSync.onSeek = (time: number) => {
+    console.log('[AlbumSwiper] onSeek called:', {
+      time,
+      currentIndex: currentIndex.value,
+      isCurrent: props.isCurrent
+    })
     const video = videoRefs.get(currentIndex.value)
-    if (video) {
-      video.currentTime = time
-      if (videoPlayingStates[currentIndex.value]) {
-        video.play().catch(() => {})
-      }
+    const currentMedia = props.images[currentIndex.value]
+
+    // 🎯 只有当前激活的 slot 且是视频类型才处理
+    if (!props.isCurrent) {
+      console.log('[AlbumSwiper] onSeek ignored: not current slot')
+      return
+    }
+
+    if (!video) {
+      console.warn('[AlbumSwiper] onSeek failed: video not found', {
+        currentIndex: currentIndex.value,
+        mediaType: currentMedia?.type
+      })
+      return
+    }
+
+    if (currentMedia?.type !== 'video') {
+      console.log('[AlbumSwiper] onSeek ignored: current media is not video', {
+        mediaType: currentMedia?.type
+      })
+      return
+    }
+
+    console.log('[AlbumSwiper] Setting video currentTime:', {
+      time,
+      wasPlaying: videoPlayingStates[currentIndex.value]
+    })
+    video.currentTime = time
+
+    // 🎯 如果父级在播放状态，则继续播放（不管之前的播放状态）
+    if (isParentPlaying.value) {
+      video.play().catch((err) => {
+        console.error('[AlbumSwiper] onSeek play failed:', err)
+      })
+    }
+  }
+
+  // 🎯 暂停合辑视频（用于拖动进度条时）
+  albumSync.onPause = () => {
+    console.log('[AlbumSwiper] onPause called:', {
+      currentIndex: currentIndex.value,
+      isCurrent: props.isCurrent
+    })
+    if (!props.isCurrent) return
+
+    const video = videoRefs.get(currentIndex.value)
+    const currentMedia = props.images[currentIndex.value]
+
+    if (video && currentMedia?.type === 'video') {
+      video.pause()
+      videoPlayingStates[currentIndex.value] = false
     }
   }
 }
