@@ -54,7 +54,7 @@ BEGIN
     v.created_at,
     v.published_at,
     -- 🎯 计算推荐分数
-    -- 公式：时间分(30%) + 互动分(50%) + 互动率(20%)
+    -- 公式：时间分(30%) + 互动分(50%) + 互动率(20%) + 推荐加权
     (
       -- 1️⃣ 时间分：最近7天满分1.0，之后逐渐衰减到0.1
       GREATEST(0.1, 1.0 - EXTRACT(EPOCH FROM (NOW() - COALESCE(v.published_at, v.created_at))) / (7 * 86400)) * 0.3 +
@@ -79,7 +79,13 @@ BEGIN
         ELSE 
           -- 新视频给默认0.5分，避免冷启动问题
           0.5
-      END * 0.2
+      END * 0.2 +
+      
+      -- 4️⃣ 推荐视频加权：运营推荐的视频额外加分
+      CASE 
+        WHEN v.is_recommended = true THEN 0.5  -- 推荐视频额外+0.5分
+        ELSE 0
+      END
     ) as score
   FROM videos v
   WHERE v.status = 'published'
@@ -104,5 +110,5 @@ ON videos(view_count, like_count, comment_count, collect_count, share_count)
 WHERE status = 'published' AND is_adult = false;
 
 -- 🎯 注释说明
-COMMENT ON FUNCTION get_video_tab_feed IS '视频tab推荐算法：时间(30%) + 互动数(50%) + 互动率(20%)混合排序，解决纯时间倒序导致优质老内容无法被发现的问题';
+COMMENT ON FUNCTION get_video_tab_feed IS '视频tab推荐算法：时间(30%) + 互动数(50%) + 互动率(20%) + 推荐加权(+0.5)，运营推荐的视频会优先展示';
 
