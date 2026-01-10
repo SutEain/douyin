@@ -148,7 +148,20 @@ async function updateSingleRedPacket(packetId: string, groupId: number, messageI
         keyboard = { inline_keyboard: [] }
       }
 
-      await editMessage(groupId, messageId, hbText, keyboard)
+      // 🎯 尝试编辑消息：先尝试文本消息，如果失败则尝试图片消息的 caption
+      let editResult = await editMessage(groupId, messageId, hbText, keyboard)
+
+      if (!editResult.ok) {
+        // 如果编辑文本消息失败，可能是图片消息，尝试编辑 caption
+        console.log(`[Update] 专属红包文本消息编辑失败，尝试编辑图片 caption...`)
+        editResult = await editMessageCaption(groupId, messageId, hbText, keyboard)
+
+        if (!editResult.ok) {
+          console.error(`[Update] ❌ 专属红包编辑消息失败:`, editResult)
+          return false
+        }
+      }
+
       return true
     }
 
