@@ -1,11 +1,15 @@
--- 🎯 视频tab优化：热度+时间混合排序
--- 目标：让优质内容更容易被发现，同时给新内容曝光机会
+-- ========================================
+-- 🎯 推荐算法 3.0：基于 Session 种子与加权随机抽样 (WRS)
+-- ========================================
 
+-- 1️⃣ 视频 Tab 推荐函数
+DROP FUNCTION IF EXISTS get_video_tab_feed(UUID, UUID[], INT, INT);
 CREATE OR REPLACE FUNCTION get_video_tab_feed(
   p_user_id UUID DEFAULT NULL,
   p_exclude_ids UUID[] DEFAULT ARRAY[]::UUID[],
   p_limit INT DEFAULT 20,
-  p_offset INT DEFAULT 0
+  p_offset INT DEFAULT 0,
+  p_seed FLOAT DEFAULT 0.5  -- 🎯 引入随机种子
 )
 RETURNS TABLE(
   id UUID,
@@ -31,6 +35,9 @@ RETURNS TABLE(
   score FLOAT
 ) AS $$
 BEGIN
+  -- 设置随机种子，保证同一 Session 分页一致
+  PERFORM setseed(p_seed);
+
   RETURN QUERY
   WITH scored_videos AS (
     SELECT 
@@ -54,33 +61,14 @@ BEGIN
       v.share_count,
       v.created_at,
       v.published_at,
-      -- 🎯 计算推荐分数
+      -- 🎯 核心评分逻辑 (保持不变)
       (
         GREATEST(0.1, 1.0 - EXTRACT(EPOCH FROM (NOW() - COALESCE(v.published_at, v.created_at))) / (7 * 86400)) * 0.3 +
-        LEAST(1.0, (
-          COALESCE(v.like_count, 0)::FLOAT / 100.0 +
-          COALESCE(v.comment_count, 0)::FLOAT / 20.0 +
-          COALESCE(v.collect_count, 0)::FLOAT / 50.0
-        )) * 0.5 +
-        CASE 
-          WHEN COALESCE(v.view_count, 0) > 10 THEN
-            LEAST(1.0, (
-              COALESCE(v.like_count, 0)::FLOAT + 
-              COALESCE(v.comment_count, 0)::FLOAT + 
-              COALESCE(v.collect_count, 0)::FLOAT
-            ) / NULLIF(v.view_count, 0) * 10)
-          ELSE 
-            0.5
-        END * 0.2 +
-        CASE 
-          WHEN v.is_recommended = true THEN 0.5
-          ELSE 0
-        END
-      ) as score,
-      -- 🎯 作者分散：每个作者在同一批次中的排名
-      ROW_NUMBER() OVER (PARTITION BY v.author_id ORDER BY 
-        COALESCE(v.published_at, v.created_at) DESC
-      ) as author_rank
+        LEAST(1.0, (COALESCE(v.like_count, 0)::FLOAT / 100.0 + COALESCE(v.comment_count, 0)::FLOAT / 20.0 + COALESCE(v.collect_count, 0)::FLOAT / 50.0)) * 0.5 +
+        CASE WHEN COALESCE(v.view_count, 0) > 10 THEN LEAST(1.0, (COALESCE(v.like_count, 0)::FLOAT + COALESCE(v.comment_count, 0)::FLOAT + COALESCE(v.collect_count, 0)::FLOAT) / NULLIF(v.view_count, 0) * 10) ELSE 0.5 END * 0.2 +
+        CASE WHEN v.is_recommended = true THEN 0.5 ELSE 0 END
+      ) as raw_score,
+      ROW_NUMBER() OVER (PARTITION BY v.author_id ORDER BY COALESCE(v.published_at, v.created_at) DESC) as author_rank
     FROM videos v
     WHERE v.status = 'published'
       AND v.is_adult = false
@@ -109,58 +97,25 @@ BEGIN
     COALESCE(sv.share_count, 0)::INT,
     sv.created_at,
     COALESCE(sv.published_at, sv.created_at),
-    sv.score::FLOAT
+    sv.raw_score::FLOAT
   FROM scored_videos sv
-  WHERE sv.author_rank <= 3  -- 🎯 每个作者最多3个视频参与排序
-  -- 🎯 随机排序：分数作为权重基础，加入随机扰动
-  -- 公式：score * (0.7 + RANDOM() * 0.6) = score * [0.7, 1.3]
-  -- 高分视频仍有更高概率排前面，但每次结果不同，避免列表固化
-  ORDER BY (sv.score * (0.7 + RANDOM() * 0.6)) DESC, RANDOM()
+  WHERE sv.author_rank <= 2  -- 🎯 更严格的作者分散，每个作者只取2个
+  -- 🎯 加权随机算法 (WRS)：POWER(RANDOM(), 1.0 / score)
+  -- 分数越高，结果越接近 1.0，越容易排在前面
+  ORDER BY POWER(RANDOM(), 1.0 / GREATEST(sv.raw_score, 0.01)) DESC
   LIMIT p_limit
   OFFSET p_offset;
 END;
-$$ LANGUAGE plpgsql VOLATILE;  -- 🎯 改为 VOLATILE 因为使用了 RANDOM()
+$$ LANGUAGE plpgsql VOLATILE;
 
--- 🎯 添加复合索引优化查询性能
-CREATE INDEX IF NOT EXISTS idx_videos_tab_feed_optimized 
-ON videos(status, is_adult, content_type, storage_type, published_at DESC, id DESC)
-WHERE status = 'published' AND is_adult = false AND content_type = 'video' AND storage_type = 'r2';
-
--- 🎯 添加统计字段索引（用于分数计算）
-CREATE INDEX IF NOT EXISTS idx_videos_engagement_stats 
-ON videos(view_count, like_count, comment_count, collect_count, share_count)
-WHERE status = 'published' AND is_adult = false;
-
--- 🎯 注释说明
-COMMENT ON FUNCTION get_video_tab_feed IS '视频tab推荐算法：时间(30%) + 互动数(50%) + 互动率(20%) + 推荐加权(+0.5)，运营推荐的视频会优先展示';
-
--- ========================================
--- 🔞 成人内容优化排序
--- ========================================
-
--- 先删除所有可能存在的旧函数版本
-DO $$ 
-BEGIN
-  -- 删除所有名为 get_adult_feed 的函数
-  DROP FUNCTION IF EXISTS public.get_adult_feed(uuid, text, integer) CASCADE;
-  DROP FUNCTION IF EXISTS public.get_adult_feed(uuid, uuid[], integer, integer) CASCADE;
-  -- 可能还有其他参数列表的版本，用通配删除
-  EXECUTE (
-    SELECT string_agg('DROP FUNCTION IF EXISTS ' || oid::regprocedure || ' CASCADE;', E'\n')
-    FROM pg_proc
-    WHERE proname = 'get_adult_feed'
-  );
-EXCEPTION
-  WHEN OTHERS THEN
-    -- 忽略错误，继续执行
-    NULL;
-END $$;
-
+-- 2️⃣ 成人 Tab 推荐函数
+DROP FUNCTION IF EXISTS get_adult_feed(UUID, UUID[], INT, INT);
 CREATE OR REPLACE FUNCTION get_adult_feed(
   p_user_id UUID DEFAULT NULL,
   p_exclude_ids UUID[] DEFAULT ARRAY[]::UUID[],
   p_limit INT DEFAULT 20,
-  p_offset INT DEFAULT 0
+  p_offset INT DEFAULT 0,
+  p_seed FLOAT DEFAULT 0.5
 )
 RETURNS TABLE(
   id UUID,
@@ -186,6 +141,8 @@ RETURNS TABLE(
   score FLOAT
 ) AS $$
 BEGIN
+  PERFORM setseed(p_seed);
+
   RETURN QUERY
   WITH scored_videos AS (
     SELECT 
@@ -209,29 +166,12 @@ BEGIN
       v.share_count,
       v.created_at,
       v.published_at,
-      -- 🎯 计算推荐分数（成人内容没有推荐加权）
       (
         GREATEST(0.1, 1.0 - EXTRACT(EPOCH FROM (NOW() - COALESCE(v.published_at, v.created_at))) / (7 * 86400)) * 0.3 +
-        LEAST(1.0, (
-          COALESCE(v.like_count, 0)::FLOAT / 100.0 +
-          COALESCE(v.comment_count, 0)::FLOAT / 20.0 +
-          COALESCE(v.collect_count, 0)::FLOAT / 50.0
-        )) * 0.5 +
-        CASE 
-          WHEN COALESCE(v.view_count, 0) > 10 THEN
-            LEAST(1.0, (
-              COALESCE(v.like_count, 0)::FLOAT + 
-              COALESCE(v.comment_count, 0)::FLOAT + 
-              COALESCE(v.collect_count, 0)::FLOAT
-            ) / NULLIF(v.view_count, 0) * 10)
-          ELSE 
-            0.5
-        END * 0.2
-      ) as score,
-      -- 🎯 作者分散：每个作者在同一批次中的排名
-      ROW_NUMBER() OVER (PARTITION BY v.author_id ORDER BY 
-        COALESCE(v.published_at, v.created_at) DESC
-      ) as author_rank
+        LEAST(1.0, (COALESCE(v.like_count, 0)::FLOAT / 100.0 + COALESCE(v.comment_count, 0)::FLOAT / 20.0 + COALESCE(v.collect_count, 0)::FLOAT / 50.0)) * 0.5 +
+        CASE WHEN COALESCE(v.view_count, 0) > 10 THEN LEAST(1.0, (COALESCE(v.like_count, 0)::FLOAT + COALESCE(v.comment_count, 0)::FLOAT + COALESCE(v.collect_count, 0)::FLOAT) / NULLIF(v.view_count, 0) * 10) ELSE 0.5 END * 0.2
+      ) as raw_score,
+      ROW_NUMBER() OVER (PARTITION BY v.author_id ORDER BY COALESCE(v.published_at, v.created_at) DESC) as author_rank
     FROM videos v
     WHERE v.status = 'published'
       AND v.is_adult = true
@@ -240,64 +180,23 @@ BEGIN
       AND (p_exclude_ids IS NULL OR cardinality(p_exclude_ids) = 0 OR NOT (v.id = ANY(p_exclude_ids)))
   )
   SELECT 
-    sv.id,
-    sv.title::TEXT,
-    sv.description::TEXT,
-    sv.cover_url::TEXT,
-    sv.play_url::TEXT,
-    sv.duration::FLOAT,
-    sv.content_type::TEXT,
-    sv.tags,
-    sv.status::TEXT,
-    sv.is_adult,
-    sv.is_sea,
-    sv.storage_type::TEXT,
-    sv.author_id,
-    COALESCE(sv.view_count, 0)::INT,
-    COALESCE(sv.like_count, 0)::INT,
-    COALESCE(sv.comment_count, 0)::INT,
-    COALESCE(sv.collect_count, 0)::INT,
-    COALESCE(sv.share_count, 0)::INT,
-    sv.created_at,
-    COALESCE(sv.published_at, sv.created_at),
-    sv.score::FLOAT
+    sv.id, sv.title::TEXT, sv.description::TEXT, sv.cover_url::TEXT, sv.play_url::TEXT, sv.duration::FLOAT, sv.content_type::TEXT, sv.tags, sv.status::TEXT, sv.is_adult, sv.is_sea, sv.storage_type::TEXT, sv.author_id, COALESCE(sv.view_count, 0)::INT, COALESCE(sv.like_count, 0)::INT, COALESCE(sv.comment_count, 0)::INT, COALESCE(sv.collect_count, 0)::INT, COALESCE(sv.share_count, 0)::INT, sv.created_at, COALESCE(sv.published_at, sv.created_at), sv.raw_score::FLOAT
   FROM scored_videos sv
-  WHERE sv.author_rank <= 3  -- 🎯 每个作者最多3个视频参与排序
-  -- 🎯 随机排序：分数作为权重基础，加入随机扰动
-  ORDER BY (sv.score * (0.7 + RANDOM() * 0.6)) DESC, RANDOM()
+  WHERE sv.author_rank <= 2
+  ORDER BY POWER(RANDOM(), 1.0 / GREATEST(sv.raw_score, 0.01)) DESC
   LIMIT p_limit
   OFFSET p_offset;
 END;
-$$ LANGUAGE plpgsql VOLATILE;  -- 🎯 改为 VOLATILE 因为使用了 RANDOM()
+$$ LANGUAGE plpgsql VOLATILE;
 
--- 🎯 添加索引优化成人内容查询
-CREATE INDEX IF NOT EXISTS idx_videos_adult_feed_optimized 
-ON videos(status, is_adult, content_type, storage_type, published_at DESC, id DESC)
-WHERE status = 'published' AND is_adult = true AND content_type = 'video' AND storage_type = 'r2';
-
-COMMENT ON FUNCTION get_adult_feed IS '成人内容推荐算法：时间(30%) + 互动数(50%) + 互动率(20%)混合排序，优质内容优先';
-
--- ========================================
--- 🌏 东南亚内容优化排序
--- ========================================
-
--- 先删除旧函数
-DO $$ 
-BEGIN
-  EXECUTE (
-    SELECT string_agg('DROP FUNCTION IF EXISTS ' || oid::regprocedure || ' CASCADE;', E'\n')
-    FROM pg_proc
-    WHERE proname = 'get_sea_feed'
-  );
-EXCEPTION
-  WHEN OTHERS THEN NULL;
-END $$;
-
+-- 3️⃣ 东南亚 Tab 推荐函数
+DROP FUNCTION IF EXISTS get_sea_feed(UUID, UUID[], INT, INT);
 CREATE OR REPLACE FUNCTION get_sea_feed(
   p_user_id UUID DEFAULT NULL,
   p_exclude_ids UUID[] DEFAULT ARRAY[]::UUID[],
   p_limit INT DEFAULT 20,
-  p_offset INT DEFAULT 0
+  p_offset INT DEFAULT 0,
+  p_seed FLOAT DEFAULT 0.5
 )
 RETURNS TABLE(
   id UUID,
@@ -323,6 +222,8 @@ RETURNS TABLE(
   score FLOAT
 ) AS $$
 BEGIN
+  PERFORM setseed(p_seed);
+
   RETURN QUERY
   WITH scored_videos AS (
     SELECT 
@@ -346,29 +247,12 @@ BEGIN
       v.share_count,
       v.created_at,
       v.published_at,
-      -- 🎯 计算推荐分数（东南亚内容没有推荐加权）
       (
         GREATEST(0.1, 1.0 - EXTRACT(EPOCH FROM (NOW() - COALESCE(v.published_at, v.created_at))) / (7 * 86400)) * 0.3 +
-        LEAST(1.0, (
-          COALESCE(v.like_count, 0)::FLOAT / 100.0 +
-          COALESCE(v.comment_count, 0)::FLOAT / 20.0 +
-          COALESCE(v.collect_count, 0)::FLOAT / 50.0
-        )) * 0.5 +
-        CASE 
-          WHEN COALESCE(v.view_count, 0) > 10 THEN
-            LEAST(1.0, (
-              COALESCE(v.like_count, 0)::FLOAT + 
-              COALESCE(v.comment_count, 0)::FLOAT + 
-              COALESCE(v.collect_count, 0)::FLOAT
-            ) / NULLIF(v.view_count, 0) * 10)
-          ELSE 
-            0.5
-        END * 0.2
-      ) as score,
-      -- 🎯 作者分散：每个作者在同一批次中的排名
-      ROW_NUMBER() OVER (PARTITION BY v.author_id ORDER BY 
-        COALESCE(v.published_at, v.created_at) DESC
-      ) as author_rank
+        LEAST(1.0, (COALESCE(v.like_count, 0)::FLOAT / 100.0 + COALESCE(v.comment_count, 0)::FLOAT / 20.0 + COALESCE(v.collect_count, 0)::FLOAT / 50.0)) * 0.5 +
+        CASE WHEN COALESCE(v.view_count, 0) > 10 THEN LEAST(1.0, (COALESCE(v.like_count, 0)::FLOAT + COALESCE(v.comment_count, 0)::FLOAT + COALESCE(v.collect_count, 0)::FLOAT) / NULLIF(v.view_count, 0) * 10) ELSE 0.5 END * 0.2
+      ) as raw_score,
+      ROW_NUMBER() OVER (PARTITION BY v.author_id ORDER BY COALESCE(v.published_at, v.created_at) DESC) as author_rank
     FROM videos v
     WHERE v.status = 'published'
       AND v.is_adult = false
@@ -377,40 +261,11 @@ BEGIN
       AND (p_exclude_ids IS NULL OR cardinality(p_exclude_ids) = 0 OR NOT (v.id = ANY(p_exclude_ids)))
   )
   SELECT 
-    sv.id,
-    sv.title::TEXT,
-    sv.description::TEXT,
-    sv.cover_url::TEXT,
-    sv.play_url::TEXT,
-    sv.duration::FLOAT,
-    sv.content_type::TEXT,
-    sv.tags,
-    sv.status::TEXT,
-    sv.is_adult,
-    sv.is_sea,
-    sv.storage_type::TEXT,
-    sv.author_id,
-    COALESCE(sv.view_count, 0)::INT,
-    COALESCE(sv.like_count, 0)::INT,
-    COALESCE(sv.comment_count, 0)::INT,
-    COALESCE(sv.collect_count, 0)::INT,
-    COALESCE(sv.share_count, 0)::INT,
-    sv.created_at,
-    COALESCE(sv.published_at, sv.created_at),
-    sv.score::FLOAT
+    sv.id, sv.title::TEXT, sv.description::TEXT, sv.cover_url::TEXT, sv.play_url::TEXT, sv.duration::FLOAT, sv.content_type::TEXT, sv.tags, sv.status::TEXT, sv.is_adult, sv.is_sea, sv.storage_type::TEXT, sv.author_id, COALESCE(sv.view_count, 0)::INT, COALESCE(sv.like_count, 0)::INT, COALESCE(sv.comment_count, 0)::INT, COALESCE(sv.collect_count, 0)::INT, COALESCE(sv.share_count, 0)::INT, sv.created_at, COALESCE(sv.published_at, sv.created_at), sv.raw_score::FLOAT
   FROM scored_videos sv
-  WHERE sv.author_rank <= 3  -- 🎯 每个作者最多3个视频参与排序
-  -- 🎯 随机排序：分数作为权重基础，加入随机扰动
-  ORDER BY (sv.score * (0.7 + RANDOM() * 0.6)) DESC, RANDOM()
+  WHERE sv.author_rank <= 2
+  ORDER BY POWER(RANDOM(), 1.0 / GREATEST(sv.raw_score, 0.01)) DESC
   LIMIT p_limit
   OFFSET p_offset;
 END;
-$$ LANGUAGE plpgsql VOLATILE;  -- 🎯 改为 VOLATILE 因为使用了 RANDOM()
-
--- 🎯 添加索引优化东南亚内容查询
-CREATE INDEX IF NOT EXISTS idx_videos_sea_feed_optimized 
-ON videos(status, is_adult, is_sea, storage_type, published_at DESC, id DESC)
-WHERE status = 'published' AND is_adult = false AND is_sea = true AND storage_type = 'r2';
-
-COMMENT ON FUNCTION get_sea_feed IS '东南亚内容推荐算法：时间(30%) + 互动数(50%) + 互动率(20%)混合排序，优质内容优先';
-
+$$ LANGUAGE plpgsql VOLATILE;

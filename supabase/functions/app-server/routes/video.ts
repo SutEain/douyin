@@ -190,9 +190,10 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
 export async function handleVideoLongFeed(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const { pageNo, pageSize, from } = parsePagination(url)
+  const seed = parseFloat(url.searchParams.get('seed') || '0.5')
   const { user } = await tryGetAuth(req)
 
-  console.log('[LongFeed] 请求参数:', { pageNo, pageSize, userId: user?.id })
+  console.log('[LongFeed] 请求参数:', { pageNo, pageSize, seed, userId: user?.id })
 
   // 🎯 获取用户最近观看历史（排除最近 300 条）
   let excludeVideoIds: string[] = []
@@ -206,16 +207,16 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
 
     if (historyData) {
       excludeVideoIds = historyData.map((h: any) => h.video_id).filter(Boolean)
-      console.log(`[LongFeed] 排除 ${excludeVideoIds.length} 条观看历史`)
     }
   }
 
-  // 🎯 使用新的推荐算法RPC（热度+时间混合排序）
+  // 🎯 使用加权随机算法 (WRS) + Seed
   const { data, error } = await supabaseAdmin.rpc('get_sea_feed', {
     p_user_id: user?.id || null,
     p_exclude_ids: excludeVideoIds,
     p_limit: pageSize,
-    p_offset: from
+    p_offset: from,
+    p_seed: seed
   })
 
   if (error) {
@@ -267,9 +268,10 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
 export async function handleVideoTabFeed(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const { pageNo, pageSize, from } = parsePagination(url)
+  const seed = parseFloat(url.searchParams.get('seed') || '0.5')
   const { user } = await tryGetAuth(req)
 
-  console.log('[VideoTabFeed] 请求参数:', { pageNo, pageSize, userId: user?.id })
+  console.log('[VideoTabFeed] 请求参数:', { pageNo, pageSize, seed, userId: user?.id })
 
   // 🎯 获取用户最近观看历史（排除最近 300 条）
   let excludeVideoIds: string[] = []
@@ -283,16 +285,16 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
 
     if (historyData) {
       excludeVideoIds = historyData.map((h: any) => h.video_id).filter(Boolean)
-      console.log(`[VideoTabFeed] 排除 ${excludeVideoIds.length} 条观看历史`)
     }
   }
 
-  // 🎯 使用新的推荐算法RPC（热度+时间混合排序）
+  // 🎯 使用加权随机算法 (WRS) + Seed
   const { data, error } = await supabaseAdmin.rpc('get_video_tab_feed', {
     p_user_id: user?.id || null,
     p_exclude_ids: excludeVideoIds,
     p_limit: pageSize,
-    p_offset: from
+    p_offset: from,
+    p_seed: seed
   })
 
   if (error) {
@@ -401,9 +403,10 @@ export async function handleShortDramaFeed(req: Request): Promise<Response> {
 export async function handleVideoAdultFeed(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const { pageNo, pageSize, from } = parsePagination(url)
+  const seed = parseFloat(url.searchParams.get('seed') || '0.5')
   const { user } = await tryGetAuth(req)
 
-  console.log('[AdultFeed] 请求参数:', { pageNo, pageSize, userId: user?.id })
+  console.log('[AdultFeed] 请求参数:', { pageNo, pageSize, seed, userId: user?.id })
 
   // 🎯 获取用户最近观看历史（排除最近 300 条）
   let excludeVideoIds: string[] = []
@@ -417,16 +420,16 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
 
     if (historyData) {
       excludeVideoIds = historyData.map((h: any) => h.video_id).filter(Boolean)
-      console.log(`[AdultFeed] 排除 ${excludeVideoIds.length} 条观看历史`)
     }
   }
 
-  // 🎯 使用新的推荐算法RPC（热度+时间混合排序）
+  // 🎯 使用加权随机算法 (WRS) + Seed
   const { data, error } = await supabaseAdmin.rpc('get_adult_feed', {
     p_user_id: user?.id || null,
     p_exclude_ids: excludeVideoIds,
     p_limit: pageSize,
-    p_offset: from
+    p_offset: from,
+    p_seed: seed
   })
 
   if (error) {

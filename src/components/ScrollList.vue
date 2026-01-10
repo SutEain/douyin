@@ -32,6 +32,7 @@ const state = reactive({
   total: 0,
   pageNo: 0,
   pageSize: 10,
+  seed: Math.random(), // 🎯 每次组件实例创建时生成唯一种子（Session 种子）
   loading: true // 🎯 初始设为 true，配合模板避免闪现“暂无视频”
 })
 
@@ -44,6 +45,7 @@ function loadData() {
 async function getData(refresh = false) {
   if (refresh) {
     state.pageNo = 0
+    state.seed = Math.random() // 🎯 刷新时更换种子，全盘重排
   } else {
     if (state.total !== 0 && state.total === state.list.length) return
   }
@@ -55,7 +57,8 @@ async function getData(refresh = false) {
   try {
     let res = await props.api({
       pageNo: state.pageNo,
-      pageSize: state.pageSize
+      pageSize: state.pageSize,
+      seed: state.seed // 🎯 传递种子
     })
     if (res.success) {
       if (refresh) {
