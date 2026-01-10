@@ -30,11 +30,14 @@ watch(
   (n) => {
     if (n) {
       if (state.show) {
-        // 🎯 核心逻辑：每次切回该 Tab 时，自动刷新种子并换一批内容
-        // 增加一个小小的防抖，避免高频切换导致请求过多
-        if (scrollListRef.value && typeof scrollListRef.value.getData === 'function') {
-          console.log('[VideoTab] 切回 Tab，触发强力洗牌...')
-          scrollListRef.value.getData(true)
+        // 🎯 优化逻辑：只有当列表为空时，才在激活时自动加载
+        // 如果已经有数据了，说明是从详情页返回或者已经切过来了，不应该强制刷新
+        // 这样可以保留用户的滚动位置
+        if (state.list?.length === 0) {
+          console.log('[VideoTab] 列表为空，执行首次加载...')
+          if (scrollListRef.value && typeof scrollListRef.value.getData === 'function') {
+            scrollListRef.value.getData()
+          }
         }
 
         const el = playingEl.value
