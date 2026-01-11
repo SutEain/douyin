@@ -65,7 +65,15 @@ const isGraphic = computed(() => {
   return t === 'image' || t === 'album' || t === 'collection'
 })
 
-const showViewDetail = computed(() => showToggle.value && state.expanded && isGraphic.value)
+// 🎯 合辑（collection）不显示"查看详情"按钮
+const isCollection = computed(() => {
+  const t = String(currentItem.value?.content_type || 'video')
+  return t === 'collection'
+})
+
+const showViewDetail = computed(
+  () => showToggle.value && state.expanded && isGraphic.value && !isCollection.value
+)
 
 function formatBeijingDate(date: Date) {
   // 输出 YYYY-MM-DD（北京时间）

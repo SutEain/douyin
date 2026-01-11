@@ -225,10 +225,15 @@
             <div class="progress-section">
               <!-- 🎯 观看时间信息放在进度条上面 -->
               <div class="time-text">
-                今日观看：<span class="highlight">{{
-                  state.watchTimeStatus?.total_minutes || 0
-                }}</span>
-                分钟
+                <template v-if="(state.watchTimeStatus?.total_seconds || 0) >= 1800">
+                  <span class="highlight">已完成任务</span>
+                </template>
+                <template v-else>
+                  今日观看：<span class="highlight">{{
+                    state.watchTimeStatus?.total_minutes || 0
+                  }}</span>
+                  分钟
+                </template>
               </div>
 
               <!-- 🎯 进度条和里程碑 -->
