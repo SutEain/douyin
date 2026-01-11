@@ -241,7 +241,11 @@ export async function sendPhoto(
 
       // 添加其他选项（如reply_markup）
       if (options.reply_markup) {
-        formData.append('reply_markup', JSON.stringify(options.reply_markup))
+        const replyMarkupStr = JSON.stringify(options.reply_markup)
+        formData.append('reply_markup', replyMarkupStr)
+        console.log('[sendPhoto] ✅ 已添加按钮:', replyMarkupStr.substring(0, 100))
+      } else {
+        console.log('[sendPhoto] ⚠️ 未提供按钮 (reply_markup)')
       }
 
       const response = await fetch(url, {

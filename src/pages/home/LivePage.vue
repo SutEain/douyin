@@ -310,7 +310,7 @@
     </Transition>
 
     <!-- 透明视频礼物特效组件 -->
-    <VapPlayer ref="vapPlayerRef" :src="vapSrc" />
+    <VapPlayer ref="vapPlayerRef" :src="vapSrc" @ended="onVapEffectEnded" />
 
     <!-- 🧧 倒计时红包组件 -->
     <RedPacketOverlay
@@ -464,6 +464,20 @@ const isSendingGift = ref(false)
 const isSendingPacket = ref(false)
 const vapPlayerRef = ref<any>(null)
 const vapSrc = ref('') // 初始值为空
+
+// 🎁 特效播放队列
+interface GiftEffectItem {
+  giftName: string
+  giftIcon: string
+  nickname: string
+  duration: number
+  titleIcon?: string
+  effectUrl?: string
+  type: 'vap' | 'css' // vap=MP4特效, css=CSS动画特效
+}
+
+const giftEffectQueue = ref<GiftEffectItem[]>([])
+const isPlayingEffect = ref(false) // 当前是否有特效正在播放
 const viewerCount = ref(0)
 const viewers = ref<any[]>([]) // 存储前几名观众
 const fallbackAvatar = new URL('../../assets/img/icon/avatar/0.png', import.meta.url).href
@@ -950,6 +964,88 @@ function triggerGiftAnim(
   domPage.append(gift)
 }
 
+// 🎁 VAP特效播放完成回调
+function onVapEffectEnded() {
+  console.log('[GiftEffect] VAP特效播放完成')
+  isPlayingEffect.value = false
+  // 播放下一个队列中的特效
+  playNextEffect()
+}
+
+// 🎁 CSS动画特效播放完成回调
+function onCssEffectEnded() {
+  console.log('[GiftEffect] CSS特效播放完成')
+  isPlayingEffect.value = false
+  // 播放下一个队列中的特效
+  playNextEffect()
+}
+
+// 🎁 播放下一个队列中的特效
+function playNextEffect() {
+  if (giftEffectQueue.value.length === 0) {
+    console.log('[GiftEffect] 队列已空，停止播放')
+    return
+  }
+
+  const nextEffect = giftEffectQueue.value.shift()
+  if (!nextEffect) return
+
+  console.log('[GiftEffect] 开始播放队列中的特效:', nextEffect.giftName)
+  isPlayingEffect.value = true
+
+  if (nextEffect.type === 'vap') {
+    // MP4特效
+    const finalUrl = nextEffect.effectUrl?.startsWith('http')
+      ? nextEffect.effectUrl
+      : nextEffect.effectUrl || ''
+
+    // 🎯 先清空 src，确保每次都会重新加载（即使 URL 相同）
+    vapSrc.value = ''
+
+    // 给一点时间让清空生效，然后设置新的 src
+    nextTick(() => {
+      vapSrc.value = finalUrl
+      // 再给一点时间让 src 切换生效
+      nextTick(() => {
+        if (vapPlayerRef.value) {
+          vapPlayerRef.value.play()
+        }
+      })
+    })
+  } else {
+    // CSS动画特效
+    if (!page.value) {
+      isPlayingEffect.value = false
+      playNextEffect() // 如果页面不存在，继续播放下一个
+      return
+    }
+
+    const domPage = new Dom(page.value)
+    const contentHtml = nextEffect.titleIcon
+      ? `<img src="${nextEffect.titleIcon}" class="large-gift-svg" alt="${nextEffect.giftName}">`
+      : `
+        <img src="${nextEffect.giftIcon}" class="large-gift-icon" alt="">
+        <div class="gift-title">送出 ${nextEffect.giftName}</div>
+        <div class="user-name">${nextEffect.nickname}</div>
+      `
+
+    const template = `
+      <div class="large-gift-effect" style="animation-duration: ${nextEffect.duration}s">
+        <div class="effect-content" style="animation-duration: ${nextEffect.duration}s">
+          <div class="glow"></div>
+          ${contentHtml}
+        </div>
+      </div>
+    `
+    const effect = new Dom().create(template)
+    effect.on('animationend', () => {
+      effect.remove()
+      onCssEffectEnded()
+    })
+    domPage.append(effect)
+  }
+}
+
 function triggerLargeGiftEffect(
   giftName: string,
   giftIcon: string,
@@ -958,42 +1054,31 @@ function triggerLargeGiftEffect(
   titleIcon?: string,
   effectUrl?: string
 ) {
-  if (effectUrl) {
-    // 处理相对路径
-    const finalUrl = effectUrl.startsWith('http') ? effectUrl : effectUrl
-    vapSrc.value = finalUrl
-
-    // 给一点时间让 src 切换生效
-    nextTick(() => {
-      if (vapPlayerRef.value) {
-        vapPlayerRef.value.play()
-      }
-    })
-    return
+  // 🎁 将特效加入队列
+  const effectItem: GiftEffectItem = {
+    giftName,
+    giftIcon,
+    nickname,
+    duration,
+    titleIcon,
+    effectUrl,
+    type: effectUrl ? 'vap' : 'css'
   }
-  if (!page.value) return
-  const domPage = new Dom(page.value)
 
-  // ✅ 如果是 SVG 模式，只显示超大图形，隐藏文字和普通图标
-  const contentHtml = titleIcon
-    ? `<img src="${titleIcon}" class="large-gift-svg" alt="${giftName}">`
-    : `
-      <img src="${giftIcon}" class="large-gift-icon" alt="">
-      <div class="gift-title">送出 ${giftName}</div>
-      <div class="user-name">${nickname}</div>
-    `
+  giftEffectQueue.value.push(effectItem)
+  console.log(
+    '[GiftEffect] 特效已加入队列:',
+    giftName,
+    '当前队列长度:',
+    giftEffectQueue.value.length
+  )
 
-  const template = `
-    <div class="large-gift-effect" style="animation-duration: ${duration}s">
-      <div class="effect-content" style="animation-duration: ${duration}s">
-        <div class="glow"></div>
-        ${contentHtml}
-      </div>
-    </div>
-  `
-  const effect = new Dom().create(template)
-  effect.on('animationend', () => effect.remove())
-  domPage.append(effect)
+  // 🎁 如果当前没有特效在播放，立即开始播放
+  if (!isPlayingEffect.value) {
+    playNextEffect()
+  } else {
+    console.log('[GiftEffect] 当前有特效正在播放，等待队列')
+  }
 }
 
 // 获取直播间信息

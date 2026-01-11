@@ -43,6 +43,20 @@ if (typeof window !== 'undefined') {
 
   const handleGlobalError = (event: Event | ErrorEvent) => {
     const target = event?.target
+    const errorEvent = event as ErrorEvent
+
+    // 🎯 过滤浏览器扩展/开发者工具注入脚本的错误（inspector.js）
+    if (
+      errorEvent.filename?.includes('inspector.js') ||
+      errorEvent.filename?.includes('extension://') ||
+      errorEvent.message?.includes('responseText') ||
+      errorEvent.message?.includes('responseType') ||
+      errorEvent.message?.includes('arraybuffer')
+    ) {
+      // 静默忽略这些错误，不影响应用运行
+      event.preventDefault?.()
+      return false
+    }
 
     if (target instanceof HTMLImageElement) {
       if (!target.dataset.fallbackApplied) {
@@ -54,7 +68,7 @@ if (typeof window !== 'undefined') {
     }
 
     if (target instanceof HTMLVideoElement) {
-      // ✅ 不再打印“视频URL”，也不要 preventDefault 以免影响播放器/第三方库接管错误处理
+      // ✅ 不再打印"视频URL"，也不要 preventDefault 以免影响播放器/第三方库接管错误处理
       // 需要排查时可在 URL 加 ?dpdebug=1 看 DPPlayer 的详细日志
       return false
     }
@@ -78,10 +92,7 @@ if (typeof window !== 'undefined') {
       }
     }
 
-    console.warn(
-      '[GlobalError]',
-      (event as ErrorEvent).message || (event as ErrorEvent).error || event
-    )
+    console.warn('[GlobalError]', errorEvent.message || errorEvent.error || event)
     event.preventDefault?.()
     return false
   }
@@ -92,6 +103,20 @@ if (typeof window !== 'undefined') {
       event.preventDefault?.()
       return
     }
+
+    // 🎯 过滤浏览器扩展/开发者工具相关的错误
+    const message = event.reason?.message || String(event.reason || '')
+    if (
+      message.includes('responseText') ||
+      message.includes('responseType') ||
+      message.includes('arraybuffer') ||
+      message.includes('XMLHttpRequest')
+    ) {
+      // 静默忽略这些错误，不影响应用运行
+      event.preventDefault?.()
+      return
+    }
+
     console.warn('[UnhandledRejection]', event.reason)
     event.preventDefault?.()
   }

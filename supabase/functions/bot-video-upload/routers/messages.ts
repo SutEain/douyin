@@ -110,17 +110,13 @@ export async function handleText(
     lowerText.startsWith('hb ') ||
     lowerText === '/hb' ||
     lowerText.startsWith('/hb ')
-  const isDiceCmd =
-    lowerText === 'tz' ||
-    lowerText.startsWith('tz ') ||
-    lowerText === '/tz' ||
-    lowerText.startsWith('/tz ')
+  // 🎯 主机器人不再处理 tz 命令
   const isBalanceCmd = lowerText === 'ye' || lowerText === '/ye' || lowerText === '余额'
   const isCleanCmd = lowerText === '/clean_keyboard'
 
   // 🎯 严格控制：群组中仅允许指定指令，其他文本直接忽略
   // 🎯 优化：提前返回，避免不必要的 getUserState 数据库查询
-  if (chatId < 0 && !isRedPacketCmd && !isDiceCmd && !isBalanceCmd && !isCleanCmd) {
+  if (chatId < 0 && !isRedPacketCmd && !isBalanceCmd && !isCleanCmd) {
     // 🎯 优化：只有回复消息 + 文本是1-2位数字（验证码格式）才处理红包领取
     // 避免所有回复消息都触发数据库查询
     if (rawMessage.reply_to_message && /^\d{1,2}$/.test(text.trim())) {
@@ -218,22 +214,7 @@ export async function handleText(
     return
   }
 
-  // 3. 处理骰子游戏
-  if (isDiceCmd) {
-    // 🎯 如果是在 dice 群，主机器人不处理 tz 指令，交给骰子机器人处理
-    const diceGroupId = Deno.env.get('DICE_GROUP_ID')
-    if (diceGroupId && String(chatId) === String(diceGroupId)) {
-      console.log(`[Dice] 在 dice 群中检测到 tz 指令，主机器人忽略，交由骰子机器人处理`)
-      return
-    }
-
-    console.log(`[Dice] 匹配到骰子指令，准备执行...`)
-    const { handleDiceCommand } = await import('../features/diceGame.ts')
-    await handleDiceCommand(chatId, text, rawMessage)
-    return
-  }
-
-  // 4. 处理红包指令
+  // 3. 处理红包指令
   if (isRedPacketCmd) {
     console.log(`[RedPacket] 匹配到红包指令，准备执行...`)
     const { handleRedPacketCommand } = await import('../features/redPacket.ts')
