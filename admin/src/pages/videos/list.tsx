@@ -849,7 +849,7 @@ export const VideoList = () => {
                   onClick={() => handleBatchAction('unset_adult', '取消成人')}
                   loading={batchLoading}
                 >
-                  取消
+                  批量取消成人
                 </Button>
               </Button.Group>
               <Button.Group>
@@ -865,7 +865,7 @@ export const VideoList = () => {
                   onClick={() => handleBatchAction('unset_sea', '取消东南亚')}
                   loading={batchLoading}
                 >
-                  取消
+                  批量取消东南亚
                 </Button>
               </Button.Group>
               <Button
