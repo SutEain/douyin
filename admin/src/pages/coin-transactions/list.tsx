@@ -15,10 +15,12 @@ const typeColors: Record<string, string> = {
   withdraw: 'volcano',
   red_packet_send: 'pink',
   red_packet_claim: 'cyan',
-  hb_in: 'cyan', // 🎯 群红包领取
-  hb_out: 'pink', // 🎯 群红包发送
+  hb_in: 'cyan',
+  hb_out: 'pink',
+  hb_refund: 'orange',
   dice_bet: 'orange',
   dice_reward: 'gold',
+  dice_refund: 'default',
   watch_time_reward: 'blue',
   adjustment: 'geekblue',
   task_reward: 'gold',
@@ -34,10 +36,12 @@ const typeLabels: Record<string, string> = {
   withdraw: '提现',
   red_packet_send: '发红包',
   red_packet_claim: '抢红包',
-  hb_in: '群红包领取', // 🎯 群红包领取
-  hb_out: '群红包发送', // 🎯 群红包发送
+  hb_in: '群红包领取',
+  hb_out: '群红包发送',
+  hb_refund: '群红包退款',
   dice_bet: '骰子下注',
   dice_reward: '骰子奖励',
+  dice_refund: '骰子退款',
   watch_time_reward: '观看时长奖励',
   adjustment: '手动调整',
   task_reward: '任务奖励',
