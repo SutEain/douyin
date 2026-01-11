@@ -217,12 +217,14 @@ async function fixCollectionPlayUrls(collection) {
       const collectionRootPlayUrl = `/videos/${id}/index.m3u8`
 
       // 将所有视频的 play_url 改回合辑根路径
-      for (const item of videoItems) {
-        if (item.play_url !== collectionRootPlayUrl) {
+      // 🎯 重要：需要同时更新 mediaList 中的对应项
+      for (let i = 0; i < mediaList.length; i++) {
+        const item = mediaList[i]
+        if (item.type === 'video' && item.play_url && item.play_url !== collectionRootPlayUrl) {
           console.log(`     修复: ${item.file_id}`)
           console.log(`       旧: ${item.play_url}`)
           console.log(`       新: ${collectionRootPlayUrl}`)
-          item.play_url = collectionRootPlayUrl
+          mediaList[i].play_url = collectionRootPlayUrl
           fixed = true
           fixedCount++
         }
