@@ -18,15 +18,16 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+// 🎯 修复脚本需要使用 SERVICE_ROLE_KEY 才能绕过 RLS 策略
 const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('❌ 缺少 Supabase 环境变量')
   console.error('   需要设置: SUPABASE_URL 或 VITE_SUPABASE_URL')
-  console.error('   需要设置: SUPABASE_SERVICE_ROLE_KEY 或 VITE_SUPABASE_ANON_KEY')
+  console.error('   推荐使用: SUPABASE_SERVICE_ROLE_KEY（修复脚本需要管理员权限）')
   console.error('   当前环境变量:', {
     SUPABASE_URL: process.env.SUPABASE_URL ? '已设置' : '未设置',
     VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ? '已设置' : '未设置',
@@ -34,6 +35,12 @@ if (!supabaseUrl || !supabaseKey) {
     VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ? '已设置' : '未设置'
   })
   process.exit(1)
+}
+
+// 🎯 检查是否使用了 SERVICE_ROLE_KEY
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.warn('⚠️  警告: 未使用 SUPABASE_SERVICE_ROLE_KEY，可能无法绕过 RLS 策略')
+  console.warn('   如果遇到权限错误，请设置 SUPABASE_SERVICE_ROLE_KEY 环境变量')
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey)
