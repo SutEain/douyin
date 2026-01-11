@@ -1,7 +1,10 @@
 -- 🎯 为 admin_videos_list 视图添加 media_list 字段
 -- 合辑和相册需要 media_list 字段来正确预览
 
-CREATE OR REPLACE VIEW public.admin_videos_list (
+-- 先删除视图，然后重新创建（因为需要添加新列）
+DROP VIEW IF EXISTS public.admin_videos_list;
+
+CREATE VIEW public.admin_videos_list (
   id,
   author_id,
   title,
