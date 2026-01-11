@@ -17,6 +17,9 @@ const typeColors: Record<string, string> = {
   red_packet_claim: 'cyan',
   hb_in: 'cyan', // 🎯 群红包领取
   hb_out: 'pink', // 🎯 群红包发送
+  dice_bet: 'orange',
+  dice_reward: 'gold',
+  watch_time_reward: 'blue',
   adjustment: 'geekblue',
   task_reward: 'gold',
   inheritance_in: 'lime',
@@ -33,6 +36,9 @@ const typeLabels: Record<string, string> = {
   red_packet_claim: '抢红包',
   hb_in: '群红包领取', // 🎯 群红包领取
   hb_out: '群红包发送', // 🎯 群红包发送
+  dice_bet: '骰子下注',
+  dice_reward: '骰子奖励',
+  watch_time_reward: '观看时长奖励',
   adjustment: '手动调整',
   task_reward: '任务奖励',
   inheritance_in: '资产继承(入)',

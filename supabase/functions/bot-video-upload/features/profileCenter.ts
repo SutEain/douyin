@@ -1244,10 +1244,21 @@ export async function handleTransactions(chatId: number, messageId?: number) {
     } else {
       const typeMap: any = {
         recharge: '💳 充值',
-        reward: '🎁 奖励',
-        gift_out: '📤 送礼',
-        gift_in: '📥 收到',
-        withdraw: '💰 提现'
+        reward: '🎁 签到奖励',
+        gift_out: '📤 打赏支出',
+        gift_in: '📥 打赏收入',
+        withdraw: '💰 提现',
+        hb_in: '🧧 群红包领取',
+        hb_out: '🧧 群红包发送',
+        dice_bet: '🎲 骰子下注',
+        dice_reward: '🎲 骰子奖励',
+        watch_time_reward: '⏱️ 观看时长奖励',
+        adjustment: '⚙️ 手动调整',
+        task_reward: '✅ 任务奖励',
+        inheritance_in: '📥 资产继承(入)',
+        inheritance_out: '📤 资产迁移(出)',
+        red_packet_send: '🧧 发红包',
+        red_packet_claim: '🧧 抢红包'
       }
 
       txs.forEach((t: any) => {
