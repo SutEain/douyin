@@ -65,26 +65,37 @@ function generateCorrectPlayUrl(collectionId, fileId) {
 }
 
 /**
- * 检测并删除重复的视频（play_url 相同）
+ * 检测并删除重复的视频
+ * 🎯 改进：不仅基于 play_url，还基于内容特征（duration、width、height、file_size）判断重复
  */
 function removeDuplicateVideos(mediaList) {
-  const videoItems = mediaList.filter((item) => item.type === 'video' && item.play_url)
-  const playUrlMap = new Map()
+  const videoItems = mediaList.filter((item) => item.type === 'video')
 
-  // 按 play_url 分组
+  // 🎯 按内容特征分组（duration、width、height、file_size）
+  // 如果这些值都相同，认为是重复视频
+  const contentMap = new Map()
+
   for (const item of videoItems) {
-    const key = item.play_url
-    if (!playUrlMap.has(key)) {
-      playUrlMap.set(key, [])
+    // 构建内容特征key
+    const contentKey = JSON.stringify({
+      duration: item.duration || null,
+      width: item.width || null,
+      height: item.height || null,
+      file_size: item.file_size || null,
+      play_url: item.play_url || null // 也包含 play_url，如果相同则更确定是重复
+    })
+
+    if (!contentMap.has(contentKey)) {
+      contentMap.set(contentKey, [])
     }
-    playUrlMap.get(key).push(item)
+    contentMap.get(contentKey).push(item)
   }
 
-  // 找出重复的 play_url
+  // 找出重复的内容
   const duplicates = []
-  for (const [playUrl, items] of playUrlMap.entries()) {
+  for (const [contentKey, items] of contentMap.entries()) {
     if (items.length > 1) {
-      duplicates.push({ playUrl, items })
+      duplicates.push({ contentKey, items })
     }
   }
 
@@ -92,16 +103,25 @@ function removeDuplicateVideos(mediaList) {
     return { mediaList, removedCount: 0 }
   }
 
-  // 删除重复项，只保留第一个
+  // 🎯 删除重复项，只保留第一个
+  // 如果所有视频的 play_url 都相同（比如都指向合辑根路径），保留第一个，删除其他的
   let removedCount = 0
-  const seenPlayUrls = new Set()
+  const seenContentKeys = new Set()
   const newMediaList = mediaList.filter((item) => {
-    if (item.type === 'video' && item.play_url) {
-      if (seenPlayUrls.has(item.play_url)) {
+    if (item.type === 'video') {
+      const contentKey = JSON.stringify({
+        duration: item.duration || null,
+        width: item.width || null,
+        height: item.height || null,
+        file_size: item.file_size || null,
+        play_url: item.play_url || null
+      })
+
+      if (seenContentKeys.has(contentKey)) {
         removedCount++
         return false // 删除重复项
       }
-      seenPlayUrls.add(item.play_url)
+      seenContentKeys.add(contentKey)
     }
     return true
   })
@@ -130,15 +150,27 @@ async function fixCollectionPlayUrls(collection) {
     let fixed = false
     let fixedCount = 0
 
-    // 1. 检查并修复每个视频的 play_url（如果是合辑根路径）
-    for (const item of videoItems) {
+    // 1. 🎯 先删除重复的视频（基于内容特征，而不是 play_url）
+    // 这样可以处理"所有视频内容相同但 play_url 都指向合辑根路径"的情况
+    const { mediaList: deduplicatedList, removedCount } = removeDuplicateVideos(mediaList)
+    if (removedCount > 0) {
+      console.log(`  🗑️  [${id}] 删除了 ${removedCount} 个重复视频（基于内容特征）`)
+      mediaList = deduplicatedList
+      fixed = true
+    }
+
+    // 2. 检查并修复每个视频的 play_url（如果是合辑根路径，且不是重复视频）
+    // 🎯 注意：只有在删除重复后，如果还有多个视频，才需要修复 play_url
+    const remainingVideoItems = mediaList.filter((item) => item.type === 'video')
+    for (const item of remainingVideoItems) {
       if (!item.file_id) {
         console.log(`  ⚠️ [${id}] 视频项缺少 file_id，跳过`)
         continue
       }
 
-      // 如果 play_url 是合辑根路径（错误的格式），需要修复
-      if (isCollectionRootPath(item.play_url, id)) {
+      // 🎯 如果 play_url 是合辑根路径，且合辑中还有其他视频，才需要修复
+      // 如果只剩下1个视频，保留合辑根路径，后续会转换为单个视频类型
+      if (isCollectionRootPath(item.play_url, id) && remainingVideoItems.length > 1) {
         const correctPlayUrl = generateCorrectPlayUrl(id, item.file_id)
         console.log(`  🔧 [${id}] 修复视频 ${item.file_id}:`)
         console.log(`     旧: ${item.play_url}`)
@@ -149,15 +181,16 @@ async function fixCollectionPlayUrls(collection) {
       }
     }
 
-    // 2. 删除重复的视频（play_url 相同）
-    const { mediaList: deduplicatedList, removedCount } = removeDuplicateVideos(mediaList)
-    if (removedCount > 0) {
-      console.log(`  🗑️  [${id}] 删除了 ${removedCount} 个重复视频`)
-      mediaList = deduplicatedList
+    // 3. 再次删除重复的视频（play_url 相同，以防修复后产生新的重复）
+    const { mediaList: finalDeduplicatedList, removedCount: additionalRemovedCount } =
+      removeDuplicateVideos(mediaList)
+    if (additionalRemovedCount > 0) {
+      console.log(`  🗑️  [${id}] 删除了额外的 ${additionalRemovedCount} 个重复视频`)
+      mediaList = finalDeduplicatedList
       fixed = true
     }
 
-    // 3. 检查修复后的视频数量
+    // 4. 检查修复后的视频数量
     const finalVideoItems = mediaList.filter((item) => item.type === 'video')
     const finalImageItems = mediaList.filter((item) => item.type === 'image')
 
