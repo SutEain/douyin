@@ -58,10 +58,55 @@ function generateCorrectPlayUrl(collectionId, fileId) {
 }
 
 /**
+ * 检测并删除重复的视频（play_url 相同）
+ */
+function removeDuplicateVideos(mediaList) {
+  const videoItems = mediaList.filter((item) => item.type === 'video' && item.play_url)
+  const playUrlMap = new Map()
+
+  // 按 play_url 分组
+  for (const item of videoItems) {
+    const key = item.play_url
+    if (!playUrlMap.has(key)) {
+      playUrlMap.set(key, [])
+    }
+    playUrlMap.get(key).push(item)
+  }
+
+  // 找出重复的 play_url
+  const duplicates = []
+  for (const [playUrl, items] of playUrlMap.entries()) {
+    if (items.length > 1) {
+      duplicates.push({ playUrl, items })
+    }
+  }
+
+  if (duplicates.length === 0) {
+    return { mediaList, removedCount: 0 }
+  }
+
+  // 删除重复项，只保留第一个
+  let removedCount = 0
+  const seenPlayUrls = new Set()
+  const newMediaList = mediaList.filter((item) => {
+    if (item.type === 'video' && item.play_url) {
+      if (seenPlayUrls.has(item.play_url)) {
+        removedCount++
+        return false // 删除重复项
+      }
+      seenPlayUrls.add(item.play_url)
+    }
+    return true
+  })
+
+  return { mediaList: newMediaList, removedCount }
+}
+
+/**
  * 修复单个合辑的 play_url
  */
 async function fixCollectionPlayUrls(collection) {
-  const { id, media_list } = collection
+  const { id, media_list, cover_url, width, height, duration } = collection
 
   try {
     let mediaList = typeof media_list === 'string' ? JSON.parse(media_list) : media_list
@@ -78,7 +123,7 @@ async function fixCollectionPlayUrls(collection) {
     let fixed = false
     let fixedCount = 0
 
-    // 检查并修复每个视频的 play_url
+    // 1. 检查并修复每个视频的 play_url（如果是合辑根路径）
     for (const item of videoItems) {
       if (!item.file_id) {
         console.log(`  ⚠️ [${id}] 视频项缺少 file_id，跳过`)
@@ -97,7 +142,69 @@ async function fixCollectionPlayUrls(collection) {
       }
     }
 
-    // 如果有修复，更新数据库
+    // 2. 删除重复的视频（play_url 相同）
+    const { mediaList: deduplicatedList, removedCount } = removeDuplicateVideos(mediaList)
+    if (removedCount > 0) {
+      console.log(`  🗑️  [${id}] 删除了 ${removedCount} 个重复视频`)
+      mediaList = deduplicatedList
+      fixed = true
+    }
+
+    // 3. 检查修复后的视频数量
+    const finalVideoItems = mediaList.filter((item) => item.type === 'video')
+    const finalImageItems = mediaList.filter((item) => item.type === 'image')
+
+    // 如果修复后只剩下1个视频，且没有图片，转换为单个视频类型
+    if (finalVideoItems.length === 1 && finalImageItems.length === 0) {
+      const singleVideo = finalVideoItems[0]
+      console.log(`  🔄 [${id}] 合辑只剩下1个视频，转换为单个视频类型`)
+
+      const updatePayload = {
+        content_type: 'video',
+        play_url: singleVideo.play_url || null,
+        cover_url: singleVideo.cover_url || cover_url || null,
+        width: singleVideo.width || width || null,
+        height: singleVideo.height || height || null,
+        duration: singleVideo.duration || duration || null,
+        media_list: null, // 单个视频不需要 media_list
+        images: null // 单个视频不需要 images
+      }
+
+      const { error } = await supabase.from('videos').update(updatePayload).eq('id', id)
+
+      if (error) {
+        console.error(`  ❌ [${id}] 转换为视频类型失败:`, error.message)
+        return { fixed: false, reason: 'db_error', error: error.message }
+      }
+
+      console.log(`  ✅ [${id}] 已转换为单个视频类型`)
+      return { fixed: true, converted: true, fixedCount, removedCount }
+    }
+
+    // 如果修复后没有视频了，标记为相册（如果还有图片）或删除
+    if (finalVideoItems.length === 0) {
+      if (finalImageItems.length > 0) {
+        console.log(`  🔄 [${id}] 合辑没有视频了，转换为相册类型`)
+        const updatePayload = {
+          content_type: 'album',
+          play_url: null,
+          media_list: mediaList,
+          images: mediaList
+        }
+        const { error } = await supabase.from('videos').update(updatePayload).eq('id', id)
+        if (error) {
+          console.error(`  ❌ [${id}] 转换为相册类型失败:`, error.message)
+          return { fixed: false, reason: 'db_error', error: error.message }
+        }
+        console.log(`  ✅ [${id}] 已转换为相册类型`)
+        return { fixed: true, converted: true, fixedCount, removedCount }
+      } else {
+        console.log(`  ⚠️  [${id}] 合辑没有任何媒体项，建议删除`)
+        return { fixed: false, reason: 'empty_collection' }
+      }
+    }
+
+    // 如果有修复但不需要转换类型，更新 media_list
     if (fixed) {
       const { error } = await supabase
         .from('videos')
@@ -112,8 +219,10 @@ async function fixCollectionPlayUrls(collection) {
         return { fixed: false, reason: 'db_error', error: error.message }
       }
 
-      console.log(`  ✅ [${id}] 修复完成，更新了 ${fixedCount} 个视频的 play_url`)
-      return { fixed: true, fixedCount }
+      console.log(
+        `  ✅ [${id}] 修复完成，更新了 ${fixedCount} 个视频的 play_url，删除了 ${removedCount} 个重复视频`
+      )
+      return { fixed: true, fixedCount, removedCount }
     }
 
     return { fixed: false, reason: 'no_fix_needed' }
@@ -129,10 +238,10 @@ async function fixCollectionPlayUrls(collection) {
 async function main() {
   console.log('🔍 开始扫描有问题的合辑...\n')
 
-  // 查询所有合辑
+  // 查询所有合辑（需要更多字段用于转换）
   const { data: collections, error } = await supabase
     .from('videos')
-    .select('id, media_list, created_at')
+    .select('id, media_list, play_url, cover_url, width, height, duration, created_at')
     .eq('content_type', 'collection')
     .not('media_list', 'is', null)
 
@@ -144,6 +253,7 @@ async function main() {
   console.log(`📊 找到 ${collections.length} 个合辑，开始检查...\n`)
 
   let totalFixed = 0
+  let totalConverted = 0
   let totalSkipped = 0
   let totalErrors = 0
 
@@ -155,6 +265,9 @@ async function main() {
 
     if (result.fixed) {
       totalFixed++
+      if (result.converted) {
+        totalConverted++
+      }
     } else if (result.reason === 'error' || result.reason === 'db_error') {
       totalErrors++
     } else {
@@ -166,6 +279,7 @@ async function main() {
 
   console.log('\n📊 修复统计:')
   console.log(`  ✅ 已修复: ${totalFixed} 个合辑`)
+  console.log(`  🔄 已转换: ${totalConverted} 个合辑（转换为视频/相册）`)
   console.log(`  ⏭️  跳过: ${totalSkipped} 个合辑`)
   console.log(`  ❌ 错误: ${totalErrors} 个合辑`)
   console.log(`\n✨ 修复完成！`)
