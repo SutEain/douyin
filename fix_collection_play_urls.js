@@ -150,8 +150,152 @@ async function fixCollectionPlayUrls(collection) {
     let fixed = false
     let fixedCount = 0
 
-    // 1. 🎯 先删除重复的视频（基于内容特征，而不是 play_url）
-    // 这样可以处理"所有视频内容相同但 play_url 都指向合辑根路径"的情况
+    // 1. 🎯 先检查：如果所有视频的 play_url 都指向合辑根路径（或都指向不存在的路径）
+    // 且内容特征相同，应该合并为1个视频，使用合辑根路径
+    const allPointToRoot = videoItems.every(
+      (item) => !item.play_url || isCollectionRootPath(item.play_url, id)
+    )
+
+    // 检查内容特征是否相同（允许小的差异，比如duration可能略有不同）
+    const contentKeys = new Set()
+    for (const item of videoItems) {
+      const key = JSON.stringify({
+        duration: item.duration || null,
+        width: item.width || null,
+        height: item.height || null,
+        file_size: item.file_size || null
+      })
+      contentKeys.add(key)
+    }
+
+    // 🎯 如果所有视频都指向根路径（或没有play_url），且内容相同，合并为1个视频
+    if (allPointToRoot && contentKeys.size === 1 && videoItems.length > 1) {
+      console.log(`  🔄 [${id}] 所有视频内容相同且都指向合辑根路径，合并为1个视频`)
+      const firstVideo = videoItems[0]
+      const collectionRootPlayUrl = `/videos/${id}/index.m3u8`
+
+      // 转换为单个视频类型
+      const updatePayload = {
+        content_type: 'video',
+        play_url: collectionRootPlayUrl,
+        cover_url: firstVideo.cover_url || cover_url || null,
+        width: firstVideo.width || width || null,
+        height: firstVideo.height || height || null,
+        duration: firstVideo.duration || duration || null,
+        media_list: null,
+        images: null,
+        is_hls: true
+      }
+
+      const { error } = await supabase.from('videos').update(updatePayload).eq('id', id)
+      if (error) {
+        console.error(`  ❌ [${id}] 转换为视频类型失败:`, error.message)
+        return { fixed: false, reason: 'db_error', error: error.message }
+      }
+
+      console.log(`  ✅ [${id}] 已合并为单个视频类型（删除了 ${videoItems.length - 1} 个重复视频）`)
+      return {
+        fixed: true,
+        converted: true,
+        fixedCount: videoItems.length - 1,
+        removedCount: videoItems.length - 1
+      }
+    }
+
+    // 🎯 如果所有视频的 play_url 都指向错误的路径（修复脚本改错的），统一改回合辑根路径
+    // 检查是否所有 play_url 都包含合辑ID但指向不存在的文件路径（修复脚本改错的格式）
+    const allHaveWrongPaths = videoItems.every(
+      (item) =>
+        item.play_url &&
+        item.play_url.includes(`/videos/${id}/`) &&
+        !isCollectionRootPath(item.play_url, id) &&
+        item.play_url.includes('/index.m3u8')
+    )
+
+    if (allHaveWrongPaths && videoItems.length > 0) {
+      console.log(`  🔧 [${id}] 所有视频的play_url都指向错误路径，统一改回合辑根路径`)
+      const collectionRootPlayUrl = `/videos/${id}/index.m3u8`
+
+      // 将所有视频的 play_url 改回合辑根路径
+      for (const item of videoItems) {
+        if (item.play_url !== collectionRootPlayUrl) {
+          console.log(`     修复: ${item.file_id}`)
+          console.log(`       旧: ${item.play_url}`)
+          console.log(`       新: ${collectionRootPlayUrl}`)
+          item.play_url = collectionRootPlayUrl
+          fixed = true
+          fixedCount++
+        }
+      }
+
+      // 更新 media_list
+      if (fixed) {
+        // 🎯 检查修复后，如果所有视频内容相同，应该合并为单个视频
+        const contentKeys = new Set()
+        for (const item of videoItems) {
+          const key = JSON.stringify({
+            duration: item.duration || null,
+            width: item.width || null,
+            height: item.height || null,
+            file_size: item.file_size || null
+          })
+          contentKeys.add(key)
+        }
+
+        // 如果内容相同，合并为单个视频
+        if (contentKeys.size === 1 && videoItems.length > 1) {
+          console.log(`  🔄 [${id}] 所有视频内容相同，合并为单个视频类型`)
+          const firstVideo = videoItems[0]
+
+          const updatePayload = {
+            content_type: 'video',
+            play_url: collectionRootPlayUrl,
+            cover_url: firstVideo.cover_url || cover_url || null,
+            width: firstVideo.width || width || null,
+            height: firstVideo.height || height || null,
+            duration: firstVideo.duration || duration || null,
+            media_list: null,
+            images: null,
+            is_hls: true
+          }
+
+          const { error } = await supabase.from('videos').update(updatePayload).eq('id', id)
+          if (error) {
+            console.error(`  ❌ [${id}] 转换为视频类型失败:`, error.message)
+            return { fixed: false, reason: 'db_error', error: error.message }
+          }
+
+          console.log(
+            `  ✅ [${id}] 已合并为单个视频类型（删除了 ${videoItems.length - 1} 个重复视频）`
+          )
+          return {
+            fixed: true,
+            converted: true,
+            fixedCount: videoItems.length - 1,
+            removedCount: videoItems.length - 1
+          }
+        }
+
+        // 如果内容不同，只更新 media_list
+        const { error } = await supabase
+          .from('videos')
+          .update({
+            media_list: mediaList,
+            images: mediaList
+          })
+          .eq('id', id)
+
+        if (error) {
+          console.error(`  ❌ [${id}] 更新失败:`, error.message)
+          return { fixed: false, reason: 'db_error', error: error.message }
+        }
+
+        console.log(`  ✅ [${id}] 已修复 ${fixedCount} 个视频的 play_url`)
+        return { fixed: true, fixedCount, removedCount: 0 }
+      }
+    }
+
+    // 2. 🎯 删除重复的视频（基于内容特征）
     const { mediaList: deduplicatedList, removedCount } = removeDuplicateVideos(mediaList)
     if (removedCount > 0) {
       console.log(`  🗑️  [${id}] 删除了 ${removedCount} 个重复视频（基于内容特征）`)
@@ -159,8 +303,7 @@ async function fixCollectionPlayUrls(collection) {
       fixed = true
     }
 
-    // 2. 检查并修复每个视频的 play_url（如果是合辑根路径，且不是重复视频）
-    // 🎯 注意：只有在删除重复后，如果还有多个视频，才需要修复 play_url
+    // 3. 检查并修复每个视频的 play_url（如果是合辑根路径，且不是重复视频）
     const remainingVideoItems = mediaList.filter((item) => item.type === 'video')
     for (const item of remainingVideoItems) {
       if (!item.file_id) {
@@ -169,7 +312,6 @@ async function fixCollectionPlayUrls(collection) {
       }
 
       // 🎯 如果 play_url 是合辑根路径，且合辑中还有其他视频，才需要修复
-      // 如果只剩下1个视频，保留合辑根路径，后续会转换为单个视频类型
       if (isCollectionRootPath(item.play_url, id) && remainingVideoItems.length > 1) {
         const correctPlayUrl = generateCorrectPlayUrl(id, item.file_id)
         console.log(`  🔧 [${id}] 修复视频 ${item.file_id}:`)
