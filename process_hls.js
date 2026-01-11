@@ -336,10 +336,12 @@ async function processCollection(video, workerId) {
   }
 
   // 🎯 核心修复：无论是否成功，只要处理过，就更新数据库，避免死循环
+  // 🎯 重要：合辑（collection）的根 play_url 应该保持为 null，因为每个视频都有自己的 play_url
+  // 如果之前错误地设置了合辑根 play_url，这里会清除它
   const updatePayload = {
     media_list: mediaList,
     is_hls: true,
-    play_url: videoItems.find((v) => v.is_hls)?.play_url || video.play_url
+    play_url: null // 合辑不应该有根 play_url，每个视频都有自己的 play_url
   }
 
   const { error: dbErr } = await supabase.from('videos').update(updatePayload).eq('id', id)
