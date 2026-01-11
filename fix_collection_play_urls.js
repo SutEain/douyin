@@ -212,12 +212,14 @@ async function fixCollectionPlayUrls(collection) {
     }
 
     // 如果有修复但不需要转换类型，更新 media_list
+    // 🎯 重要：同时清除合辑的根 play_url（合辑不应该有根 play_url）
     if (fixed) {
       const { error } = await supabase
         .from('videos')
         .update({
           media_list: mediaList,
-          images: mediaList
+          images: mediaList,
+          play_url: null // 🎯 清除合辑的根 play_url
         })
         .eq('id', id)
 
