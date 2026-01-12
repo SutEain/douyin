@@ -329,12 +329,14 @@ export async function handleDeleteSearchHistory(req: Request): Promise<Response>
 // --- 内部辅助函数 ---
 
 async function saveSearchHistory(userId: string, keyword: string, type: string) {
+  const now = new Date().toISOString()
   await supabaseAdmin.from('search_history').upsert(
     {
       user_id: userId,
       keyword: keyword,
       search_type: type,
-      created_at: new Date().toISOString()
+      created_at: now,
+      updated_at: now
     },
     { onConflict: 'user_id,keyword' }
   )
