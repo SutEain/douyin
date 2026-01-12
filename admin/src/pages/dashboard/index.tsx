@@ -229,21 +229,11 @@ export const Dashboard = () => {
               return { data: total, error: null }
             }),
           // 🎯 今日手动调整的抖币：从交易记录统计（北京时间）
-          // recharge类型且description包含'[后台调整]'
-          supabaseClient
-            .from('coin_transactions')
-            .select('amount')
-            .gte('created_at', startISO)
-            .lt('created_at', endISO)
-            .eq('type', 'recharge')
-            .ilike('description', '%[后台调整]%')
-            .then((res) => {
-              if (res.error) throw res.error
-              // 手动调整可能是正数（增加）或负数（减少），这里统计所有调整的绝对值总和
-              const total =
-                res.data?.reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0) || 0
-              return { data: total, error: null }
-            }),
+          // 使用 RPC 函数绕过 RLS 限制，直接使用 SQL SUM 聚合
+          supabaseClient.rpc('get_today_manual_adjustments', {
+            p_start_iso: startISO,
+            p_end_iso: endISO
+          }),
           // 🎯 今日抖币抽水：平台通过打赏、直播礼物、游戏各种抽水回收的抖币（北京时间）
           // 分别统计各个来源的抽水
           Promise.all([
