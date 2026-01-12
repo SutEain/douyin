@@ -45,59 +45,56 @@ export const UserList = () => {
     onSearch: (params: Record<string, any>) => {
       const filters: any[] = []
 
-      const q = String(params.q || '').trim()
-      const inviterId = String(params.inviter_id || '').trim()
-      const numericId = String(params.numeric_id || '').trim()
-      const tgUserId = String(params.tg_user_id || '').trim()
-      const uuid = String(params.id || '').trim()
-      const hasVideos = params.has_videos
-      const liveStatus = params.live_status
-
-      if (q) {
+      // 1. 关键词搜索 (q)
+      if (params.q && params.q.trim()) {
+        const qVal = params.q.trim()
         const orConditions: any[] = [
-          { field: 'nickname', operator: 'contains', value: q },
-          { field: 'username', operator: 'contains', value: q },
-          { field: 'tg_username', operator: 'contains', value: q }
+          { field: 'nickname', operator: 'contains', value: qVal },
+          { field: 'username', operator: 'contains', value: qVal },
+          { field: 'tg_username', operator: 'contains', value: qVal }
         ]
-
-        // 如果主关键词输入的是纯数字，自动匹配 ID
-        if (/^\d+$/.test(q)) {
-          orConditions.push({ field: 'numeric_id', operator: 'eq', value: q })
-          orConditions.push({ field: 'tg_user_id', operator: 'eq', value: q })
+        // 如果输入的是纯数字，主搜索框也自动匹配数字ID和TGID
+        if (/^\d+$/.test(qVal)) {
+          const numVal = Number(qVal)
+          orConditions.push({ field: 'numeric_id', operator: 'eq', value: numVal })
+          orConditions.push({ field: 'tg_user_id', operator: 'eq', value: numVal })
         }
-
-        filters.push({
-          operator: 'or',
-          value: orConditions
-        })
+        filters.push({ operator: 'or', value: orConditions })
       }
 
-      if (inviterId) {
+      // 2. 独立数字 ID 搜索
+      if (params.numeric_id) {
+        filters.push({ field: 'numeric_id', operator: 'eq', value: Number(params.numeric_id) })
+      }
+
+      // 3. 独立 TGID 搜索
+      if (params.tg_user_id) {
+        filters.push({ field: 'tg_user_id', operator: 'eq', value: Number(params.tg_user_id) })
+      }
+
+      // 4. 邀请人 ID 搜索
+      if (params.inviter_id) {
         filters.push({
           field: 'inviter->numeric_id',
           operator: 'eq',
-          value: inviterId
+          value: Number(params.inviter_id)
         })
       }
 
-      if (numericId) {
-        filters.push({ field: 'numeric_id', operator: 'eq', value: numericId })
-      }
-      if (tgUserId) {
-        filters.push({ field: 'tg_user_id', operator: 'eq', value: tgUserId })
-      }
-      if (uuid) {
-        filters.push({ field: 'id', operator: 'eq', value: uuid })
+      // 5. UUID 搜索
+      if (params.id && params.id.trim()) {
+        filters.push({ field: 'id', operator: 'eq', value: params.id.trim() })
       }
 
-      if (hasVideos === 'true' || hasVideos === true) {
+      // 6. 状态过滤
+      if (params.has_videos === 'true' || params.has_videos === true) {
         filters.push({ field: 'video_count', operator: 'gt', value: 0 })
-      } else if (hasVideos === 'false' || hasVideos === false) {
+      } else if (params.has_videos === 'false' || params.has_videos === false) {
         filters.push({ field: 'video_count', operator: 'eq', value: 0 })
       }
 
-      if (liveStatus !== undefined && liveStatus !== '') {
-        filters.push({ field: 'live_status', operator: 'eq', value: liveStatus })
+      if (params.live_status !== undefined && params.live_status !== '') {
+        filters.push({ field: 'live_status', operator: 'eq', value: Number(params.live_status) })
       }
 
       return filters
