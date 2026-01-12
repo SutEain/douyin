@@ -53,15 +53,23 @@ export function isBrowserEnvironment(): boolean {
   // 🎯 检查是否是真实的 Telegram WebApp（排除降级对象）
   const tgWebApp = window.Telegram?.WebApp
   if (tgWebApp) {
-    // 🚨 关键修复：即使 version 是 'fallback' 或 platform 是 'unknown'，
-    // 只要存在 Telegram.WebApp 对象，就应该认为是 Telegram 环境
-    // 因为降级对象只在浏览器环境中创建，如果存在说明可能是 Telegram 环境
+    // 🎯 关键：准确识别降级对象
+    // 降级对象的特点：version='fallback' 且 platform='unknown' 且没有 initData
+    const isFallbackObject =
+      tgWebApp.version === 'fallback' &&
+      tgWebApp.platform === 'unknown' &&
+      (!tgWebApp.initData || tgWebApp.initData.length === 0)
 
-    // 检查是否是真实的 Telegram WebApp（有 initData 或 platform 不是 'unknown'）
+    // 如果是降级对象，说明是浏览器环境（降级对象只在浏览器环境中创建）
+    if (isFallbackObject) {
+      return true // 是浏览器环境
+    }
+
+    // 检查是否是真实的 Telegram WebApp
     const hasRealTelegramObj =
       (tgWebApp.version !== 'fallback' && tgWebApp.platform !== 'unknown') ||
       (tgWebApp.initData && tgWebApp.initData.length > 0) ||
-      // 🎯 新增：检查 platform 是否是有效的 Telegram 平台
+      // 🎯 检查 platform 是否是有效的 Telegram 平台
       (tgWebApp.platform &&
         ['ios', 'android', 'tdesktop', 'web', 'macos', 'windows', 'linux'].includes(
           tgWebApp.platform
@@ -71,20 +79,17 @@ export function isBrowserEnvironment(): boolean {
       return false // 有真实的 Telegram WebApp 对象，不是浏览器环境
     }
 
-    // 🚨 关键修复：如果 Telegram.WebApp 存在但可能是降级对象，
-    // 需要进一步检查：如果 URL 中没有明确的浏览器标识，保守地认为是 Telegram 环境
-    // 这样可以避免在 miniAPP 中误显示 Web 版登录
-    const url = window.location.href.toLowerCase()
-    const isExplicitBrowserUrl =
-      url.includes('localhost') ||
-      url.includes('127.0.0.1') ||
-      url.includes('.test') ||
-      url.includes('.local')
-
-    if (!isExplicitBrowserUrl) {
-      // 🎯 保守策略：如果 URL 不是明确的开发环境，且存在 Telegram.WebApp 对象，
-      // 即使可能是降级对象，也认为是 Telegram 环境（避免误显示 Web 版登录）
-      return false
+    // 🚨 如果既不是降级对象，也不是真实的 Telegram WebApp，可能是中间状态
+    // 此时需要更严格的判断：检查是否有其他 Telegram 标识
+    // 如果没有其他标识，且是降级对象的特征，认为是浏览器环境
+    if (
+      !tgWebApp.initData ||
+      tgWebApp.initData.length === 0 ||
+      tgWebApp.version === 'fallback' ||
+      tgWebApp.platform === 'unknown'
+    ) {
+      // 没有 initData 且是降级特征，认为是浏览器环境
+      return true
     }
   }
 
