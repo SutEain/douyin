@@ -5,6 +5,53 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>抖音管理后台</title>
+    <script>
+      // ✅ 彻底禁用所有控制台输出（仅非本地环境生效，除非 URL 包含 debug=1）
+      ;(function () {
+        try {
+          const host = window.location.hostname
+          const isDev =
+            host === 'localhost' ||
+            host === '127.0.0.1' ||
+            host.endsWith('.test') ||
+            host.endsWith('.local')
+          const isDebug = window.location.search.includes('debug=1')
+
+          if (!isDev && !isDebug) {
+            const noop = function () {}
+            const methods = [
+              'log',
+              'info',
+              'debug',
+              'warn',
+              'error',
+              'trace',
+              'table',
+              'group',
+              'groupCollapsed',
+              'groupEnd',
+              'time',
+              'timeEnd',
+              'count',
+              'assert'
+            ]
+            // 保存原始 console 引用，备用
+            window.__rawConsole__ = {}
+            for (const key in window.console) {
+              window.__rawConsole__[key] = window.console[key]
+            }
+            // 覆盖方法
+            methods.forEach(function (m) {
+              if (typeof window.console[m] === 'function') {
+                window.console[m] = noop
+              }
+            })
+          }
+        } catch (e) {
+          // ignore
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

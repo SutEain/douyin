@@ -18,6 +18,53 @@
     <link rel="preconnect" href="https://media.tgdouyin.com" crossorigin />
 
     <title>TGDouyin - Telegram 短视频平台</title>
+    <script>
+      // ✅ 彻底禁用所有控制台输出（仅非本地环境生效，除非 URL 包含 debug=1）
+      ;(function () {
+        try {
+          const host = window.location.hostname
+          const isDev =
+            host === 'localhost' ||
+            host === '127.0.0.1' ||
+            host.endsWith('.test') ||
+            host.endsWith('.local')
+          const isDebug = window.location.search.includes('debug=1')
+
+          if (!isDev && !isDebug) {
+            const noop = function () {}
+            const methods = [
+              'log',
+              'info',
+              'debug',
+              'warn',
+              'error',
+              'trace',
+              'table',
+              'group',
+              'groupCollapsed',
+              'groupEnd',
+              'time',
+              'timeEnd',
+              'count',
+              'assert'
+            ]
+            // 保存原始 console 引用，备用
+            window.__rawConsole__ = {}
+            for (const key in window.console) {
+              window.__rawConsole__[key] = window.console[key]
+            }
+            // 覆盖方法
+            methods.forEach(function (m) {
+              if (typeof window.console[m] === 'function') {
+                window.console[m] = noop
+              }
+            })
+          }
+        } catch (e) {
+          // ignore
+        }
+      })()
+    </script>
     <meta
       name="description"
       content="TGDouyin 是一个基于 Telegram 的短视频分享平台，提供海量精彩视频内容，支持直播、评论、点赞等互动功能。"

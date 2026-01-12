@@ -1,15 +1,35 @@
 import { createApp } from 'vue'
 
-// ✅ 生产环境禁用控制台输出（除非 URL 包含 debug=1）
+// ✅ 彻底禁用所有控制台输出（仅生产环境生效，除非 URL 包含 debug=1）
 if (import.meta.env.PROD && !window.location.search.includes('debug=1')) {
+  const noop = () => {}
+  const consoleMethods: (keyof Console)[] = [
+    'log',
+    'info',
+    'debug',
+    'warn',
+    'error',
+    'trace',
+    'table',
+    'group',
+    'groupCollapsed',
+    'groupEnd',
+    'time',
+    'timeEnd',
+    'count',
+    'assert'
+  ]
+
   // 保存原始 console 引用，备用
   if (typeof window !== 'undefined') {
     ;(window as any).__rawConsole__ = { ...window.console }
   }
-  console.log = () => {}
-  console.info = () => {}
-  console.debug = () => {}
-  // console.warn = () => {} // 建议保留 warn 和 error 用于捕获线上异常
+
+  consoleMethods.forEach((method) => {
+    if (typeof (console as any)[method] === 'function') {
+      ;(console as any)[method] = noop
+    }
+  })
 }
 
 import App from './App.vue'
