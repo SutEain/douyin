@@ -51,6 +51,12 @@ const state = reactive({
 async function loadMore() {
   if (state.loading) return
 
+  // 🎯 检查是否还有更多数据
+  if (!state.hasMore) {
+    console.log('[LongVideo] 已无更多数据，跳过加载')
+    return
+  }
+
   // 1. 🎯 核心重构：等待 App Ready
   const store = useBaseStore()
   if (!store.isAppReady) {
@@ -70,10 +76,10 @@ async function loadMore() {
   state.loading = true
 
   try {
-    // 💡 核心策略：已登录用户永远请求 pageNo: 0 (由后端排除已看过的)
-    // 💡 未登录用户则正常按 pageNo 分页
+    // 🎯 修复：已登录用户也需要递增 pageNo，让后端返回不同的数据
+    // 后端会排除已看过的视频，但我们需要通过不同的 pageNo 来获取更多数据
     const res = await recommendedLongVideo({
-      pageNo: store.userinfo.uid ? 0 : state.page,
+      pageNo: state.page, // 🎯 统一使用 state.page，不再区分登录状态
       pageSize: state.pageSize,
       seed: state.seed // 🎯 传递种子
     })
@@ -88,24 +94,44 @@ async function loadMore() {
       if (uniqueNewList.length > 0) {
         state.list.push(...uniqueNewList)
         state.page++
-        state.hasMore = true
+        // 🎯 根据返回的数据量判断是否还有更多
+        state.hasMore = newList.length >= state.pageSize
+        console.log('[LongVideo] 加载成功', {
+          新增: uniqueNewList.length,
+          总数: state.list.length,
+          hasMore: state.hasMore
+        })
       } else if (newList.length > 0) {
-        // 如果全是重复，尝试下一页
+        // 🎯 如果全是重复，说明后端可能返回了相同的数据，尝试下一页
+        console.log('[LongVideo] 返回的数据全是重复，尝试下一页')
         state.page++
         state.loading = false
-        setTimeout(() => loadMore(), 300)
+        // 🎯 增加延迟，避免频繁请求
+        setTimeout(() => loadMore(), 500)
         return
       } else {
+        // 🎯 后端返回空列表，说明没有更多数据了
         state.hasMore = false
+        console.log('[LongVideo] 没有更多数据了')
       }
     } else {
       console.warn('[LongVideo] 加载失败:', res.message)
+      // 🎯 如果第一次加载就失败，允许重试
       if (state.list.length === 0) {
         state.hasMore = true
+      } else {
+        // 🎯 已有数据但加载失败，暂时标记为没有更多，避免无限重试
+        state.hasMore = false
       }
     }
   } catch (error) {
     console.error('[LongVideo] ❌ 加载失败', error)
+    // 🎯 异常情况下，如果已有数据，标记为没有更多；如果没有数据，允许重试
+    if (state.list.length === 0) {
+      state.hasMore = true
+    } else {
+      state.hasMore = false
+    }
   } finally {
     state.loading = false
   }
