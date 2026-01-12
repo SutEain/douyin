@@ -76,12 +76,13 @@ async function loadMore() {
   state.loading = true
 
   try {
-    // 🎯 修复：已登录用户也需要递增 pageNo，让后端返回不同的数据
-    // 后端会排除已看过的视频，但我们需要通过不同的 pageNo 来获取更多数据
+    // 🎯 修复：使用已加载的数量作为 offset，而不是 pageNo
+    // 后端使用加权随机算法 + Seed，每次请求会返回不同的随机内容
+    // 后端已经通过 exclude_ids 排除了已观看的视频，所以我们可以使用已加载的数量作为 offset
     const res = await recommendedLongVideo({
-      pageNo: state.page, // 🎯 统一使用 state.page，不再区分登录状态
+      pageNo: Math.floor(state.list.length / state.pageSize), // 🎯 使用已加载的数量计算 pageNo
       pageSize: state.pageSize,
-      seed: state.seed // 🎯 传递种子
+      seed: state.seed // 🎯 传递种子，确保随机性
     })
 
     if (res.success) {

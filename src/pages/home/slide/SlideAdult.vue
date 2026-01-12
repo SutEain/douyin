@@ -55,6 +55,12 @@ const state = reactive({
 async function loadMore() {
   if (state.loading) return
 
+  // 🎯 检查是否还有更多数据
+  if (!state.hasMore) {
+    console.log('[SlideAdult] 已无更多数据，跳过加载')
+    return
+  }
+
   // 1. 🎯 核心重构：允许并行加载
   const hasTGInitData = !!(window as any).Telegram?.WebApp?.initData
 
@@ -74,40 +80,61 @@ async function loadMore() {
   state.loading = true
 
   try {
-    // 💡 核心策略：如果已登录，后端会排除已观看，此时必须永远传 start: 0 才能不跳过新内容
-    // 💡 如果未登录，后端是简单时间倒序，此时需要正常分页
+    // 🎯 修复：使用已加载的数量作为 offset，而不是 pageNo
+    // 后端使用加权随机算法 + Seed，每次请求会返回不同的随机内容
+    // 后端已经通过 exclude_ids 排除了已观看的视频，所以我们可以使用已加载的数量作为 offset
     const res = await adultVideoFeed({
-      start: store.userinfo.uid ? 0 : state.page * state.pageSize,
+      start: state.list.length, // 🎯 使用已加载的数量作为 offset
       pageSize: state.pageSize,
-      seed: state.seed // 🎯 传递种子
+      seed: state.seed // 🎯 传递种子，确保随机性
     })
 
     if (res.success) {
       const newList = res.data.list || []
+
+      // 💡 前端去重（防止后端返回重复数据）
       const existingIds = new Set(state.list.map((v: any) => v.aweme_id || v.id))
       const uniqueNewList = newList.filter((v: any) => !existingIds.has(v.aweme_id || v.id))
 
       if (uniqueNewList.length > 0) {
         state.list.push(...uniqueNewList)
-        state.page++
-        state.hasMore = true
+        // 🎯 根据返回的数据量判断是否还有更多
+        state.hasMore = newList.length >= state.pageSize
+        console.log('[SlideAdult] 加载成功', {
+          新增: uniqueNewList.length,
+          总数: state.list.length,
+          hasMore: state.hasMore
+        })
       } else if (newList.length > 0) {
-        // 全是重复，尝试下一页
-        state.page++
+        // 🎯 如果全是重复，说明后端可能返回了相同的数据，尝试增加 offset
+        console.log('[SlideAdult] 返回的数据全是重复，尝试增加 offset')
         state.loading = false
-        setTimeout(() => loadMore(), 300)
+        // 🎯 增加延迟，避免频繁请求
+        setTimeout(() => loadMore(), 500)
         return
       } else {
+        // 🎯 后端返回空列表，说明没有更多数据了
         state.hasMore = false
+        console.log('[SlideAdult] 没有更多数据了')
       }
     } else {
-      console.warn('[SlideAdult] 加载失败:', res.message)
+      console.warn('[SlideAdult] 加载失败:', res)
+      // 🎯 如果第一次加载就失败，允许重试
       if (state.list.length === 0) {
         state.hasMore = true
+      } else {
+        // 🎯 已有数据但加载失败，暂时标记为没有更多，避免无限重试
+        state.hasMore = false
       }
     }
   } catch (e) {
-    console.error('[SlideAdult] 加载异常:', e)
+    console.error('[SlideAdult] ❌ 加载异常:', e)
+    // 🎯 异常情况下，如果已有数据，标记为没有更多；如果没有数据，允许重试
+    if (state.list.length === 0) {
+      state.hasMore = true
+    } else {
+      state.hasMore = false
+    }
   } finally {
     state.loading = false
   }
