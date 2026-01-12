@@ -9,34 +9,26 @@
       </template>
     </BaseHeader>
     <div class="content">
-      <Indicator
-        style="width: calc(100vw - 2rem); margin-left: 1rem"
-        tabStyleWidth="50%"
-        :tabTexts="['视频', '影视综']"
-        v-model:active-index="data.currentSlideItemIndex"
-      >
-      </Indicator>
-      <SlideHorizontal v-model:index="data.currentSlideItemIndex" class="SlideHorizontal">
-        <SlideItem class="tab1" style="overflow: auto">
-          <Scroll class="Scroll" @pulldown="getHistoryVideo">
-            <Posters :list="data.historyVideo.list" v-if="data.historyVideo.total"></Posters>
-            <Loading :is-full-screen="false" v-if="data.loadingVideo" />
-            <template v-else>
-              <NoMore v-if="data.historyVideo.list.length" />
-              <div class="empty" v-else>
-                <img src="../../../assets/img/icon/none-bg1.webp" alt="" />
-                <div class="title">暂无观看历史记录</div>
-              </div>
-            </template>
-          </Scroll>
-        </SlideItem>
-        <SlideItem class="tab2">
-          <div class="empty">
-            <img src="../../../assets/img/icon/none-bg1.webp" alt="" />
-            <div class="title">暂无观影历史记录</div>
+      <Scroll class="Scroll" @pulldown="getHistoryVideo">
+        <Posters
+          v-if="data.historyVideo.list.length > 0"
+          :list="data.historyVideo.list"
+          :showLabels="true"
+        />
+        <Loading :is-full-screen="false" v-if="data.loadingVideo" />
+        <template v-else>
+          <NoMore
+            v-if="
+              data.historyVideo.list.length &&
+              data.historyVideo.total !== -1 &&
+              data.historyVideo.list.length >= data.historyVideo.total
+            "
+          />
+          <div v-else-if="data.historyVideo.total === 0" class="empty-list">
+            <div class="title">暂无观看历史记录</div>
           </div>
-        </SlideItem>
-      </SlideHorizontal>
+        </template>
+      </Scroll>
     </div>
   </div>
 </template>
@@ -44,7 +36,7 @@
 import Posters from '@/components/Posters.vue'
 import Scroll from '@/components/Scroll.vue'
 import NoMore from '@/components/NoMore.vue'
-import { historyOther, historyVideo } from '@/api/videos'
+import { historyVideo, clearVideoHistory } from '@/api/videos'
 
 import { computed, onMounted, reactive } from 'vue'
 import { _showConfirmDialog } from '@/utils'
@@ -55,81 +47,68 @@ defineOptions({
 
 const data = reactive({
   loadingVideo: false,
-  loadingOther: false,
   isClearHistoryVideo: false,
-  isClearHistoryOther: false,
-  currentSlideItemIndex: 0,
   pageSize: 15,
   historyVideo: {
-    total: 0,
-    pageNo: 0,
-    list: []
-  },
-  historyOther: {
-    total: 0,
+    total: -1, // 🎯 初始化为 -1，和 Me 页面保持一致
     pageNo: 0,
     list: []
   }
 })
 
 const isClear = computed(() => {
-  if (data.currentSlideItemIndex === 0) {
-    return data.historyVideo.list.length
-  }
-  return data.historyOther.list.length
+  return data.historyVideo.list.length > 0
 })
+
 onMounted(() => {
   getHistoryVideo(true)
-  getHistoryOther(true)
 })
 
 async function getHistoryVideo(init = false) {
   if (data.loadingVideo) return
   if (data.isClearHistoryVideo) return
-  if (!init) {
-    if (data.historyVideo.total <= data.historyVideo.list.length) return
-    data.historyVideo.pageNo++
+
+  // 🎯 如果已加载完所有数据，不再请求
+  if (data.historyVideo.total !== -1 && data.historyVideo.list.length >= data.historyVideo.total) {
+    return
   }
+
   data.loadingVideo = true
-  let res: any = await historyVideo({
-    pageNo: data.historyVideo.pageNo,
-    pageSize: data.pageSize
-  })
-  console.log(res)
-  data.loadingVideo = false
-  if (res.success) {
-    data.historyVideo.list = data.historyVideo.list.concat(res.data.list)
-    data.historyVideo.total = res.data.total
-  }
-}
+  try {
+    const res: any = await historyVideo({
+      pageNo: data.historyVideo.pageNo,
+      pageSize: data.pageSize
+    })
 
-async function getHistoryOther(init = false) {
-  if (data.loadingOther) return
-  if (data.isClearHistoryOther) return
-  data.loadingOther = true
-  if (!init) {
-    data.historyOther.pageNo++
-  }
-  let res: any = await historyOther({
-    pageNo: data.historyOther.pageNo,
-    pageSize: data.pageSize
-  })
-  data.loadingOther = false
-  if (res.success) {
-    data.historyOther.list = data.historyOther.list.concat(res.data.list)
-    data.historyOther.total = res.data.total
-  }
-}
-
-function clear() {
-  _showConfirmDialog('确定清空？', '清空后，以往观看记录不再展示', 'gray', () => {
-    if (data.currentSlideItemIndex === 0) {
-      data.historyVideo.list = []
-      data.isClearHistoryVideo = true
-      return
+    if (res.success) {
+      data.historyVideo.total = res.data.total
+      data.historyVideo.list.push(...res.data.list)
+      data.historyVideo.pageNo++ // 🎯 成功加载后递增页码
     }
-    data.historyOther.list = []
-    data.isClearHistoryVideo = true
+  } catch (error) {
+    console.error('[LookHistory] 加载观看历史失败:', error)
+  } finally {
+    data.loadingVideo = false
+  }
+}
+
+async function clear() {
+  _showConfirmDialog('确定清空？', '清空后，所有观看记录将被永久删除', 'gray', async () => {
+    try {
+      const res = await clearVideoHistory()
+      if (res.success) {
+        // 🎯 清空成功后，重置前端状态
+        data.historyVideo.list = []
+        data.historyVideo.total = 0
+        data.historyVideo.pageNo = 0
+        data.isClearHistoryVideo = false // 重置标志，允许重新加载
+        console.log('[LookHistory] 成功清空所有观看历史')
+      } else {
+        console.error('[LookHistory] 清空失败:', res.message)
+      }
+    } catch (error) {
+      console.error('[LookHistory] 清空观看历史异常:', error)
+    }
   })
 }
 </script>
@@ -150,28 +129,24 @@ function clear() {
   .content {
     padding-top: 60rem;
 
-    .SlideHorizontal,
     .Scroll {
-      height: calc(
-        var(--vh, 1vh) * 100 - var(--indicator-height) - var(--common-header-height)
-      ) !important;
+      height: calc(var(--vh, 1vh) * 100 - var(--common-header-height)) !important;
     }
 
-    .empty {
-      height: 70vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-
-      img {
-        height: 120rem;
-      }
+    .empty-list {
+      padding: 40rem 20rem;
+      text-align: center;
 
       .title {
-        font-size: 13rem;
-        margin-top: 10rem;
+        font-size: 14rem;
         color: var(--second-text-color);
+        margin-bottom: 8rem;
+      }
+
+      .desc {
+        font-size: 12rem;
+        color: var(--second-text-color);
+        opacity: 0.7;
       }
     }
   }

@@ -21,6 +21,8 @@ import {
   handleVideoLikes,
   handleVideoMy,
   handleVideoDetail,
+  handleVideoHistory,
+  handleClearVideoHistory,
   handleBatchReview,
   handleApproveVideo,
   handleRecordView,
@@ -127,6 +129,12 @@ serve(async (req) => {
     }
     if (route === '/video/likes' && method === 'GET') {
       return handleVideoLikes(req)
+    }
+    if (route === '/video/history' && method === 'GET') {
+      return handleVideoHistory(req)
+    }
+    if (route === '/video/history' && method === 'DELETE') {
+      return handleClearVideoHistory(req)
     }
     if (route === '/video/collections' && method === 'GET') {
       return handleVideoCollections(req)

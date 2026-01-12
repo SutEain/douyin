@@ -102,8 +102,13 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
         .maybeSingle()
 
       if (startRow) {
-        startVideo = startRow
-        console.log('[Feed] 深链接视频:', startVideoId)
+        // 🎯 隐私保护：如果视频是私密的且当前用户不是作者，则不作为深链视频加载
+        if (startRow.is_private && (!user || user.id !== startRow.author_id)) {
+          console.log('[Feed] 深链接视频是私密的，且用户无权查看:', startVideoId)
+        } else {
+          startVideo = startRow
+          console.log('[Feed] 深链接视频:', startVideoId)
+        }
       }
     }
   }
@@ -131,6 +136,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
       .select('*')
       .eq('status', 'published')
       .eq('is_adult', false)
+      .eq('is_private', false) // 🎯 增加私密过滤
       .order('created_at', { ascending: false })
       .range(from, to)
     rows = fallbackData || []
@@ -174,6 +180,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     .select('*', { count: 'exact', head: true })
     .eq('status', 'published')
     .eq('is_adult', false)
+    .eq('is_private', false) // 🎯 增加私密过滤
   // .eq('is_sea', false) // 🎯 允许东南亚内容
 
   return successResponse({
@@ -197,7 +204,16 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
 
   console.log('[LongFeed] 请求参数:', { pageNo, pageSize, seed, userId: user?.id })
 
-  // 🎯 获取用户最近观看历史（排除最近 300 条）
+  // 🎯 调试：检查用户是否有观看历史
+  if (user?.id) {
+    const { count } = await supabaseAdmin
+      .from('watch_history')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    console.log('[LongFeed] 用户观看历史总数:', count)
+  }
+
+  // 🎯 获取用户最近观看历史（排除最近 500 条，确保覆盖更多历史）
   let excludeVideoIds: string[] = []
   if (user?.id) {
     const { data: historyData } = await supabaseAdmin
@@ -205,17 +221,28 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
       .select('video_id')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
-      .limit(300)
+      .limit(500) // 🎯 增加到 500 条，确保覆盖更多观看历史
 
     if (historyData) {
       excludeVideoIds = historyData.map((h: any) => h.video_id).filter(Boolean)
+      console.log('[LongFeed] 排除已观看视频数量:', excludeVideoIds.length)
     }
   }
 
   // 🎯 使用加权随机算法 (WRS) + Seed
+  console.log('[LongFeed] 调用 RPC，排除视频数量:', excludeVideoIds.length)
+  console.log('[LongFeed] RPC参数:', {
+    p_user_id: user?.id || null,
+    p_exclude_ids_count: excludeVideoIds.length,
+    p_exclude_ids_sample: excludeVideoIds.slice(0, 3), // 打印前3个ID用于调试
+    p_limit: pageSize,
+    p_offset: from,
+    p_seed: seed
+  })
+
   const { data, error } = await supabaseAdmin.rpc('get_sea_feed', {
     p_user_id: user?.id || null,
-    p_exclude_ids: excludeVideoIds,
+    p_exclude_ids: excludeVideoIds.length > 0 ? excludeVideoIds : null, // 🎯 空数组改为 null，避免 RPC 函数判断错误
     p_limit: pageSize,
     p_offset: from,
     p_seed: seed
@@ -229,8 +256,20 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
   console.log('[LongFeed] RPC返回:', {
     count: data?.length || 0,
     firstScore: data?.[0]?.score,
-    lastScore: data?.[data?.length - 1]?.score
+    lastScore: data?.[data?.length - 1]?.score,
+    returned_ids: data?.slice(0, 3).map((r: any) => r.id) // 打印返回的前3个ID用于调试
   })
+
+  // 🎯 验证：检查返回的视频是否在排除列表中
+  if (excludeVideoIds.length > 0 && data && data.length > 0) {
+    const returnedIds = data.map((r: any) => r.id)
+    const duplicates = returnedIds.filter((id: string) => excludeVideoIds.includes(id))
+    if (duplicates.length > 0) {
+      console.error('[LongFeed] ⚠️ 警告：返回的视频中包含已排除的视频:', duplicates)
+    } else {
+      console.log('[LongFeed] ✅ 验证通过：返回的视频都不在排除列表中')
+    }
+  }
 
   // 附加用户标记（点赞、收藏、关注状态）
   await attachUserFlags(data ?? [], user?.id ?? null)
@@ -275,7 +314,7 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
 
   console.log('[VideoTabFeed] 请求参数:', { pageNo, pageSize, seed, userId: user?.id })
 
-  // 🎯 获取用户最近观看历史（排除最近 300 条）
+  // 🎯 获取用户最近观看历史（排除最近 500 条，确保覆盖更多历史）
   let excludeVideoIds: string[] = []
   if (user?.id) {
     const { data: historyData } = await supabaseAdmin
@@ -283,10 +322,11 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
       .select('video_id')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
-      .limit(300)
+      .limit(500) // 🎯 增加到 500 条，确保覆盖更多观看历史
 
     if (historyData) {
       excludeVideoIds = historyData.map((h: any) => h.video_id).filter(Boolean)
+      console.log('[LongFeed] 排除已观看视频数量:', excludeVideoIds.length)
     }
   }
 
@@ -357,6 +397,7 @@ export async function handleShortDramaFeed(req: Request): Promise<Response> {
     .select('*', { count: 'exact' })
     .eq('status', 'published')
     .eq('is_adult', false)
+    .eq('is_private', false) // 🎯 增加私密过滤
     .contains('tags', ['短剧']) // 🎯 查询包含"短剧"标签的视频
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -410,7 +451,16 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
 
   console.log('[AdultFeed] 请求参数:', { pageNo, pageSize, seed, userId: user?.id })
 
-  // 🎯 获取用户最近观看历史（排除最近 300 条）
+  // 🎯 调试：检查用户是否有观看历史
+  if (user?.id) {
+    const { count } = await supabaseAdmin
+      .from('watch_history')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    console.log('[AdultFeed] 用户观看历史总数:', count)
+  }
+
+  // 🎯 获取用户最近观看历史（排除最近 500 条，确保覆盖更多历史）
   let excludeVideoIds: string[] = []
   if (user?.id) {
     const { data: historyData } = await supabaseAdmin
@@ -418,17 +468,28 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
       .select('video_id')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
-      .limit(300)
+      .limit(500) // 🎯 增加到 500 条，确保覆盖更多观看历史
 
     if (historyData) {
       excludeVideoIds = historyData.map((h: any) => h.video_id).filter(Boolean)
+      console.log('[LongFeed] 排除已观看视频数量:', excludeVideoIds.length)
     }
   }
 
   // 🎯 使用加权随机算法 (WRS) + Seed
+  console.log('[AdultFeed] 调用 RPC，排除视频数量:', excludeVideoIds.length)
+  console.log('[AdultFeed] RPC参数:', {
+    p_user_id: user?.id || null,
+    p_exclude_ids_count: excludeVideoIds.length,
+    p_exclude_ids_sample: excludeVideoIds.slice(0, 3), // 打印前3个ID用于调试
+    p_limit: pageSize,
+    p_offset: from,
+    p_seed: seed
+  })
+
   const { data, error } = await supabaseAdmin.rpc('get_adult_feed', {
     p_user_id: user?.id || null,
-    p_exclude_ids: excludeVideoIds,
+    p_exclude_ids: excludeVideoIds.length > 0 ? excludeVideoIds : null, // 🎯 空数组改为 null，避免 RPC 函数判断错误
     p_limit: pageSize,
     p_offset: from,
     p_seed: seed
@@ -442,8 +503,20 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
   console.log('[AdultFeed] RPC返回:', {
     count: data?.length || 0,
     firstScore: data?.[0]?.score,
-    lastScore: data?.[data?.length - 1]?.score
+    lastScore: data?.[data?.length - 1]?.score,
+    returned_ids: data?.slice(0, 3).map((r: any) => r.id) // 打印返回的前3个ID用于调试
   })
+
+  // 🎯 验证：检查返回的视频是否在排除列表中
+  if (excludeVideoIds.length > 0 && data && data.length > 0) {
+    const returnedIds = data.map((r: any) => r.id)
+    const duplicates = returnedIds.filter((id: string) => excludeVideoIds.includes(id))
+    if (duplicates.length > 0) {
+      console.error('[AdultFeed] ⚠️ 警告：返回的视频中包含已排除的视频:', duplicates)
+    } else {
+      console.log('[AdultFeed] ✅ 验证通过：返回的视频都不在排除列表中')
+    }
+  }
 
   // 附加用户标记（点赞、收藏、关注状态）
   await attachUserFlags(data ?? [], user?.id ?? null)
@@ -641,15 +714,22 @@ export async function handleVideoAuthor(req: Request): Promise<Response> {
   const { pageNo, pageSize, from, to } = parsePagination(url)
   const { user } = await tryGetAuth(req)
 
-  const {
-    data: rows,
-    error: videoError,
-    count
-  } = await supabaseAdmin
+  const query = supabaseAdmin
     .from('videos')
     .select('*', { count: 'exact' })
     .eq('status', 'published')
     .eq('author_id', authorId)
+
+  // 🎯 隐私保护：如果不是作者本人，只能看到公开视频
+  if (user?.id !== authorId) {
+    query.eq('is_private', false)
+  }
+
+  const {
+    data: rows,
+    error: videoError,
+    count
+  } = await query
     .order('is_top', { ascending: false })
     .order('created_at', { ascending: false })
     .range(from, to)
@@ -701,12 +781,16 @@ export async function handleVideoDetail(req: Request): Promise<Response> {
   console.log('[app-server][VideoDetail] 当前用户:', user?.id || '未登录')
 
   console.log('[app-server][VideoDetail] 📡 查询数据库...')
-  const { data: row, error: videoError } = await supabaseAdmin
-    .from('videos')
-    .select('*')
-    .eq('id', videoId)
-    .eq('status', 'published')
-    .maybeSingle()
+  const query = supabaseAdmin.from('videos').select('*').eq('id', videoId).eq('status', 'published')
+
+  // 🎯 隐私保护：如果不是作者本人，只能查看公开视频
+  if (user?.id) {
+    query.or(`is_private.eq.false,author_id.eq.${user.id}`)
+  } else {
+    query.eq('is_private', false)
+  }
+
+  const { data: row, error: videoError } = await query.maybeSingle()
 
   if (videoError) {
     console.error('[app-server][VideoDetail] ❌ 数据库查询失败:', videoError)
@@ -815,11 +899,20 @@ async function queryUserLikes(
   const videoIds = (likeRows ?? []).map((row) => row.video_id).filter(Boolean)
   let videos: any[] = []
   if (videoIds.length) {
-    const { data: videoData, error: videoError } = await supabaseAdmin
+    const query = supabaseAdmin
       .from('videos')
       .select('*')
       .in('id', videoIds)
       .eq('status', 'published')
+
+    // 🎯 隐私保护：只能看到公开视频，或者是作者自己的私密视频
+    if (currentUserId) {
+      query.or(`is_private.eq.false,author_id.eq.${currentUserId}`)
+    } else {
+      query.eq('is_private', false)
+    }
+
+    const { data: videoData, error: videoError } = await query
     if (videoError) {
       console.error('[app-server] Fetch liked videos failed:', videoError)
       return errorResponse('Failed to load videos', 1, 500)
@@ -858,16 +951,37 @@ export async function handleVideoLike(req: Request): Promise<Response> {
   }
 
   if (body.liked) {
-    // 🎯 频率限制：1分钟点赞不能超过 15 次
+    // 🎯 频率限制：1分钟点赞不能超过 15 次（针对单个用户）
     const { count: recentLikes } = await supabaseAdmin
       .from('video_likes')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .gte('created_at', new Date(Date.now() - 60000).toISOString())
 
-    if (recentLikes !== null && recentLikes >= 15) {
+    // 🎯 记录日志：记录触发速率限制的用户和视频信息
+    if (recentLikes !== null && recentLikes >= 3) {
+      console.error('[VideoLike] ⚠️ 速率限制触发:', {
+        user_id: user.id,
+        user_email: user.email,
+        profile_id: profile?.id,
+        profile_nickname: profile?.nickname,
+        video_id: body.video_id,
+        recent_likes_count: recentLikes,
+        limit: 15,
+        time_window: '1分钟',
+        timestamp: new Date().toISOString()
+      })
       throw new HttpError('点赞太频繁了，先休息下吧', 429)
     }
+
+    // 🎯 记录正常点赞日志（用于调试）
+    console.log('[VideoLike] 用户点赞:', {
+      user_id: user.id,
+      profile_nickname: profile?.nickname,
+      video_id: body.video_id,
+      recent_likes_count: recentLikes,
+      timestamp: new Date().toISOString()
+    })
 
     const { error } = await supabaseAdmin
       .from('video_likes')
@@ -978,11 +1092,20 @@ async function queryUserCollections(
   const videoIds = (collectionRows ?? []).map((row) => row.video_id).filter(Boolean)
   let videos: any[] = []
   if (videoIds.length) {
-    const { data: videoData, error: videoError } = await supabaseAdmin
+    const query = supabaseAdmin
       .from('videos')
       .select('*')
       .in('id', videoIds)
       .eq('status', 'published')
+
+    // 🎯 隐私保护：只能看到公开视频，或者是作者自己的私密视频
+    if (currentUserId) {
+      query.or(`is_private.eq.false,author_id.eq.${currentUserId}`)
+    } else {
+      query.eq('is_private', false)
+    }
+
+    const { data: videoData, error: videoError } = await query
     if (videoError) {
       console.error('[app-server] Fetch collected videos failed:', videoError)
       return errorResponse('Failed to load videos', 1, 500)
@@ -1409,6 +1532,105 @@ export async function handleRecordView(req: Request): Promise<Response> {
     console.error('[view] Unexpected error:', error)
     return successResponse({ success: true }) // 即使失败也返回成功，不影响用户体验
   }
+}
+
+/**
+ * 获取观看历史
+ * GET /video/history?pageNo=&pageSize=
+ * 返回用户观看过的视频列表，按最近观看时间倒序
+ */
+export async function handleVideoHistory(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+  const url = new URL(req.url)
+  const { pageNo, pageSize, from, to } = parsePagination(url)
+
+  console.log('[VideoHistory] 请求参数:', { pageNo, pageSize, userId: user.id })
+
+  // 🎯 从 watch_history 表查询用户的观看历史，关联 videos 表获取视频信息
+  // 使用内连接 (!inner) 确保只返回有效的、已发布的视频
+  const {
+    data: historyRows,
+    error: historyError,
+    count
+  } = await supabaseAdmin
+    .from('watch_history')
+    .select(
+      `
+      video_id,
+      updated_at,
+      videos!inner (
+        *
+      )
+    `,
+      { count: 'exact' }
+    )
+    .eq('user_id', user.id)
+    .eq('videos.status', 'published') // 🎯 只查询已发布的视频
+    .or(`is_private.eq.false,author_id.eq.${user.id}`, { foreignTable: 'videos' }) // 🎯 增加隐私过滤
+    .order('updated_at', { ascending: false })
+    .range(from, to)
+
+  if (historyError) {
+    console.error('[VideoHistory] 查询观看历史失败:', historyError)
+    return errorResponse('Failed to load history', 1, 500)
+  }
+
+  // 🎯 映射数据格式
+  const profileCache = new Map<string, any>()
+  const list: any[] = []
+
+  for (const historyRow of historyRows ?? []) {
+    const video = (historyRow as any).videos
+    if (!video) {
+      continue // 理论上不应该出现，但为了安全还是检查一下
+    }
+
+    const authorProfile = await getVideoAuthorProfile(video, profileCache)
+    const mapped = await mapVideoRow(video, authorProfile)
+    if (mapped) {
+      applyRowFlags(mapped, video)
+      list.push(mapped)
+    }
+  }
+
+  // 🎯 附加用户标记（点赞、收藏、关注状态）
+  await attachUserFlags(list, user.id)
+
+  console.log('[VideoHistory] 返回数据:', {
+    count: count ?? 0,
+    listLength: list.length,
+    pageNo,
+    pageSize
+  })
+
+  return successResponse({
+    list,
+    total: count ?? 0,
+    pageNo,
+    pageSize
+  })
+}
+
+/**
+ * 清空观看历史
+ * DELETE /video/history
+ * 删除用户的所有观看历史记录
+ */
+export async function handleClearVideoHistory(req: Request): Promise<Response> {
+  const { user } = await requireAuth(req)
+
+  console.log('[ClearVideoHistory] 清空用户观看历史:', { userId: user.id })
+
+  const { error } = await supabaseAdmin.from('watch_history').delete().eq('user_id', user.id)
+
+  if (error) {
+    console.error('[ClearVideoHistory] 清空观看历史失败:', error)
+    return errorResponse('Failed to clear history', 1, 500)
+  }
+
+  console.log('[ClearVideoHistory] 成功清空观看历史')
+
+  return successResponse({ success: true })
 }
 
 /**

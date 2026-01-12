@@ -5,8 +5,38 @@ export function historyOther(params?: any, data?: any) {
   return request({ url: '/video/historyOther', method: 'get', params, data })
 }
 
-export function historyVideo(params?: any, data?: any) {
-  return request({ url: '/video/history', method: 'get', params, data })
+// 🎯 获取观看历史（使用 Supabase Edge Function）
+export async function historyVideo(params?: any) {
+  try {
+    const pageNo = params?.pageNo ?? 0
+    const pageSize = params?.pageSize ?? 15
+    const data = await callAppServer(`/video/history?pageNo=${pageNo}&pageSize=${pageSize}`, {
+      method: 'GET',
+      requireAuth: true
+    })
+    return { success: true, data }
+  } catch (error: any) {
+    console.error('[historyVideo] 请求失败:', error)
+    return {
+      success: false,
+      message: error?.message || '获取观看历史失败',
+      data: { list: [], total: 0 }
+    }
+  }
+}
+
+// 🎯 清空所有观看历史
+export async function clearVideoHistory() {
+  try {
+    const data = await callAppServer('/video/history', {
+      method: 'DELETE',
+      requireAuth: true
+    })
+    return { success: true, data }
+  } catch (error: any) {
+    console.error('[clearVideoHistory] 清空观看历史失败:', error)
+    return { success: false, message: error?.message || '清空观看历史失败' }
+  }
 }
 
 export function recommendedVideo(params?: any) {

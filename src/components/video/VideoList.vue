@@ -238,20 +238,15 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
     return // 退出，不设置计时器
   }
 
-  // 视频：时长的 70%，最少 2 秒，最多 30 秒
-  const duration = item.video?.duration || 10
-  const completionTime = Math.max(2000, Math.min(30000, duration * 0.7 * 1000))
+  // 🎯 HLS视频：不再使用定时器，改为监听实际播放进度（在bindCurrentVideoEvents中处理）
+  // 对于视频类型，完播记录会在timeupdate事件中处理（播放进度达到70%时）
+  // 这样可以准确处理HLS视频，因为HLS的duration可能获取不到或不准确
+  console.log(
+    `[ViewHistory] 视频类型，将在播放进度达到70%时记录完播: ${item.aweme_id.substring(0, 8)}`
+  )
 
-  console.log(`[ViewHistory] 设置完播计时器: ${item.aweme_id.substring(0, 8)}, ${completionTime}ms`)
-
-  currentCompletionTimer = setTimeout(() => {
-    if (!completedViews.has(item.aweme_id)) {
-      completedViews.add(item.aweme_id)
-      recordVideoView(item.aweme_id, { progress: 100, completed: true })
-      console.log(`[ViewHistory] 记录完播: ${item.aweme_id.substring(0, 8)}`)
-    }
-    currentCompletionTimer = null
-  }, completionTime)
+  // 🎯 注意：完播记录逻辑已移到 bindCurrentVideoEvents 的 timeupdate 监听器中
+  // 这里不再设置定时器，避免HLS视频duration不准确的问题
 }
 
 // 🎯 离开 current（清除计时器 + 暂停累计观看时长，但不立即上报）
@@ -813,6 +808,15 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
       oldHls.destroy()
       hlsInstances.delete(slot.key)
     }
+
+    // 🎯 图片/相册/合辑：只要刷到了就立即记录播放历史（如果是 current slot）
+    if (slot.role === 'current' && idx != null && idx >= 0 && idx < props.items.length) {
+      const item = props.items[idx]
+      if (item?.aweme_id) {
+        recordEnterCurrent(item, contentType)
+      }
+    }
+
     // 这些类型交由 ImageViewer 或 AlbumSwiper 处理，不需要外层视频元素，直接返回
     return
   }
@@ -1951,6 +1955,7 @@ function unbindVideoEvents(video: HTMLVideoElement) {
   if (video) {
     video.onloadedmetadata = null
     video.ontimeupdate = null
+    video.onended = null // 🎯 清理播放结束事件监听
   }
 }
 
@@ -1994,6 +1999,39 @@ function bindCurrentVideoEvents(video: HTMLVideoElement) {
       computeStep()
     }
     updateProgressFromVideo(video)
+
+    // 🎯 HLS视频完播记录：当播放进度达到70%时记录完播
+    if (video.duration && video.currentTime > 0) {
+      const progress = (video.currentTime / video.duration) * 100
+      const slot = getSlotByRole('current')
+      if (slot && slot.videoIndex != null) {
+        const item = props.items[slot.videoIndex]
+        if (item?.aweme_id && !completedViews.has(item.aweme_id)) {
+          // 播放进度达到70%时记录完播
+          if (progress >= 70) {
+            completedViews.add(item.aweme_id)
+            recordVideoView(item.aweme_id, { progress: 100, completed: true })
+            console.log(
+              `[ViewHistory] HLS视频播放进度达到70%，记录完播: ${item.aweme_id.substring(0, 8)}`
+            )
+          }
+        }
+      }
+    }
+  }
+
+  // 🎯 监听视频播放结束事件，确保完播记录
+  video.onended = () => {
+    if (video !== currentBoundVideo) return
+    const slot = getSlotByRole('current')
+    if (slot && slot.videoIndex != null) {
+      const item = props.items[slot.videoIndex]
+      if (item?.aweme_id && !completedViews.has(item.aweme_id)) {
+        completedViews.add(item.aweme_id)
+        recordVideoView(item.aweme_id, { progress: 100, completed: true })
+        console.log(`[ViewHistory] 视频播放结束，记录完播: ${item.aweme_id.substring(0, 8)}`)
+      }
+    }
   }
 
   nextTick(computeStep)

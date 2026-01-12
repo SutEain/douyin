@@ -69,6 +69,9 @@
               <div class="item" @click.stop="handleRefresh" :class="{ loading: baseStore.loading }">
                 <Icon icon="mdi:refresh" />
               </div>
+              <div class="item" @click.stop="$nav('/me/right-menu/look-history')">
+                <Icon icon="mdi:history" />
+              </div>
               <div class="item" @click.stop="$nav('/message/visitors')">
                 <Icon icon="eva:people-outline" />
               </div>
