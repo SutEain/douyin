@@ -921,14 +921,9 @@ async function handleVerifyCode() {
 
     console.log('[Me] ✅ API 调用成功，返回结果:', result)
 
-    if (result?.user) {
-      console.log('[Me] 📝 应用用户信息到 baseStore...')
-      baseStore.applyProfile(result.user)
-    }
-
-    // 等待 session 写入
+    // 🎯 等待 session 写入（确保 session 已保存到本地存储）
     console.log('[Me] ⏳ 等待 session 写入...')
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await new Promise((resolve) => setTimeout(resolve, 200))
 
     const { data } = await supabase.auth.getSession()
     console.log('[Me] 🔍 获取 session 结果:', {
@@ -936,30 +931,47 @@ async function handleVerifyCode() {
       userId: data.session?.user?.id
     })
 
-    if (data.session) {
-      // 重新初始化 store
-      console.log('[Me] 🔄 重新初始化 baseStore...')
-      await baseStore.init()
+    if (!data.session) {
+      console.error('[Me] ❌ session 不存在，登录失败')
+      errorMessage.value = '登录失败，请重试'
+      return
+    }
 
-      console.log('[Me] 📊 baseStore.init() 完成，userinfo:', {
-        uid: userinfo.value.uid,
-        unique_id: userinfo.value.unique_id,
-        nickname: userinfo.value.nickname
-      })
+    // 🎯 重新初始化 store（会从数据库获取完整的 profile）
+    console.log('[Me] 🔄 重新初始化 baseStore...')
+    await baseStore.init()
 
-      if (userinfo.value.uid) {
-        console.log('[Me] 🎉 登录成功！加载用户数据...')
-        loadMyVideos() // 登录成功后立即加载数据
-        loadWatchTimeStatus() // 🎯 加载观看时长状态
-      } else {
-        console.warn('[Me] ⚠️ session 存在但 userinfo.uid 为空，可能初始化失败')
-        errorMessage.value = '登录成功但获取用户信息失败，请刷新页面重试'
-      }
+    // 🎯 再次等待一下，确保 profile 已加载
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    console.log('[Me] 📊 baseStore.init() 完成，userinfo:', {
+      uid: userinfo.value.uid,
+      unique_id: userinfo.value.unique_id,
+      nickname: userinfo.value.nickname
+    })
+
+    if (userinfo.value.uid) {
+      console.log('[Me] 🎉 登录成功！加载用户数据...')
+      loadMyVideos() // 登录成功后立即加载数据
+      loadWatchTimeStatus() // 🎯 加载观看时长状态
       // 清空验证码
       verificationCode.value = ''
     } else {
-      console.error('[Me] ❌ session 不存在，登录失败')
-      errorMessage.value = '登录失败，请重试'
+      console.warn('[Me] ⚠️ session 存在但 userinfo.uid 为空，可能初始化失败')
+      // 🎯 如果初始化失败，尝试再次获取 profile
+      const { getCurrentProfile } = await import('@/api/auth')
+      const profile = await getCurrentProfile()
+
+      if (profile) {
+        console.log('[Me] ✅ 通过 getCurrentProfile 获取到 profile，应用用户信息...')
+        baseStore.applyProfile(profile)
+        loadMyVideos()
+        loadWatchTimeStatus()
+        verificationCode.value = ''
+      } else {
+        console.error('[Me] ❌ 无法获取用户信息，可能是 RLS 策略问题或数据库问题')
+        errorMessage.value = '登录成功但获取用户信息失败，请刷新页面重试'
+      }
     }
   } catch (error: any) {
     console.error('[Me] ❌ 验证码登录失败:', error)

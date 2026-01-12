@@ -187,6 +187,67 @@ export async function sendDice(chatId: number, options: any = {}) {
   }
 }
 
+/**
+ * 🎲 带重试机制的发送骰子函数
+ * @param chatId 聊天ID
+ * @param options 选项
+ * @param maxRetries 最大重试次数（默认5次）
+ * @param initialDelay 初始延迟（毫秒，默认1000）
+ * @returns 发送结果
+ */
+export async function sendDiceWithRetry(
+  chatId: number,
+  options: any = {},
+  maxRetries: number = 5,
+  initialDelay: number = 1000
+): Promise<any> {
+  let lastError: any = null
+  let lastResponse: any = null
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[sendDiceWithRetry] 🎲 尝试发送骰子 (${attempt}/${maxRetries})...`)
+
+      const response = await sendDice(chatId, options)
+      lastResponse = response
+
+      if (response.ok && response.result?.dice) {
+        console.log(
+          `[sendDiceWithRetry] ✅ 骰子发送成功 (尝试 ${attempt}/${maxRetries})，结果: ${response.result.dice.value}`
+        )
+        return response
+      }
+
+      // 如果返回了错误，记录但不立即失败
+      const errorMsg = response.description || response.error_code || 'Unknown error'
+      console.warn(`[sendDiceWithRetry] ⚠️ 骰子发送失败 (尝试 ${attempt}/${maxRetries}):`, errorMsg)
+      lastError = new Error(`Telegram API error: ${errorMsg}`)
+
+      // 如果不是最后一次尝试，等待后重试
+      if (attempt < maxRetries) {
+        // 🎯 指数退避：每次重试延迟递增（1s, 2s, 3s, 4s, 5s）
+        const delay = initialDelay * attempt
+        console.log(`[sendDiceWithRetry] ⏳ 等待 ${delay}ms 后重试...`)
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+    } catch (error) {
+      console.error(`[sendDiceWithRetry] ❌ 发送骰子异常 (尝试 ${attempt}/${maxRetries}):`, error)
+      lastError = error
+
+      // 如果不是最后一次尝试，等待后重试
+      if (attempt < maxRetries) {
+        const delay = initialDelay * attempt
+        console.log(`[sendDiceWithRetry] ⏳ 等待 ${delay}ms 后重试...`)
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+    }
+  }
+
+  // 所有重试都失败了
+  console.error(`[sendDiceWithRetry] ❌ 骰子发送失败，已重试 ${maxRetries} 次`)
+  throw lastError || new Error(`Failed to send dice after ${maxRetries} attempts`)
+}
+
 export async function answerCallbackQuery(
   callbackQueryId: string,
   text?: string,

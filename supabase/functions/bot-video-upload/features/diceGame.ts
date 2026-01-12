@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient.ts'
-import { sendMessage, answerCallbackQuery, editMessage, sendDice } from '../telegram.ts'
+import { sendMessage, answerCallbackQuery, editMessage, sendDiceWithRetry } from '../telegram.ts'
 import { escapeHTML, sanitizeError } from '../utils/text.ts'
 
 /**
@@ -296,17 +296,21 @@ async function startRolling(chatId: number, roomId: string) {
     const results: any[] = []
 
     for (const player of players) {
-      // ... 保持原有掷骰子逻辑 ...
-      let res = await sendDice(chatId, { emoji: '🎲' })
-      if (!res.ok) {
-        await new Promise((r) => setTimeout(r, 1000))
-        res = await sendDice(chatId, { emoji: '🎲' })
-      }
-      if (!res.ok) {
-        throw new Error(`无法为玩家 ${player.user?.nickname || '未知'} 发送骰子`)
+      // 🎲 使用带重试机制的发送骰子函数（最多重试5次，指数退避）
+      console.log(`[DiceGame] 🎲 开始为玩家 ${player.user?.nickname || '未知'} 发送骰子...`)
+      const res = await sendDiceWithRetry(chatId, { emoji: '🎲' }, 5, 1000)
+
+      if (!res.ok || !res.result?.dice) {
+        const errorMsg = res.description || res.error_code || 'Unknown error'
+        console.error(
+          `[DiceGame] ❌ 无法为玩家 ${player.user?.nickname || '未知'} 发送骰子:`,
+          errorMsg
+        )
+        throw new Error(`无法为玩家 ${player.user?.nickname || '未知'} 发送骰子: ${errorMsg}`)
       }
 
       const value = res.result.dice.value
+      console.log(`[DiceGame] ✅ 玩家 ${player.user?.nickname || '未知'} 掷出: ${value} 点`)
       results.push({ id: player.id, user_id: player.user_id, name: player.user?.nickname, value })
       await supabase.from('dice_room_players').update({ roll_result: value }).eq('id', player.id)
 
