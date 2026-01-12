@@ -83,6 +83,7 @@ function getStartOfTodayShanghaiISO(now = new Date()): string {
 }
 
 // 🎯 获取今日结束时间（北京时间）
+// 注意：返回的是明天的开始时间（00:00:00），用于 < 比较
 function getEndOfTodayShanghaiISO(now = new Date()): string {
   const fmt = new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -94,8 +95,9 @@ function getEndOfTodayShanghaiISO(now = new Date()): string {
   const y = Number(parts.find((p) => p.type === 'year')?.value)
   const m = Number(parts.find((p) => p.type === 'month')?.value)
   const d = Number(parts.find((p) => p.type === 'day')?.value)
-  // 上海时区 UTC+8：上海 23:59:59 对应 UTC 当天 15:59:59
-  const utcMs = Date.UTC(y, m - 1, d, 23, 59, 59, 999) - 8 * 60 * 60 * 1000
+  // 🎯 返回明天的开始时间（北京时间 00:00:00），对应 UTC 前一天的 16:00:00
+  // 例如：北京时间 2026-01-13 00:00:00 = UTC 2026-01-12 16:00:00
+  const utcMs = Date.UTC(y, m - 1, d + 1, 0, 0, 0) - 8 * 60 * 60 * 1000
   return new Date(utcMs).toISOString()
 }
 
@@ -222,10 +224,23 @@ export const Dashboard = () => {
           }),
           // 🎯 今日手动调整的抖币：从交易记录统计（北京时间）
           // 使用 RPC 函数绕过 RLS 限制，直接使用 SQL SUM 聚合
-          supabaseClient.rpc('get_today_manual_adjustments', {
-            p_start_iso: startISO,
-            p_end_iso: endISO
-          }),
+          supabaseClient
+            .rpc('get_today_manual_adjustments', {
+              p_start_iso: startISO,
+              p_end_iso: endISO
+            })
+            .then((res) => {
+              // 🐛 调试日志：检查时间范围和结果
+              if (process.env.NODE_ENV === 'development') {
+                console.log('[Dashboard] 今日手动调整统计:', {
+                  startISO,
+                  endISO,
+                  result: res.data,
+                  error: res.error
+                })
+              }
+              return res
+            }),
           // 🎯 今日抖币抽水：平台通过打赏、直播礼物、游戏各种抽水回收的抖币（北京时间）
           // 分别统计各个来源的抽水
           Promise.all([
