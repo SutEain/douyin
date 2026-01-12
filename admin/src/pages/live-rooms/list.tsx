@@ -10,13 +10,15 @@ import {
   Tag,
   Form,
   Input,
-  Select
+  Select,
+  Tabs
 } from 'antd'
 import { useInvalidate, useUpdate } from '@refinedev/core'
 import { useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import dayjs from 'dayjs'
 import { supabaseClient } from '../../supabaseClient'
+import { OfficialLiveRoomList } from '../official-live-rooms/list'
 
 type LiveRoomRow = {
   id: string
@@ -41,6 +43,7 @@ export const LiveRoomList = () => {
   const { mutate: updateOne } = useUpdate()
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [bulkProbing, setBulkProbing] = useState(false)
+  const [activeTab, setActiveTab] = useState<string>('external')
 
   const { tableProps, searchFormProps } = useTable<LiveRoomRow>({
     resource: 'live_rooms',
@@ -213,146 +216,181 @@ export const LiveRoomList = () => {
     <List
       title="直播间管理"
       headerButtons={
-        <Space>
-          <Button type="primary" onClick={() => navigate('/live-rooms/create')}>
-            新增直播间
-          </Button>
-          <Button
-            onClick={() => probeSelectedSequential()}
-            disabled={bulkProbing || selectedRowKeys.length === 0}
-            loading={bulkProbing}
-          >
-            勾选探测
-          </Button>
-          <Button
-            onClick={() => setSelectedRowKeys([])}
-            disabled={bulkProbing || selectedRowKeys.length === 0}
-          >
-            清空勾选
-          </Button>
-        </Space>
-      }
-    >
-      <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
-        <Form.Item name="title" label="标题">
-          <Input placeholder="搜索标题" allowClear />
-        </Form.Item>
-        <Form.Item name="status" label="状态">
-          <Select placeholder="选择状态" allowClear style={{ width: 120 }}>
-            <Select.Option value="online">在线</Select.Option>
-            <Select.Option value="offline">离线</Select.Option>
-          </Select>
-        </Form.Item>
-        <Form.Item>
+        activeTab === 'external' ? (
           <Space>
-            <Button type="primary" htmlType="submit">
-              搜索
+            <Button type="primary" onClick={() => navigate('/live-rooms/create')}>
+              新增直播间
             </Button>
             <Button
-              onClick={() => {
-                searchFormProps.form?.resetFields()
-                searchFormProps.onFinish?.({})
-              }}
+              onClick={() => probeSelectedSequential()}
+              disabled={bulkProbing || selectedRowKeys.length === 0}
+              loading={bulkProbing}
             >
-              重置
+              勾选探测
+            </Button>
+            <Button
+              onClick={() => setSelectedRowKeys([])}
+              disabled={bulkProbing || selectedRowKeys.length === 0}
+            >
+              清空勾选
             </Button>
           </Space>
-        </Form.Item>
-      </Form>
-      <Table
-        {...tableProps}
-        rowKey="id"
-        size="middle"
-        rowSelection={{
-          selectedRowKeys,
-          onChange: (keys) => setSelectedRowKeys(keys)
-        }}
-        pagination={{
-          ...(tableProps.pagination as any),
-          pageSize: 100,
-          showSizeChanger: true,
-          pageSizeOptions: [20, 50, 100, 200]
-        }}
-      >
-        <Table.Column
-          title="封面"
-          dataIndex="cover_url"
-          render={(v: string) =>
-            v ? (
-              <Image
-                src={v}
-                width={120}
-                height={68}
-                style={{ objectFit: 'cover', borderRadius: 8 }}
-                preview
-              />
-            ) : (
-              <span style={{ color: '#999' }}>-</span>
+        ) : undefined
+      }
+    >
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={[
+          {
+            key: 'external',
+            label: '转播直播间',
+            children: (
+              <>
+                <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
+                  <Form.Item name="title" label="标题">
+                    <Input placeholder="搜索标题" allowClear />
+                  </Form.Item>
+                  <Form.Item name="status" label="状态">
+                    <Select placeholder="选择状态" allowClear style={{ width: 120 }}>
+                      <Select.Option value="online">在线</Select.Option>
+                      <Select.Option value="offline">离线</Select.Option>
+                    </Select>
+                  </Form.Item>
+                  <Form.Item>
+                    <Space>
+                      <Button type="primary" htmlType="submit">
+                        搜索
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          searchFormProps.form?.resetFields()
+                          searchFormProps.onFinish?.({})
+                        }}
+                      >
+                        重置
+                      </Button>
+                    </Space>
+                  </Form.Item>
+                </Form>
+                <Table
+                  {...tableProps}
+                  rowKey="id"
+                  size="middle"
+                  rowSelection={{
+                    selectedRowKeys,
+                    onChange: (keys) => setSelectedRowKeys(keys)
+                  }}
+                  pagination={{
+                    ...(tableProps.pagination as any),
+                    pageSize: 100,
+                    showSizeChanger: true,
+                    pageSizeOptions: [20, 50, 100, 200]
+                  }}
+                >
+                  <Table.Column
+                    title="封面"
+                    dataIndex="cover_url"
+                    render={(v: string) =>
+                      v ? (
+                        <Image
+                          src={v}
+                          width={120}
+                          height={68}
+                          style={{ objectFit: 'cover', borderRadius: 8 }}
+                          preview
+                        />
+                      ) : (
+                        <span style={{ color: '#999' }}>-</span>
+                      )
+                    }
+                  />
+                  <Table.Column title="标题" dataIndex="title" render={(v: any) => v || '-'} />
+                  <Table.Column
+                    title="描述"
+                    dataIndex="description"
+                    render={(v: any) => v || '-'}
+                  />
+                  <Table.Column title="类别" dataIndex="category" render={(v: any) => v || '-'} />
+                  <Table.Column
+                    title="排序"
+                    dataIndex="sort_order"
+                    render={(v: any, record: LiveRoomRow) => (
+                      <InputNumber
+                        value={typeof v === 'number' ? v : 0}
+                        size="small"
+                        style={{ width: 90 }}
+                        onChange={(val) => updateSort(record, typeof val === 'number' ? val : 0)}
+                      />
+                    )}
+                  />
+                  <Table.Column
+                    title="启用"
+                    dataIndex="is_active"
+                    render={(v: any, record: LiveRoomRow) => (
+                      <Switch
+                        checked={v === true}
+                        onChange={(checked) => toggleActive(record, checked)}
+                      />
+                    )}
+                  />
+                  <Table.Column
+                    title="探测状态"
+                    dataIndex="status"
+                    render={(v: any) => {
+                      const vv = String(v || 'unknown')
+                      if (vv === 'online') return <Tag color="green">在线</Tag>
+                      if (vv === 'offline') return <Tag color="red">离线</Tag>
+                      return <Tag>未知</Tag>
+                    }}
+                  />
+                  <Table.Column
+                    title="上次探测"
+                    dataIndex="last_checked_at"
+                    render={(v: any) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-')}
+                  />
+                  <Table.Column
+                    title="探测次数"
+                    dataIndex="check_count"
+                    render={(v: any) => v ?? 0}
+                  />
+                  <Table.Column title="错误" dataIndex="last_error" render={(v: any) => v || '-'} />
+                  <Table.Column
+                    title="更新时间"
+                    dataIndex="updated_at"
+                    render={(v: any) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-')}
+                  />
+                  <Table.Column
+                    title="操作"
+                    dataIndex="actions"
+                    render={(_, record: LiveRoomRow) => (
+                      <Space>
+                        <Button size="small" type="default" onClick={() => play(record)}>
+                          播放
+                        </Button>
+                        <Button size="small" onClick={() => probeOne(record)}>
+                          探测
+                        </Button>
+                        <Button
+                          size="small"
+                          onClick={() => navigate(`/live-rooms/edit/${record.id}`)}
+                        >
+                          编辑
+                        </Button>
+                      </Space>
+                    )}
+                  />
+                </Table>
+              </>
             )
+          },
+          {
+            key: 'official',
+            label: '官方直播间',
+            children: <OfficialLiveRoomList />
           }
-        />
-        <Table.Column title="标题" dataIndex="title" render={(v: any) => v || '-'} />
-        <Table.Column title="描述" dataIndex="description" render={(v: any) => v || '-'} />
-        <Table.Column title="类别" dataIndex="category" render={(v: any) => v || '-'} />
-        <Table.Column
-          title="排序"
-          dataIndex="sort_order"
-          render={(v: any, record: LiveRoomRow) => (
-            <InputNumber
-              value={typeof v === 'number' ? v : 0}
-              size="small"
-              style={{ width: 90 }}
-              onChange={(val) => updateSort(record, typeof val === 'number' ? val : 0)}
-            />
-          )}
-        />
-        <Table.Column
-          title="启用"
-          dataIndex="is_active"
-          render={(v: any, record: LiveRoomRow) => (
-            <Switch checked={v === true} onChange={(checked) => toggleActive(record, checked)} />
-          )}
-        />
-        <Table.Column
-          title="探测状态"
-          dataIndex="status"
-          render={(v: any) => {
-            const vv = String(v || 'unknown')
-            if (vv === 'online') return <Tag color="green">在线</Tag>
-            if (vv === 'offline') return <Tag color="red">离线</Tag>
-            return <Tag>未知</Tag>
-          }}
-        />
-        <Table.Column
-          title="上次探测"
-          dataIndex="last_checked_at"
-          render={(v: any) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-')}
-        />
-        <Table.Column title="探测次数" dataIndex="check_count" render={(v: any) => v ?? 0} />
-        <Table.Column title="错误" dataIndex="last_error" render={(v: any) => v || '-'} />
-        <Table.Column
-          title="更新时间"
-          dataIndex="updated_at"
-          render={(v: any) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-')}
-        />
-        <Table.Column
-          title="操作"
-          dataIndex="actions"
-          render={(_, record: LiveRoomRow) => (
-            <Space>
-              <Button size="small" type="default" onClick={() => play(record)}>
-                播放
-              </Button>
-              <Button size="small" onClick={() => probeOne(record)}>
-                探测
-              </Button>
-              <Button size="small" onClick={() => navigate(`/live-rooms/edit/${record.id}`)}>
-                编辑
-              </Button>
-            </Space>
-          )}
-        />
-      </Table>
+        ]}
+      />
     </List>
   )
 }

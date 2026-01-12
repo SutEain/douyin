@@ -15,7 +15,7 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
       .from('live_broadcast_rooms')
       .select(
         `
-        id, title, status, viewer_count, stream_key, anchor_id,
+        id, title, status, viewer_count, custom_viewer_count, stream_key, anchor_id,
         node:live_broadcast_nodes(domain_name),
         anchor:profiles(id, nickname, avatar_url)
       `
@@ -29,12 +29,15 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
 
     if (selfRoom) {
       console.log('[live_detail] Found in self-hosted:', selfRoom.id)
+      // 🎯 优先使用自定义人数，如果没有则使用真实人数
+      const displayViewerCount = selfRoom.custom_viewer_count ?? selfRoom.viewer_count ?? 0
       return successResponse({
         room: {
           id: selfRoom.id,
           title: selfRoom.title,
           status: selfRoom.status,
-          viewer_count: selfRoom.viewer_count,
+          viewer_count: displayViewerCount,
+          real_viewer_count: selfRoom.viewer_count ?? 0, // 保留真实人数供后台查看
           stream_url: `https://${selfRoom.node?.domain_name}/LiveApp/streams/${selfRoom.stream_key}.m3u8`,
           cover_url: selfRoom.anchor?.avatar_url,
           is_self_hosted: true,
@@ -149,6 +152,7 @@ export async function handleLiveRooms(_req: Request): Promise<Response> {
         title,
         status,
         viewer_count,
+        custom_viewer_count,
         stream_key,
         anchor_id,
         node:live_broadcast_nodes(domain_name),
@@ -163,23 +167,28 @@ export async function handleLiveRooms(_req: Request): Promise<Response> {
     }
 
     // 3. 转换自建直播间格式以匹配前端需求
-    const formattedSelfHosted = (selfHostedRooms || []).map((r: any) => ({
-      id: r.id,
-      title: r.title,
-      description: `正在直播 - ${r.anchor?.nickname || '主播'}`,
-      stream_url: `https://${r.node?.domain_name}/LiveApp/streams/${r.stream_key}.m3u8`,
-      cover_url: r.anchor?.avatar_url || '',
-      is_active: true,
-      updated_at: null,
-      sort_order: 100, // 自建直播默认排序靠前
-      is_self_hosted: true,
-      anchor_id: r.anchor_id,
-      anchor_info: {
-        id: r.anchor_id,
-        nickname: r.anchor?.nickname || '匿名',
-        avatar_url: r.anchor?.avatar_url || ''
+    const formattedSelfHosted = (selfHostedRooms || []).map((r: any) => {
+      // 🎯 优先使用自定义人数，如果没有则使用真实人数
+      const displayViewerCount = r.custom_viewer_count ?? r.viewer_count ?? 0
+      return {
+        id: r.id,
+        title: r.title,
+        description: `正在直播 - ${r.anchor?.nickname || '主播'}`,
+        stream_url: `https://${r.node?.domain_name}/LiveApp/streams/${r.stream_key}.m3u8`,
+        cover_url: r.anchor?.avatar_url || '',
+        is_active: true,
+        updated_at: null,
+        sort_order: 100, // 自建直播默认排序靠前
+        is_self_hosted: true,
+        anchor_id: r.anchor_id,
+        viewer_count: displayViewerCount, // 使用显示人数
+        anchor_info: {
+          id: r.anchor_id,
+          nickname: r.anchor?.nickname || '匿名',
+          avatar_url: r.anchor?.avatar_url || ''
+        }
       }
-    }))
+    })
 
     // 4. 合并列表并按照 sort_order 排序
     const combinedList = [...formattedSelfHosted, ...(externalRooms || [])]
