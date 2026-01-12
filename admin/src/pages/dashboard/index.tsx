@@ -212,14 +212,8 @@ export const Dashboard = () => {
           // 🎯 调用 RPC 获取有过观看历史的总用户数量
           supabaseClient.rpc('get_active_user_count'),
           // 🎯 平台抖币总余额：统计所有用户的balance_coins总和（所有用户剩余抖币之和）
-          supabaseClient
-            .from('profiles')
-            .select('balance_coins')
-            .then((res) => {
-              if (res.error) throw res.error
-              const total = res.data?.reduce((sum, p) => sum + Number(p.balance_coins || 0), 0) || 0
-              return { data: total, error: null }
-            }),
+          // 使用 RPC 函数绕过 RLS 限制，直接使用 SQL SUM 聚合
+          supabaseClient.rpc('get_total_coins_balance'),
           // 🎯 今日系统发放的抖币奖励：从交易记录统计（北京时间）
           // 包括：reward, task_reward, watch_time_reward, author_views_reward
           supabaseClient
