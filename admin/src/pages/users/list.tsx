@@ -60,10 +60,10 @@ export const UserList = () => {
           { field: 'tg_username', operator: 'contains', value: q }
         ]
 
-        // 🎯 如果输入的是纯数字，额外搜索数字ID和TG用户ID
+        // 如果主关键词输入的是纯数字，自动匹配 ID
         if (/^\d+$/.test(q)) {
-          orConditions.push({ field: 'numeric_id', operator: 'eq', value: Number(q) })
-          orConditions.push({ field: 'tg_user_id', operator: 'eq', value: Number(q) })
+          orConditions.push({ field: 'numeric_id', operator: 'eq', value: q })
+          orConditions.push({ field: 'tg_user_id', operator: 'eq', value: q })
         }
 
         filters.push({
@@ -76,13 +76,19 @@ export const UserList = () => {
         filters.push({
           field: 'inviter->numeric_id',
           operator: 'eq',
-          value: Number(inviterId)
+          value: inviterId
         })
       }
 
-      if (numericId) filters.push({ field: 'numeric_id', operator: 'eq', value: Number(numericId) })
-      if (tgUserId) filters.push({ field: 'tg_user_id', operator: 'eq', value: Number(tgUserId) })
-      if (uuid) filters.push({ field: 'id', operator: 'eq', value: uuid })
+      if (numericId) {
+        filters.push({ field: 'numeric_id', operator: 'eq', value: numericId })
+      }
+      if (tgUserId) {
+        filters.push({ field: 'tg_user_id', operator: 'eq', value: tgUserId })
+      }
+      if (uuid) {
+        filters.push({ field: 'id', operator: 'eq', value: uuid })
+      }
 
       if (hasVideos === 'true' || hasVideos === true) {
         filters.push({ field: 'video_count', operator: 'gt', value: 0 })
@@ -91,7 +97,7 @@ export const UserList = () => {
       }
 
       if (liveStatus !== undefined && liveStatus !== '') {
-        filters.push({ field: 'live_status', operator: 'eq', value: Number(liveStatus) })
+        filters.push({ field: 'live_status', operator: 'eq', value: liveStatus })
       }
 
       return filters
