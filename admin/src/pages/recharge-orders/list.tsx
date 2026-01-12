@@ -37,12 +37,12 @@ export const RechargeOrderList = () => {
       const status = params.status
       const userId = params.user_id
 
-      if (status) {
-        filters.push({ field: 'status', operator: 'eq', value: status })
-      }
-      if (userId) {
-        filters.push({ field: 'profiles.numeric_id', operator: 'eq', value: Number(userId) })
-      }
+      filters.push({ field: 'status', operator: 'eq', value: status || undefined })
+      filters.push({
+        field: 'profiles.numeric_id',
+        operator: 'eq',
+        value: userId ? Number(userId) : undefined
+      })
 
       return filters
     }
@@ -145,7 +145,10 @@ export const RechargeOrderList = () => {
             <Button
               onClick={() => {
                 searchFormProps.form?.resetFields()
-                searchFormProps.onFinish?.({})
+                searchFormProps.onFinish?.({
+                  user_id: undefined,
+                  status: undefined
+                })
               }}
             >
               重置

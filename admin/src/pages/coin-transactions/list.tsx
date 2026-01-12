@@ -80,33 +80,39 @@ export const CoinTransactionList = () => {
             value: userQ
           })
         }
+      } else {
+        // 🎯 清除用户过滤
+        filters.push({ field: 'profiles.numeric_id', operator: 'eq', value: undefined })
+        filters.push({ field: 'profiles.nickname', operator: 'contains', value: undefined })
       }
 
-      if (params.type) {
-        filters.push({ field: 'type', operator: 'eq', value: params.type })
-      }
+      filters.push({ field: 'type', operator: 'eq', value: params.type || undefined })
 
       // 🎯 搜索备注 (description)
-      if (params.description_q) {
-        filters.push({
-          field: 'description',
-          operator: 'contains',
-          value: params.description_q.trim()
-        })
-      }
+      filters.push({
+        field: 'description',
+        operator: 'contains',
+        value: params.description_q ? params.description_q.trim() : undefined
+      })
 
       // 🎯 关联 ID 搜索
-      if (params.related_id) {
-        filters.push({ field: 'related_id', operator: 'eq', value: params.related_id.trim() })
-      }
+      filters.push({
+        field: 'related_id',
+        operator: 'eq',
+        value: params.related_id ? params.related_id.trim() : undefined
+      })
 
       // 🎯 金额范围过滤
-      if (params.min_amount !== undefined && params.min_amount !== null) {
-        filters.push({ field: 'amount', operator: 'gte', value: params.min_amount })
-      }
-      if (params.max_amount !== undefined && params.max_amount !== null) {
-        filters.push({ field: 'amount', operator: 'lte', value: params.max_amount })
-      }
+      filters.push({
+        field: 'amount',
+        operator: 'gte',
+        value: params.min_amount !== undefined ? params.min_amount : undefined
+      })
+      filters.push({
+        field: 'amount',
+        operator: 'lte',
+        value: params.max_amount !== undefined ? params.max_amount : undefined
+      })
 
       // 🎯 日期范围过滤
       if (params.date_range && params.date_range.length === 2) {
@@ -121,6 +127,9 @@ export const CoinTransactionList = () => {
           operator: 'lte',
           value: end.toISOString()
         })
+      } else {
+        filters.push({ field: 'created_at', operator: 'gte', value: undefined })
+        filters.push({ field: 'created_at', operator: 'lte', value: undefined })
       }
 
       return filters
@@ -174,7 +183,15 @@ export const CoinTransactionList = () => {
             <Button
               onClick={() => {
                 searchFormProps.form?.resetFields()
-                searchFormProps.onFinish?.({})
+                searchFormProps.onFinish?.({
+                  user_q: undefined,
+                  type: undefined,
+                  description_q: undefined,
+                  date_range: undefined,
+                  min_amount: undefined,
+                  max_amount: undefined,
+                  related_id: undefined
+                })
               }}
             >
               重置

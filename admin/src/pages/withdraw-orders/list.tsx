@@ -51,15 +51,17 @@ export const WithdrawOrderList = () => {
       const userId = params.user_id
       const orderNo = params.order_no
 
-      if (status) {
-        filters.push({ field: 'status', operator: 'eq', value: status })
-      }
-      if (userId) {
-        filters.push({ field: 'profiles.numeric_id', operator: 'eq', value: Number(userId) })
-      }
-      if (orderNo) {
-        filters.push({ field: 'order_no', operator: 'contains', value: orderNo })
-      }
+      filters.push({ field: 'status', operator: 'eq', value: status || undefined })
+      filters.push({
+        field: 'profiles.numeric_id',
+        operator: 'eq',
+        value: userId ? Number(userId) : undefined
+      })
+      filters.push({
+        field: 'order_no',
+        operator: 'contains',
+        value: orderNo || undefined
+      })
 
       return filters
     }
@@ -231,7 +233,11 @@ export const WithdrawOrderList = () => {
             <Button
               onClick={() => {
                 searchFormProps.form?.resetFields()
-                searchFormProps.onFinish?.({})
+                searchFormProps.onFinish?.({
+                  order_no: undefined,
+                  user_id: undefined,
+                  status: undefined
+                })
               }}
             >
               重置

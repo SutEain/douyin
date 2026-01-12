@@ -53,48 +53,47 @@ export const UserList = () => {
       const hasVideos = params.has_videos
       const liveStatus = params.live_status
 
-      if (q) {
-        // 昵称 / 用户名 模糊搜索（任意命中）
-        // 使用标准 Refine 逻辑过滤器数组语法，修复 e.value.map is not a function 错误
-        filters.push({
-          operator: 'or',
-          value: [
-            { field: 'nickname', operator: 'contains', value: q },
-            { field: 'username', operator: 'contains', value: q },
-            { field: 'tg_username', operator: 'contains', value: q }
-          ]
-        })
-      }
+      // 🎯 修复逻辑：即使为空也显式传 undefined 来清除之前的过滤器
+      filters.push({
+        operator: 'or',
+        value: [
+          { field: 'nickname', operator: 'contains', value: q || undefined },
+          { field: 'username', operator: 'contains', value: q || undefined },
+          { field: 'tg_username', operator: 'contains', value: q || undefined }
+        ]
+      })
 
-      if (inviterId) {
-        // 搜索邀请人：直接用邀请人的数字 ID 搜索
-        // 注意：这里利用 Supabase/PostgREST 对 JSONB 字段的过滤能力
-        filters.push({
-          field: 'inviter->numeric_id',
-          operator: 'eq',
-          value: Number(inviterId)
-        })
-      }
+      filters.push({
+        field: 'inviter->numeric_id',
+        operator: 'eq',
+        value: inviterId ? Number(inviterId) : undefined
+      })
 
-      if (numericId) {
-        filters.push({ field: 'numeric_id', operator: 'eq', value: Number(numericId) })
-      }
-      if (tgUserId) {
-        filters.push({ field: 'tg_user_id', operator: 'eq', value: Number(tgUserId) })
-      }
-      if (uuid) {
-        filters.push({ field: 'id', operator: 'eq', value: uuid })
-      }
+      filters.push({
+        field: 'numeric_id',
+        operator: 'eq',
+        value: numericId ? Number(numericId) : undefined
+      })
+      filters.push({
+        field: 'tg_user_id',
+        operator: 'eq',
+        value: tgUserId ? Number(tgUserId) : undefined
+      })
+      filters.push({ field: 'id', operator: 'eq', value: uuid || undefined })
 
       if (hasVideos === 'true' || hasVideos === true) {
         filters.push({ field: 'video_count', operator: 'gt', value: 0 })
       } else if (hasVideos === 'false' || hasVideos === false) {
         filters.push({ field: 'video_count', operator: 'eq', value: 0 })
+      } else {
+        filters.push({ field: 'video_count', operator: 'eq', value: undefined })
       }
 
-      if (liveStatus !== undefined && liveStatus !== '' && liveStatus !== null) {
-        filters.push({ field: 'live_status', operator: 'eq', value: Number(liveStatus) })
-      }
+      filters.push({
+        field: 'live_status',
+        operator: 'eq',
+        value: liveStatus !== undefined && liveStatus !== '' ? Number(liveStatus) : undefined
+      })
 
       return filters
     }
@@ -281,7 +280,15 @@ export const UserList = () => {
             <Button
               onClick={() => {
                 searchFormProps.form?.resetFields()
-                searchFormProps.onFinish?.({})
+                searchFormProps.onFinish?.({
+                  q: undefined,
+                  inviter_id: undefined,
+                  numeric_id: undefined,
+                  tg_user_id: undefined,
+                  id: undefined,
+                  has_videos: undefined,
+                  live_status: undefined
+                })
               }}
             >
               重置
@@ -455,7 +462,10 @@ export const UserList = () => {
             name="reason"
             rules={[{ required: true, message: '请输入封禁原因' }]}
           >
-            <Input.TextArea placeholder="请输入违规原因，用户尝试使用机器人时会看到此信息" rows={3} />
+            <Input.TextArea
+              placeholder="请输入违规原因，用户尝试使用机器人时会看到此信息"
+              rows={3}
+            />
           </Form.Item>
         </Form>
       </Modal>

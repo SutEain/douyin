@@ -142,67 +142,78 @@ export const VideoList = () => {
 
       // 1. 视频 ID (UUID)
       const videoId = String(params.video_id || '').trim()
-      if (videoId) {
-        filters.push({ field: 'id', operator: 'eq', value: videoId })
-      }
+      filters.push({
+        field: 'id',
+        operator: 'eq',
+        value: videoId || undefined // 🎯 关键：显式传 undefined 告诉框架清除这个过滤
+      })
 
       // 2. 搜索描述
       const desc = String(params.description || '').trim()
-      if (desc) {
-        filters.push({
-          field: 'description',
-          operator: 'contains',
-          value: desc
-        })
-      }
+      filters.push({
+        field: 'description',
+        operator: 'contains',
+        value: desc || undefined
+      })
 
-      // 3. 搜索用户（支持多种输入，统一走视图的 author_search）
+      // 3. 搜索用户
       const userQ = String(params.user_q || '').trim()
-      if (userQ) {
-        filters.push({ field: 'author_search', operator: 'contains', value: userQ.toLowerCase() })
-      }
+      filters.push({
+        field: 'author_search',
+        operator: 'contains',
+        value: userQ ? userQ.toLowerCase() : undefined
+      })
 
       // 4. 筛选状态
-      if (params.status) {
-        filters.push({ field: 'status', operator: 'eq', value: params.status })
-      }
+      filters.push({
+        field: 'status',
+        operator: 'eq',
+        value: params.status || undefined
+      })
 
       // 5. 筛选审核状态
-      if (params.review_status) {
-        filters.push({ field: 'review_status', operator: 'eq', value: params.review_status })
-      }
+      filters.push({
+        field: 'review_status',
+        operator: 'eq',
+        value: params.review_status || undefined
+      })
 
       // 6. 筛选内容类型
-      if (params.content_type) {
-        filters.push({ field: 'content_type', operator: 'eq', value: params.content_type })
-      }
+      filters.push({
+        field: 'content_type',
+        operator: 'eq',
+        value: params.content_type || undefined
+      })
 
       // 7. 筛选推荐状态
-      if (params.is_recommended === 'true' || params.is_recommended === 'false') {
-        filters.push({
-          field: 'is_recommended',
-          operator: 'eq',
-          value: params.is_recommended === 'true'
-        })
-      }
+      filters.push({
+        field: 'is_recommended',
+        operator: 'eq',
+        value:
+          params.is_recommended === 'true' || params.is_recommended === 'false'
+            ? params.is_recommended === 'true'
+            : undefined
+      })
 
       // 8. 筛选成人内容
-      if (params.is_adult === 'true' || params.is_adult === 'false') {
-        filters.push({
-          field: 'is_adult',
-          operator: 'eq',
-          value: params.is_adult === 'true'
-        })
-      }
+      filters.push({
+        field: 'is_adult',
+        operator: 'eq',
+        value:
+          params.is_adult === 'true' || params.is_adult === 'false'
+            ? params.is_adult === 'true'
+            : undefined
+      })
 
       // 9. 筛选东南亚板块
-      if (params.is_sea === 'true' || params.is_sea === 'false') {
-        filters.push({
-          field: 'is_sea',
-          operator: 'eq',
-          value: params.is_sea === 'true'
-        })
-      }
+      filters.push({
+        field: 'is_sea',
+        operator: 'eq',
+        value:
+          params.is_sea === 'true' || params.is_sea === 'false'
+            ? params.is_sea === 'true'
+            : undefined
+      })
 
       return filters
     }
@@ -821,7 +832,19 @@ export const VideoList = () => {
               <Button
                 onClick={() => {
                   searchFormProps.form?.resetFields()
-                  searchFormProps.onFinish?.({})
+                  // 🎯 关键修复：重置时手动触发一次搜索，并将所有字段设为 undefined
+                  // 这会强制清除 URL 中的所有 query 字符串
+                  searchFormProps.onFinish?.({
+                    user_q: undefined,
+                    description: undefined,
+                    video_id: undefined,
+                    status: undefined,
+                    review_status: undefined,
+                    content_type: undefined,
+                    is_recommended: undefined,
+                    is_adult: undefined,
+                    is_sea: undefined
+                  })
                 }}
               >
                 重置
