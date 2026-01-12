@@ -19,9 +19,13 @@ interface DashboardStats {
   newNormalVideosToday: number
   newAdultVideosToday: number
   usersWithHistory: number // 🎯 新增：看过视频的用户（总）
-  totalCoinsBalance: number // 🎯 平台抖币总余额
-  todayNewCoins: number // 🎯 今日新增抖币（系统发放的奖励）
-  todayCommission: number // 🎯 今日抖币抽水
+  totalCoinsBalance: number // 🎯 平台抖币总余额（所有用户剩余抖币之和）
+  todaySystemRewards: number // 🎯 今日系统发放的抖币奖励
+  todayManualAdjustments: number // 🎯 今日手动调整的抖币
+  todayGiftCommission: number // 🎯 今日打赏/直播礼物抽水
+  todayDiceCommission: number // 🎯 今日骰子游戏抽水
+  todayRpsCommission: number // 🎯 今日石头剪刀布游戏抽水
+  todayTotalCommission: number // 🎯 今日总抽水
 }
 
 type ActiveUserRow = {
@@ -78,6 +82,23 @@ function getStartOfTodayShanghaiISO(now = new Date()): string {
   return new Date(utcMs).toISOString()
 }
 
+// 🎯 获取今日结束时间（北京时间）
+function getEndOfTodayShanghaiISO(now = new Date()): string {
+  const fmt = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+  const parts = fmt.formatToParts(now)
+  const y = Number(parts.find((p) => p.type === 'year')?.value)
+  const m = Number(parts.find((p) => p.type === 'month')?.value)
+  const d = Number(parts.find((p) => p.type === 'day')?.value)
+  // 上海时区 UTC+8：上海 23:59:59 对应 UTC 当天 15:59:59
+  const utcMs = Date.UTC(y, m - 1, d, 23, 59, 59, 999) - 8 * 60 * 60 * 1000
+  return new Date(utcMs).toISOString()
+}
+
 function formatShanghaiTime(iso?: string | null): string {
   if (!iso) return '-'
   const d = new Date(iso)
@@ -110,6 +131,7 @@ export const Dashboard = () => {
   const [activePageSize, setActivePageSize] = useState(20)
 
   const startISO = useMemo(() => getStartOfTodayShanghaiISO(), [])
+  const endISO = useMemo(() => getEndOfTodayShanghaiISO(), [])
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -131,8 +153,9 @@ export const Dashboard = () => {
           newFirstPublishersRes, // 🎯 新增
           usersWithHistoryRes, // 🎯 新增
           totalCoinsRes, // 🎯 平台抖币总余额
-          todayNewCoinsRes, // 🎯 今日新增抖币
-          todayCommissionRes // 🎯 今日抖币抽水
+          todaySystemRewardsRes, // 🎯 今日系统发放的抖币奖励
+          todayManualAdjustmentsRes, // 🎯 今日手动调整的抖币
+          todayCommissionRes // 🎯 今日抖币抽水（包含各个来源）
         ] = await Promise.all([
           supabaseClient.from('profiles').select('*', { count: 'exact', head: true }),
           supabaseClient
@@ -188,7 +211,7 @@ export const Dashboard = () => {
           supabaseClient.rpc('get_today_first_publishers_count', { p_start_iso: startISO }),
           // 🎯 调用 RPC 获取有过观看历史的总用户数量
           supabaseClient.rpc('get_active_user_count'),
-          // 🎯 平台抖币总余额：统计所有用户的balance_coins总和
+          // 🎯 平台抖币总余额：统计所有用户的balance_coins总和（所有用户剩余抖币之和）
           supabaseClient
             .from('profiles')
             .select('balance_coins')
@@ -197,38 +220,50 @@ export const Dashboard = () => {
               const total = res.data?.reduce((sum, p) => sum + Number(p.balance_coins || 0), 0) || 0
               return { data: total, error: null }
             }),
-          // 🎯 今日新增抖币：统计今日所有系统奖励类型的正数amount总和
+          // 🎯 今日系统发放的抖币奖励：从交易记录统计（北京时间）
+          // 包括：reward, task_reward, watch_time_reward, author_views_reward
           supabaseClient
             .from('coin_transactions')
             .select('amount')
             .gte('created_at', startISO)
-            .in('type', [
-              'reward',
-              'task_reward',
-              'watch_time_reward',
-              'author_views_reward',
-              'red_packet_claim'
-            ])
+            .lt('created_at', endISO)
+            .in('type', ['reward', 'task_reward', 'watch_time_reward', 'author_views_reward'])
             .gt('amount', 0)
             .then((res) => {
               if (res.error) throw res.error
               const total = res.data?.reduce((sum, t) => sum + Number(t.amount || 0), 0) || 0
               return { data: total, error: null }
             }),
-          // 🎯 今日抖币抽水：统计今日所有抽水相关的负数amount总和
-          // 打赏抽水 = gift_out总额 - gift_in总额（差额就是平台抽水）
-          // 游戏抽水需要从游戏房间表计算
+          // 🎯 今日手动调整的抖币：从交易记录统计（北京时间）
+          // recharge类型且description包含'[后台调整]'
+          supabaseClient
+            .from('coin_transactions')
+            .select('amount')
+            .gte('created_at', startISO)
+            .lt('created_at', endISO)
+            .eq('type', 'recharge')
+            .ilike('description', '%[后台调整]%')
+            .then((res) => {
+              if (res.error) throw res.error
+              // 手动调整可能是正数（增加）或负数（减少），这里统计所有调整的绝对值总和
+              const total =
+                res.data?.reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0) || 0
+              return { data: total, error: null }
+            }),
+          // 🎯 今日抖币抽水：平台通过打赏、直播礼物、游戏各种抽水回收的抖币（北京时间）
+          // 分别统计各个来源的抽水
           Promise.all([
-            // 打赏抽水：计算gift_out和gift_in的差额
+            // 打赏/直播礼物抽水：gift_out总额 - gift_in总额（差额就是平台抽水）
             supabaseClient
               .from('coin_transactions')
               .select('amount, type')
               .gte('created_at', startISO)
+              .lt('created_at', endISO)
               .in('type', ['gift_out', 'gift_in'])
               .then((res) => {
                 if (res.error) throw res.error
-                let giftOutTotal = 0
-                let giftInTotal = 0
+                let giftOutTotal = 0 // 用户打赏支出的总额
+                let giftInTotal = 0 // 用户收到打赏的总额
                 res.data?.forEach((t) => {
                   const amount = Number(t.amount || 0)
                   if (t.type === 'gift_out') {
@@ -240,45 +275,54 @@ export const Dashboard = () => {
                 // 抽水 = 打赏总额 - 用户收到的（差额就是平台抽水）
                 return giftOutTotal - giftInTotal
               }),
-            // 游戏抽水：从dice_rooms和rps_rooms表计算
-            Promise.all([
-              // 骰子游戏抽水：total_prize - winner实际获得（需要查询claim_dice_reward的记录）
-              supabaseClient
-                .from('dice_rooms')
-                .select('total_prize, bet_amount, target_count')
-                .eq('status', 'finished')
-                .gte('updated_at', startISO)
-                .then((res) => {
-                  if (res.error) throw res.error
-                  let totalCommission = 0
-                  res.data?.forEach((room) => {
-                    const totalPrize = Number(room.total_prize || 0)
+            // 骰子游戏抽水：total_prize * 2%
+            supabaseClient
+              .from('dice_rooms')
+              .select('total_prize, updated_at')
+              .eq('status', 'finished')
+              .gte('updated_at', startISO)
+              .lt('updated_at', endISO)
+              .then((res) => {
+                if (res.error) throw res.error
+                let totalCommission = 0
+                res.data?.forEach((room) => {
+                  const totalPrize = Number(room.total_prize || 0)
+                  if (totalPrize > 0) {
                     // 骰子游戏抽水2%
                     const commission = Math.floor(totalPrize * 0.02)
                     totalCommission += commission
-                  })
-                  return totalCommission
-                }),
-              // 石头剪刀布游戏抽水
-              supabaseClient
-                .from('rps_rooms')
-                .select('total_prize')
-                .eq('status', 'finished')
-                .gte('finished_at', startISO)
-                .then((res) => {
-                  if (res.error) throw res.error
-                  let totalCommission = 0
-                  res.data?.forEach((room) => {
-                    const totalPrize = Number(room.total_prize || 0)
+                  }
+                })
+                return totalCommission
+              }),
+            // 石头剪刀布游戏抽水：total_prize * 2%
+            supabaseClient
+              .from('rps_rooms')
+              .select('total_prize, finished_at')
+              .eq('status', 'finished')
+              .not('total_prize', 'is', null)
+              .gte('finished_at', startISO)
+              .lt('finished_at', endISO)
+              .then((res) => {
+                if (res.error) throw res.error
+                let totalCommission = 0
+                res.data?.forEach((room) => {
+                  const totalPrize = Number(room.total_prize || 0)
+                  if (totalPrize > 0) {
                     // 石头剪刀布游戏抽水2%
                     const commission = Math.floor(totalPrize * 0.02)
                     totalCommission += commission
-                  })
-                  return totalCommission
+                  }
                 })
-            ]).then(([diceCommission, rpsCommission]) => diceCommission + rpsCommission)
-          ]).then(([giftCommission, gameCommission]) => ({
-            data: giftCommission + gameCommission,
+                return totalCommission
+              })
+          ]).then(([giftCommission, diceCommission, rpsCommission]) => ({
+            data: {
+              giftCommission,
+              diceCommission,
+              rpsCommission,
+              totalCommission: giftCommission + diceCommission + rpsCommission
+            },
             error: null
           }))
         ])
@@ -298,8 +342,12 @@ export const Dashboard = () => {
           newAdultVideosToday: newAdultVideosRes.count ?? 0,
           usersWithHistory: Number(usersWithHistoryRes.data) || 0, // 🎯 新增
           totalCoinsBalance: Number(totalCoinsRes.data) || 0, // 🎯 平台抖币总余额
-          todayNewCoins: Number(todayNewCoinsRes.data) || 0, // 🎯 今日新增抖币
-          todayCommission: Number(todayCommissionRes.data) || 0 // 🎯 今日抖币抽水
+          todaySystemRewards: Number(todaySystemRewardsRes.data) || 0, // 🎯 今日系统发放的抖币奖励
+          todayManualAdjustments: Number(todayManualAdjustmentsRes.data) || 0, // 🎯 今日手动调整的抖币
+          todayGiftCommission: Number(todayCommissionRes.data?.giftCommission) || 0, // 🎯 今日打赏/直播礼物抽水
+          todayDiceCommission: Number(todayCommissionRes.data?.diceCommission) || 0, // 🎯 今日骰子游戏抽水
+          todayRpsCommission: Number(todayCommissionRes.data?.rpsCommission) || 0, // 🎯 今日石头剪刀布游戏抽水
+          todayTotalCommission: Number(todayCommissionRes.data?.totalCommission) || 0 // 🎯 今日总抽水
         })
       } catch (error) {
         console.error('[Dashboard] 获取统计数据失败:', error)
@@ -581,7 +629,7 @@ export const Dashboard = () => {
         </Row>
 
         <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
-          <Col xs={24} sm={12} md={8}>
+          <Col xs={24} sm={12} md={6}>
             <Card>
               <Statistic
                 title="平台抖币总余额"
@@ -592,13 +640,49 @@ export const Dashboard = () => {
               />
             </Card>
           </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card>
+              <Statistic
+                title="今日系统发放奖励"
+                value={stats?.todaySystemRewards ?? 0}
+                precision={0}
+                valueStyle={{ color: '#52c41a' }}
+                suffix="抖币"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card>
+              <Statistic
+                title="今日手动调整"
+                value={stats?.todayManualAdjustments ?? 0}
+                precision={0}
+                valueStyle={{ color: '#722ed1' }}
+                suffix="抖币"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card>
+              <Statistic
+                title="今日总抽水"
+                value={stats?.todayTotalCommission ?? 0}
+                precision={0}
+                valueStyle={{ color: '#fa8c16', fontWeight: 'bold' }}
+                suffix="抖币"
+              />
+            </Card>
+          </Col>
+        </Row>
+
+        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24} sm={12} md={8}>
             <Card>
               <Statistic
-                title="今日新增抖币"
-                value={stats?.todayNewCoins ?? 0}
+                title="打赏/直播礼物抽水"
+                value={stats?.todayGiftCommission ?? 0}
                 precision={0}
-                valueStyle={{ color: '#52c41a' }}
+                valueStyle={{ color: '#fa541c' }}
                 suffix="抖币"
               />
             </Card>
@@ -606,10 +690,21 @@ export const Dashboard = () => {
           <Col xs={24} sm={12} md={8}>
             <Card>
               <Statistic
-                title="今日抖币抽水"
-                value={stats?.todayCommission ?? 0}
+                title="骰子游戏抽水"
+                value={stats?.todayDiceCommission ?? 0}
                 precision={0}
-                valueStyle={{ color: '#fa8c16' }}
+                valueStyle={{ color: '#faad14' }}
+                suffix="抖币"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <Card>
+              <Statistic
+                title="石头剪刀布抽水"
+                value={stats?.todayRpsCommission ?? 0}
+                precision={0}
+                valueStyle={{ color: '#d48806' }}
                 suffix="抖币"
               />
             </Card>
