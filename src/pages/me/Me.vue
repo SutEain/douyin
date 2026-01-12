@@ -438,6 +438,7 @@ import { checkIn } from '@/api/user'
 import { useBaseStore } from '@/store/pinia'
 import { useNav } from '@/utils/hooks/useNav'
 import { supabase } from '@/utils/supabase'
+import { isBrowserEnvironment } from '@/utils/env'
 
 defineOptions({
   name: 'Me'
@@ -462,58 +463,9 @@ const telegramLoginUrl = computed(() => {
 })
 
 // 🎯 检测是否在浏览器环境（非 Telegram WebApp）
+// 🚨 使用统一的环境检测工具函数，确保在 miniAPP 中绝对不会显示 Web 版登录
 const isBrowserEnv = computed(() => {
-  // 开发环境强制认为是浏览器环境
-  const host = window.location.hostname
-  const isDev =
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host.endsWith('.test') ||
-    host.endsWith('.local')
-
-  if (isDev) {
-    return true
-  }
-
-  // 🎯 优先检查 URL 中是否有 Telegram WebApp 数据（最可靠的标识）
-  const hasTgData =
-    window.location.href.includes('tgWebAppData') ||
-    window.location.hash.includes('tgWebAppData') ||
-    window.location.search.includes('tgWebAppData')
-
-  if (hasTgData) {
-    return false // 有 Telegram 数据，不是浏览器环境
-  }
-
-  // 🎯 检查 User Agent
-  const uaTelegram = /Telegram/i.test(navigator.userAgent)
-  if (uaTelegram) {
-    return false // Telegram User Agent，不是浏览器环境
-  }
-
-  // 🎯 检查 Referrer
-  const refTelegram = /t\.me|telegram\.org|telegram\.me|web\.telegram\.org/i.test(
-    document.referrer || ''
-  )
-  if (refTelegram) {
-    return false // Telegram Referrer，不是浏览器环境
-  }
-
-  // 🎯 检查是否是真实的 Telegram WebApp（排除降级对象）
-  const tgWebApp = window.Telegram?.WebApp
-  const hasRealTelegramObj =
-    tgWebApp &&
-    tgWebApp.version !== 'fallback' &&
-    tgWebApp.platform !== 'unknown' &&
-    tgWebApp.initData && // 真实的 Telegram WebApp 会有 initData
-    tgWebApp.initData.length > 0 // 确保 initData 不为空
-
-  if (hasRealTelegramObj) {
-    return false // 有真实的 Telegram WebApp 对象，不是浏览器环境
-  }
-
-  // 🎯 如果以上都不满足，认为是浏览器环境
-  return true
+  return isBrowserEnvironment()
 })
 
 // ========== State ==========

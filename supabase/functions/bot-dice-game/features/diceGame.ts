@@ -295,33 +295,106 @@ async function startRolling(chatId: number, roomId: string) {
 
     const results: any[] = []
 
-    for (const player of players) {
-      // 🎲 使用带重试机制的发送骰子函数（最多重试5次，指数退避）
-      console.log(`[DiceGame] 🎲 开始为玩家 ${player.user?.nickname || '未知'} 发送骰子...`)
-      const res = await sendDiceWithRetry(chatId, { emoji: '🎲' }, 5, 1000)
+    for (let i = 0; i < players.length; i++) {
+      const player = players[i]
+      const playerName = player.user?.nickname || '未知'
 
-      if (!res.ok || !res.result?.dice) {
-        const errorMsg = res.description || res.error_code || 'Unknown error'
-        console.error(
-          `[DiceGame] ❌ 无法为玩家 ${player.user?.nickname || '未知'} 发送骰子:`,
-          errorMsg
+      try {
+        // 🎲 使用带重试机制的发送骰子函数（最多重试7次，指数退避）
+        console.log(
+          `[DiceGame] 🎲 开始为玩家 ${playerName} (${i + 1}/${players.length}) 发送骰子...`
         )
-        throw new Error(`无法为玩家 ${player.user?.nickname || '未知'} 发送骰子: ${errorMsg}`)
-      }
 
-      const value = res.result.dice.value
-      console.log(`[DiceGame] ✅ 玩家 ${player.user?.nickname || '未知'} 掷出: ${value} 点`)
-      results.push({ id: player.id, user_id: player.user_id, name: player.user?.nickname, value })
-      await supabase.from('dice_room_players').update({ roll_result: value }).eq('id', player.id)
+        // 🎯 为每个玩家设置超时保护（最多60秒）
+        const playerTimeout = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(`为玩家 ${playerName} 发送骰子超时（60秒）`)), 60000)
+        })
 
-      if (progressMsgId) {
-        const currentBoard = results
-          .map((r, i) => `${i + 1}. ${escapeHTML(r.name || '玩家')}: <b>${r.value}</b> 点`)
-          .join('\n')
-        const updateText = `🎲 <b>对局进行中...</b>\n\n${currentBoard}\n\n⏳ 正在等待下一位玩家...`
-        await editMessage(chatId, progressMsgId, updateText)
+        const res = (await Promise.race([
+          sendDiceWithRetry(chatId, { emoji: '🎲' }, 7, 1500),
+          playerTimeout
+        ])) as any
+
+        if (!res.ok || !res.result?.dice) {
+          const errorMsg = res.description || res.error_code || 'Unknown error'
+          console.error(`[DiceGame] ❌ 无法为玩家 ${playerName} 发送骰子:`, errorMsg)
+          throw new Error(`无法为玩家 ${playerName} 发送骰子: ${errorMsg}`)
+        }
+
+        const value = res.result.dice.value
+        console.log(`[DiceGame] ✅ 玩家 ${playerName} 掷出: ${value} 点`)
+        results.push({ id: player.id, user_id: player.user_id, name: playerName, value })
+
+        // 🎯 更新数据库，如果失败也继续（避免单个更新失败导致整个流程中断）
+        try {
+          await supabase
+            .from('dice_room_players')
+            .update({ roll_result: value })
+            .eq('id', player.id)
+        } catch (dbError) {
+          console.error(`[DiceGame] ⚠️ 更新玩家 ${playerName} 结果到数据库失败:`, dbError)
+          // 继续执行，不中断流程
+        }
+
+        // 🎯 更新进度消息，如果失败也继续
+        if (progressMsgId) {
+          try {
+            const currentBoard = results
+              .map((r, idx) => `${idx + 1}. ${escapeHTML(r.name || '玩家')}: <b>${r.value}</b> 点`)
+              .join('\n')
+            const updateText = `🎲 <b>对局进行中...</b>\n\n${currentBoard}\n\n⏳ 正在等待下一位玩家...`
+            await editMessage(chatId, progressMsgId, updateText)
+          } catch (editError) {
+            console.error(`[DiceGame] ⚠️ 更新进度消息失败:`, editError)
+            // 继续执行，不中断流程
+          }
+        }
+
+        // 🎯 每个玩家之间等待，但最后一个玩家不需要等待
+        if (i < players.length - 1) {
+          await new Promise((r) => setTimeout(r, 1500))
+        }
+      } catch (playerError: any) {
+        console.error(`[DiceGame] ❌ 处理玩家 ${playerName} 时发生错误:`, playerError)
+        // 🎯 如果单个玩家失败，使用随机值继续（避免整个游戏卡住）
+        const fallbackValue = Math.floor(Math.random() * 6) + 1
+        console.warn(`[DiceGame] ⚠️ 使用备用值 ${fallbackValue} 继续游戏`)
+        results.push({
+          id: player.id,
+          user_id: player.user_id,
+          name: playerName,
+          value: fallbackValue
+        })
+
+        try {
+          await supabase
+            .from('dice_room_players')
+            .update({ roll_result: fallbackValue })
+            .eq('id', player.id)
+        } catch (dbError) {
+          console.error(`[DiceGame] ⚠️ 更新备用值到数据库失败:`, dbError)
+        }
+
+        // 🎯 更新进度消息，显示使用了备用值
+        if (progressMsgId) {
+          try {
+            const currentBoard = results
+              .map(
+                (r, idx) =>
+                  `${idx + 1}. ${escapeHTML(r.name || '玩家')}: <b>${r.value}</b> 点${r.value === fallbackValue ? ' ⚠️' : ''}`
+              )
+              .join('\n')
+            const updateText = `🎲 <b>对局进行中...</b>\n\n${currentBoard}\n\n⏳ 正在等待下一位玩家...`
+            await editMessage(chatId, progressMsgId, updateText)
+          } catch (editError) {
+            // 忽略编辑错误
+          }
+        }
+
+        if (i < players.length - 1) {
+          await new Promise((r) => setTimeout(r, 1500))
+        }
       }
-      await new Promise((r) => setTimeout(r, 1500))
     }
 
     // 4. 结算逻辑 (使用开头获取到的 roomInfo)

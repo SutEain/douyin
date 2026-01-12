@@ -33,6 +33,7 @@ import { useRouter } from 'vue-router'
 import { loginWithTelegram } from '@/api/auth'
 import { useBaseStore } from '@/store/pinia'
 import { supabase } from '@/utils/supabase'
+import { isBrowserEnvironment } from '@/utils/env'
 
 const router = useRouter()
 const baseStore = useBaseStore()
@@ -41,44 +42,8 @@ const errorMessage = ref('')
 const widgetContainer = ref<HTMLElement | null>(null)
 
 // 🎯 检测是否在浏览器环境（非 Telegram WebApp）
+// 🚨 使用统一的环境检测工具函数，确保在 miniAPP 中绝对不会显示 Web 版登录
 const isBrowserEnv = ref(false)
-
-// 🎯 检测环境
-function detectEnvironment() {
-  // 开发环境强制认为是浏览器环境
-  const host = window.location.hostname
-  const isDev =
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host.endsWith('.test') ||
-    host.endsWith('.local')
-
-  if (isDev) {
-    isBrowserEnv.value = true
-    return
-  }
-
-  const uaTelegram = /Telegram/i.test(navigator.userAgent)
-  const refTelegram = /t\.me|telegram\.org|telegram\.me|web\.telegram\.org/i.test(
-    document.referrer || ''
-  )
-
-  // 🎯 检查是否是真实的 Telegram WebApp（排除降级对象）
-  const tgWebApp = window.Telegram?.WebApp
-  const hasRealTelegramObj =
-    tgWebApp &&
-    tgWebApp.version !== 'fallback' &&
-    tgWebApp.platform !== 'unknown' &&
-    tgWebApp.initData // 真实的 Telegram WebApp 会有 initData
-
-  const hasTgData =
-    window.location.href.includes('tgWebAppData') ||
-    window.location.hash.includes('tgWebAppData') ||
-    window.location.search.includes('tgWebAppData')
-
-  // 如果完全没有 Telegram 相关标识，认为是浏览器环境
-  isBrowserEnv.value = !hasTgData && !uaTelegram && !refTelegram && !hasRealTelegramObj
-}
 
 onMounted(async () => {
   // 🎯 如果已经有 session 了，说明是回退回来的，直接进入首页
@@ -91,8 +56,8 @@ onMounted(async () => {
     return
   }
 
-  // 检测环境
-  detectEnvironment()
+  // 🚨 使用统一的环境检测工具函数，确保在 miniAPP 中绝对不会显示 Web 版登录
+  isBrowserEnv.value = isBrowserEnvironment()
 
   if (isBrowserEnv.value) {
     // 浏览器环境：加载 Telegram Login Widget

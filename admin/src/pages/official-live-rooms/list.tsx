@@ -25,6 +25,8 @@ export const OfficialLiveRoomList = () => {
   const invalidate = useInvalidate()
   const { mutate: updateOne } = useUpdate()
   const [updatingViewerCount, setUpdatingViewerCount] = useState<string | null>(null)
+  // 🎯 本地状态管理输入值，避免每次输入都触发更新
+  const [localViewerCounts, setLocalViewerCounts] = useState<Record<string, number | null>>({})
 
   const { tableProps, searchFormProps } = useTable<OfficialLiveRoomRow>({
     resource: 'live_broadcast_rooms',
@@ -73,11 +75,23 @@ export const OfficialLiveRoomList = () => {
           message.success('自定义人数已更新')
           invalidate({ resource: 'live_broadcast_rooms', invalidates: ['list'] })
           setUpdatingViewerCount(null)
+          // 🎯 清除本地状态，使用服务器返回的值
+          setLocalViewerCounts((prev) => {
+            const next = { ...prev }
+            delete next[record.id]
+            return next
+          })
         },
         onError: (e: any) => {
           console.error('[OfficialLiveRoomList] updateCustomViewerCount failed:', e)
           message.error(e?.message || '更新失败')
           setUpdatingViewerCount(null)
+          // 🎯 更新失败时，恢复本地状态为原始值
+          setLocalViewerCounts((prev) => {
+            const next = { ...prev }
+            next[record.id] = record.custom_viewer_count ?? null
+            return next
+          })
         }
       }
     )
@@ -179,20 +193,54 @@ export const OfficialLiveRoomList = () => {
         <Table.Column
           title="自定义人数"
           dataIndex="custom_viewer_count"
-          render={(v: any, record: OfficialLiveRoomRow) => (
-            <InputNumber
-              value={v ?? null}
-              size="small"
-              style={{ width: 120 }}
-              min={0}
-              placeholder="使用真实人数"
-              disabled={updatingViewerCount === record.id}
-              onChange={(val) => {
-                const numVal = typeof val === 'number' ? val : null
-                updateCustomViewerCount(record, numVal)
-              }}
-            />
-          )}
+          render={(v: any, record: OfficialLiveRoomRow) => {
+            // 🎯 优先使用本地状态，如果没有则使用服务器值
+            const displayValue =
+              localViewerCounts[record.id] !== undefined
+                ? localViewerCounts[record.id]
+                : (v ?? null)
+
+            return (
+              <InputNumber
+                value={displayValue}
+                size="small"
+                style={{ width: 120 }}
+                min={0}
+                placeholder="使用真实人数"
+                disabled={updatingViewerCount === record.id}
+                onChange={(val) => {
+                  // 🎯 只更新本地状态，不触发API请求
+                  const numVal = typeof val === 'number' ? val : null
+                  setLocalViewerCounts((prev) => ({
+                    ...prev,
+                    [record.id]: numVal
+                  }))
+                }}
+                onBlur={() => {
+                  // 🎯 失去焦点时才触发更新
+                  const currentValue =
+                    localViewerCounts[record.id] !== undefined
+                      ? localViewerCounts[record.id]
+                      : (v ?? null)
+                  // 🎯 如果值没有变化，不触发更新
+                  if (currentValue === (v ?? null)) {
+                    // 清除本地状态
+                    setLocalViewerCounts((prev) => {
+                      const next = { ...prev }
+                      delete next[record.id]
+                      return next
+                    })
+                    return
+                  }
+                  updateCustomViewerCount(record, currentValue)
+                }}
+                onPressEnter={(e) => {
+                  // 🎯 按回车时也触发更新
+                  ;(e.target as HTMLInputElement).blur()
+                }}
+              />
+            )
+          }}
         />
         <Table.Column
           title="显示人数"

@@ -136,6 +136,7 @@ import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { uploadImage } from '@/utils/upload'
 import { logout } from '@/api/auth'
+import { isBrowserEnvironment } from '@/utils/env'
 
 defineOptions({
   name: 'EditUserInfo'
@@ -337,20 +338,9 @@ function handleLocationClick(e: Event) {
 }
 
 // 🎯 检测是否在浏览器环境（非 Telegram WebApp）
+// 🚨 使用统一的环境检测工具函数，确保在 miniAPP 中绝对不会显示 Web 版登录
 const isBrowserEnv = computed(() => {
-  const host = window.location.hostname
-  const isDev =
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host.endsWith('.test') ||
-    host.endsWith('.local')
-
-  if (isDev) {
-    return true
-  }
-
-  // 生产环境：检查是否有真实的 Telegram WebApp
-  return !window.Telegram?.WebApp || !window.Telegram.WebApp.initData
+  return isBrowserEnvironment()
 })
 
 // 🎯 退出登录

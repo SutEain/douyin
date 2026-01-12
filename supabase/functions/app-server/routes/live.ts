@@ -38,6 +38,7 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
           status: selfRoom.status,
           viewer_count: displayViewerCount,
           real_viewer_count: selfRoom.viewer_count ?? 0, // 保留真实人数供后台查看
+          custom_viewer_count: selfRoom.custom_viewer_count ?? null, // 🎯 返回自定义人数，前端需要知道是否有自定义
           stream_url: `https://${selfRoom.node?.domain_name}/LiveApp/streams/${selfRoom.stream_key}.m3u8`,
           cover_url: selfRoom.anchor?.avatar_url,
           is_self_hosted: true,

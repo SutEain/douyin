@@ -1081,6 +1081,21 @@ function triggerLargeGiftEffect(
   }
 }
 
+// 🎯 计算显示人数：优先使用自定义人数（如果存在且不为0），否则使用实际人数
+function getDisplayViewerCount(room: any): number {
+  // 如果是自建直播且有自定义人数且不为0，使用自定义人数
+  if (
+    room.is_self_hosted &&
+    room.custom_viewer_count !== null &&
+    room.custom_viewer_count !== undefined &&
+    room.custom_viewer_count > 0
+  ) {
+    return room.custom_viewer_count
+  }
+  // 否则使用实际人数（viewer_count 或 real_viewer_count）
+  return room.viewer_count || room.real_viewer_count || 0
+}
+
 // 获取直播间信息
 async function fetchRoomInfo() {
   const currentRoomId = roomId.value
@@ -1105,7 +1120,9 @@ async function fetchRoomInfo() {
         ...room,
         stream_url: buildPlayUrl(room.stream_url)
       }
-      viewerCount.value = room.viewer_count || 0
+      // 🎯 计算显示人数：优先使用自定义人数（如果存在且不为0），否则使用实际人数
+      const displayCount = getDisplayViewerCount(room)
+      viewerCount.value = displayCount
 
       // 获取个人抖币余额 (无论是否自建直播)
       if (session?.user?.id) {
@@ -1392,8 +1409,18 @@ function setupSubscription() {
         return (presences as any[]).map((p) => ({ ...p, presence_key: key }))
       })
 
-      // 更新总人数
-      viewerCount.value = Math.max(allPresences.length, 1)
+      // 🎯 更新总人数：如果存在自定义人数且不为0，则不更新（保持自定义人数）
+      // 否则使用实际在线人数
+      const hasCustomCount =
+        roomInfo.value.is_self_hosted &&
+        roomInfo.value.custom_viewer_count !== null &&
+        roomInfo.value.custom_viewer_count !== undefined &&
+        roomInfo.value.custom_viewer_count > 0
+
+      if (!hasCustomCount) {
+        viewerCount.value = Math.max(allPresences.length, 1)
+      }
+      // 如果有自定义人数，保持 viewerCount.value 不变（已经在 fetchRoomInfo 时设置）
 
       // 提取头像流（去重显示，每个人只占一个坑位）
       const uniqueViewers = new Map()
