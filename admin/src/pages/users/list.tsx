@@ -21,7 +21,7 @@ import {
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useUpdate } from '@refinedev/core'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabaseClient } from '../../supabaseClient'
 
 export const UserList = () => {
