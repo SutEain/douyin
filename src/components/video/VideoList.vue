@@ -189,13 +189,11 @@ const debugLog = (...args: any[]) => {
 }
 // 🎯 观看历史记录追踪（避免重复记录）
 const recordedViews = new Set<string>() // 已记录开始观看
-const completedViews = new Set<string>() // 已记录完播
-let currentCompletionTimer: ReturnType<typeof setTimeout> | null = null // 当前视频的完播计时器
 
 // 🎯 观看时长心跳记录（简化版：只要在播放就累计）
 let watchTimeHeartbeatTimer: ReturnType<typeof setInterval> | null = null // 心跳定时器
 
-// 🎯 记录进入 current（立即记录播放 + 设置完播计时器）
+// 🎯 记录进入 current（只记录已播放，不记录完播）
 function recordEnterCurrent(item: VideoItem | null, contentType: string) {
   console.log(`[WatchTime] 🎬 recordEnterCurrent 被调用:`, {
     itemId: item?.aweme_id?.substring(0, 8) || 'null',
@@ -208,56 +206,22 @@ function recordEnterCurrent(item: VideoItem | null, contentType: string) {
     return
   }
 
-  // 1. 立即记录播放
+  // 🎯 只记录已播放（progress: 0），不记录完播
+  // 即使已记录过，也更新一次观看时间（用于更新 updated_at）
   if (!recordedViews.has(item.aweme_id)) {
     recordedViews.add(item.aweme_id)
     recordVideoView(item.aweme_id, { progress: 0 })
     console.log(`[ViewHistory] 记录播放: ${item.aweme_id.substring(0, 8)}`)
+  } else {
+    // 🎯 已记录过，更新观看时间（更新 updated_at）
+    recordVideoView(item.aweme_id, { progress: 0 })
+    console.log(`[ViewHistory] 更新观看时间: ${item.aweme_id.substring(0, 8)}`)
   }
-
-  // 🎯 2. 观看时长由心跳定时器统一处理，这里不需要额外逻辑
-
-  // 3. 设置完播计时器
-  if (completedViews.has(item.aweme_id)) return // 已完播过
-
-  // 清除之前的计时器
-  if (currentCompletionTimer) {
-    clearTimeout(currentCompletionTimer)
-    currentCompletionTimer = null
-  }
-
-  // 根据内容类型计算完播时长
-  if (contentType === 'image' || contentType === 'album' || contentType === 'collection') {
-    // 🎯 图片/相册/合集：立即记录完播，且由于 RPC v2 支持，我们只需确保一次性标记
-    if (!completedViews.has(item.aweme_id)) {
-      recordedViews.add(item.aweme_id)
-      completedViews.add(item.aweme_id)
-      recordVideoView(item.aweme_id, { progress: 100, completed: true })
-      console.log(`[ViewHistory] 图片/相册立即完播: ${item.aweme_id.substring(0, 8)}`)
-    }
-    return // 退出，不设置计时器
-  }
-
-  // 🎯 HLS视频：不再使用定时器，改为监听实际播放进度（在bindCurrentVideoEvents中处理）
-  // 对于视频类型，完播记录会在timeupdate事件中处理（播放进度达到70%时）
-  // 这样可以准确处理HLS视频，因为HLS的duration可能获取不到或不准确
-  console.log(
-    `[ViewHistory] 视频类型，将在播放进度达到70%时记录完播: ${item.aweme_id.substring(0, 8)}`
-  )
-
-  // 🎯 注意：完播记录逻辑已移到 bindCurrentVideoEvents 的 timeupdate 监听器中
-  // 这里不再设置定时器，避免HLS视频duration不准确的问题
 }
 
-// 🎯 离开 current（清除计时器 + 暂停累计观看时长，但不立即上报）
+// 🎯 离开 current（不做任何操作，观看历史已在 recordEnterCurrent 中记录）
 function recordLeaveCurrent() {
-  if (currentCompletionTimer) {
-    clearTimeout(currentCompletionTimer)
-    currentCompletionTimer = null
-    console.log(`[ViewHistory] 清除完播计时器（离开当前视频）`)
-  }
-
-  // 🎯 极简版本：不做任何操作
+  // 🎯 不需要清除计时器，因为已经移除了完播计时器
   // 观看时长会在下一次 recordEnterCurrent（切换到新视频）或 onUnmounted（页面卸载）时上报
 }
 const SLOT_KEYS = ['slotA', 'slotB', 'slotC'] as const
@@ -638,13 +602,9 @@ function handleImageClick(slot: SlotState) {
   console.log('[VideoList] Image clicked:', slot.key)
 }
 
-// 🎯 相册/合集滑到最后一张，记录完播
+// 🎯 相册/合集滑到最后一张（不再记录完播，只记录已播放）
 function handleAlbumComplete(slot: SlotState) {
-  const item = slot.videoIndex != null ? props.items[slot.videoIndex] : null
-  if (item?.aweme_id && !completedViews.has(item.aweme_id)) {
-    completedViews.add(item.aweme_id)
-    recordVideoView(item.aweme_id, { progress: 100, completed: true })
-  }
+  // 🎯 不再记录完播，只记录已播放（已在 recordEnterCurrent 中记录）
 }
 
 // 🎯 为合辑视频提供进度条同步机制
@@ -965,6 +925,19 @@ function updateSlotSource(slot: SlotState, preloadOnly = false) {
     if (slot.role === 'current') {
       resetProgressState()
       bindCurrentVideoEvents(video)
+
+      // 🎯 视频类型：确保记录播放历史（即使快速滑动也能记录）
+      if (idx != null && idx >= 0 && idx < props.items.length) {
+        const item = props.items[idx]
+        if (item?.aweme_id) {
+          const contentType = getSlotContentType(slot)
+          // 对于视频类型，确保记录（图片/相册/合辑已在上面处理）
+          if (contentType === 'video') {
+            recordEnterCurrent(item, contentType)
+          }
+        }
+      }
+
       // 🎯 统一管理：依靠 autoplay 属性，同时手动 play 确保成功率
       video.play().catch(() => {})
     }
@@ -1955,7 +1928,6 @@ function unbindVideoEvents(video: HTMLVideoElement) {
   if (video) {
     video.onloadedmetadata = null
     video.ontimeupdate = null
-    video.onended = null // 🎯 清理播放结束事件监听
   }
 }
 
@@ -2000,38 +1972,7 @@ function bindCurrentVideoEvents(video: HTMLVideoElement) {
     }
     updateProgressFromVideo(video)
 
-    // 🎯 HLS视频完播记录：当播放进度达到70%时记录完播
-    if (video.duration && video.currentTime > 0) {
-      const progress = (video.currentTime / video.duration) * 100
-      const slot = getSlotByRole('current')
-      if (slot && slot.videoIndex != null) {
-        const item = props.items[slot.videoIndex]
-        if (item?.aweme_id && !completedViews.has(item.aweme_id)) {
-          // 播放进度达到70%时记录完播
-          if (progress >= 70) {
-            completedViews.add(item.aweme_id)
-            recordVideoView(item.aweme_id, { progress: 100, completed: true })
-            console.log(
-              `[ViewHistory] HLS视频播放进度达到70%，记录完播: ${item.aweme_id.substring(0, 8)}`
-            )
-          }
-        }
-      }
-    }
-  }
-
-  // 🎯 监听视频播放结束事件，确保完播记录
-  video.onended = () => {
-    if (video !== currentBoundVideo) return
-    const slot = getSlotByRole('current')
-    if (slot && slot.videoIndex != null) {
-      const item = props.items[slot.videoIndex]
-      if (item?.aweme_id && !completedViews.has(item.aweme_id)) {
-        completedViews.add(item.aweme_id)
-        recordVideoView(item.aweme_id, { progress: 100, completed: true })
-        console.log(`[ViewHistory] 视频播放结束，记录完播: ${item.aweme_id.substring(0, 8)}`)
-      }
-    }
+    // 🎯 不再记录完播，只记录已播放（已在 recordEnterCurrent 中记录）
   }
 
   nextTick(computeStep)
