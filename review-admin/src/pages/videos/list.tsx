@@ -1,181 +1,114 @@
-import { List, useTable, DateField } from '@refinedev/antd'
-import { Table, Space, Button, Tag, Image, Form, Select, Input } from 'antd'
-import { EyeOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { List, useTable } from '@refinedev/antd'
+import { Table, Tag, Space, Button, Input, Select, message, Modal, Avatar, Form } from 'antd'
+import { supabaseClient } from '../../supabaseClient'
+import { CheckCircleOutlined, CloseCircleOutlined, EyeOutlined, UserOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
 
 export const VideoList = () => {
-  const navigate = useNavigate()
-
   const { tableProps, searchFormProps } = useTable({
     resource: 'videos',
-    sorters: {
-      initial: [{ field: 'created_at', order: 'desc' }]
-    },
-    filters: {
-      initial: [{ field: 'status', operator: 'eq', value: 'published' }]
-    },
+    syncWithLocation: true,
+    pagination: { pageSize: 10 },
+    sorters: { initial: [{ field: 'created_at', order: 'desc' }] },
     meta: {
-      select: '*, author:profiles!videos_author_id_fkey(id, nickname, username, numeric_id)'
-    },
-    pagination: {
-      pageSize: 20
+      select: '*, profiles:user_id(nickname, numeric_id, avatar_url)'
     },
     onSearch: (params: any) => {
-      const filters: any[] = [{ field: 'status', operator: 'eq', value: 'published' }]
-
-      if (params.review_status) {
-        filters.push({ field: 'review_status', operator: 'eq', value: params.review_status })
-      }
-      if (params.is_adult) {
-        filters.push({ field: 'is_adult', operator: 'eq', value: params.is_adult === 'true' })
-      }
+      const filters: any[] = []
+      // 🎯 核心逻辑：只根据当前表单里的值生成 Filter
       if (params.title) {
         filters.push({ field: 'title', operator: 'contains', value: params.title })
       }
-
+      if (params.review_status) {
+        filters.push({ field: 'review_status', operator: 'eq', value: params.review_status })
+      }
+      if (params.content_type) {
+        filters.push({ field: 'content_type', operator: 'eq', value: params.content_type })
+      }
       return filters
     }
   })
 
-  const getReviewStatusTag = (status: string) => {
-    const statusMap: Record<string, { color: string; text: string }> = {
-      pending: { color: 'orange', text: '待审核' },
-      approved: { color: 'green', text: '已通过' },
-      rejected: { color: 'red', text: '已拒绝' },
-      flagged: { color: 'volcano', text: '已标记' }
+  // 快速审核操作
+  const handleReview = async (id: string, status: 'approved' | 'rejected') => {
+    const { error } = await supabaseClient
+      .from('videos')
+      .update({ review_status: status })
+      .eq('id', id)
+
+    if (error) {
+      message.error('审核操作失败: ' + error.message)
+    } else {
+      message.success('审核操作成功')
+      tableProps.onChange?.(tableProps.pagination as any, {}, {}) 
     }
-    const s = statusMap[status] || { color: 'default', text: status }
-    return <Tag color={s.color}>{s.text}</Tag>
+  }
+
+  const previewVideo = (url: string) => {
+    Modal.info({
+      title: '视频预览',
+      width: 800,
+      centered: true,
+      content: <video src={url} controls autoPlay style={{ width: '100%', maxHeight: '70vh' }} />,
+      footer: null,
+      maskClosable: true
+    })
+  }
+
+  const formatNumber = (num: number) => {
+    if (num >= 10000) return (num / 10000).toFixed(1) + 'w'
+    return num?.toString() || '0'
   }
 
   return (
-    <List
-      title="视频审核"
-      headerButtons={
-        <Button
-          onClick={() => {
-            searchFormProps.form?.resetFields()
-            searchFormProps.form?.submit()
-          }}
-        >
-          刷新
-        </Button>
-      }
-    >
+    <List title="视频审核">
       <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
-        <Form.Item name="review_status" label="审核状态">
-          <Select placeholder="全部" allowClear style={{ width: 120 }}>
+        <Form.Item name="title" label="关键词">
+          <Input placeholder="标题/描述" allowClear style={{ width: 180 }} />
+        </Form.Item>
+        <Form.Item name="review_status" label="审核">
+          <Select placeholder="全部" allowClear style={{ width: 100 }}>
             <Select.Option value="pending">待审核</Select.Option>
             <Select.Option value="approved">已通过</Select.Option>
             <Select.Option value="rejected">已拒绝</Select.Option>
-            <Select.Option value="flagged">已标记</Select.Option>
           </Select>
         </Form.Item>
-        <Form.Item name="is_adult" label="内容类型">
-          <Select placeholder="全部" allowClear style={{ width: 120 }}>
-            <Select.Option value="false">正常</Select.Option>
-            <Select.Option value="true">成人</Select.Option>
+        <Form.Item name="content_type" label="类型">
+          <Select placeholder="全部" allowClear style={{ width: 90 }}>
+            <Select.Option value="video">视频</Select.Option>
+            <Select.Option value="image">图片</Select.Option>
+            <Select.Option value="album">相册</Select.Option>
+            <Select.Option value="collection">合集</Select.Option>
           </Select>
-        </Form.Item>
-        <Form.Item name="title" label="标题">
-          <Input placeholder="搜索标题" allowClear />
         </Form.Item>
         <Form.Item>
           <Space>
-            <Button type="primary" htmlType="submit">
-              搜索
-            </Button>
-            <Button
-              onClick={() => {
-                searchFormProps.form?.resetFields()
-                searchFormProps.form?.submit()
-              }}
-            >
-              重置
-            </Button>
+            <Button type="primary" htmlType="submit">搜索</Button>
+            <Button onClick={() => {
+              searchFormProps.form?.resetFields();
+              searchFormProps.onFinish?.({}); // 🎯 强制用空条件刷新，解决 admin 后台的粘性搜索 bug
+            }}>重置</Button>
           </Space>
         </Form.Item>
       </Form>
 
-      <Table {...tableProps} rowKey="id" size="middle">
-        <Table.Column
-          title="封面"
-          dataIndex="cover_url"
-          width={100}
-          render={(url: string) =>
-            url ? (
-              <Image
-                src={url}
-                width={80}
-                height={80}
-                style={{ objectFit: 'cover', borderRadius: 4 }}
-                preview
-              />
-            ) : (
-              <span style={{ color: '#999' }}>-</span>
-            )
-          }
-        />
-        <Table.Column
-          title="标题"
-          dataIndex="title"
-          width={200}
-          render={(title: string) => title || '-'}
-        />
-        <Table.Column
-          title="作者"
-          dataIndex={['author', 'nickname']}
-          width={120}
-          render={(nickname: string, record: any) =>
-            nickname || record.author?.username || `ID: ${record.author?.numeric_id}` || '-'
-          }
-        />
-        <Table.Column
-          title="审核状态"
-          dataIndex="review_status"
-          width={100}
-          render={(status: string) => getReviewStatusTag(status)}
-        />
-        <Table.Column
-          title="内容类型"
-          dataIndex="is_adult"
-          width={100}
-          render={(isAdult: boolean) => (
-            <Tag color={isAdult ? 'red' : 'blue'}>{isAdult ? '成人' : '正常'}</Tag>
-          )}
-        />
-        <Table.Column
-          title="观看/点赞"
-          width={120}
-          render={(_: any, record: any) => (
-            <span>
-              {record.view_count || 0} / {record.like_count || 0}
-            </span>
-          )}
-        />
-        <Table.Column
-          title="创建时间"
-          dataIndex="created_at"
-          width={180}
-          render={(value: any) => <DateField value={value} format="YYYY-MM-DD HH:mm:ss" />}
-        />
-        <Table.Column
-          title="操作"
-          width={100}
-          fixed="right"
-          render={(_: any, record: any) => (
-            <Space>
-              <Button
-                type="link"
-                size="small"
-                icon={<EyeOutlined />}
-                onClick={() => navigate(`/videos/show/${record.id}`)}
-              >
-                查看
-              </Button>
-            </Space>
-          )}
-        />
+      <Table {...tableProps} rowKey="id" scroll={{ x: 1500 }}>
+        <Table.Column title="封面" width={90} render={(_, r: any) => <img src={r.cover_url} style={{ width: 70, height: 70, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }} onClick={() => previewVideo(r.play_url)} />} />
+        <Table.Column dataIndex="title" title="标题/描述" width={250} render={(val) => <div style={{ maxHeight: 70, overflow: 'hidden' }}>{val || '无标题'}</div>} />
+        <Table.Column title="作者" width={180} render={(_, r: any) => <Space><Avatar src={r.profiles?.avatar_url} icon={<UserOutlined />} /><div><div>{r.profiles?.nickname || '未知'}</div><div style={{ fontSize: 12, color: '#999' }}>ID: {r.profiles?.numeric_id || '-'}</div></div></Space>} />
+        <Table.Column dataIndex="review_status" title="状态" width={100} render={(v) => <Tag color={v === 'approved' ? 'green' : v === 'rejected' ? 'red' : 'orange'}>{v === 'approved' ? '已通过' : v === 'rejected' ? '已拒绝' : '待审核'}</Tag>} />
+        <Table.Column dataIndex="is_adult" title="成人" width={70} render={(v) => <Tag color={v ? 'magenta' : 'blue'}>{v ? '🔞' : '否'}</Tag>} />
+        <Table.Column title="数据" width={180} render={(_, r: any) => <div style={{ fontSize: 12 }}>播放: {formatNumber(r.view_count)}<br/>赞: {formatNumber(r.like_count)} | 评: {formatNumber(r.comment_count)}</div>} />
+        <Table.Column dataIndex="created_at" title="创建时间" width={160} render={(val) => dayjs(val).format('YYYY-MM-DD HH:mm:ss')} />
+        <Table.Column title="操作" fixed="right" width={180} render={(_, r: any) => (
+          <Space size="small">
+            <Button size="small" icon={<EyeOutlined />} onClick={() => previewVideo(r.play_url)}>预览</Button>
+            {r.review_status === 'pending' && (
+              <><Button size="small" type="primary" onClick={() => handleReview(r.id, 'approved')} style={{ background: '#52c41a', borderColor: '#52c41a' }}>通过</Button>
+              <Button size="small" danger onClick={() => handleReview(r.id, 'rejected')}>拒绝</Button></>
+            )}
+          </Space>
+        )} />
       </Table>
     </List>
   )

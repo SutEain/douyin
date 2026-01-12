@@ -1,7 +1,7 @@
-import { AuthBindings } from '@refinedev/core'
+import type { AuthProvider } from '@refinedev/core'
 import { supabaseClient } from './supabaseClient'
 
-export const authProvider: AuthBindings = {
+export const authProvider: AuthProvider = {
   login: async ({ email, password }) => {
     const { data, error } = await supabaseClient.auth.signInWithPassword({
       email,
@@ -19,10 +19,10 @@ export const authProvider: AuthBindings = {
     }
 
     if (data?.user) {
-      // 检查用户是否为审核员
+      // 🎯 检查是否是审核员或管理员
       const { data: profile } = await supabaseClient
         .from('profiles')
-        .select('is_reviewer, is_admin, nickname')
+        .select('is_reviewer, is_admin')
         .eq('id', data.user.id)
         .single()
 
@@ -53,38 +53,20 @@ export const authProvider: AuthBindings = {
   },
   logout: async () => {
     const { error } = await supabaseClient.auth.signOut()
-
-    if (error) {
-      return {
-        success: false,
-        error: {
-          name: '登出失败',
-          message: error.message
-        }
-      }
-    }
-
-    return {
-      success: true,
-      redirectTo: '/login'
-    }
+    if (error) return { success: false, error }
+    return { success: true, redirectTo: '/login' }
   },
   check: async () => {
     const { data } = await supabaseClient.auth.getSession()
-    const { session } = data
+    const session = data?.session
 
     if (!session) {
       return {
         authenticated: false,
-        redirectTo: '/login',
-        error: {
-          message: '请先登录',
-          name: '未登录'
-        }
+        redirectTo: '/login'
       }
     }
 
-    // 检查用户是否为审核员
     const { data: profile } = await supabaseClient
       .from('profiles')
       .select('is_reviewer, is_admin')
@@ -92,57 +74,43 @@ export const authProvider: AuthBindings = {
       .single()
 
     if (!profile?.is_reviewer && !profile?.is_admin) {
-      await supabaseClient.auth.signOut()
       return {
         authenticated: false,
-        redirectTo: '/login',
-        error: {
-          message: '您没有访问审核后台的权限',
-          name: '权限不足'
-        }
+        error: { message: '权限不足', name: 'PermissionError' },
+        redirectTo: '/login'
       }
     }
 
-    return {
-      authenticated: true
-    }
+    return { authenticated: true }
   },
   getPermissions: async () => {
     const { data } = await supabaseClient.auth.getUser()
-
-    if (data?.user) {
-      const { data: profile } = await supabaseClient
-        .from('profiles')
-        .select('is_reviewer, is_admin')
-        .eq('id', data.user.id)
-        .single()
-
-      return profile?.is_admin ? 'admin' : 'reviewer'
-    }
-
-    return null
+    if (!data?.user) return null
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('is_reviewer, is_admin')
+      .eq('id', data.user.id)
+      .single()
+    return profile?.is_admin ? 'admin' : 'reviewer'
   },
   getIdentity: async () => {
     const { data } = await supabaseClient.auth.getUser()
+    if (!data?.user) return null
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('nickname, username, avatar_url')
+      .eq('id', data.user.id)
+      .single()
 
-    if (data?.user) {
-      const { data: profile } = await supabaseClient
-        .from('profiles')
-        .select('nickname, username, avatar_url')
-        .eq('id', data.user.id)
-        .single()
-
-      return {
-        id: data.user.id,
-        name: profile?.nickname || profile?.username || data.user.email || 'User',
-        avatar: profile?.avatar_url
-      }
+    return {
+      ...data.user,
+      name: profile?.nickname || profile?.username || data.user.email,
+      avatar: profile?.avatar_url
     }
-
-    return null
   },
-  onError: async (error) => {
-    console.error(error)
+  onError: async (error: any) => {
+    if (error?.code === 'PGRST301') return { logout: true }
     return { error }
   }
 }
+

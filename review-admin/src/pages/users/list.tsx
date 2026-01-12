@@ -1,154 +1,64 @@
-import { List, useTable, DateField } from '@refinedev/antd'
-import { Table, Space, Button, Tag, Avatar, Form, Input, Select } from 'antd'
-import { EyeOutlined, UserOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { List, useTable } from '@refinedev/antd'
+import { Table, Tag, Input, Space, Avatar, Form, Button } from 'antd'
+import { UserOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
 
 export const UserList = () => {
-  const navigate = useNavigate()
-
   const { tableProps, searchFormProps } = useTable({
     resource: 'profiles',
-    sorters: {
-      initial: [{ field: 'created_at', order: 'desc' }]
-    },
-    pagination: {
-      pageSize: 20
-    },
+    syncWithLocation: true,
+    pagination: { pageSize: 10 },
+    sorters: { initial: [{ field: 'created_at', order: 'desc' }] },
     onSearch: (params: any) => {
       const filters: any[] = []
-
-      if (params.is_banned) {
-        filters.push({ field: 'is_banned', operator: 'eq', value: params.is_banned === 'true' })
+      const q = params.q?.trim()
+      if (q) {
+        filters.push({
+          operator: 'or',
+          value: [
+            { field: 'nickname', operator: 'contains', value: q },
+            { field: 'username', operator: 'contains', value: q },
+            { field: 'numeric_id', operator: 'eq', value: isNaN(Number(q)) ? undefined : Number(q) }
+          ].filter(f => f.value !== undefined)
+        })
       }
-      if (params.keyword) {
-        // Note: Supabase doesn't support OR directly in filters, so we'll use username search
-        filters.push({ field: 'username', operator: 'contains', value: params.keyword })
-      }
-
       return filters
     }
   })
 
   return (
-    <List
-      title="用户管理"
-      headerButtons={
-        <Button
-          onClick={() => {
-            searchFormProps.form?.resetFields()
-            searchFormProps.form?.submit()
-          }}
-        >
-          刷新
-        </Button>
-      }
-    >
+    <List title="用户管理 (只读)">
       <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
-        <Form.Item name="is_banned" label="状态">
-          <Select placeholder="全部" allowClear style={{ width: 120 }}>
-            <Select.Option value="false">正常</Select.Option>
-            <Select.Option value="true">已封禁</Select.Option>
-          </Select>
-        </Form.Item>
-        <Form.Item name="keyword" label="关键词">
-          <Input placeholder="搜索用户名/昵称" allowClear />
+        <Form.Item name="q" label="关键词">
+          <Input placeholder="昵称/ID/用户名" allowClear style={{ width: 250 }} />
         </Form.Item>
         <Form.Item>
           <Space>
-            <Button type="primary" htmlType="submit">
-              搜索
-            </Button>
-            <Button
-              onClick={() => {
-                searchFormProps.form?.resetFields()
-                searchFormProps.form?.submit()
-              }}
-            >
-              重置
-            </Button>
+            <Button type="primary" htmlType="submit">搜索</Button>
+            <Button onClick={() => {
+              searchFormProps.form?.resetFields();
+              searchFormProps.onFinish?.({});
+            }}>重置</Button>
           </Space>
         </Form.Item>
       </Form>
 
-      <Table {...tableProps} rowKey="id" size="middle">
-        <Table.Column
-          title="头像"
-          dataIndex="avatar_url"
-          width={80}
-          render={(url: string) =>
-            url ? <Avatar src={url} size={50} /> : <Avatar icon={<UserOutlined />} size={50} />
-          }
-        />
-        <Table.Column
-          title="昵称"
-          dataIndex="nickname"
-          width={150}
-          render={(nickname: string) => nickname || '-'}
-        />
-        <Table.Column
-          title="用户名"
-          dataIndex="username"
-          width={150}
-          render={(username: string) => username || '-'}
-        />
-        <Table.Column
-          title="数字ID"
-          dataIndex="numeric_id"
-          width={100}
-          render={(id: number) => id || '-'}
-        />
-        <Table.Column
-          title="状态"
-          dataIndex="is_banned"
-          width={100}
-          render={(isBanned: boolean) => (
-            <Tag color={isBanned ? 'red' : 'green'}>{isBanned ? '已封禁' : '正常'}</Tag>
-          )}
-        />
-        <Table.Column
-          title="余额"
-          dataIndex="balance_coins"
-          width={120}
-          render={(balance: number) => `${balance || 0} 抖币`}
-        />
-        <Table.Column
-          title="视频数"
-          dataIndex="video_count"
-          width={100}
-          render={(count: number) => count || 0}
-        />
-        <Table.Column
-          title="粉丝/关注"
-          width={120}
-          render={(_: any, record: any) => (
-            <span>
-              {record.follower_count || 0} / {record.following_count || 0}
-            </span>
-          )}
-        />
-        <Table.Column
-          title="注册时间"
-          dataIndex="created_at"
-          width={180}
-          render={(value: any) => <DateField value={value} format="YYYY-MM-DD HH:mm:ss" />}
-        />
-        <Table.Column
-          title="操作"
-          width={100}
-          fixed="right"
-          render={(_: any, record: any) => (
-            <Space>
-              <Button
-                type="link"
-                size="small"
-                icon={<EyeOutlined />}
-                onClick={() => navigate(`/users/show/${record.id}`)}
-              >
-                查看
-              </Button>
-            </Space>
-          )}
-        />
+      <Table {...tableProps} rowKey="id" scroll={{ x: 1300 }}>
+        <Table.Column title="基本信息" width={200} render={(_, r: any) => (
+          <Space><Avatar src={r.avatar_url} icon={<UserOutlined />} />
+          <div><div style={{ fontWeight: 'bold' }}>{r.nickname || '神秘用户'}</div><div style={{ fontSize: 12, color: '#999' }}>ID: {r.numeric_id || '-'}</div></div></Space>
+        )} />
+        <Table.Column title="身份/状态" width={150} render={(_, r: any) => (
+          <Space direction="vertical" size={0}>
+            <Space>{r.is_admin && <Tag color="gold">管理员</Tag>}{r.is_reviewer && <Tag color="blue">审核员</Tag>}</Space>
+            <div style={{ marginTop: 4 }}>{r.is_banned ? <Tag color="red">已封禁</Tag> : <Tag color="green">正常</Tag>}</div>
+          </Space>
+        )} />
+        <Table.Column title="资产" width={180} render={(_, r: any) => (
+          <div style={{ fontSize: 12 }}>余额: <b>{r.balance_coins || 0}</b> | 冻结: {r.frozen_coins || 0}</div>
+        )} />
+        <Table.Column dataIndex="video_count" title="作品数" width={100} sorter />
+        <Table.Column dataIndex="created_at" title="注册时间" width={160} render={(val) => dayjs(val).format('YYYY-MM-DD HH:mm')} />
       </Table>
     </List>
   )

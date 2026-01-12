@@ -1,5 +1,6 @@
 import { List, useTable } from '@refinedev/antd'
-import { Button, Form, Input, Select, Space, Table, Tag } from 'antd'
+import { Button, Form, Input, Select, Space, Table, Tag, Switch, message } from 'antd'
+import { useInvalidate, useUpdate } from '@refinedev/core'
 import { useNavigate } from 'react-router-dom'
 
 const ruleTypeText: Record<string, { text: string; color: string }> = {
@@ -13,6 +14,8 @@ const ruleTypeText: Record<string, { text: string; color: string }> = {
 
 export const IncentiveRuleList = () => {
   const navigate = useNavigate()
+  const invalidate = useInvalidate()
+  const { mutate: updateOne } = useUpdate()
 
   const { tableProps, searchFormProps } = useTable({
     resource: 'incentive_rules',
@@ -37,6 +40,26 @@ export const IncentiveRuleList = () => {
       return filters
     }
   })
+
+  function toggleActive(record: any, next: boolean) {
+    updateOne(
+      {
+        resource: 'incentive_rules',
+        id: record.id,
+        values: { is_active: next }
+      },
+      {
+        onSuccess: () => {
+          message.success(next ? '已启用任务' : '已禁用任务')
+          invalidate({ resource: 'incentive_rules', invalidates: ['list'] })
+        },
+        onError: (e: any) => {
+          console.error('[IncentiveRuleList] toggleActive failed:', e)
+          message.error(e?.message || '操作失败')
+        }
+      }
+    )
+  }
 
   return (
     <List
@@ -107,7 +130,13 @@ export const IncentiveRuleList = () => {
           dataIndex="is_active"
           title="状态"
           width={90}
-          render={(v) => (v ? <Tag color="green">启用</Tag> : <Tag>禁用</Tag>)}
+          render={(v, record: any) => (
+            <Switch
+              checked={v === true}
+              onChange={(checked) => toggleActive(record, checked)}
+              size="small"
+            />
+          )}
         />
         <Table.Column
           title="操作"

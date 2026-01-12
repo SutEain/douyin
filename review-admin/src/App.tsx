@@ -1,118 +1,122 @@
-import { Refine, Authenticated } from '@refinedev/core'
-import { RefineKbar, RefineKbarProvider } from '@refinedev/kbar'
-import { ErrorComponent, ThemedLayoutV2, useNotificationProvider } from '@refinedev/antd'
-import routerBindings, {
-  CatchAllNavigate,
-  DocumentTitleHandler,
-  NavigateToResource,
-  UnsavedChangesNotifier
-} from '@refinedev/react-router-v6'
+import { Refine } from '@refinedev/core'
+import { ErrorComponent, useNotificationProvider, ThemedLayout } from '@refinedev/antd'
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import routerProvider from '@refinedev/react-router'
 import { dataProvider, liveProvider } from '@refinedev/supabase'
-import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom'
 import { App as AntdApp, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import '@refinedev/antd/dist/reset.css'
 
+import { useEffect, useState } from 'react'
 import { supabaseClient } from './supabaseClient'
 import { authProvider } from './authProvider'
-import { VideoList } from './pages/videos/list'
-import { VideoShow } from './pages/videos/show'
-import { UserList } from './pages/users/list'
-import { UserShow } from './pages/users/show'
-import { TransactionList } from './pages/transactions/list'
 import { Login } from './pages/login'
+import { VideoList } from './pages/videos/list'
+import { UserList } from './pages/users/list'
+import { TransactionList } from './pages/transactions/list'
 
-import { VideoCameraOutlined, UserOutlined, TransactionOutlined } from '@ant-design/icons'
+function ReviewerGuard() {
+  const [checking, setChecking] = useState(true)
+  const [ok, setOk] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const { data } = await supabaseClient.auth.getSession()
+        const session = data?.session
+        if (!session) {
+          if (mounted) {
+            setOk(false)
+            setChecking(false)
+          }
+          return
+        }
+
+        const { data: profile } = await supabaseClient
+          .from('profiles')
+          .select('is_reviewer, is_admin')
+          .eq('id', session.user.id)
+          .single()
+
+        if (!profile?.is_reviewer && !profile?.is_admin) {
+          await supabaseClient.auth.signOut()
+          if (mounted) {
+            setOk(false)
+            setChecking(false)
+          }
+          return
+        }
+
+        if (mounted) {
+          setOk(true)
+          setChecking(false)
+        }
+      } catch (e) {
+        if (mounted) {
+          setOk(false)
+          setChecking(false)
+        }
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  if (checking) return <div style={{ padding: 24 }}>身份核验中...</div>
+  if (!ok) return <Navigate to="/login" replace />
+
+  return (
+    <ThemedLayout>
+      <Outlet />
+    </ThemedLayout>
+  )
+}
 
 function App() {
   return (
     <BrowserRouter>
       <ConfigProvider locale={zhCN}>
-        <RefineKbarProvider>
-          <AntdApp>
-            <Refine
-              dataProvider={dataProvider(supabaseClient)}
-              liveProvider={liveProvider(supabaseClient)}
-              authProvider={authProvider}
-              routerProvider={routerBindings}
-              notificationProvider={useNotificationProvider}
-              resources={[
-                {
-                  name: 'videos',
-                  list: '/videos',
-                  show: '/videos/show/:id',
-                  meta: {
-                    label: '视频审核',
-                    icon: <VideoCameraOutlined />
-                  }
-                },
-                {
-                  name: 'profiles',
-                  list: '/users',
-                  show: '/users/show/:id',
-                  meta: {
-                    label: '用户管理',
-                    icon: <UserOutlined />
-                  }
-                },
-                {
-                  name: 'coin_transactions',
-                  list: '/transactions',
-                  meta: {
-                    label: '资金流水',
-                    icon: <TransactionOutlined />
-                  }
-                }
-              ]}
-              options={{
-                syncWithLocation: true,
-                warnWhenUnsavedChanges: true,
-                useNewQueryKeys: true,
-                projectId: 'review-admin'
-              }}
-            >
-              <Routes>
-                <Route
-                  element={
-                    <Authenticated
-                      key="authenticated-inner"
-                      fallback={<CatchAllNavigate to="/login" />}
-                    >
-                      <ThemedLayoutV2>
-                        <Outlet />
-                      </ThemedLayoutV2>
-                    </Authenticated>
-                  }
-                >
-                  <Route index element={<NavigateToResource resource="videos" />} />
-                  <Route path="/videos">
-                    <Route index element={<VideoList />} />
-                    <Route path="show/:id" element={<VideoShow />} />
-                  </Route>
-                  <Route path="/users">
-                    <Route index element={<UserList />} />
-                    <Route path="show/:id" element={<UserShow />} />
-                  </Route>
-                  <Route path="/transactions" element={<TransactionList />} />
-                </Route>
-                <Route
-                  element={
-                    <Authenticated key="authenticated-outer" fallback={<Outlet />}>
-                      <NavigateToResource />
-                    </Authenticated>
-                  }
-                >
-                  <Route path="/login" element={<Login />} />
-                </Route>
-                <Route path="*" element={<ErrorComponent />} />
-              </Routes>
-
-              <RefineKbar />
-              <UnsavedChangesNotifier />
-              <DocumentTitleHandler />
-            </Refine>
-          </AntdApp>
-        </RefineKbarProvider>
+        <AntdApp>
+          <Refine
+            dataProvider={dataProvider(supabaseClient)}
+            liveProvider={liveProvider(supabaseClient)}
+            authProvider={authProvider}
+            routerProvider={routerProvider}
+            notificationProvider={useNotificationProvider}
+            resources={[
+              {
+                name: 'videos',
+                list: '/videos',
+                meta: { label: '视频审核' }
+              },
+              {
+                name: 'profiles',
+                list: '/users',
+                meta: { label: '用户管理' }
+              },
+              {
+                name: 'coin_transactions',
+                list: '/transactions',
+                meta: { label: '资金流水' }
+              }
+            ]}
+            options={{
+              syncWithLocation: true,
+              warnWhenUnsavedChanges: true
+            }}
+          >
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route element={<ReviewerGuard />}>
+                <Route index element={<Navigate to="/videos" replace />} />
+                <Route path="/videos" element={<VideoList />} />
+                <Route path="/users" element={<UserList />} />
+                <Route path="/transactions" element={<TransactionList />} />
+              </Route>
+              <Route path="*" element={<ErrorComponent />} />
+            </Routes>
+          </Refine>
+        </AntdApp>
       </ConfigProvider>
     </BrowserRouter>
   )
