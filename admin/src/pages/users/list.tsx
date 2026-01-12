@@ -54,13 +54,21 @@ export const UserList = () => {
       const liveStatus = params.live_status
 
       if (q) {
+        const orConditions: any[] = [
+          { field: 'nickname', operator: 'contains', value: q },
+          { field: 'username', operator: 'contains', value: q },
+          { field: 'tg_username', operator: 'contains', value: q }
+        ]
+
+        // 🎯 如果输入的是纯数字，额外搜索数字ID和TG用户ID
+        if (/^\d+$/.test(q)) {
+          orConditions.push({ field: 'numeric_id', operator: 'eq', value: Number(q) })
+          orConditions.push({ field: 'tg_user_id', operator: 'eq', value: Number(q) })
+        }
+
         filters.push({
           operator: 'or',
-          value: [
-            { field: 'nickname', operator: 'contains', value: q },
-            { field: 'username', operator: 'contains', value: q },
-            { field: 'tg_username', operator: 'contains', value: q }
-          ]
+          value: orConditions
         })
       }
 

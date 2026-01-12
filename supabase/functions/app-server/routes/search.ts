@@ -30,7 +30,7 @@ export async function handleCombinedSearch(req: Request): Promise<Response> {
   if (pageNo === 0) {
     let userOrQuery = `nickname.ilike.%${keyword}%`
     if (/^\d+$/.test(keyword)) {
-      userOrQuery += `,numeric_id.eq.${keyword}`
+      userOrQuery += `,numeric_id.eq.${keyword},tg_user_id.eq.${keyword}`
     }
 
     const { data: userRows, count: totalUsers } = await supabaseAdmin
@@ -213,10 +213,10 @@ export async function handleSearchUsers(req: Request): Promise<Response> {
     await saveSearchHistory(user.id, keyword, 'user').catch(() => {})
   }
 
-  // 搜索用户：昵称(模糊) + 数字ID(精确)
+  // 搜索用户：昵称(模糊) + 数字ID(精确) + TGID(精确)
   let orQuery = `nickname.ilike.%${keyword}%`
   if (/^\d+$/.test(keyword)) {
-    orQuery += `,numeric_id.eq.${keyword}`
+    orQuery += `,numeric_id.eq.${keyword},tg_user_id.eq.${keyword}`
   }
 
   const {
