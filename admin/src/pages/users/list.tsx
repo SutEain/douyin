@@ -21,7 +21,7 @@ import {
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useUpdate } from '@refinedev/core'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabaseClient } from '../../supabaseClient'
 
 export const UserList = () => {
@@ -53,47 +53,38 @@ export const UserList = () => {
       const hasVideos = params.has_videos
       const liveStatus = params.live_status
 
-      // 🎯 修复逻辑：即使为空也显式传 undefined 来清除之前的过滤器
-      filters.push({
-        operator: 'or',
-        value: [
-          { field: 'nickname', operator: 'contains', value: q || undefined },
-          { field: 'username', operator: 'contains', value: q || undefined },
-          { field: 'tg_username', operator: 'contains', value: q || undefined }
-        ]
-      })
+      if (q) {
+        filters.push({
+          operator: 'or',
+          value: [
+            { field: 'nickname', operator: 'contains', value: q },
+            { field: 'username', operator: 'contains', value: q },
+            { field: 'tg_username', operator: 'contains', value: q }
+          ]
+        })
+      }
 
-      filters.push({
-        field: 'inviter->numeric_id',
-        operator: 'eq',
-        value: inviterId ? Number(inviterId) : undefined
-      })
+      if (inviterId) {
+        filters.push({
+          field: 'inviter->numeric_id',
+          operator: 'eq',
+          value: Number(inviterId)
+        })
+      }
 
-      filters.push({
-        field: 'numeric_id',
-        operator: 'eq',
-        value: numericId ? Number(numericId) : undefined
-      })
-      filters.push({
-        field: 'tg_user_id',
-        operator: 'eq',
-        value: tgUserId ? Number(tgUserId) : undefined
-      })
-      filters.push({ field: 'id', operator: 'eq', value: uuid || undefined })
+      if (numericId) filters.push({ field: 'numeric_id', operator: 'eq', value: Number(numericId) })
+      if (tgUserId) filters.push({ field: 'tg_user_id', operator: 'eq', value: Number(tgUserId) })
+      if (uuid) filters.push({ field: 'id', operator: 'eq', value: uuid })
 
       if (hasVideos === 'true' || hasVideos === true) {
         filters.push({ field: 'video_count', operator: 'gt', value: 0 })
       } else if (hasVideos === 'false' || hasVideos === false) {
         filters.push({ field: 'video_count', operator: 'eq', value: 0 })
-      } else {
-        filters.push({ field: 'video_count', operator: 'eq', value: undefined })
       }
 
-      filters.push({
-        field: 'live_status',
-        operator: 'eq',
-        value: liveStatus !== undefined && liveStatus !== '' ? Number(liveStatus) : undefined
-      })
+      if (liveStatus !== undefined && liveStatus !== '') {
+        filters.push({ field: 'live_status', operator: 'eq', value: Number(liveStatus) })
+      }
 
       return filters
     }
@@ -340,13 +331,21 @@ export const UserList = () => {
           title="余额(抖币)"
           width={120}
           sorter
-          render={(v) => <span style={{ fontFamily: 'monospace' }}>{v ?? '0'}</span>}
+          render={(v) => (
+            <span style={{ fontFamily: 'monospace' }}>
+              {(Math.floor((v ?? 0) * 100) / 100).toFixed(2)}
+            </span>
+          )}
         />
         <Table.Column
           dataIndex="frozen_coins"
           title="冻结(抖币)"
           width={120}
-          render={(v) => <span style={{ fontFamily: 'monospace' }}>{v ?? '0'}</span>}
+          render={(v) => (
+            <span style={{ fontFamily: 'monospace' }}>
+              {(Math.floor((v ?? 0) * 100) / 100).toFixed(2)}
+            </span>
+          )}
         />
         <Table.Column
           dataIndex="auto_approve"

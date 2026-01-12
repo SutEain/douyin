@@ -296,7 +296,7 @@ BEGIN
 
   ELSE
     -- 有赢家：抽水 2%
-    v_commission := FLOOR(v_total_prize * 0.02);
+    v_commission := TRUNC(v_total_prize * 0.02, 2);
     v_winner_prize := v_total_prize - v_commission;
 
     IF v_result = 'owner_win' THEN
@@ -316,7 +316,7 @@ BEGIN
         'success', true,
         'result', 'owner_win',
         'winner_id', v_room.owner_id,
-        'winner_prize', v_winner_prize,
+        'winner_prize', TRUNC(v_winner_prize, 2),
         'commission', v_commission,
         'message', '房主获胜'
       );
@@ -338,7 +338,7 @@ BEGIN
         'success', true,
         'result', 'opponent_win',
         'winner_id', v_room.opponent_id,
-        'winner_prize', v_winner_prize,
+        'winner_prize', TRUNC(v_winner_prize, 2),
         'commission', v_commission,
         'message', '挑战者获胜'
       );

@@ -70,7 +70,7 @@ export async function handleRpsCommand(chatId: number, text: string, message: an
     const rpsText =
       `🪨✂️📄 <b>石头剪刀布挑战</b>\n\n` +
       `👤 发起人：<b>${escapeHTML(sender.nickname)}</b>\n` +
-      `💰 赌注：<b>${amount}</b> 抖币\n` +
+      `💰 赌注：<b>${Number(amount).toFixed(2)}</b> 抖币\n` +
       `⏳ 状态：等待对手加入\n\n` +
       `📜 <b>游戏规则：</b>\n` +
       `• 金额范围：5 - 10000 抖币\n` +
@@ -157,8 +157,8 @@ export async function handleJoinRpsGame(
       `🪨✂️📄 <b>石头剪刀布对决</b>\n\n` +
       `👤 玩家A：<b>${escapeHTML(room.owner.nickname)}</b>\n` +
       `👤 玩家B：<b>${escapeHTML(room.opponent.nickname)}</b>\n` +
-      `💰 赌注：<b>${room.bet_amount}</b> 抖币/人\n` +
-      `🎁 奖池：<b>${room.bet_amount * 2}</b> 抖币\n\n` +
+      `💰 赌注：<b>${Number(room.bet_amount).toFixed(2)}</b> 抖币/人\n` +
+      `🎁 奖池：<b>${(room.bet_amount * 2).toFixed(2)}</b> 抖币\n\n` +
       `⏳ 请双方选择出手！`
 
     await editMessage(chatId, messageId, updatedText, {
@@ -244,8 +244,8 @@ export async function handleRpsChoice(
       `🪨✂️📄 <b>石头剪刀布对决</b>\n\n` +
       `👤 玩家A：<b>${escapeHTML(room.owner.nickname)}</b> ${ownerStatus}\n` +
       `👤 玩家B：<b>${escapeHTML(room.opponent.nickname)}</b> ${opponentStatus}\n` +
-      `💰 赌注：<b>${room.bet_amount}</b> 抖币/人\n` +
-      `🎁 奖池：<b>${room.bet_amount * 2}</b> 抖币\n\n` +
+      `💰 赌注：<b>${Number(room.bet_amount).toFixed(2)}</b> 抖币/人\n` +
+      `🎁 奖池：<b>${(room.bet_amount * 2).toFixed(2)}</b> 抖币\n\n` +
       (room.owner_choice && !room.opponent_choice
         ? `⏳ 请 <b>${escapeHTML(room.opponent.nickname)}</b> 选择出手！`
         : !room.owner_choice && room.opponent_choice
@@ -312,7 +312,7 @@ async function settleRpsGame(chatId: number, messageId: number, roomId: string) 
         `👤 ${escapeHTML(room.owner.nickname)} 出了：${getChoiceEmoji(room.owner_choice)}\n` +
         `👤 ${escapeHTML(room.opponent.nickname)} 出了：${getChoiceEmoji(room.opponent_choice)}\n\n` +
         `🤝 <b>平局！</b>\n` +
-        `💰 本金已退回双方账户 (各 ${room.bet_amount} 抖币)\n\n` +
+        `💰 本金已退回双方账户 (各 ${Number(room.bet_amount).toFixed(2)} 抖币)\n\n` +
         `再来一局决胜负？`
     } else {
       // 有赢家
@@ -326,8 +326,8 @@ async function settleRpsGame(chatId: number, messageId: number, roomId: string) 
         `👤 ${escapeHTML(room.owner.nickname)} 出了：${getChoiceEmoji(room.owner_choice)}\n` +
         `👤 ${escapeHTML(room.opponent.nickname)} 出了：${getChoiceEmoji(room.opponent_choice)}\n\n` +
         `🏆 赢家：<b>${escapeHTML(winnerName)}</b>\n` +
-        `💰 奖金：<b>${res.winner_prize}</b> 抖币（已发放）\n` +
-        `💸 系统抽水：<b>${res.commission}</b> 抖币 (2%)\n\n` +
+        `💰 奖金：<b>${Number(res.winner_prize).toFixed(2)}</b> 抖币（已发放）\n` +
+        `💸 系统抽水：<b>${Number(res.commission).toFixed(2)}</b> 抖币 (2%)\n\n` +
         `感谢参与！再来一局？`
     }
 

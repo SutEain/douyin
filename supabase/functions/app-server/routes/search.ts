@@ -71,6 +71,7 @@ export async function handleCombinedSearch(req: Request): Promise<Response> {
     .from('video_search_view')
     .select('*', { count: 'exact' })
     .eq('status', 'published')
+    .eq('is_private', false) // 🎯 增加私密过滤
     .ilike('search_text', `%${keyword}%`)
     .order('like_count', { ascending: false })
     .order('created_at', { ascending: false })
@@ -150,6 +151,7 @@ export async function handleSearchVideos(req: Request): Promise<Response> {
     .from('video_search_view') // 👈 使用新视图
     .select('*', { count: 'exact' })
     .eq('status', 'published')
+    .eq('is_private', false) // 🎯 增加私密过滤
     // 🎯 取消 is_adult 过滤，实现普通与成人内容全量搜索
     .ilike('search_text', `%${keyword}%`)
     .order('like_count', { ascending: false })

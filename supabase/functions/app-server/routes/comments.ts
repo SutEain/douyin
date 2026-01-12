@@ -12,6 +12,23 @@ export async function handleVideoComments(req: Request): Promise<Response> {
     throw new HttpError('Missing video_id', 400)
   }
   const { pageNo, pageSize, from, to } = parsePagination(url, { pageNo: 0, pageSize: 20 })
+  const { user } = await tryGetAuth(req)
+
+  // 🎯 隐私检查：确认视频是否可看
+  const { data: video, error: videoError } = await supabaseAdmin
+    .from('videos')
+    .select('author_id, is_private, status')
+    .eq('id', videoId)
+    .maybeSingle()
+
+  if (videoError || !video) {
+    throw new HttpError('Video not found', 404)
+  }
+
+  // 如果视频是私密的且当前用户不是作者，禁止查看评论
+  if (video.is_private && (!user || user.id !== video.author_id)) {
+    throw new HttpError('This video is private', 403)
+  }
 
   const { data, error, count } = await supabaseAdmin
     .from('video_comments')

@@ -24,23 +24,36 @@ export async function handleTaskReward(chatId: number, messageId?: number) {
     const v = stats.views_stats
     const l = stats.likes_stats
 
-    const text =
-      `🎁 <b>创作者奖励中心</b>\n\n` +
-      `📺 <b>作品播放奖励 (${v.threshold}次=${v.reward_amount}币)</b>\n` +
-      `• 总播放：<code>${v.current_total}</code> 次\n` +
-      `• 待领取：<code>${v.pending_count * Number(v.reward_amount)}</code> 抖币 (${v.pending_count}份)\n` +
-      `• 下一份还差：<code>${v.next_reward_distance}</code> 次\n\n` +
-      `❤️ <b>作品获赞奖励 (${l.threshold}个赞=${l.reward_amount}币)</b>\n` +
-      `• 总获赞：<code>${l.current_total}</code> 次\n` +
-      `• 待领取：<code>${l.pending_count * Number(l.reward_amount)}</code> 抖币 (${l.pending_count}份)\n` +
-      `• 下一份还差：<code>${l.next_reward_distance}</code> 个赞\n\n` +
-      `<i>💡 点击下方按钮领取对应奖励：</i>`
+    // 🎯 构建文本内容（只显示激活的任务）
+    let text = `🎁 <b>创作者奖励中心</b>\n\n`
+
+    if (v) {
+      text +=
+        `📺 <b>作品播放奖励 (${v.threshold}次=${v.reward_amount}币)</b>\n` +
+        `• 总播放：<code>${v.current_total}</code> 次\n` +
+        `• 待领取：<code>${v.pending_count * Number(v.reward_amount)}</code> 抖币 (${v.pending_count}份)\n` +
+        `• 下一份还差：<code>${v.next_reward_distance}</code> 次\n\n`
+    }
+
+    if (l) {
+      text +=
+        `❤️ <b>作品获赞奖励 (${l.threshold}个赞=${l.reward_amount}币)</b>\n` +
+        `• 总获赞：<code>${l.current_total}</code> 次\n` +
+        `• 待领取：<code>${l.pending_count * Number(l.reward_amount)}</code> 抖币 (${l.pending_count}份)\n` +
+        `• 下一份还差：<code>${l.next_reward_distance}</code> 个赞\n\n`
+    }
+
+    if (!v && !l) {
+      text += `<i>暂无可用的任务奖励</i>\n\n`
+    } else {
+      text += `<i>💡 点击下方按钮领取对应奖励：</i>`
+    }
 
     const keyboard = {
       inline_keyboard: [] as any[][]
     }
 
-    if (v.pending_count > 0) {
+    if (v && v.pending_count > 0) {
       keyboard.inline_keyboard.push([
         {
           text: `💰 领取播放奖励 (${v.pending_count * Number(v.reward_amount)} 币)`,
@@ -49,7 +62,7 @@ export async function handleTaskReward(chatId: number, messageId?: number) {
       ])
     }
 
-    if (l.pending_count > 0) {
+    if (l && l.pending_count > 0) {
       keyboard.inline_keyboard.push([
         {
           text: `💰 领取获赞奖励 (${l.pending_count * Number(l.reward_amount)} 币)`,
@@ -104,7 +117,7 @@ export async function handleClaimGenericReward(
         `💰 <b>获得奖励：</b> <code>${rewardCoins}</code> 抖币\n` +
         `📋 <b>领取份数：</b> ${claimsCount} 份\n` +
         `📊 <b>当前指标：</b> ${currentTotal}\n` +
-        `💵 <b>最新余额：</b> <code>${Math.floor(balanceAfter)}</code> 抖币\n\n` +
+        `💵 <b>最新余额：</b> <code>${(Math.floor(balanceAfter * 100) / 100).toFixed(2)}</code> 抖币\n\n` +
         `奖励已自动发放，感谢您的优质内容创作！`
 
       await editMessage(chatId, messageId, successText, {
@@ -192,7 +205,7 @@ export async function handleUserProfile(
     let text =
       `👤 <b>个人中心</b>\n\n` +
       `🆔 <b>用户ID：</b> <code>${profile.numeric_id}</code>\n` +
-      `💰 <b>抖币余额：</b> <code>${Math.floor(profile.balance_coins || 0)}</code>\n` +
+      `💰 <b>抖币余额：</b> <code>${(Math.floor((profile.balance_coins || 0) * 100) / 100).toFixed(2)}</code>\n` +
       `🔞 <b>成人权限：</b> ${statusText}\n` +
       `👥 <b>累计邀请：</b> ${profile.invite_success_count || 0} 人\n\n`
 
@@ -282,7 +295,7 @@ export async function handleInviteUnlock(chatId: number, messageId?: number) {
 
     const inviteLink = `https://t.me/dydy?start=${profile?.numeric_id || ''}`
     const count = profile?.invite_success_count || 0
-    const balance = Math.floor(profile?.balance_coins || 0)
+    const balance = (Math.floor((profile?.balance_coins || 0) * 100) / 100).toFixed(2)
 
     const text =
       `💰 <b>【TG抖音-暴富邀请令】轻松赚 USDT！</b>\n\n` +
@@ -577,7 +590,7 @@ export async function handleWallet(chatId: number, messageId?: number) {
       .eq('tg_user_id', chatId)
       .single()
 
-    const balance = Math.floor(profile?.balance_coins || 0)
+    const balance = (Math.floor((profile?.balance_coins || 0) * 100) / 100).toFixed(2)
     const text =
       `💰 <b>我的钱包</b>\n\n` +
       `当前余额：<code>${balance}</code> 抖币\n\n` +
@@ -777,13 +790,13 @@ export async function handleCreateRechargeOrder(chatId: number, messageId: numbe
     const coins = amount * 100
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${trcAddress}`
 
-    // 5. 显示订单信息
+    // 🎯 显示订单信息
     const text =
       `<a href="${qrUrl}">&#8205;</a>` + // 🎯 隐藏链接用于显示二维码预览
       `📝 <b>充值订单已创建</b>\n\n` +
       `🔢 <b>订单编号：</b> <code>${orderNo}</code>\n` +
       `💰 <b>支付金额：</b> <code>${Number(totalAmount).toFixed(2)}</code> USDT\n` +
-      `💎 <b>预计到账：</b> <code>${coins.toLocaleString()}</code> 抖币\n` +
+      `💎 <b>预计到账：</b> <code>${Number(coins).toFixed(2)}</code> 抖币\n` +
       `📊 <b>充值比例：</b> 1 USDT = 100 抖币\n\n` +
       `📍 <b>收款地址 (TRC20)：</b>\n<code>${trcAddress}</code>\n\n` +
       `⏰ <b>有效期：</b> 30 分钟 (请在北京时间 ${timeStr} 前完成支付)\n\n` +
@@ -851,14 +864,15 @@ export async function handleWithdrawStart(chatId: number, messageId?: number) {
       .eq('tg_user_id', chatId)
       .single()
 
-    const balance = Math.floor(profile?.balance_coins || 0)
+    const balanceNum = profile?.balance_coins || 0
+    const balanceDisplay = (Math.floor(balanceNum * 100) / 100).toFixed(2)
     const minWithdraw = 1000 // 最低1000抖币
     const fee = 50 // 手续费50抖币
 
-    if (balance < minWithdraw) {
+    if (balanceNum < minWithdraw) {
       const errorText =
         `❌ <b>提现金额不足</b>\n\n` +
-        `当前余额：<code>${balance}</code> 抖币\n` +
+        `当前余额：<code>${balanceDisplay}</code> 抖币\n` +
         `最低提现额度为 <code>${minWithdraw}</code> 抖币\n` +
         `（扣除${fee}抖币手续费后到账 ${(minWithdraw - fee) / 100} USDT）\n\n` +
         `💡 您可以通过邀请好友或作品打赏获取更多抖币。`
@@ -884,7 +898,7 @@ export async function handleWithdrawStart(chatId: number, messageId?: number) {
 
     const text =
       `💰 <b>抖币提现</b>\n\n` +
-      `当前可提现余额：<code>${balance}</code> 抖币\n\n` +
+      `当前可提现余额：<code>${balanceDisplay}</code> 抖币\n\n` +
       `请输入您要提现的金额 (仅输入数字)：\n` +
       `<i>💡 最低提现额度为 1000 抖币</i>\n` +
       `<i>📌 手续费：50抖币</i>\n` +
@@ -919,8 +933,8 @@ export async function handleWithdrawConfirmPage(
 
   const text =
     `⚠️ <b>请确认提现信息</b>\n\n` +
-    `💰 <b>提现金额：</b> <code>${amount}</code> 抖币\n` +
-    `📌 <b>手续费：</b> <code>-${fee}</code> 抖币\n` +
+    `💰 <b>提现金额：</b> <code>${Number(amount).toFixed(2)}</code> 抖币\n` +
+    `📌 <b>手续费：</b> <code>-${Number(fee).toFixed(2)}</code> 抖币\n` +
     `💵 <b>实际到账：</b> <code>${usdt}</code> USDT\n` +
     `📍 <b>提现地址 (TRC20)：</b>\n<code>${address}</code>\n\n` +
     `<b>注意：</b>\n` +
@@ -1270,8 +1284,9 @@ export async function handleTransactions(chatId: number, messageId?: number) {
           hour: 'numeric',
           minute: 'numeric'
         })
-        const amount = t.amount > 0 ? `+${t.amount}` : `${t.amount}`
-        text += `• [${time}] ${typeMap[t.type] || t.type}\n  金额：<code>${amount}</code> | 余额：<code>${t.balance_after}</code>\n`
+        const amount =
+          t.amount > 0 ? `+${Number(t.amount).toFixed(2)}` : `${Number(t.amount).toFixed(2)}`
+        text += `• [${time}] ${typeMap[t.type] || t.type}\n  金额：<code>${amount}</code> | 余额：<code>${Number(t.balance_after).toFixed(2)}</code>\n`
         if (t.description) text += `  备注：${t.description}\n`
         text += `\n`
       })

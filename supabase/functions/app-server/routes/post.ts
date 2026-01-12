@@ -21,6 +21,7 @@ export async function handlePostRecommended(req: Request): Promise<Response> {
     .select('*', { count: 'exact' })
     .eq('status', 'published')
     .eq('is_adult', false)
+    .eq('is_private', false) // 🎯 增加私密过滤
     // 🎯 只要是 image 或 album 都会出现在图文 Tab，不再受 is_sea 限制（因为图文目前没有东南亚分类）
     .in('content_type', ['image', 'album'])
     .order('published_at', { ascending: false, nullsFirst: false })

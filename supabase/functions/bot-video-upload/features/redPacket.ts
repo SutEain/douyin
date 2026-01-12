@@ -70,7 +70,10 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
     }
 
     if (sender.balance_coins < amount) {
-      await sendMessage(chatId, `❌ 余额不足 (当前: ${sender.balance_coins} 抖币)`)
+      await sendMessage(
+        chatId,
+        `❌ 余额不足 (当前: ${(Math.floor(sender.balance_coins * 100) / 100).toFixed(2)} 抖币)`
+      )
       return
     }
 
@@ -181,7 +184,7 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
 
       hbText =
         `🧧 <b>${escapeHTML(sender.nickname)}</b> 给 ${targetMention} 发了一个专属红包\n` +
-        `💰 金额：<b>${amount}</b> 抖币\n` +
+        `💰 金额：<b>${Number(amount).toFixed(2)}</b> 抖币\n` +
         `⏳ 状态：<b>待领取</b>\n\n` +
         `👉 <b>点击下方按钮领取</b>\n\n` +
         `📜 <b>红包规则：</b>\n` +
@@ -243,7 +246,7 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
 
       hbText =
         `🧧 <b>${escapeHTML(sender.nickname)}</b> 发了一个${typeText} (${count}份)\n` +
-        `💰 总金额：<b>${amount}</b> 抖币\n` +
+        `💰 总金额：<b>${Number(amount).toFixed(2)}</b> 抖币\n` +
         `⏳ 剩余 <b>${count}</b>/${count} 份\n\n` +
         `👉 <b>点击下方按钮领取红包</b>\n` +
         `💡 点击后会私聊发送计算题，30秒内回答正确即可领取\n\n` +
@@ -790,15 +793,15 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
         // 已领取：移除所有按钮（专属红包不需要跳转按钮）
         hbText =
           `🧧 <b>${escapeHTML(senderName)}</b> 给 ${targetMention} 的专属红包\n` +
-          `💰 金额：<b>${packet.total_amount}</b> 抖币\n` +
+          `💰 金额：<b>${Number(packet.total_amount).toFixed(2)}</b> 抖币\n` +
           `📊 状态：✨ <b>已被领取</b> ✨\n\n` +
-          `🎉 <b>${escapeHTML(claimerName)}</b> 领了 <code>${claimInfo?.amount || packet.total_amount}</code> 抖币`
+          `🎉 <b>${escapeHTML(claimerName)}</b> 领了 <code>${Number(claimInfo?.amount || packet.total_amount).toFixed(2)}</code> 抖币`
         keyboard = { inline_keyboard: [] }
       } else {
         // 待领取：只保留领取按钮（专属红包不需要跳转按钮）
         hbText =
           `🧧 <b>${escapeHTML(senderName)}</b> 给 ${targetMention} 的专属红包\n` +
-          `💰 金额：<b>${packet.total_amount}</b> 抖币\n` +
+          `💰 金额：<b>${Number(packet.total_amount).toFixed(2)}</b> 抖币\n` +
           `📊 状态：<b>待领取</b>`
         keyboard = {
           inline_keyboard: [
@@ -839,7 +842,9 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
 
     // 🎯 智能分割消息：如果领取记录太多，分多条消息发送
     const baseText =
-      `${hbTitle}\n` + `💰 总金额：<b>${packet.total_amount}</b> 抖币\n` + `📊 状态：${statusText}`
+      `${hbTitle}\n` +
+      `💰 总金额：<b>${Number(packet.total_amount).toFixed(2)}</b> 抖币\n` +
+      `📊 状态：${statusText}`
 
     if (claims && claims.length > 0) {
       const MAX_MESSAGE_LENGTH = 4000 // 留96字符余量
@@ -851,7 +856,7 @@ async function updateRedPacketMessage(chatId: number, messageId: number, packetI
         const c = claims[i]
         const name = c.user?.nickname || '匿名'
         // 🎯 用🧧 emoji替代数字ID
-        const recordLine = `🧧 ${escapeHTML(name)} 领了 <code>${c.amount}</code> 币\n`
+        const recordLine = `🧧 ${escapeHTML(name)} 领了 <code>${Number(c.amount).toFixed(2)}</code> 币\n`
         recordTexts.push(recordLine)
       }
 
@@ -1422,11 +1427,11 @@ async function updateRedPacketMessageNow(chatId: number, messageId: number, pack
 
       hbText =
         `🧧 <b>${escapeHTML(senderName)}</b> 给 ${targetMention} 的专属红包\n` +
-        `💰 金额：<b>${packet.total_amount}</b> 抖币\n` +
+        `💰 金额：<b>${Number(packet.total_amount).toFixed(2)}</b> 抖币\n` +
         `📊 状态：${isCompleted ? '✨ <b>已被领取</b> ✨' : '<b>待领取</b>'}\n\n`
 
       if (isCompleted) {
-        hbText += `🎉 <b>${escapeHTML(claimerName)}</b> 领了 <code>${claimInfo?.amount || packet.total_amount}</code> 抖币`
+        hbText += `🎉 <b>${escapeHTML(claimerName)}</b> 领了 <code>${Number(claimInfo?.amount || packet.total_amount).toFixed(2)}</code> 抖币`
       }
 
       // 🎯 专属红包按钮逻辑（不需要跳转按钮）
@@ -1473,7 +1478,7 @@ async function updateRedPacketMessageNow(chatId: number, messageId: number, pack
     if (packet.type === 'lucky' && packet.claims && packet.claims.length > 0) {
       const bestClaim = packet.claims.find((c) => c.is_best_luck)
       if (bestClaim) {
-        bestLuckText = `\n🏆 <b>手气最佳：</b>${escapeHTML(bestClaim.user?.nickname || '未知')} (${bestClaim.amount}抖币)\n`
+        bestLuckText = `\n🏆 <b>手气最佳：</b>${escapeHTML(bestClaim.user?.nickname || '未知')} (${Number(bestClaim.amount).toFixed(2)}抖币)\n`
       }
     }
 
@@ -1496,7 +1501,7 @@ async function updateRedPacketMessageNow(chatId: number, messageId: number, pack
         const name = c.user?.nickname || '未知'
         const isBest = c.is_best_luck ? ' 🏆' : ''
         // 🎯 用🧧 emoji替代数字ID
-        claimsText += `🧧 ${escapeHTML(name)} - ${c.amount}抖币${isBest}\n`
+        claimsText += `🧧 ${escapeHTML(name)} - ${Number(c.amount).toFixed(2)}抖币${isBest}\n`
       }
 
       // 🎯 如果总人数超过30，显示还有多少人未显示
@@ -1510,7 +1515,7 @@ async function updateRedPacketMessageNow(chatId: number, messageId: number, pack
     // 组合最终消息
     hbText =
       `🧧 <b>${escapeHTML(senderName)}</b> 的${typeText} (${packet.total_count}份)\n` +
-      `💰 总金额：<b>${packet.total_amount}</b> 抖币\n` +
+      `💰 总金额：<b>${Number(packet.total_amount).toFixed(2)}</b> 抖币\n` +
       `${statusText}${bestLuckText}${claimsText}`
 
     // 🎯 使用统一的按钮判断函数

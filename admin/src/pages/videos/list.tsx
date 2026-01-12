@@ -117,7 +117,7 @@ export const VideoList = () => {
     mediaVideo?: { video: HTMLVideoElement; hls: Hls | null }
   }>({})
 
-  const { tableProps, searchFormProps } = useTable({
+  const { tableProps, searchFormProps, setFilters } = useTable({
     // ✅ 后台视频列表使用视图（支持业务优先级排序 + 用户多字段搜索）
     resource: 'admin_videos_list',
     syncWithLocation: true,
@@ -136,88 +136,52 @@ export const VideoList = () => {
     queryOptions: {
       staleTime: 0, // ✅ 禁用缓存，确保每次进入页面都重新获取最新数据
       refetchOnMount: 'always' // ✅ 强制挂载时重新获取
-    },
-    onSearch: (params: Record<string, any>) => {
-      const filters: any[] = []
+    }
+  })
 
-      // 1. 视频 ID (UUID)
-      const videoId = String(params.video_id || '').trim()
-      filters.push({
-        field: 'id',
-        operator: 'eq',
-        value: videoId || undefined // 🎯 关键：显式传 undefined 告诉框架清除这个过滤
-      })
+  // 🎯 核心修复：点搜索时，根据当前有哪些条件，构建全新的过滤器
+  const handleSearch = (params: any) => {
+    const filters: any[] = []
 
-      // 2. 搜索描述
-      const desc = String(params.description || '').trim()
-      filters.push({
-        field: 'description',
-        operator: 'contains',
-        value: desc || undefined
-      })
-
-      // 3. 搜索用户
-      const userQ = String(params.user_q || '').trim()
+    if (params.video_id?.trim()) {
+      filters.push({ field: 'id', operator: 'eq', value: params.video_id.trim() })
+    }
+    if (params.description?.trim()) {
+      filters.push({ field: 'description', operator: 'contains', value: params.description.trim() })
+    }
+    if (params.user_q?.trim()) {
       filters.push({
         field: 'author_search',
         operator: 'contains',
-        value: userQ ? userQ.toLowerCase() : undefined
+        value: params.user_q.trim().toLowerCase()
       })
-
-      // 4. 筛选状态
-      filters.push({
-        field: 'status',
-        operator: 'eq',
-        value: params.status || undefined
-      })
-
-      // 5. 筛选审核状态
-      filters.push({
-        field: 'review_status',
-        operator: 'eq',
-        value: params.review_status || undefined
-      })
-
-      // 6. 筛选内容类型
-      filters.push({
-        field: 'content_type',
-        operator: 'eq',
-        value: params.content_type || undefined
-      })
-
-      // 7. 筛选推荐状态
+    }
+    if (params.status) {
+      filters.push({ field: 'status', operator: 'eq', value: params.status })
+    }
+    if (params.review_status) {
+      filters.push({ field: 'review_status', operator: 'eq', value: params.review_status })
+    }
+    if (params.content_type) {
+      filters.push({ field: 'content_type', operator: 'eq', value: params.content_type })
+    }
+    if (params.is_recommended === 'true' || params.is_recommended === 'false') {
       filters.push({
         field: 'is_recommended',
         operator: 'eq',
-        value:
-          params.is_recommended === 'true' || params.is_recommended === 'false'
-            ? params.is_recommended === 'true'
-            : undefined
+        value: params.is_recommended === 'true'
       })
-
-      // 8. 筛选成人内容
-      filters.push({
-        field: 'is_adult',
-        operator: 'eq',
-        value:
-          params.is_adult === 'true' || params.is_adult === 'false'
-            ? params.is_adult === 'true'
-            : undefined
-      })
-
-      // 9. 筛选东南亚板块
-      filters.push({
-        field: 'is_sea',
-        operator: 'eq',
-        value:
-          params.is_sea === 'true' || params.is_sea === 'false'
-            ? params.is_sea === 'true'
-            : undefined
-      })
-
-      return filters
     }
-  })
+    if (params.is_adult === 'true' || params.is_adult === 'false') {
+      filters.push({ field: 'is_adult', operator: 'eq', value: params.is_adult === 'true' })
+    }
+    if (params.is_sea === 'true' || params.is_sea === 'false') {
+      filters.push({ field: 'is_sea', operator: 'eq', value: params.is_sea === 'true' })
+    }
+
+    // 🎯 这里的 "replace" 是关键！它会清除之前的所有旧条件，只用当前这几个。
+    setFilters(filters, 'replace')
+  }
 
   // 格式化北京时间
   const formatBeijingTime = (dateStr: string) => {
@@ -770,7 +734,12 @@ export const VideoList = () => {
         }
       >
         {/* 搜索和筛选表单 */}
-        <Form {...searchFormProps} layout="inline" style={{ marginBottom: 16, gap: '8px 0' }}>
+        <Form
+          {...searchFormProps}
+          onFinish={handleSearch}
+          layout="inline"
+          style={{ marginBottom: 16, gap: '8px 0' }}
+        >
           <Form.Item name="user_q" label="作者">
             <Input placeholder="昵称/用户名/ID" allowClear style={{ width: 160 }} />
           </Form.Item>
@@ -832,19 +801,8 @@ export const VideoList = () => {
               <Button
                 onClick={() => {
                   searchFormProps.form?.resetFields()
-                  // 🎯 关键修复：重置时手动触发一次搜索，并将所有字段设为 undefined
-                  // 这会强制清除 URL 中的所有 query 字符串
-                  searchFormProps.onFinish?.({
-                    user_q: undefined,
-                    description: undefined,
-                    video_id: undefined,
-                    status: undefined,
-                    review_status: undefined,
-                    content_type: undefined,
-                    is_recommended: undefined,
-                    is_adult: undefined,
-                    is_sea: undefined
-                  })
+                  // 🎯 重置也要清场
+                  setFilters([], 'replace')
                 }}
               >
                 重置

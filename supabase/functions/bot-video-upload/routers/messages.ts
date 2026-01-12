@@ -160,7 +160,7 @@ export async function handleText(
       .single()
 
     if (profile) {
-      const balance = Math.floor(profile.balance_coins || 0)
+      const balance = (Math.floor((profile.balance_coins || 0) * 100) / 100).toFixed(2)
       const nickname = profile.nickname || '未设置'
       const numericId = profile.numeric_id || '未知'
 
@@ -291,8 +291,8 @@ export async function handleText(
     await editMessage(
       chatId,
       userState.current_message_id,
-      `💰 <b>提现金额：</b> <code>${amount}</code> 抖币\n` +
-        `📌 <b>手续费：</b> <code>-${fee}</code> 抖币\n` +
+      `💰 <b>提现金额：</b> <code>${Number(amount).toFixed(2)}</code> 抖币\n` +
+        `📌 <b>手续费：</b> <code>-${Number(fee).toFixed(2)}</code> 抖币\n` +
         `💵 <b>实际到账：</b> <code>${actualUsdt}</code> USDT\n\n` +
         `请发送您的 <b>USDT-TRC20</b> 收款地址：\n\n` +
         `💡 发送 /cancel 可取消操作。`,

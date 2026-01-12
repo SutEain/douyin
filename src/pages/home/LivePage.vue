@@ -143,7 +143,7 @@
             <span>赠送礼物</span>
             <div class="coin-info">
               <img src="../../assets/img/icon/home/redpack.png" alt="" />
-              <span>{{ userCoins }} 抖币</span>
+              <span>{{ userCoins.toFixed(2) }} 抖币</span>
               <div class="recharge" @click="handleRecharge">充值</div>
             </div>
           </div>
@@ -328,7 +328,7 @@
             <span>发放直播间红包</span>
             <div class="coin-info">
               <img src="../../assets/img/icon/home/redpack.png" alt="" />
-              <span>{{ userCoins }} 抖币</span>
+              <span>{{ userCoins.toFixed(2) }} 抖币</span>
             </div>
           </div>
 
@@ -731,7 +731,7 @@ async function handleSendGift() {
 
     // 2. 更新本地余额显示
     if (res && typeof res.sender_balance === 'number') {
-      userCoins.value = Math.floor(res.sender_balance)
+      userCoins.value = Math.floor(Number(res.sender_balance) * 100) / 100
     }
 
     // 后端已经通过 supabaseAdmin 代发了消息，前端不需要再 insert
@@ -1132,7 +1132,7 @@ async function fetchRoomInfo() {
           .eq('id', session.user.id)
           .maybeSingle()
         if (profile) {
-          userCoins.value = Math.floor(Number(profile.balance_coins || 0))
+          userCoins.value = Math.floor(Number(profile.balance_coins || 0) * 100) / 100
         }
 
         // 检查关注状态 (不管是自建还是转播，只要有主播 ID)

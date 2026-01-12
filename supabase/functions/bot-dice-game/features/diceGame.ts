@@ -77,7 +77,7 @@ export async function handleDiceCommand(chatId: number, text: string, message: a
     const diceText =
       `🎲 <b>新开局：骰子比大小</b>\n\n` +
       `👤 房主：<b>${escapeHTML(sender.nickname)}</b>\n` +
-      `💰 赌注：<b>${amount}</b> 抖币\n` +
+      `💰 赌注：<b>${Number(amount).toFixed(2)}</b> 抖币\n` +
       `👥 目标人数：<b>${targetCount}</b> 人\n` +
       `⏳ 状态：等待加入 (1/${targetCount})\n\n` +
       `📜 <b>游戏规则：</b>\n` +
@@ -169,7 +169,7 @@ export async function handleJoinDiceGame(
       const diceText =
         `🎲 <b>骰子比大小</b>\n\n` +
         `👤 房主：<b>${escapeHTML(room.owner?.nickname || '未知')}</b>\n` +
-        `💰 赌注：<b>${room.bet_amount}</b> 抖币\n` +
+        `💰 赌注：<b>${Number(room.bet_amount).toFixed(2)}</b> 抖币\n` +
         `👥 人数：<b>${room.current_count}/${room.target_count}</b>\n` +
         `⏳ 状态：🔥 <b>满员，正在依次开奖...</b>\n\n` +
         `📜 <b>游戏规则：</b>\n` +
@@ -203,7 +203,7 @@ export async function handleJoinDiceGame(
       const diceText =
         `🎲 <b>骰子比大小</b>\n\n` +
         `👤 房主：<b>${escapeHTML(room.owner?.nickname || '未知')}</b>\n` +
-        `💰 赌注：<b>${room.bet_amount}</b> 抖币\n` +
+        `💰 赌注：<b>${Number(room.bet_amount).toFixed(2)}</b> 抖币\n` +
         `👥 人数：<b>${room.current_count}/${room.target_count}</b>\n` +
         `⏳ 状态：等待加入\n\n` +
         `📜 <b>游戏规则：</b>\n` +
@@ -402,9 +402,11 @@ async function startRolling(chatId: number, roomId: string) {
     const winners = results.filter((r) => r.value === maxVal)
 
     const totalPrize = roomInfo.bet_amount * roomInfo.target_count
-    const commission = Math.floor(totalPrize * 0.02)
+    // 🎯 抽水 2%，保留2位小数，不四舍五入
+    const commission = Math.floor(totalPrize * 0.02 * 100) / 100
     const netPrize = totalPrize - commission
-    const perWinnerPrize = Math.floor(netPrize / winners.length)
+    // 🎯 净奖金平均分配给赢家，保留2位小数，不四舍五入
+    const perWinnerPrize = Math.floor((netPrize / winners.length) * 100) / 100
 
     // 更新房间结果
     await supabase
@@ -438,7 +440,7 @@ async function startRolling(chatId: number, roomId: string) {
       `🎊 <b>本局结算完成</b> 🎊\n\n` +
       `📊 <b>比分榜：</b>\n${scoreBoard}\n\n` +
       `🏆 赢家：${winnerNames}\n` +
-      `💰 获得奖励：<b>${perWinnerPrize}</b> 抖币 (已扣除2%抽水)\n\n` +
+      `💰 获得奖励：<b>${perWinnerPrize.toFixed(2)}</b> 抖币 (已扣除2%抽水)\n\n` +
       `感谢大家的参与！`
 
     if (progressMsgId) {

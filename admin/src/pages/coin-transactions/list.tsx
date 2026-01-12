@@ -80,39 +80,41 @@ export const CoinTransactionList = () => {
             value: userQ
           })
         }
-      } else {
-        // 🎯 清除用户过滤
-        filters.push({ field: 'profiles.numeric_id', operator: 'eq', value: undefined })
-        filters.push({ field: 'profiles.nickname', operator: 'contains', value: undefined })
       }
 
-      filters.push({ field: 'type', operator: 'eq', value: params.type || undefined })
+      if (params.type) {
+        filters.push({ field: 'type', operator: 'eq', value: params.type })
+      }
 
       // 🎯 搜索备注 (description)
-      filters.push({
-        field: 'description',
-        operator: 'contains',
-        value: params.description_q ? params.description_q.trim() : undefined
-      })
+      if (params.description_q) {
+        filters.push({
+          field: 'description',
+          operator: 'contains',
+          value: params.description_q.trim()
+        })
+      }
 
       // 🎯 关联 ID 搜索
-      filters.push({
-        field: 'related_id',
-        operator: 'eq',
-        value: params.related_id ? params.related_id.trim() : undefined
-      })
+      if (params.related_id) {
+        filters.push({ field: 'related_id', operator: 'eq', value: params.related_id.trim() })
+      }
 
       // 🎯 金额范围过滤
-      filters.push({
-        field: 'amount',
-        operator: 'gte',
-        value: params.min_amount !== undefined ? params.min_amount : undefined
-      })
-      filters.push({
-        field: 'amount',
-        operator: 'lte',
-        value: params.max_amount !== undefined ? params.max_amount : undefined
-      })
+      if (
+        params.min_amount !== undefined &&
+        params.min_amount !== null &&
+        params.min_amount !== ''
+      ) {
+        filters.push({ field: 'amount', operator: 'gte', value: Number(params.min_amount) })
+      }
+      if (
+        params.max_amount !== undefined &&
+        params.max_amount !== null &&
+        params.max_amount !== ''
+      ) {
+        filters.push({ field: 'amount', operator: 'lte', value: Number(params.max_amount) })
+      }
 
       // 🎯 日期范围过滤
       if (params.date_range && params.date_range.length === 2) {
@@ -127,9 +129,6 @@ export const CoinTransactionList = () => {
           operator: 'lte',
           value: end.toISOString()
         })
-      } else {
-        filters.push({ field: 'created_at', operator: 'gte', value: undefined })
-        filters.push({ field: 'created_at', operator: 'lte', value: undefined })
       }
 
       return filters
@@ -231,7 +230,7 @@ export const CoinTransactionList = () => {
                 color: v > 0 ? '#52c41a' : '#ff4d4f'
               }}
             >
-              {v > 0 ? `+${v}` : v}
+              {v > 0 ? `+${Number(v).toFixed(2)}` : Number(v).toFixed(2)}
             </span>
           )}
         />
@@ -239,7 +238,7 @@ export const CoinTransactionList = () => {
           dataIndex="balance_after"
           title="变动后余额"
           width={120}
-          render={(v) => <span style={{ fontFamily: 'monospace' }}>{v}</span>}
+          render={(v) => <span style={{ fontFamily: 'monospace' }}>{Number(v).toFixed(2)}</span>}
         />
         <Table.Column
           dataIndex="description"

@@ -269,7 +269,7 @@ export const Dashboard = () => {
                   const totalPrize = Number(room.total_prize || 0)
                   if (totalPrize > 0) {
                     // 骰子游戏抽水2%
-                    const commission = Math.floor(totalPrize * 0.02)
+                    const commission = Math.floor(totalPrize * 0.02 * 100) / 100
                     totalCommission += commission
                   }
                 })
@@ -290,7 +290,7 @@ export const Dashboard = () => {
                   const totalPrize = Number(room.total_prize || 0)
                   if (totalPrize > 0) {
                     // 石头剪刀布游戏抽水2%
-                    const commission = Math.floor(totalPrize * 0.02)
+                    const commission = Math.floor(totalPrize * 0.02 * 100) / 100
                     totalCommission += commission
                   }
                 })
@@ -614,7 +614,7 @@ export const Dashboard = () => {
               <Statistic
                 title="平台抖币总余额"
                 value={stats?.totalCoinsBalance ?? 0}
-                precision={0}
+                precision={2}
                 valueStyle={{ color: '#1890ff' }}
                 suffix="抖币"
               />
@@ -625,7 +625,7 @@ export const Dashboard = () => {
               <Statistic
                 title="今日系统发放奖励"
                 value={stats?.todaySystemRewards ?? 0}
-                precision={0}
+                precision={2}
                 valueStyle={{ color: '#52c41a' }}
                 suffix="抖币"
               />
@@ -636,7 +636,7 @@ export const Dashboard = () => {
               <Statistic
                 title="今日手动调整"
                 value={stats?.todayManualAdjustments ?? 0}
-                precision={0}
+                precision={2}
                 valueStyle={{ color: '#722ed1' }}
                 suffix="抖币"
               />
@@ -647,7 +647,7 @@ export const Dashboard = () => {
               <Statistic
                 title="今日总抽水"
                 value={stats?.todayTotalCommission ?? 0}
-                precision={0}
+                precision={2}
                 valueStyle={{ color: '#fa8c16', fontWeight: 'bold' }}
                 suffix="抖币"
               />
@@ -661,7 +661,7 @@ export const Dashboard = () => {
               <Statistic
                 title="打赏/直播礼物抽水"
                 value={stats?.todayGiftCommission ?? 0}
-                precision={0}
+                precision={2}
                 valueStyle={{ color: '#fa541c' }}
                 suffix="抖币"
               />
@@ -672,7 +672,7 @@ export const Dashboard = () => {
               <Statistic
                 title="骰子游戏抽水"
                 value={stats?.todayDiceCommission ?? 0}
-                precision={0}
+                precision={2}
                 valueStyle={{ color: '#faad14' }}
                 suffix="抖币"
               />
@@ -683,7 +683,7 @@ export const Dashboard = () => {
               <Statistic
                 title="石头剪刀布抽水"
                 value={stats?.todayRpsCommission ?? 0}
-                precision={0}
+                precision={2}
                 valueStyle={{ color: '#d48806' }}
                 suffix="抖币"
               />
