@@ -109,10 +109,18 @@ export async function handleText(
     lowerText === 'hb' ||
     lowerText.startsWith('hb ') ||
     lowerText === '/hb' ||
-    lowerText.startsWith('/hb ')
+    lowerText.startsWith('/hb ') ||
+    lowerText.startsWith('/hb@')
   // 🎯 主机器人不再处理 tz 命令
-  const isBalanceCmd = lowerText === 'ye' || lowerText === '/ye' || lowerText === '余额'
-  const isCleanCmd = lowerText === '/clean_keyboard'
+  const isBalanceCmd =
+    lowerText === 'ye' ||
+    lowerText === '/ye' ||
+    lowerText === '余额' ||
+    lowerText.startsWith('ye ') ||
+    lowerText.startsWith('/ye ') ||
+    lowerText.startsWith('/ye@') ||
+    lowerText.startsWith('余额 ')
+  const isCleanCmd = lowerText === '/clean_keyboard' || lowerText.startsWith('/clean_keyboard@')
 
   // 🎯 严格控制：群组中仅允许指定指令，其他文本直接忽略
   // 🎯 优化：提前返回，避免不必要的 getUserState 数据库查询

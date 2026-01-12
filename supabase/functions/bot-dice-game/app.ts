@@ -121,11 +121,19 @@ export async function handleRequest(req: Request): Promise<Response> {
 
           // 🎯 猜拳指令
           const isRpsCmd =
-            text === 'cq' || text.startsWith('cq ') || text === '/cq' || text.startsWith('/cq ')
+            text === 'cq' ||
+            text.startsWith('cq ') ||
+            text === '/cq' ||
+            text.startsWith('/cq ') ||
+            text.startsWith('/cq@')
 
           // 🎯 骰子指令
           const isDiceCmd =
-            text === 'tz' || text.startsWith('tz ') || text === '/tz' || text.startsWith('/tz ')
+            text === 'tz' ||
+            text.startsWith('tz ') ||
+            text === '/tz' ||
+            text.startsWith('/tz ') ||
+            text.startsWith('/tz@')
 
           if (isRpsCmd) {
             console.log(`[RPS-BOT] 匹配到猜拳指令，准备执行...`)

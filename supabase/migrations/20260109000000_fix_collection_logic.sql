@@ -15,7 +15,10 @@ CREATE OR REPLACE FUNCTION public.append_collection_media(
     p_author_id UUID,
     p_caption TEXT DEFAULT NULL,
     p_tags TEXT[] DEFAULT NULL,
-    p_content_type TEXT DEFAULT 'album'
+    p_content_type TEXT DEFAULT 'album',
+    p_is_auto_sync BOOLEAN DEFAULT FALSE,
+    p_is_adult BOOLEAN DEFAULT FALSE,
+    p_is_sea BOOLEAN DEFAULT FALSE
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -56,7 +59,10 @@ BEGIN
             content_type,
             status,
             storage_type,
-            review_status
+            review_status,
+            is_auto_sync,
+            is_adult,
+            is_sea
         ) VALUES (
             p_chat_id,
             p_author_id,
@@ -69,11 +75,14 @@ BEGIN
             p_content_type,
             'processing',
             'r2_pending',
-            CASE WHEN v_profile_auto_approve THEN 'auto_approved' ELSE 'pending' END
+            CASE WHEN v_profile_auto_approve THEN 'auto_approved' ELSE 'pending' END,
+            p_is_auto_sync,
+            p_is_adult,
+            p_is_sea
         )
         RETURNING id INTO v_video_id;
     ELSE
-        -- 3. 如果已存在，追加媒体项
+        -- 3. 如果已存在，追加媒体项，并更新相关标志（如果传入的是 true）
         v_media_list := COALESCE(v_media_list, '[]'::jsonb) || jsonb_build_array(p_new_item);
         
         -- 核心修复：智能决定 content_type
@@ -89,6 +98,9 @@ BEGIN
         SET media_list = v_media_list,
             images = v_media_list,
             content_type = v_current_content_type,
+            is_auto_sync = CASE WHEN p_is_auto_sync = TRUE THEN TRUE ELSE is_auto_sync END,
+            is_adult = CASE WHEN p_is_adult = TRUE THEN TRUE ELSE is_adult END,
+            is_sea = CASE WHEN p_is_sea = TRUE THEN TRUE ELSE is_sea END,
             updated_at = NOW()
         WHERE id = v_video_id;
     END IF;

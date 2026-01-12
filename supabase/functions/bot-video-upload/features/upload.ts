@@ -292,7 +292,9 @@ export async function handlePhoto(
         p_caption: description,
         p_tags: tags.length > 0 ? tags : null,
         p_content_type: 'album', // 🎯 多图上传，初始类型设为相册 (album)
-        p_is_auto_sync: extraData?.is_auto_sync || false // 🎯 传递 is_auto_sync 参数
+        p_is_auto_sync: extraData?.is_auto_sync || false, // 🎯 传递 is_auto_sync 参数
+        p_is_adult: extraData?.is_adult || false, // 🎯 传递成人标签
+        p_is_sea: extraData?.is_sea || false // 🎯 传递东南亚标签
       })
 
       if (rpcError || result?.error) {
@@ -575,7 +577,9 @@ export async function handleVideo(
         p_caption: description,
         p_tags: tags.length > 0 ? tags : null,
         p_content_type: 'collection',
-        p_is_auto_sync: extraData?.is_auto_sync || false // 🎯 传递 is_auto_sync 参数
+        p_is_auto_sync: extraData?.is_auto_sync || false, // 🎯 传递 is_auto_sync 参数
+        p_is_adult: extraData?.is_adult || false, // 🎯 传递成人标签
+        p_is_sea: extraData?.is_sea || false // 🎯 传递东南亚标签
       })
 
       if (rpcError || result?.error) {
