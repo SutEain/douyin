@@ -215,19 +215,11 @@ export const Dashboard = () => {
           // 使用 RPC 函数绕过 RLS 限制，直接使用 SQL SUM 聚合
           supabaseClient.rpc('get_total_coins_balance'),
           // 🎯 今日系统发放的抖币奖励：从交易记录统计（北京时间）
-          // 包括：reward, task_reward, watch_time_reward, author_views_reward
-          supabaseClient
-            .from('coin_transactions')
-            .select('amount')
-            .gte('created_at', startISO)
-            .lt('created_at', endISO)
-            .in('type', ['reward', 'task_reward', 'watch_time_reward', 'author_views_reward'])
-            .gt('amount', 0)
-            .then((res) => {
-              if (res.error) throw res.error
-              const total = res.data?.reduce((sum, t) => sum + Number(t.amount || 0), 0) || 0
-              return { data: total, error: null }
-            }),
+          // 使用 RPC 函数绕过 RLS 限制，直接使用 SQL SUM 聚合
+          supabaseClient.rpc('get_today_system_rewards', {
+            p_start_iso: startISO,
+            p_end_iso: endISO
+          }),
           // 🎯 今日手动调整的抖币：从交易记录统计（北京时间）
           // 使用 RPC 函数绕过 RLS 限制，直接使用 SQL SUM 聚合
           supabaseClient.rpc('get_today_manual_adjustments', {
@@ -238,26 +230,15 @@ export const Dashboard = () => {
           // 分别统计各个来源的抽水
           Promise.all([
             // 打赏/直播礼物抽水：gift_out总额 - gift_in总额（差额就是平台抽水）
+            // 使用 RPC 函数绕过 RLS 限制，直接使用 SQL SUM 聚合
             supabaseClient
-              .from('coin_transactions')
-              .select('amount, type')
-              .gte('created_at', startISO)
-              .lt('created_at', endISO)
-              .in('type', ['gift_out', 'gift_in'])
+              .rpc('get_today_gift_commission', {
+                p_start_iso: startISO,
+                p_end_iso: endISO
+              })
               .then((res) => {
                 if (res.error) throw res.error
-                let giftOutTotal = 0 // 用户打赏支出的总额
-                let giftInTotal = 0 // 用户收到打赏的总额
-                res.data?.forEach((t) => {
-                  const amount = Number(t.amount || 0)
-                  if (t.type === 'gift_out') {
-                    giftOutTotal += Math.abs(amount) // gift_out是负数，取绝对值
-                  } else if (t.type === 'gift_in') {
-                    giftInTotal += amount // gift_in是正数
-                  }
-                })
-                // 抽水 = 打赏总额 - 用户收到的（差额就是平台抽水）
-                return giftOutTotal - giftInTotal
+                return Number(res.data) || 0
               }),
             // 骰子游戏抽水：total_prize * 2%
             supabaseClient
