@@ -7,8 +7,8 @@ if (import.meta.env.PROD && !window.location.search.includes('debug=1')) {
     'log',
     'info',
     'debug',
-    'warn',
-    'error',
+    // 'warn',  // 🎯 暂时保留 warn 和 error 以便排查黑屏原因
+    // 'error',
     'trace',
     'table',
     'group',
@@ -146,34 +146,6 @@ if (typeof window !== 'undefined') {
 window.isMoved = false
 window.isMuted = true
 window.showMutedNotice = true
-
-// ✅ 优化：包装 Proxy 操作，避免在某些 WebView 中导致崩溃
-try {
-  HTMLElement.prototype.addEventListener = new Proxy(HTMLElement.prototype.addEventListener, {
-    apply(target, ctx, args) {
-      const eventName = args[0]
-      const listener = args[1]
-      if (listener instanceof Function && eventName === 'click') {
-        args[1] = new Proxy(listener, {
-          apply(target1, ctx1, args1) {
-            // console.log('e', args1)
-            // console.log('click点击', window.isMoved)
-            if (window.isMoved) return
-            try {
-              return target1.apply(ctx1, args1)
-            } catch (e) {
-              console.error(`[proxyPlayerEvent][${eventName}]`, listener, e)
-            }
-          }
-        })
-      }
-      return target.apply(ctx, args)
-    }
-  })
-} catch (e) {
-  console.warn('[Main] Proxy addEventListener 失败，使用原生方法:', e)
-  // 如果 Proxy 失败，继续使用原生方法，不影响应用运行
-}
 
 const vClick = useClick()
 const pinia = createPinia()

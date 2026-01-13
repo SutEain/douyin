@@ -48,16 +48,23 @@
               'count',
               'assert'
             ]
-            // 保存原始 console 引用，备用
-            window.__rawConsole__ = {}
-            for (const key in window.console) {
-              window.__rawConsole__[key] = window.console[key]
-            }
-            // 覆盖方法
-            methods.forEach(function (m) {
-              if (typeof window.console[m] === 'function') {
-                window.console[m] = noop
+            // 🎯 安全保存原始 console
+            try {
+              window.__rawConsole__ = {
+                log: window.console.log,
+                info: window.console.info,
+                warn: window.console.warn,
+                error: window.console.error
               }
+            } catch (e) {}
+
+            // 🎯 仅覆盖已知方法，不使用 for...in 遍历原生对象
+            methods.forEach(function (m) {
+              try {
+                if (typeof window.console[m] === 'function') {
+                  window.console[m] = noop
+                }
+              } catch (e) {}
             })
           }
         } catch (e) {
