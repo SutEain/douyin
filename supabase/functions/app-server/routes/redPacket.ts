@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../lib/env.ts'
 import { successResponse, errorResponse } from '../../_shared/response.ts'
-import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
+import { requireAuth, tryGetAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
 
 /**
  * 主播发送红包
@@ -126,6 +126,7 @@ export async function handleGetActiveRedPackets(req: Request): Promise<Response>
     throw new HttpError('缺少 room_id', 400)
   }
 
+  // 1. 获取基本红包列表
   const { data: packets, error } = await supabaseAdmin
     .from('live_red_packets')
     .select('*')
@@ -136,6 +137,27 @@ export async function handleGetActiveRedPackets(req: Request): Promise<Response>
 
   if (error) {
     throw new HttpError('查询红包失败', 500)
+  }
+
+  if (!packets || packets.length === 0) {
+    return successResponse({ list: [] })
+  }
+
+  // 2. 如果用户已登录，过滤掉已领取的红包
+  const { user } = await tryGetAuth(req)
+  if (user) {
+    const packetIds = packets.map((p) => p.id)
+    const { data: claims } = await supabaseAdmin
+      .from('live_red_packet_claims')
+      .select('packet_id')
+      .eq('user_id', user.id)
+      .in('packet_id', packetIds)
+
+    if (claims && claims.length > 0) {
+      const claimedIds = new Set(claims.map((c) => c.packet_id))
+      const filteredPackets = packets.filter((p) => !claimedIds.has(p.id))
+      return successResponse({ list: filteredPackets })
+    }
   }
 
   return successResponse({ list: packets || [] })

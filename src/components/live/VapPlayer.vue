@@ -60,8 +60,6 @@ const fs = `
     vec2 rgbCoord = vec2(v_texCoord.x * u_hRatio, v_texCoord.y);
     
     // 2. 映射遮罩区域坐标 (右侧 hRatio ~ 1.0)
-    // 水平：把 [0, 1] 映射到 [hRatio, 1]
-    // 垂直：把 [0, 1] 映射到 [vOffset, vOffset + vRatio]
     vec2 alphaCoord = vec2(
       u_hRatio + v_texCoord.x * (1.0 - u_hRatio), 
       u_vOffset + v_texCoord.y * u_vRatio
@@ -70,15 +68,19 @@ const fs = `
     vec4 color = texture2D(u_image, rgbCoord);
     vec4 mask = texture2D(u_image, alphaCoord);
     
-    // 使用遮罩的 R 通道作为 Alpha
-    gl_FragColor = vec4(color.rgb, mask.r);
+    // 🎯 优化：增加 Alpha 阈值过滤，并进行平滑处理，消除边缘白边/黑边
+    float alpha = mask.r;
+    if (alpha < 0.02) discard; // 彻底舍弃极低透明度的像素（压缩噪点）
+    
+    gl_FragColor = vec4(color.rgb, alpha);
   }
 `
 
 const initGL = () => {
   const canvas = canvasRef.value!
-  canvas.width = canvas.clientWidth * window.devicePixelRatio || 720
-  canvas.height = canvas.clientHeight * window.devicePixelRatio || 1280
+  // 🎯 优化：使用固定 9:16 高清比例，配合 CSS 的 object-fit: cover 实现真正全屏且不拉伸
+  canvas.width = 720
+  canvas.height = 1280
 
   gl = canvas.getContext('webgl', {
     alpha: true,
@@ -275,6 +277,6 @@ onUnmounted(() => {
 canvas {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover; /* 🎯 关键：使用 cover 确保特效填满全屏，消除边缘黑边 */
 }
 </style>

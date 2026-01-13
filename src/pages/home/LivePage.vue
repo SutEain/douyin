@@ -1328,82 +1328,29 @@ function setupSubscription() {
       async (payload) => {
         const isGift = payload.new.msg_type === 'gift'
         const giftPayload = payload.new.payload || {}
-
-        // 无论是否是礼物，都先拉取用户信息（增加缓存防止卡顿）
-        let profile = profileCache.get(payload.new.user_id)
-        if (!profile) {
-          const { data } = await supabase
-            .from('profiles')
-            .select('nickname, avatar_url')
-            .eq('id', payload.new.user_id)
-            .single()
-          if (data) {
-            profile = {
-              nickname: data.nickname || '路人',
-              avatar_url: data.avatar_url || ''
-            }
-            profileCache.set(payload.new.user_id, profile)
-          }
-        }
-
-        const nickname = profile?.nickname || '路人'
-        const avatar = profile?.avatar_url || ''
-
-        if (isGift) {
-          // 根据单次送礼的总价值计算停留时间
-          const giftId = Number(giftPayload.gift_id)
-          const gift = giftList.value.find((g) => g.id === giftId)
-          const unitPrice = gift ? gift.cost : 0
-          const totalValue = unitPrice * (giftPayload.amount || 1)
-
-          let animDuration = 3 // 基础 3 秒
-          if (totalValue >= 50) animDuration = 4
-          if (totalValue >= 100) animDuration = 6
-          if (totalValue >= 500) animDuration = 8
-          if (totalValue >= 1000) animDuration = 12
-          if (totalValue >= 3000) animDuration = 18 // 高价值大礼物停留更久
-
-          // 1. 触发基础横幅动画
-          triggerGiftAnim(
-            nickname,
-            avatar,
-            giftPayload.gift_name || payload.new.content,
-            giftPayload.gift_icon || '',
-            giftPayload.combo || giftPayload.amount || 1,
-            animDuration
-          )
-
-          // 2. 触发大礼物全屏特效
-          // 如果礼物自带 effect_url (数据库配置的 MP4)，则直接播放 MP4 特效
-          // 否则根据价值触发基础的全屏图标动画
-          if (giftPayload.effect_url || totalValue >= 100) {
-            const giftIcon = giftPayload.gift_icon || ''
-            const isSvg = giftIcon.toLowerCase().endsWith('.svg')
-
-            triggerLargeGiftEffect(
-              giftPayload.gift_name,
-              giftIcon,
-              nickname,
-              animDuration,
-              isSvg ? giftIcon : undefined,
-              giftPayload.effect_url ? getResourceUrl(giftPayload.effect_url) : undefined
-            )
-          }
-        }
-
-        // 普通消息或新礼物消息添加
-        const newMessage = {
-          id: payload.new.id,
-          content: payload.new.content,
-          user_id: payload.new.user_id,
-          user_nickname: nickname,
-          type: payload.new.msg_type || 'chat',
-          combo: giftPayload.combo || 1
-        }
-
+        // ...
         messages.value.push(newMessage)
         if (messages.value.length > 100) messages.value.shift()
         scrollToBottom()
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'live_broadcast_rooms',
+        filter: `id=eq.${currentRoomId}`
+      },
+      (payload) => {
+        console.log('[LivePage] Room info updated:', payload.new)
+        // 🎯 更新本地 roomInfo 中的自定义人数和状态等
+        roomInfo.value = {
+          ...roomInfo.value,
+          ...payload.new
+        }
+        // 🎯 重新计算并显示人数
+        viewerCount.value = getDisplayViewerCount(roomInfo.value)
       }
     )
     .on('presence', { event: 'sync' }, () => {

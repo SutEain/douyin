@@ -230,7 +230,9 @@ export async function claimRedPacket(packetId: string) {
 
 export async function getActiveRedPackets(roomId: string) {
   return callAppServer(`/live/red-packet/active?room_id=${roomId}`, {
-    method: 'GET'
+    method: 'GET',
+    requireAuth: false,
+    includeAuthIfAvailable: true
   })
 }
 
