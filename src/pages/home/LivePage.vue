@@ -1417,10 +1417,16 @@ function setupSubscription() {
       (payload) => {
         console.log('[LivePage] Room info updated:', payload.new)
         // 🎯 更新本地 roomInfo 中的自定义人数和状态等
-        roomInfo.value = {
+        const newInfo = {
           ...roomInfo.value,
           ...payload.new
         }
+        // 如果推送了新的流地址，重新构建播放地址
+        if (payload.new.stream_url) {
+          newInfo.stream_url = buildPlayUrl(payload.new.stream_url)
+        }
+        roomInfo.value = newInfo
+
         // 🎯 重新计算并显示人数
         viewerCount.value = getDisplayViewerCount(roomInfo.value)
       }

@@ -68,9 +68,11 @@ const fs = `
     vec4 color = texture2D(u_image, rgbCoord);
     vec4 mask = texture2D(u_image, alphaCoord);
     
-    // 🎯 优化：增加 Alpha 阈值过滤，并进行平滑处理，消除边缘白边/黑边
+    // 🎯 优化：增加 Alpha 阈值过滤，消除边缘白边/黑边
     float alpha = mask.r;
-    if (alpha < 0.02) discard; // 彻底舍弃极低透明度的像素（压缩噪点）
+    if (alpha < 0.05) {
+      alpha = 0.0;
+    }
     
     gl_FragColor = vec4(color.rgb, alpha);
   }
