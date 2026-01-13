@@ -84,12 +84,17 @@ const initGL = () => {
   canvas.width = 720
   canvas.height = 1280
 
-  gl = canvas.getContext('webgl', {
-    alpha: true,
-    premultipliedAlpha: false,
-    antialias: true
-  })
-  if (!gl) return
+  gl =
+    canvas.getContext('webgl', {
+      alpha: true,
+      premultipliedAlpha: false,
+      antialias: true
+    }) || (canvas.getContext('experimental-webgl') as WebGLRenderingContext)
+
+  if (!gl) {
+    console.error('[VapPlayer] WebGL not supported')
+    return
+  }
 
   // 🎯 关键修复：开启 Y 轴翻转，使 WebGL 坐标系 (0 在底部) 与视频纹理坐标系同步
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
@@ -260,6 +265,16 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (rafId) cancelAnimationFrame(rafId)
+  // 🎯 优化：移动端主动释放 WebGL 上下文和纹理，防止内存泄漏导致 App 崩溃
+  if (gl) {
+    if (texture) gl.deleteTexture(texture)
+    if (program) gl.deleteProgram(program)
+    const ext = gl.getExtension('WEBGL_lose_context')
+    if (ext) ext.loseContext()
+  }
+  gl = null
+  program = null
+  texture = null
 })
 </script>
 
