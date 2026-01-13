@@ -1,8 +1,22 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Button, Image, InputNumber, message, Tag, Form, Input, Select } from 'antd'
+import {
+  Table,
+  Space,
+  Button,
+  Image,
+  InputNumber,
+  message,
+  Tag,
+  Form,
+  Input,
+  Select,
+  Tooltip
+} from 'antd'
 import { useInvalidate, useUpdate } from '@refinedev/core'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import dayjs from 'dayjs'
+import { supabaseClient } from '../../supabaseClient'
+import { InfoCircleOutlined } from '@ant-design/icons'
 
 type OfficialLiveRoomRow = {
   id: string
@@ -28,19 +42,20 @@ export const OfficialLiveRoomList = () => {
   // 🎯 本地状态管理输入值，避免每次输入都触发更新
   const [localViewerCounts, setLocalViewerCounts] = useState<Record<string, number | null>>({})
 
+  // 🎯 实时人数状态管理
+  const [realPresenceCounts, setRealPresenceCounts] = useState<Record<string, number>>({})
+  const channelsRef = useRef<Record<string, any>>({})
+
   const { tableProps, searchFormProps } = useTable<OfficialLiveRoomRow>({
     resource: 'live_broadcast_rooms',
-    syncWithLocation: false, // 🎯 禁用 URL 同步，避免排序参数冲突
+    syncWithLocation: false,
     meta: {
       select: '*, anchor:profiles!live_broadcast_rooms_anchor_id_fkey(id, nickname, avatar_url)',
-      // 🎯 明确指定排序，使用 PostgREST 的 order 参数格式，避免使用不存在的字段
-      // 注意：order 参数会覆盖 sorters 配置
       order: 'status.desc.nullslast,created_at.desc.nullslast'
     },
-    // 🎯 不设置 sorters，完全依赖 meta.order 来避免字段冲突
     sorters: {
       initial: [],
-      mode: 'off' // 🎯 完全禁用 sorters，只使用 meta.order
+      mode: 'off'
     },
     pagination: {
       pageSize: 50
@@ -60,6 +75,63 @@ export const OfficialLiveRoomList = () => {
     }
   })
 
+  // 🎯 实时订阅逻辑：监听直播中的房间人数
+  useEffect(() => {
+    const liveRooms = tableProps.dataSource?.filter((r) => r.status === 'live') || []
+    const liveRoomIds = new Set(liveRooms.map((r) => r.id))
+
+    // 1. 清理不再直播或不在当前页面的房间订阅
+    Object.keys(channelsRef.current).forEach((id) => {
+      if (!liveRoomIds.has(id)) {
+        console.log(`[Admin] Unsubscribing from room: ${id}`)
+        supabaseClient.removeChannel(channelsRef.current[id])
+        delete channelsRef.current[id]
+        setRealPresenceCounts((prev) => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+      }
+    })
+
+    // 2. 为新出现的直播间建立订阅
+    liveRooms.forEach((room) => {
+      if (!channelsRef.current[room.id]) {
+        console.log(`[Admin] Subscribing to presence for room: ${room.id}`)
+        const channel = supabaseClient.channel(`live_room_${room.id}`)
+
+        channel
+          .on('presence', { event: 'sync' }, () => {
+            const state = channel.presenceState()
+            const count = Object.keys(state).length
+            setRealPresenceCounts((prev) => ({
+              ...prev,
+              [room.id]: count
+            }))
+          })
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              console.log(`[Admin] Subscribed to presence for room: ${room.id}`)
+            }
+          })
+
+        channelsRef.current[room.id] = channel
+      }
+    })
+
+    return () => {
+      // 组件卸载时不需要清理所有，因为依赖项会处理，但为了保险起见也可以全清
+    }
+  }, [tableProps.dataSource])
+
+  // 组件完全卸载时清理所有订阅
+  useEffect(() => {
+    return () => {
+      Object.values(channelsRef.current).forEach((ch) => supabaseClient.removeChannel(ch))
+      channelsRef.current = {}
+    }
+  }, [])
+
   function updateCustomViewerCount(record: OfficialLiveRoomRow, value: number | null) {
     if (updatingViewerCount === record.id) return
 
@@ -75,7 +147,6 @@ export const OfficialLiveRoomList = () => {
           message.success('自定义人数已更新')
           invalidate({ resource: 'live_broadcast_rooms', invalidates: ['list'] })
           setUpdatingViewerCount(null)
-          // 🎯 清除本地状态，使用服务器返回的值
           setLocalViewerCounts((prev) => {
             const next = { ...prev }
             delete next[record.id]
@@ -86,7 +157,6 @@ export const OfficialLiveRoomList = () => {
           console.error('[OfficialLiveRoomList] updateCustomViewerCount failed:', e)
           message.error(e?.message || '更新失败')
           setUpdatingViewerCount(null)
-          // 🎯 更新失败时，恢复本地状态为原始值
           setLocalViewerCounts((prev) => {
             const next = { ...prev }
             next[record.id] = record.custom_viewer_count ?? null
@@ -97,9 +167,14 @@ export const OfficialLiveRoomList = () => {
     )
   }
 
-  // 显示的人数（优先使用自定义人数，否则使用真实人数）
+  // 显示的人数：真实人数 + 自定义偏移量
   function getDisplayViewerCount(record: OfficialLiveRoomRow): number {
-    return record.custom_viewer_count ?? record.viewer_count ?? 0
+    const realTimeCount = realPresenceCounts[record.id]
+    const dbRealCount = record.viewer_count ?? 0
+    // 如果有实时订阅的人数，优先使用实时人数作为“真实人数”参考
+    const finalRealCount = realTimeCount !== undefined ? realTimeCount : dbRealCount
+
+    return finalRealCount + (record.custom_viewer_count ?? 0)
   }
 
   return (
@@ -189,16 +264,45 @@ export const OfficialLiveRoomList = () => {
             return <Tag>待开始</Tag>
           }}
         />
-        <Table.Column title="真实人数" dataIndex="viewer_count" render={(v: any) => v ?? 0} />
         <Table.Column
-          title="自定义人数"
+          title={
+            <Space>
+              真实人数
+              <Tooltip title="基于实时 Presence 统计的在线人数">
+                <InfoCircleOutlined style={{ color: '#1890ff' }} />
+              </Tooltip>
+            </Space>
+          }
+          dataIndex="viewer_count"
+          render={(v: any, record: OfficialLiveRoomRow) => {
+            const realTimeCount = realPresenceCounts[record.id]
+            if (record.status === 'live' && realTimeCount !== undefined) {
+              return (
+                <Space>
+                  <span style={{ fontWeight: 'bold', color: '#52c41a' }}>{realTimeCount}</span>
+                  <Tag color="success" style={{ fontSize: '10px', lineHeight: '16px' }}>
+                    实时
+                  </Tag>
+                </Space>
+              )
+            }
+            return v ?? 0
+          }}
+        />
+        <Table.Column
+          title={
+            <Space>
+              人数偏移量
+              <Tooltip title="在真实人数的基础上增加的显示人数（例如设置为 100，真实 10 人，则显示 110 人）">
+                <InfoCircleOutlined style={{ color: '#1890ff' }} />
+              </Tooltip>
+            </Space>
+          }
           dataIndex="custom_viewer_count"
           render={(v: any, record: OfficialLiveRoomRow) => {
             // 🎯 优先使用本地状态，如果没有则使用服务器值
             const displayValue =
-              localViewerCounts[record.id] !== undefined
-                ? localViewerCounts[record.id]
-                : (v ?? null)
+              localViewerCounts[record.id] !== undefined ? localViewerCounts[record.id] : (v ?? 0)
 
             return (
               <InputNumber
@@ -206,11 +310,11 @@ export const OfficialLiveRoomList = () => {
                 size="small"
                 style={{ width: 120 }}
                 min={0}
-                placeholder="使用真实人数"
+                placeholder="额外增加人数"
                 disabled={updatingViewerCount === record.id}
                 onChange={(val) => {
                   // 🎯 只更新本地状态，不触发API请求
-                  const numVal = typeof val === 'number' ? val : null
+                  const numVal = typeof val === 'number' ? val : 0
                   setLocalViewerCounts((prev) => ({
                     ...prev,
                     [record.id]: numVal
@@ -221,9 +325,9 @@ export const OfficialLiveRoomList = () => {
                   const currentValue =
                     localViewerCounts[record.id] !== undefined
                       ? localViewerCounts[record.id]
-                      : (v ?? null)
+                      : (v ?? 0)
                   // 🎯 如果值没有变化，不触发更新
-                  if (currentValue === (v ?? null)) {
+                  if (currentValue === (v ?? 0)) {
                     // 清除本地状态
                     setLocalViewerCounts((prev) => {
                       const next = { ...prev }
@@ -243,16 +347,23 @@ export const OfficialLiveRoomList = () => {
           }}
         />
         <Table.Column
-          title="显示人数"
+          title="前端显示人数"
           render={(_, record: OfficialLiveRoomRow) => {
             const displayCount = getDisplayViewerCount(record)
-            const isCustom = record.custom_viewer_count !== null
+            const hasOffset = (record.custom_viewer_count ?? 0) > 0
+            const isRealTime = realPresenceCounts[record.id] !== undefined
+
             return (
               <span>
-                {displayCount}
-                {isCustom && (
+                <span style={{ fontWeight: 'bold' }}>{displayCount}</span>
+                {hasOffset && (
                   <Tag color="blue" style={{ marginLeft: 8 }}>
-                    自定义
+                    +{record.custom_viewer_count} 偏移
+                  </Tag>
+                )}
+                {isRealTime && (
+                  <Tag color="success" style={{ marginLeft: 8 }}>
+                    实时
                   </Tag>
                 )}
               </span>

@@ -29,16 +29,18 @@ export async function handleLiveRoomDetail(req: Request): Promise<Response> {
 
     if (selfRoom) {
       console.log('[live_detail] Found in self-hosted:', selfRoom.id)
-      // 🎯 优先使用自定义人数，如果没有则使用真实人数
-      const displayViewerCount = selfRoom.custom_viewer_count ?? selfRoom.viewer_count ?? 0
+      // 🎯 逻辑：真实人数 + 自定义偏移量
+      const realCount = selfRoom.viewer_count ?? 0
+      const customOffset = selfRoom.custom_viewer_count ?? 0
+      const displayViewerCount = realCount + customOffset
       return successResponse({
         room: {
           id: selfRoom.id,
           title: selfRoom.title,
           status: selfRoom.status,
           viewer_count: displayViewerCount,
-          real_viewer_count: selfRoom.viewer_count ?? 0, // 保留真实人数供后台查看
-          custom_viewer_count: selfRoom.custom_viewer_count ?? null, // 🎯 返回自定义人数，前端需要知道是否有自定义
+          real_viewer_count: realCount, // 保留真实人数供后台查看
+          custom_viewer_count: selfRoom.custom_viewer_count ?? null, // 🎯 返回自定义偏移量，前端需要知道是否有自定义
           stream_url: `https://${selfRoom.node?.domain_name}/LiveApp/streams/${selfRoom.stream_key}.m3u8`,
           cover_url: selfRoom.anchor?.avatar_url,
           is_self_hosted: true,
@@ -169,8 +171,10 @@ export async function handleLiveRooms(_req: Request): Promise<Response> {
 
     // 3. 转换自建直播间格式以匹配前端需求
     const formattedSelfHosted = (selfHostedRooms || []).map((r: any) => {
-      // 🎯 优先使用自定义人数，如果没有则使用真实人数
-      const displayViewerCount = r.custom_viewer_count ?? r.viewer_count ?? 0
+      // 🎯 逻辑：真实人数 + 自定义偏移量
+      const realCount = r.viewer_count ?? 0
+      const customOffset = r.custom_viewer_count ?? 0
+      const displayViewerCount = realCount + customOffset
       return {
         id: r.id,
         title: r.title,
