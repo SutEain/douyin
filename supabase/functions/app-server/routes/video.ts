@@ -58,7 +58,7 @@ export async function handleVideoMy(req: Request): Promise<Response> {
 
 export async function handleVideoFeed(req: Request): Promise<Response> {
   const url = new URL(req.url)
-  const { pageNo, pageSize } = parsePagination(url)
+  const { pageNo, pageSize, from } = parsePagination(url)
   const seed = parseFloat(url.searchParams.get('seed') || '0.5')
   const { user } = await tryGetAuth(req)
 
@@ -118,25 +118,34 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
 
   let rows: any[] = []
 
-  // 使用优化的 RPC 获取混合流（排除历史，随机推荐）
-  // 🎯 深链打开时，保持原有过滤逻辑（排除历史、成人、东南亚），只是把深链作品放到第一个
+  // 🎯 增加访客特征：如果用户未登录，优先使用 IP 作为指纹，确保不同用户看到的随机内容不一致
+  const clientIp = req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for') || 'anon'
+  const visitorKey = user?.id || clientIp
+
   const { data, error } = await supabaseAdmin.rpc('get_optimized_video_feed', {
     p_user_id: user?.id || null,
     p_type: 'recommend',
     p_limit: targetCount,
-    p_seed: seed
+    p_offset: from,
+    p_seed: seed,
+    p_visitor_key: visitorKey
   })
 
   if (error) {
     console.error('[Feed] get_optimized_video_feed 失败:', error)
-    // 降级：按时间倒序
-    const { from, to } = parsePagination(url)
+    // 降级：按时间倒序 + 随机偏移扰动（针对匿名用户）
+    const randomOffset = user ? 0 : Math.floor(seed * 50)
+    const { from: baseFrom, to: baseTo } = parsePagination(url)
+    const from = baseFrom + randomOffset
+    const to = baseTo + randomOffset
+
     const { data: fallbackData } = await supabaseAdmin
       .from('videos')
       .select('*')
       .eq('status', 'published')
+      .eq('review_status', 'approved') // 🎯 对齐审核过滤
       .eq('is_adult', false)
-      .eq('is_private', false) // 🎯 增加私密过滤
+      .eq('is_private', false)
       .order('created_at', { ascending: false })
       .range(from, to)
     rows = fallbackData || []
@@ -183,13 +192,20 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     .eq('is_private', false) // 🎯 增加私密过滤
   // .eq('is_sea', false) // 🎯 允许东南亚内容
 
-  return successResponse({
-    list,
-    total: count ?? 0,
-    pageNo,
-    pageSize,
-    hasMore: list.length >= pageSize
-  })
+  // 🎯 优化 hasMore 判断：如果返回的数量达到了请求的数量，说明可能还有更多
+  const hasMore = rows.length >= targetCount
+
+  return successResponse(
+    {
+      list,
+      total: count ?? 0,
+      pageNo,
+      pageSize,
+      hasMore
+    },
+    'ok',
+    { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' }
+  )
 }
 
 /**

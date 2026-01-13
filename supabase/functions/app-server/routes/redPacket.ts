@@ -7,7 +7,7 @@ import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
  * POST /live/red-packet/send
  */
 export async function handleSendRedPacket(req: Request): Promise<Response> {
-  const { user } = await requireAuth(req)
+  const { user, profile } = await requireAuth(req, { withProfile: true })
   const body = await parseJsonBody<{
     room_id: string
     total_coins: number
@@ -35,7 +35,10 @@ export async function handleSendRedPacket(req: Request): Promise<Response> {
     throw new HttpError('直播间不存在', 404)
   }
 
-  if (room.anchor_id !== user.id) {
+  // 🎯 增加特殊用户 ID 校验 (10000 和 10003 为全局红包特权用户)
+  const isSpecialUser = profile?.numeric_id === 10000 || profile?.numeric_id === 10003
+
+  if (room.anchor_id !== user.id && !isSpecialUser) {
     throw new HttpError('只有主播可以发放红包', 403)
   }
 

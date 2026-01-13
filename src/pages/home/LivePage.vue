@@ -101,7 +101,11 @@
               <Icon icon="solar:share-bold" />
             </div>
             <div
-              v-if="roomInfo.is_self_hosted && roomInfo.anchor_id === baseStore.userinfo.uid"
+              v-if="
+                roomInfo.is_self_hosted &&
+                (roomInfo.anchor_id === baseStore.userinfo.uid ||
+                  [10000, 10003].includes(baseStore.userinfo.numeric_id))
+              "
               class="option-item redpacket"
               @click="showSendPacket = true"
             >

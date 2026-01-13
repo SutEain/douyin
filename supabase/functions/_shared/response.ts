@@ -6,14 +6,18 @@ export interface ApiResponse<T = any> {
   data?: T
 }
 
-export function successResponse<T>(data: T, msg = 'ok'): Response {
+export function successResponse<T>(
+  data: T,
+  msg = 'ok',
+  headers: Record<string, string> = {}
+): Response {
   const response: ApiResponse<T> = {
     code: 0,
     msg,
     data
   }
   return new Response(JSON.stringify(response), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json', ...headers },
     status: 200
   })
 }
