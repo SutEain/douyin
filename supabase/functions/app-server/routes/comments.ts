@@ -2,7 +2,7 @@ import { successResponse, errorResponse } from '../../_shared/response.ts'
 import { supabaseAdmin } from '../lib/env.ts'
 import { checkAndSendNotification } from '../lib/notification.ts'
 import { formatCommentRow } from '../lib/video.ts'
-import { parseJsonBody, parsePagination, requireAuth } from '../lib/auth.ts'
+import { parseJsonBody, parsePagination, requireAuth, tryGetAuth } from '../lib/auth.ts'
 import { HttpError } from '../lib/auth.ts'
 
 export async function handleVideoComments(req: Request): Promise<Response> {
