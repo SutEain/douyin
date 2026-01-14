@@ -1,13 +1,19 @@
 import { createApp } from 'vue'
 
-// ✅ 彻底禁用所有控制台输出（仅生产环境生效，除非 URL 包含 debug=1）
-if (import.meta.env.PROD && !window.location.search.includes('debug=1')) {
+// ✅ 允许控制台输出（开发和排查阶段）
+if (
+  import.meta.env.PROD &&
+  !window.location.search.includes('debug=1') &&
+  !window.location.search.includes('console=1')
+) {
+  // 如果需要彻底禁用，可以取消下面的注释
+  /*
   const noop = () => {}
   const consoleMethods: (keyof Console)[] = [
     'log',
     'info',
     'debug',
-    // 'warn',  // 🎯 暂时保留 warn 和 error 以便排查黑屏原因
+    // 'warn',
     // 'error',
     'trace',
     'table',
@@ -19,18 +25,14 @@ if (import.meta.env.PROD && !window.location.search.includes('debug=1')) {
     'count',
     'assert'
   ]
-
-  // 保存原始 console 引用，备用
-  if (typeof window !== 'undefined') {
-    ;(window as any).__rawConsole__ = { ...window.console }
-  }
-
-  consoleMethods.forEach((method) => {
-    if (typeof (console as any)[method] === 'function') {
-      ;(console as any)[method] = noop
-    }
-  })
+  // ...
+  */
 }
+
+console.log('[Main] App Starting...')
+console.log('[Main] Environment:', import.meta.env.MODE)
+console.log('[Main] UserAgent:', navigator.userAgent)
+console.log('[Main] Screen:', { width: window.innerWidth, height: window.innerHeight })
 
 import App from './App.vue'
 import './assets/less/index.less'

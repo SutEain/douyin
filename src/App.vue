@@ -113,12 +113,14 @@ function resetVhAndPx() {
 
 onMounted(() => {
   console.log('[App.onMounted] ========== App 组件已挂载 ==========')
+  console.log('[App.onMounted] Window Height:', window.innerHeight)
   // 🎯 初始化应用（登录时自动创建用户，无需额外调用）
   console.log('[App.onMounted] 开始调用 store.init()')
   store.init()
   console.log('[App.onMounted] store.init() 已调用')
 
   resetVhAndPx()
+  console.log('[App.onMounted] VH Set:', document.documentElement.style.getPropertyValue('--vh'))
 
   // 监听resize事件 视图大小发生变化就重新计算1vh的值
   window.addEventListener('resize', () => {

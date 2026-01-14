@@ -225,6 +225,11 @@ function checkDeepLink() {
 // ========== 生命周期 ==========
 onMounted(() => {
   console.log('[Home] mounted')
+  console.log('[Home] State:', {
+    navIndex: state.navIndex,
+    isFullscreen: videoStore.isFullscreen,
+    footerHeight: getComputedStyle(document.documentElement).getPropertyValue('--footer-height')
+  })
 
   // 监听点击头像事件
   bus.on(EVENT_KEY.GO_USERINFO, handleGoUserInfo)
