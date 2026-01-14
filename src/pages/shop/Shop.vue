@@ -253,7 +253,9 @@ const nav = useNav()
   .Scroll {
     position: relative;
     z-index: 2;
-    height: calc(var(--vh, 1vh) * 100 - var(--footer-height) * 2) !important;
+    height: calc(
+      var(--vh, 1vh) * 100 - var(--footer-height) * 2 - env(safe-area-inset-bottom)
+    ) !important;
   }
 
   .fixed {

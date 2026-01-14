@@ -273,7 +273,7 @@ onDeactivated(() => {
 .video-content {
   position: relative;
   width: 100%;
-  height: calc(var(--vh, 1vh) * 100 - var(--footer-height));
+  height: calc(var(--vh, 1vh) * 100 - var(--footer-height) - env(safe-area-inset-bottom));
   overflow: hidden;
 
   /* 让每个 tab 的内容占满整个区域 */

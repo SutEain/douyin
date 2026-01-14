@@ -779,7 +779,7 @@ async function loadRecommendData() {
     .scroll {
       flex: 1;
       padding-top: 10rem;
-      padding-bottom: var(--footer-height);
+      padding-bottom: calc(var(--footer-height) + env(safe-area-inset-bottom));
     }
 
     .friends {

@@ -1194,7 +1194,7 @@ onBeforeUnmount(() => {
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: var(--footer-height);
+    padding-bottom: calc(var(--footer-height) + env(safe-area-inset-bottom));
 
     &::-webkit-scrollbar {
       display: none;

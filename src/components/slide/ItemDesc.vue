@@ -185,7 +185,7 @@ const publishDate = computed(() => {
 <style scoped lang="less">
 .item-desc {
   position: absolute;
-  bottom: -5rem;
+  bottom: 10rem;
   width: 76%;
 
   .content {

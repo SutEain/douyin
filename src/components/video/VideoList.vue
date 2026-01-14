@@ -2212,7 +2212,7 @@ defineExpose({
 // 新的进度条样式
 .video-progress {
   position: absolute;
-  bottom: -7px; // 🎯 向上移动一点，确保不被文字挡住，且在屏幕可见范围内
+  bottom: 0; // 🎯 贴在底部，上面有 ItemDesc 撑开空间
   left: 0;
   right: 0;
   z-index: 1000; // 🎯 绝对置顶，确保在描述文字上方
