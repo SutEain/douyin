@@ -77,17 +77,24 @@
               </div>
               <div class="comment" :key="msg.id" v-for="msg in messages" :class="msg.type">
                 <template v-if="msg.type === 'system'">
-                  <span class="system-text"
-                    >{{ _truncate(msg.user_nickname, 15) }} {{ msg.content }}</span
-                  >
+                  <span class="system-text">
+                    <span class="name" @click="goUser(msg.user_id)">{{
+                      _truncate(msg.user_nickname, 15)
+                    }}</span>
+                    {{ msg.content }}
+                  </span>
                 </template>
                 <template v-else-if="msg.type === 'gift'">
-                  <span class="name">{{ _truncate(msg.user_nickname, 15) }}</span>
+                  <span class="name" @click="goUser(msg.user_id)">{{
+                    _truncate(msg.user_nickname, 15)
+                  }}</span>
                   <span class="gift-text">送出了 {{ msg.content }}</span>
                   <span class="combo-num" v-if="msg.combo > 1">x{{ msg.combo }}</span>
                 </template>
                 <template v-else>
-                  <span class="name">{{ _truncate(msg.user_nickname, 15) }}:</span>
+                  <span class="name" @click="goUser(msg.user_id)"
+                    >{{ _truncate(msg.user_nickname, 15) }}:</span
+                  >
                   <span class="text">{{ msg.content }}</span>
                 </template>
               </div>
@@ -439,7 +446,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { supabase } from '@/utils/supabase'
 import { _checkImgUrl, _notice, _copy, _truncate } from '@/utils'
@@ -452,6 +459,7 @@ import Dom from '@/utils/dom'
 import { useBaseStore } from '@/store/pinia'
 
 const route = useRoute()
+const router = useRouter()
 const baseStore = useBaseStore()
 const roomId = computed(() => route.query.id as string)
 const page = ref<HTMLElement | null>(null)
@@ -1298,6 +1306,11 @@ async function attention() {
   }
 }
 
+function goUser(uid: string) {
+  if (!uid) return
+  router.push(`/user/${uid}`)
+}
+
 let channel: any = null
 
 const profileCache = new Map<string, { nickname: string; avatar_url: string }>()
@@ -1453,9 +1466,11 @@ function setupSubscription() {
     .on('broadcast', { event: 'user_joined' }, (payload) => {
       const nickname = payload.payload.nickname || '路人'
       const rank = payload.payload.rank || 1
+      const userId = payload.payload.user_id
       // 1. 添加到列表
       messages.value.push({
         id: Date.now(),
+        user_id: userId,
         user_nickname: nickname,
         content: '加入了直播间',
         type: 'system'
@@ -1491,7 +1506,7 @@ function setupSubscription() {
           channel.send({
             type: 'broadcast',
             event: 'user_joined',
-            payload: { nickname, rank }
+            payload: { nickname, rank, user_id: user.id }
           })
 
           // 自己也显示进场动画
@@ -2075,6 +2090,11 @@ onBeforeUnmount(() => {
           .name {
             color: #ffda00;
             margin-right: 6rem;
+            cursor: pointer;
+
+            &:active {
+              opacity: 0.7;
+            }
           }
 
           &.system {
