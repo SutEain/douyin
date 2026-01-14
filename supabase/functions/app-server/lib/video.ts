@@ -56,11 +56,12 @@ export async function mapVideoRow(row: any, profile: any) {
             parsed.map(async (item: any) => {
               const mappedItem = { ...item }
               if (item.file_id) {
-                // 🎯 优先使用已有的 play_url (R2 完整路径)，避免重新生成指向 CDN 的旧链接
-                if (item.play_url && /^https?:\/\//i.test(item.play_url)) {
-                  mappedItem.url = item.play_url
-                } else if (item.url && /^https?:\/\//i.test(item.url)) {
-                  mappedItem.url = item.url
+                // 🎯 优先使用已有的 play_url 或 url，支持相对路径和绝对路径
+                const resolvedUrl = await convertMediaReferenceToUrl(item.play_url || item.url)
+                if (resolvedUrl) {
+                  // 🎯 同时更新 url 和 play_url，确保前端不论读取哪个字段都能拿到正确地址
+                  mappedItem.url = resolvedUrl
+                  mappedItem.play_url = resolvedUrl
                 } else {
                   // 只有确实没有直链时才走代理
                   mappedItem.url = await buildTelegramFileUrl(item.file_id)
@@ -71,13 +72,14 @@ export async function mapVideoRow(row: any, profile: any) {
                   mappedItem.play_url = mappedItem.url
                 }
               }
-              // 如果是视频且有封面 file_id，也转换它
-              if (
-                item.type === 'video' &&
-                item.cover_url &&
-                !/^https?:\/\//i.test(item.cover_url)
-              ) {
-                mappedItem.cover_url = await buildTelegramFileUrl(item.cover_url)
+              // 如果有封面地址，也转换它
+              if (item.cover_url) {
+                const resolvedCover = await convertMediaReferenceToUrl(item.cover_url)
+                if (resolvedCover) {
+                  mappedItem.cover_url = resolvedCover
+                } else if (item.type === 'video') {
+                  mappedItem.cover_url = await buildTelegramFileUrl(item.cover_url)
+                }
               }
               return mappedItem
             })
@@ -296,10 +298,13 @@ export async function buildTelegramFileUrl(fileId?: string): Promise<string | nu
 
 export async function convertMediaReferenceToUrl(value?: string): Promise<string | null> {
   if (!value) return null
+  const v = String(value).trim()
   // 🎯 完整 URL：直接返回
-  if (/^https?:\/\//i.test(value)) return value
+  if (/^https?:\/\//i.test(v)) return v
   // 🎯 相对路径（R2 存储路径）：直接返回，前端会通过 buildCdnUrl 处理
-  if (value.startsWith('/')) return value
+  if (v.startsWith('/')) return v
+  // 🎯 兼容没有前导斜杠的 R2 路径
+  if (v.startsWith('videos/')) return `/${v}`
   // 🎯 Telegram file_id：不再支持，返回 null
   return null
 }

@@ -27,7 +27,7 @@
         @load-more="loadMore"
       />
     </div>
-    
+
     <!-- 底部导航 -->
     <BaseFooter :init-tab="5" />
 
@@ -40,11 +40,7 @@
     />
 
     <!-- 分享弹窗 -->
-    <Share
-      v-model="state.isSharing"
-      page-id="video-detail"
-      :item="videoStore.currentVideo"
-    />
+    <Share v-model="state.isSharing" page-id="video-detail" :item="videoStore.currentVideo" />
   </div>
 </template>
 
@@ -93,7 +89,7 @@ function loadMore() {
 
 onMounted(() => {
   console.log('[VideoDetail] mounted')
-  
+
   if (baseStore.routeData?.list && Array.isArray(baseStore.routeData.list)) {
     state.index = baseStore.routeData.index || 0
     state.list = baseStore.routeData.list
@@ -102,7 +98,7 @@ onMounted(() => {
     router.back()
     return
   }
-  
+
   videoManager.pauseAll()
 })
 
@@ -195,7 +191,8 @@ onDeactivated(() => {
   }
 
   .content {
-    height: calc(var(--vh, 1vh) * 100 - var(--footer-height));
+    // 🎯 修复：详情页容器改为全屏高度，避让逻辑交给子组件内部的 calc(var(--footer-height)...)
+    height: calc(var(--vh, 1vh) * 100);
   }
 }
 </style>

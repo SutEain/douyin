@@ -354,7 +354,8 @@ onDeactivated(() => {
 
   .video-container {
     width: 100%;
-    height: calc(var(--vh, 1vh) * 100 - var(--footer-height));
+    // 🎯 保持全屏高度。内部组件 ItemDesc 会通过 bottom: var(--footer-height) 自动对齐到 Footer 上方
+    height: 100%;
     position: relative;
     transition: transform 0.2s ease-out;
     will-change: transform;
