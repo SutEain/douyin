@@ -127,15 +127,19 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
   const clientIp = req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for') || 'anon'
   const visitorKey = user?.id || clientIp
 
-  const { data, error } = await supabaseAdmin.rpc('get_optimized_video_feed', {
-    p_user_id: user?.id || null,
+  const rpcParams = {
+    p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_type: 'recommend',
     p_limit: targetCount,
     p_offset: from,
-    p_seed: seed,
-    p_visitor_key: visitorKey,
+    p_seed: seed || 0.5,
+    p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon',
     p_exclude_ids: excludeIds.length > 0 ? excludeIds : null
-  })
+  }
+
+  console.log('[Feed] 调用 RPC get_optimized_video_feed:', JSON.stringify(rpcParams))
+
+  const { data, error } = await supabaseAdmin.rpc('get_optimized_video_feed', rpcParams)
 
   if (error) {
     console.error('[Feed] get_optimized_video_feed 失败:', error)
@@ -259,14 +263,18 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
   const clientIp = req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for') || 'anon'
   const visitorKey = user?.id || clientIp
 
-  const { data, error } = await supabaseAdmin.rpc('get_sea_feed', {
-    p_user_id: user?.id || null,
+  const rpcParams = {
+    p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_exclude_ids: finalExcludeIds.length > 0 ? finalExcludeIds : null,
     p_limit: pageSize,
     p_offset: from,
-    p_seed: seed,
-    p_visitor_key: visitorKey
-  })
+    p_seed: seed || 0.5,
+    p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon'
+  }
+
+  console.log('[LongFeed] 调用 RPC get_sea_feed:', JSON.stringify(rpcParams))
+
+  const { data, error } = await supabaseAdmin.rpc('get_sea_feed', rpcParams)
 
   if (error) {
     console.error('[LongFeed] RPC调用失败:', error)
@@ -367,15 +375,19 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
   const clientIp = req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for') || 'anon'
   const visitorKey = user?.id || clientIp
 
-  // 🎯 使用加权随机算法 (WRS) + Seed
-  const { data, error } = await supabaseAdmin.rpc('get_video_tab_feed', {
-    p_user_id: user?.id || null,
+  const rpcParams = {
+    p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_exclude_ids: finalExcludeIds.length > 0 ? finalExcludeIds : null,
     p_limit: pageSize,
     p_offset: from,
-    p_seed: seed,
-    p_visitor_key: visitorKey
-  })
+    p_seed: seed || 0.5,
+    p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon'
+  }
+
+  console.log('[VideoTabFeed] 调用 RPC get_video_tab_feed:', JSON.stringify(rpcParams))
+
+  // 🎯 使用加权随机算法 (WRS) + Seed
+  const { data, error } = await supabaseAdmin.rpc('get_video_tab_feed', rpcParams)
 
   if (error) {
     console.error('[VideoTabFeed] RPC调用失败:', error)
@@ -522,26 +534,18 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
   const clientIp = req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for') || 'anon'
   const visitorKey = user?.id || clientIp
 
-  // 🎯 使用加权随机算法 (WRS) + Seed
-  console.log('[AdultFeed] 调用 RPC，排除视频数量:', finalExcludeIds.length)
-  console.log('[AdultFeed] RPC参数:', {
-    p_user_id: user?.id || null,
-    p_exclude_ids_count: finalExcludeIds.length,
-    p_exclude_ids_sample: finalExcludeIds.slice(0, 3),
-    p_limit: pageSize,
-    p_offset: from,
-    p_seed: seed,
-    p_visitor_key: visitorKey
-  })
-
-  const { data, error } = await supabaseAdmin.rpc('get_adult_feed', {
-    p_user_id: user?.id || null,
+  const rpcParams = {
+    p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_exclude_ids: finalExcludeIds.length > 0 ? finalExcludeIds : null,
     p_limit: pageSize,
     p_offset: from,
-    p_seed: seed,
-    p_visitor_key: visitorKey
-  })
+    p_seed: seed || 0.5,
+    p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon'
+  }
+
+  console.log('[AdultFeed] 调用 RPC get_adult_feed:', JSON.stringify(rpcParams))
+
+  const { data, error } = await supabaseAdmin.rpc('get_adult_feed', rpcParams)
 
   if (error) {
     console.error('[AdultFeed] RPC调用失败:', error)
