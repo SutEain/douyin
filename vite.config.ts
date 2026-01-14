@@ -38,25 +38,15 @@ export default defineConfig((): Promise<UserConfig> => {
           sourcemap: false,
           rollupOptions: {
             output: {
-              manualChunks(id: string, { getModuleInfo }: any) {
-                // 1. 独立拆分非逻辑依赖（图标库通常体积巨大且逻辑独立，拆分最安全）
+              manualChunks(id: string) {
+                // 1. 独立拆分非逻辑依赖
                 if (id.includes('node_modules')) {
                   if (id.includes('@iconify')) return 'libs-icons'
-                  // supabase 和 axios 等核心库放回 vendor 以保证初始化顺序
                   return 'vendor'
                 }
 
-                // 2. 识别并提取真正的公共组件
-                if (id.includes('/src/components/')) {
-                  const info = getModuleInfo(id)
-                  if (info && info.importers.length > 1) {
-                    return 'common'
-                  }
-                }
-
-                // 3. 业务页面按功能模块分包
+                // 2. 业务页面按功能模块分包
                 if (id.includes('/src/pages/')) {
-                  // 排除掉首页核心 feed，将其他边缘页面放入 other
                   if (
                     !id.includes('/src/pages/home/index.vue') &&
                     !id.includes('/src/pages/home/slide/')
