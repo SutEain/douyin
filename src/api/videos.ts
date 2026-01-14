@@ -580,7 +580,9 @@ async function callAppServer(path: string, options: CallOptions = {}) {
     accessToken = await resolveAccessToken(false)
   }
 
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = {
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+  }
   if (method !== 'GET' && options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
