@@ -200,7 +200,6 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     .eq('status', 'published')
     .eq('is_adult', false)
     .eq('is_private', false) // 🎯 增加私密过滤
-  // .eq('is_sea', false) // 🎯 允许东南亚内容
 
   // 🎯 优化 hasMore 判断：如果返回的数量达到了请求的数量，说明可能还有更多
   const hasMore = rows.length >= targetCount
@@ -484,11 +483,50 @@ export async function handleShortDramaFeed(req: Request): Promise<Response> {
 /**
  * 图文 Tab：只返回 content_type in ('image','album') 且 is_sea = false 且 is_adult = false 的已发布作品，按发布时间倒序
  * GET /video/graphic-feed?pageNo=&pageSize=
- *
- * 说明：
- * - 🎯 单独接口，不与 feed 流复用
- * - 允许未登录访问；如已登录则附加 like/collect/follow 等标记
  */
+export async function handleGraphicFeed(req: Request): Promise<Response> {
+  const url = new URL(req.url)
+  const { pageNo, pageSize, from, to } = parsePagination(url)
+  const { user } = await tryGetAuth(req)
+
+  const { data, error, count } = await supabaseAdmin
+    .from('videos')
+    .select('*', { count: 'exact' })
+    .eq('status', 'published')
+    .eq('is_adult', false)
+    .eq('is_private', false)
+    .in('content_type', ['image', 'album'])
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .range(from, to)
+
+  if (error) {
+    console.error('[GraphicFeed] 查询图文失败:', error)
+    return errorResponse('Failed to load graphic feed', 1, 500)
+  }
+
+  await attachUserFlags(data ?? [], user?.id ?? null)
+
+  const profileCache = new Map<string, any>()
+  const list = []
+  for (const row of data ?? []) {
+    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+    const mapped = await mapVideoRow(row, authorProfile)
+    if (mapped) {
+      applyRowFlags(mapped, row)
+      list.push(mapped)
+    }
+  }
+
+  return successResponse({
+    list,
+    total: count ?? 0,
+    pageNo,
+    pageSize,
+    hasMore: list.length >= pageSize
+  })
+}
+
 /**
  * 成人内容流：只返回 is_adult = true 的已发布视频，按时间倒序
  * GET /video/adult-feed?pageNo=&pageSize=
@@ -622,58 +660,6 @@ export async function getAdultQuota(userId: string) {
     permanent: true,
     invite_success_count: profile?.invite_success_count ?? 0
   }
-
-  /* 原始限制逻辑已注释
-  if (permanent || (unlockUntil && unlockUntil > now)) {
-    return {
-      unlimited: true,
-      limit: dailyLimit,
-      used: 0,
-      remaining: Number.POSITIVE_INFINITY,
-      unlock_until: unlockUntil ? unlockUntil.toISOString() : null,
-      permanent,
-      invite_success_count: profile?.invite_success_count ?? 0
-    }
-  }
-
-  // 统计今天已观看的成人视频数量
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startISO = startOfDay.toISOString()
-
-  const { data: historyRows } = await supabaseAdmin
-    .from('watch_history')
-    .select('video_id')
-    .eq('user_id', userId)
-    .gte('updated_at', startISO)
-
-  const videoIds = Array.from(
-    new Set((historyRows ?? []).map((row: any) => row.video_id).filter(Boolean))
-  )
-
-  let used = 0
-  if (videoIds.length > 0) {
-    const { count } = await supabaseAdmin
-      .from('videos')
-      .select('*', { count: 'exact', head: true })
-      .in('id', videoIds)
-      .eq('is_adult', true)
-      .eq('status', 'published')
-
-    used = count ?? 0
-  }
-
-  const remaining = Math.max(0, dailyLimit - used)
-
-  return {
-    unlimited: false,
-    limit: dailyLimit,
-    used,
-    remaining,
-    unlock_until: null,
-    permanent: false,
-    invite_success_count: profile?.invite_success_count ?? 0
-  }
-  */
 }
 
 /**
@@ -813,26 +799,14 @@ export async function handleVideoAuthor(req: Request): Promise<Response> {
 
 // 🎯 根据 video_id 获取单个视频详情
 export async function handleVideoDetail(req: Request): Promise<Response> {
-  console.log('[app-server][VideoDetail] ========== 开始处理视频详情请求 ==========')
-
   const url = new URL(req.url)
   const videoId = url.searchParams.get('video_id')
 
-  console.log('[app-server][VideoDetail] 请求 URL:', req.url)
-  console.log('[app-server][VideoDetail] video_id 参数:', videoId)
-
   if (!videoId) {
-    console.error('[app-server][VideoDetail] ❌ 缺少 video_id 参数')
     throw new HttpError('Missing video_id', 400)
   }
 
-  console.log('[app-server][VideoDetail] video_id 长度:', videoId.length)
-  console.log('[app-server][VideoDetail] video_id 类型:', typeof videoId)
-
   const { user } = await tryGetAuth(req)
-  console.log('[app-server][VideoDetail] 当前用户:', user?.id || '未登录')
-
-  console.log('[app-server][VideoDetail] 📡 查询数据库...')
   const query = supabaseAdmin.from('videos').select('*').eq('id', videoId).eq('status', 'published')
 
   // 🎯 隐私保护：如果不是作者本人，只能查看公开视频
@@ -844,54 +818,19 @@ export async function handleVideoDetail(req: Request): Promise<Response> {
 
   const { data: row, error: videoError } = await query.maybeSingle()
 
-  if (videoError) {
-    console.error('[app-server][VideoDetail] ❌ 数据库查询失败:', videoError)
-    console.error('[app-server][VideoDetail] 错误详情:', JSON.stringify(videoError, null, 2))
-    return errorResponse('Failed to load video', 1, 500)
-  }
-
-  if (!row) {
-    console.error('[app-server][VideoDetail] ❌ 视频不存在')
-    console.error('[app-server][VideoDetail] 查询的 video_id:', videoId)
+  if (videoError || !row) {
     return errorResponse('Video not found', 1, 404)
   }
 
-  console.log('[app-server][VideoDetail] ✅ 找到视频')
-  console.log('[app-server][VideoDetail] 视频ID:', row.id)
-  console.log('[app-server][VideoDetail] 视频描述:', row.description)
-  console.log('[app-server][VideoDetail] 作者ID:', row.author_id)
-  console.log('[app-server][VideoDetail] 视频状态:', row.status)
-  console.log('[app-server][VideoDetail] 视频原始数据:', JSON.stringify(row, null, 2))
-
-  console.log('[app-server][VideoDetail] 📝 附加用户标记...')
   await attachUserFlags([row], user?.id ?? null)
-
-  console.log('[app-server][VideoDetail] 👤 获取作者信息...')
   const authorProfile = await getVideoAuthorProfile(row, new Map())
-  console.log(
-    '[app-server][VideoDetail] 作者信息:',
-    authorProfile ? `${authorProfile.nickname} (${authorProfile.id})` : '未找到'
-  )
-
-  console.log('[app-server][VideoDetail] 🔄 映射视频数据...')
   const mapped = await mapVideoRow(row, authorProfile)
 
   if (!mapped) {
-    console.error('[app-server][VideoDetail] ❌ 映射视频数据失败')
     return errorResponse('Failed to process video', 1, 500)
   }
 
-  console.log('[app-server][VideoDetail] ✅ 映射成功')
-  console.log('[app-server][VideoDetail] 映射后的 aweme_id:', mapped.aweme_id)
-  console.log('[app-server][VideoDetail] 映射后的描述:', mapped.desc)
-  console.log('[app-server][VideoDetail] 映射后的作者:', mapped.author?.nickname)
-
   applyRowFlags(mapped, row)
-
-  console.log('[app-server][VideoDetail] ✅ 返回视频数据')
-  console.log('[app-server][VideoDetail] 完整映射数据:', JSON.stringify(mapped, null, 2))
-  console.log('[app-server][VideoDetail] ========== 处理完成 ==========')
-
   return successResponse(mapped)
 }
 
@@ -900,28 +839,18 @@ export async function handleVideoLikes(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const { pageNo, pageSize, from, to } = parsePagination(url)
 
-  // 🎯 支持查询指定用户的喜欢列表
   const targetUserId = url.searchParams.get('user_id')
 
-  // 如果没有指定user_id，则必须登录，查询自己的
   if (!targetUserId) {
     if (!user) {
       throw new HttpError('Missing user_id or authentication', 401)
     }
-    // 查询自己的喜欢列表，无需隐私检查
     return await queryUserLikes(user.id, user.id, { pageNo, pageSize, from, to })
   }
 
-  // 查询别人的喜欢列表，需要检查隐私设置
   const targetProfile = await getProfileById(targetUserId)
   if (!targetProfile || targetProfile.show_like !== true) {
-    // 如果隐私设置不允许，返回空列表
-    return successResponse({
-      list: [],
-      total: 0,
-      pageNo,
-      pageSize
-    })
+    return successResponse({ list: [], total: 0, pageNo, pageSize })
   }
 
   return await queryUserLikes(targetUserId, user?.id ?? null, { pageNo, pageSize, from, to })
@@ -944,7 +873,6 @@ async function queryUserLikes(
     .range(pagination.from, pagination.to)
 
   if (error) {
-    console.error('[app-server] Load liked videos failed:', error)
     return errorResponse('Failed to load videos', 1, 500)
   }
 
@@ -957,18 +885,13 @@ async function queryUserLikes(
       .in('id', videoIds)
       .eq('status', 'published')
 
-    // 🎯 隐私保护：只能看到公开视频，或者是作者自己的私密视频
     if (currentUserId) {
       query.or(`is_private.eq.false,author_id.eq.${currentUserId}`)
     } else {
       query.eq('is_private', false)
     }
 
-    const { data: videoData, error: videoError } = await query
-    if (videoError) {
-      console.error('[app-server] Fetch liked videos failed:', videoError)
-      return errorResponse('Failed to load videos', 1, 500)
-    }
+    const { data: videoData } = await query
     const videoMap = new Map((videoData ?? []).map((row) => [row.id, row]))
     videos = videoIds.map((id) => videoMap.get(id)).filter(Boolean)
   }
@@ -1003,43 +926,10 @@ export async function handleVideoLike(req: Request): Promise<Response> {
   }
 
   if (body.liked) {
-    // 🎯 频率限制：1分钟点赞不能超过 15 次（针对单个用户）
-    const { count: recentLikes } = await supabaseAdmin
-      .from('video_likes')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gte('created_at', new Date(Date.now() - 60000).toISOString())
-
-    // 🎯 记录日志：记录触发速率限制的用户和视频信息
-    if (recentLikes !== null && recentLikes >= 3) {
-      console.error('[VideoLike] ⚠️ 速率限制触发:', {
-        user_id: user.id,
-        user_email: user.email,
-        profile_id: profile?.id,
-        profile_nickname: profile?.nickname,
-        video_id: body.video_id,
-        recent_likes_count: recentLikes,
-        limit: 15,
-        time_window: '1分钟',
-        timestamp: new Date().toISOString()
-      })
-      throw new HttpError('点赞太频繁了，先休息下吧', 429)
-    }
-
-    // 🎯 记录正常点赞日志（用于调试）
-    console.log('[VideoLike] 用户点赞:', {
-      user_id: user.id,
-      profile_nickname: profile?.nickname,
-      video_id: body.video_id,
-      recent_likes_count: recentLikes,
-      timestamp: new Date().toISOString()
-    })
-
     const { error } = await supabaseAdmin
       .from('video_likes')
       .upsert({ user_id: user.id, video_id: body.video_id }, { onConflict: 'user_id,video_id' })
     if (error) {
-      console.error('[app-server] Like video failed:', error)
       return errorResponse('Failed to like video', 1, 500)
     }
   } else {
@@ -1049,30 +939,18 @@ export async function handleVideoLike(req: Request): Promise<Response> {
       .eq('user_id', user.id)
       .eq('video_id', body.video_id)
     if (error) {
-      console.error('[app-server] Unlike video failed:', error)
       return errorResponse('Failed to unlike video', 1, 500)
     }
   }
 
   const { data: video } = await supabaseAdmin
     .from('videos')
-    .select('like_count, author_id, description')
+    .select('like_count, author_id')
     .eq('id', body.video_id)
     .maybeSingle()
 
-  // 🔍 调试日志：点赞通知前置检查
-  console.log('[DEBUG-LIKE] 检查通知条件:', {
-    liked: body.liked,
-    hasVideo: !!video,
-    authorId: video?.author_id,
-    currentUserId: user.id,
-    isSelf: video?.author_id === user.id
-  })
-
-  // 发送通知
   if (body.liked && video && video.author_id && video.author_id !== user.id) {
     const nickname = profile.nickname || profile.username || '用户'
-    // 异步发送
     checkAndSendNotification(
       video.author_id,
       'like',
@@ -1093,28 +971,18 @@ export async function handleVideoCollections(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const { pageNo, pageSize, from, to } = parsePagination(url)
 
-  // 🎯 支持查询指定用户的收藏列表
   const targetUserId = url.searchParams.get('user_id')
 
-  // 如果没有指定user_id，则必须登录，查询自己的
   if (!targetUserId) {
     if (!user) {
       throw new HttpError('Missing user_id or authentication', 401)
     }
-    // 查询自己的收藏列表，无需隐私检查
     return await queryUserCollections(user.id, user.id, { pageNo, pageSize, from, to })
   }
 
-  // 查询别人的收藏列表，需要检查隐私设置
   const targetProfile = await getProfileById(targetUserId)
   if (!targetProfile || targetProfile.show_collect !== true) {
-    // 如果隐私设置不允许，返回空列表
-    return successResponse({
-      list: [],
-      total: 0,
-      pageNo,
-      pageSize
-    })
+    return successResponse({ list: [], total: 0, pageNo, pageSize })
   }
 
   return await queryUserCollections(targetUserId, user?.id ?? null, { pageNo, pageSize, from, to })
@@ -1137,7 +1005,6 @@ async function queryUserCollections(
     .range(pagination.from, pagination.to)
 
   if (error) {
-    console.error('[app-server] Load collected videos failed:', error)
     return errorResponse('Failed to load videos', 1, 500)
   }
 
@@ -1150,18 +1017,13 @@ async function queryUserCollections(
       .in('id', videoIds)
       .eq('status', 'published')
 
-    // 🎯 隐私保护：只能看到公开视频，或者是作者自己的私密视频
     if (currentUserId) {
       query.or(`is_private.eq.false,author_id.eq.${currentUserId}`)
     } else {
       query.eq('is_private', false)
     }
 
-    const { data: videoData, error: videoError } = await query
-    if (videoError) {
-      console.error('[app-server] Fetch collected videos failed:', videoError)
-      return errorResponse('Failed to load videos', 1, 500)
-    }
+    const { data: videoData } = await query
     const videoMap = new Map((videoData ?? []).map((row) => [row.id, row]))
     videos = videoIds.map((id) => videoMap.get(id)).filter(Boolean)
   }
@@ -1196,22 +1058,10 @@ export async function handleVideoCollect(req: Request): Promise<Response> {
   }
 
   if (body.collected) {
-    // 🎯 频率限制：1分钟收藏不能超过 10 次
-    const { count: recentCollects } = await supabaseAdmin
-      .from('video_collections')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gte('created_at', new Date(Date.now() - 60000).toISOString())
-
-    if (recentCollects !== null && recentCollects >= 10) {
-      throw new HttpError('收藏太频繁了，先休息下吧', 429)
-    }
-
     const { error } = await supabaseAdmin
       .from('video_collections')
       .upsert({ user_id: user.id, video_id: body.video_id }, { onConflict: 'user_id,video_id' })
     if (error) {
-      console.error('[app-server] Collect video failed:', error)
       return errorResponse('Failed to collect video', 1, 500)
     }
   } else {
@@ -1221,18 +1071,16 @@ export async function handleVideoCollect(req: Request): Promise<Response> {
       .eq('user_id', user.id)
       .eq('video_id', body.video_id)
     if (error) {
-      console.error('[app-server] Un-collect video failed:', error)
       return errorResponse('Failed to remove collection', 1, 500)
     }
   }
 
   const { data: video } = await supabaseAdmin
     .from('videos')
-    .select('collect_count, author_id, description')
+    .select('collect_count, author_id')
     .eq('id', body.video_id)
     .maybeSingle()
 
-  // 发送通知
   if (body.collected && video && video.author_id && video.author_id !== user.id) {
     const nickname = profile.nickname || profile.username || '用户'
     checkAndSendNotification(
@@ -1250,525 +1098,171 @@ export async function handleVideoCollect(req: Request): Promise<Response> {
   })
 }
 
-/**
- * 批量审核视频
- * POST /video/batch-review
- */
 export async function handleBatchReview(req: Request): Promise<Response> {
   const body = await parseJsonBody(req)
   const { video_ids, action, reject_reason } = body
 
   if (!video_ids || !Array.isArray(video_ids) || video_ids.length === 0) {
-    return errorResponse('video_ids is required and must be a non-empty array', 1, 400)
+    return errorResponse('video_ids is required', 1, 400)
   }
 
-  if (
-    !action ||
-    !['approve', 'reject', 'set_adult', 'unset_adult', 'set_sea', 'unset_sea', 'delete'].includes(
-      action
-    )
-  ) {
-    return errorResponse(
-      'action must be one of: approve, reject, set_adult, unset_adult, set_sea, unset_sea, delete',
-      1,
-      400
-    )
-  }
-
-  if (action === 'reject' && !reject_reason) {
-    return errorResponse('reject_reason is required when rejecting', 1, 400)
-  }
-
-  console.log(`[batch-review] ${action} ${video_ids.length} videos`)
-
-  try {
-    if (action === 'approve') {
-      // 批量通过：先查询所有视频的状态
-      const { data: videos, error: queryError } = await supabaseAdmin
-        .from('videos')
-        .select('id, status, author_id')
-        .in('id', video_ids)
-
-      if (queryError) {
-        console.error('[batch-review] Query videos error:', queryError)
-        return errorResponse('Failed to query videos', 1, 500)
-      }
-
-      // 批量更新：ready → published, 其他状态保持
-      const updatePromises = (videos ?? []).map((video) => {
-        const shouldPublish = video.status === 'ready'
-        return supabaseAdmin
-          .from('videos')
-          .update({
-            review_status: 'approved',
-            status: shouldPublish ? 'published' : video.status,
-            published_at: shouldPublish ? new Date().toISOString() : null
-          })
-          .eq('id', video.id)
-      })
-
-      const results = await Promise.all(updatePromises)
-
-      // 🎯 任务 2: 处理作者的 auto_approve 提升
-      const authorIds = Array.from(new Set((videos ?? []).map((v) => v.author_id).filter(Boolean)))
-      if (authorIds.length > 0) {
-        // 查找这些作者中还没有 auto_approve 权限的
-        const { data: profilesToPromote } = await supabaseAdmin
-          .from('profiles')
-          .select('id, auto_approve')
-          .in('id', authorIds)
-          .or('auto_approve.eq.false,auto_approve.is.null')
-
-        if (profilesToPromote && profilesToPromote.length > 0) {
-          const promoteIds = profilesToPromote.map((p) => p.id)
-          await supabaseAdmin.from('profiles').update({ auto_approve: true }).in('id', promoteIds)
-
-          // 发送通知
-          const approvalNotice =
-            `🎉 <b>您的作品已通过审核！</b>\n\n` +
-            `由于您的首个作品表现优秀，系统已为您开启<b>【免审核模式】</b>。今后您发布的作品将自动发布，无需等待人工审核。\n\n` +
-            `📌 <b>发布规范提醒：</b>\n` +
-            `1. <b>成人内容</b>：请务必将其分类到<b>【成人】</b>频道。\n` +
-            `2. <b>东南亚内容</b>：请务必将其分类到<b>【东南亚】</b>频道。\n\n` +
-            `良好的分类有助于您的作品获得更多精准流量。感谢您的配合！`
-
-          for (const pid of promoteIds) {
-            checkAndSendNotification(pid, 'request_update', approvalNotice).catch((e) =>
-              console.error(`[batch-review] 通知作者 ${pid} 失败:`, e)
-            )
-          }
-        }
-      }
-
-      // 检查是否有错误
-      const errors = results.filter((r) => r.error)
-      if (errors.length > 0) {
-        console.error('[batch-review] Some updates failed:', errors)
-        return errorResponse(`${errors.length} videos failed to update`, 1, 500)
-      }
-
-      console.log(`[batch-review] Successfully approved ${video_ids.length} videos`)
-      return successResponse({
-        success: true,
-        updated: video_ids.length
-      })
-    } else if (action === 'reject') {
-      // 批量拒绝
-      const { error } = await supabaseAdmin
+  if (action === 'approve') {
+    const { data: videos } = await supabaseAdmin
+      .from('videos')
+      .select('id, status')
+      .in('id', video_ids)
+    const updatePromises = (videos ?? []).map((v) => {
+      const shouldPublish = v.status === 'ready'
+      return supabaseAdmin
         .from('videos')
         .update({
-          review_status: 'rejected',
-          reject_reason: reject_reason
+          review_status: 'approved',
+          status: shouldPublish ? 'published' : v.status,
+          published_at: shouldPublish ? new Date().toISOString() : null
         })
-        .in('id', video_ids)
-
-      if (error) {
-        console.error('[batch-review] Batch reject error:', error)
-        return errorResponse('Failed to reject videos', 1, 500)
-      }
-
-      console.log(`[batch-review] Successfully rejected ${video_ids.length} videos`)
-      return successResponse({
-        success: true,
-        updated: video_ids.length
-      })
-    } else if (action === 'delete') {
-      // 批量删除视频
-      const { error } = await supabaseAdmin.from('videos').delete().in('id', video_ids)
-
-      if (error) {
-        console.error('[batch-review] Batch delete error:', error)
-        return errorResponse('Failed to delete videos', 1, 500)
-      }
-
-      console.log(`[batch-review] Successfully deleted ${video_ids.length} videos`)
-      return successResponse({
-        success: true,
-        deleted: video_ids.length
-      })
-    } else {
-      // 批量设置标记：set_adult, unset_adult, set_sea, unset_sea
-      const updatePayload: Record<string, any> = {}
-      if (action === 'set_adult') updatePayload.is_adult = true
-      if (action === 'unset_adult') updatePayload.is_adult = false
-      if (action === 'set_sea') updatePayload.is_sea = true
-      if (action === 'unset_sea') updatePayload.is_sea = false
-
-      const { error } = await supabaseAdmin.from('videos').update(updatePayload).in('id', video_ids)
-
-      if (error) {
-        console.error(`[batch-review] Batch ${action} error:`, error)
-        return errorResponse(`Failed to perform batch action ${action}`, 1, 500)
-      }
-
-      console.log(`[batch-review] Successfully performed ${action} on ${video_ids.length} videos`)
-      return successResponse({
-        success: true,
-        updated: video_ids.length
-      })
-    }
-  } catch (error) {
-    console.error('[batch-review] Unexpected error:', error)
-    return errorResponse('Internal server error', 1, 500)
+        .eq('id', v.id)
+    })
+    await Promise.all(updatePromises)
+    return successResponse({ success: true, updated: video_ids.length })
+  } else if (action === 'reject') {
+    await supabaseAdmin
+      .from('videos')
+      .update({ review_status: 'rejected', reject_reason })
+      .in('id', video_ids)
+    return successResponse({ success: true })
+  } else if (action === 'delete') {
+    await supabaseAdmin.from('videos').delete().in('id', video_ids)
+    return successResponse({ success: true })
+  } else {
+    const updatePayload: Record<string, any> = {}
+    if (action === 'set_adult') updatePayload.is_adult = true
+    if (action === 'unset_adult') updatePayload.is_adult = false
+    if (action === 'set_sea') updatePayload.is_sea = true
+    if (action === 'unset_sea') updatePayload.is_sea = false
+    await supabaseAdmin.from('videos').update(updatePayload).in('id', video_ids)
+    return successResponse({ success: true })
   }
 }
 
-/**
- * 单个视频审核通过（含自动审核逻辑）
- * POST /video/approve
- */
 export async function handleApproveVideo(req: Request): Promise<Response> {
   const body = await parseJsonBody(req)
   const { video_id } = body
+  if (!video_id) return errorResponse('video_id required', 1, 400)
 
-  if (!video_id) {
-    return errorResponse('video_id is required', 1, 400)
-  }
+  const { data: video } = await supabaseAdmin
+    .from('videos')
+    .select('id, status, author_id, description')
+    .eq('id', video_id)
+    .single()
 
-  console.log(`[approve] Processing video: ${video_id}`)
+  if (!video) return errorResponse('Not found', 1, 404)
 
-  try {
-    // 1. 查询视频信息（包含描述、is_auto_sync，用于通知）
-    const { data: video, error: videoError } = await supabaseAdmin
-      .from('videos')
-      .select('id, status, author_id, tg_user_id, description, is_auto_sync')
-      .eq('id', video_id)
-      .single()
-
-    if (videoError || !video) {
-      console.error('[approve] Video not found:', videoError)
-      return errorResponse('Video not found', 1, 404)
-    }
-
-    // 2. 更新视频状态
-    const shouldPublish = video.status === 'ready'
-    const { error: updateError } = await supabaseAdmin
-      .from('videos')
-      .update({
-        review_status: 'approved',
-        status: shouldPublish ? 'published' : video.status,
-        published_at: shouldPublish ? new Date().toISOString() : null
-      })
-      .eq('id', video_id)
-
-    if (updateError) {
-      console.error('[approve] Update video failed:', updateError)
-      return errorResponse('Failed to approve video', 1, 500)
-    }
-
-    // 3. 检查并更新用户的自动审核权限
-    let autoApproveEnabled = false
-    const authorField = video.tg_user_id ? 'tg_user_id' : 'id'
-    const authorValue = video.tg_user_id ?? video.author_id
-
-    // 查询用户当前的 auto_approve 状态和昵称
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('id, auto_approve, nickname, tg_user_id')
-      .eq(authorField, authorValue)
-      .single()
-
-    if (profile && !profile.auto_approve) {
-      // 用户还没有自动审核权限，这是他的第一个通过的视频
-      // 设置 auto_approve = true
-      const { error: profileError } = await supabaseAdmin
-        .from('profiles')
-        .update({ auto_approve: true })
-        .eq('id', profile.id)
-
-      if (profileError) {
-        console.error('[approve] Failed to update auto_approve:', profileError)
-        // 不影响主流程，只记录日志
-      } else {
-        autoApproveEnabled = true
-        console.log(`[approve] Enabled auto_approve for user: ${profile.id}`)
-
-        // 🎯 任务2：通知新用户已获得免审核权限，并提醒分类规范
-        const approvalNotice =
-          `🎉 <b>您的作品已通过审核！</b>\n\n` +
-          `由于您的首个作品表现优秀，系统已为您开启<b>【免审核模式】</b>。今后您发布的作品将自动发布，无需等待人工审核。\n\n` +
-          `📌 <b>发布规范提醒：</b>\n` +
-          `1. <b>成人内容</b>：请务必将其分类到<b>【成人】</b>频道。\n` +
-          `2. <b>东南亚内容</b>：请务必将其分类到<b>【东南亚】</b>频道。\n\n` +
-          `良好的分类有助于您的作品获得更多精准流量。感谢您的配合！`
-
-        checkAndSendNotification(profile.id, 'request_update', approvalNotice).catch((e) =>
-          console.error('[approve] 发送免审核通知失败:', e)
-        )
-      }
-    }
-
-    // 🎯 4. 审核通过并发布后，发送通知
-    if (shouldPublish && profile?.id) {
-      // 🎯 如果是频道同步视频，发送专门的频道同步通知（只有发布成功才通知）
-      if (video.is_auto_sync) {
-        // 优先使用 video.tg_user_id，如果没有则使用 profile.tg_user_id
-        const tgUserId = video.tg_user_id || profile.tg_user_id
-        if (tgUserId) {
-          const TG_BOT_TOKEN = Deno.env.get('TG_BOT_TOKEN')
-          if (TG_BOT_TOKEN) {
-            const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`
-            fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chat_id: tgUserId,
-                text: '同步成功 📢：检测到您的频道发布了新视频，已自动发布。',
-                parse_mode: 'HTML'
-              })
-            }).catch((e: any) => {
-              console.error('[approve] 发送频道同步通知失败:', e)
-            })
-          }
-        }
-      }
-
-      // 通知粉丝有新作品发布
-      const { notifyFollowersNewPost } = await import('../lib/notification.ts')
-      notifyFollowersNewPost(
-        profile.id,
-        profile.nickname || '用户',
-        video_id,
-        video.description
-      ).catch((e: any) => {
-        console.error('[approve] 通知粉丝失败:', e)
-      })
-    }
-
-    console.log(`[approve] Successfully approved video: ${video_id}`)
-    return successResponse({
-      success: true,
-      auto_approve_enabled: autoApproveEnabled
+  const shouldPublish = video.status === 'ready'
+  await supabaseAdmin
+    .from('videos')
+    .update({
+      review_status: 'approved',
+      status: shouldPublish ? 'published' : video.status,
+      published_at: shouldPublish ? new Date().toISOString() : null
     })
-  } catch (error) {
-    console.error('[approve] Unexpected error:', error)
-    return errorResponse('Internal server error', 1, 500)
+    .eq('id', video_id)
+
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('id, auto_approve, nickname')
+    .eq('id', video.author_id)
+    .single()
+
+  if (profile && !profile.auto_approve) {
+    await supabaseAdmin.from('profiles').update({ auto_approve: true }).eq('id', profile.id)
   }
+
+  return successResponse({ success: true })
 }
 
-/**
- * 记录观看历史
- * POST /video/view
- * body: { video_id: string, progress?: number, completed?: boolean }
- * progress: 0-100 的百分比
- */
 export async function handleRecordView(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
   const body = await parseJsonBody(req)
   const { video_id, progress, completed } = body
+  if (!video_id) return errorResponse('video_id required', 1, 400)
 
-  if (!video_id) {
-    return errorResponse('video_id is required', 1, 400)
-  }
+  const { data, error } = await supabaseAdmin.rpc('record_video_view_v2', {
+    p_user_id: user.id,
+    p_video_id: video_id,
+    p_progress: progress ?? 0,
+    p_completed: completed === true
+  })
 
-  try {
-    // 🎯 使用原子 RPC v2 处理：
-    // 1. 自动处理并发冲突 (FOR UPDATE 锁定)
-    // 2. 自动增加视频 view_count (首次观看时)
-    // 3. 自动更新 watch_history
-    // 4. 自动触发任务进度 increment_task_progress (完播时)
-    const { data, error } = await supabaseAdmin.rpc('record_video_view_v2', {
-      p_user_id: user.id,
-      p_video_id: video_id,
-      p_progress: progress ?? 0,
-      p_completed: completed === true
-    })
-
-    if (error) {
-      console.error('[view] RPC record_video_view_v2 failed:', error)
-      return errorResponse('Failed to record view', 1, 500)
-    }
-
-    return successResponse(data)
-  } catch (error) {
-    console.error('[view] Unexpected error:', error)
-    return successResponse({ success: true }) // 即使失败也返回成功，不影响用户体验
-  }
+  if (error) return errorResponse('Failed', 1, 500)
+  return successResponse(data)
 }
 
-/**
- * 获取观看历史
- * GET /video/history?pageNo=&pageSize=
- * 返回用户观看过的视频列表，按最近观看时间倒序
- */
 export async function handleVideoHistory(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
   const url = new URL(req.url)
   const { pageNo, pageSize, from, to } = parsePagination(url)
 
-  console.log('[VideoHistory] 请求参数:', { pageNo, pageSize, userId: user.id })
-
-  // 🎯 从 watch_history 表查询用户的观看历史，关联 videos 表获取视频信息
-  // 使用内连接 (!inner) 确保只返回有效的、已发布的视频
-  const {
-    data: historyRows,
-    error: historyError,
-    count
-  } = await supabaseAdmin
+  const { data: rows, count } = await supabaseAdmin
     .from('watch_history')
-    .select(
-      `
-      video_id,
-      updated_at,
-      videos!inner (
-        *
-      )
-    `,
-      { count: 'exact' }
-    )
+    .select('video_id, updated_at, videos!inner(*)', { count: 'exact' })
     .eq('user_id', user.id)
-    .eq('videos.status', 'published') // 🎯 只查询已发布的视频
-    .or(`is_private.eq.false,author_id.eq.${user.id}`, { foreignTable: 'videos' }) // 🎯 增加隐私过滤
+    .eq('videos.status', 'published')
     .order('updated_at', { ascending: false })
     .range(from, to)
 
-  if (historyError) {
-    console.error('[VideoHistory] 查询观看历史失败:', historyError)
-    return errorResponse('Failed to load history', 1, 500)
-  }
+  const videos = (rows ?? []).map((r: any) => r.videos)
+  await attachUserFlags(videos, user.id)
 
-  // 🎯 映射数据格式
-  const profileCache = new Map<string, any>()
-  const list: any[] = []
-
-  for (const historyRow of historyRows ?? []) {
-    const video = (historyRow as any).videos
-    if (!video) {
-      continue // 理论上不应该出现，但为了安全还是检查一下
-    }
-
-    const authorProfile = await getVideoAuthorProfile(video, profileCache)
-    const mapped = await mapVideoRow(video, authorProfile)
+  const profileCache = new Map()
+  const list = []
+  for (const v of videos) {
+    const author = await getVideoAuthorProfile(v, profileCache)
+    const mapped = await mapVideoRow(v, author)
     if (mapped) {
-      applyRowFlags(mapped, video)
+      applyRowFlags(mapped, v)
       list.push(mapped)
     }
   }
 
-  // 🎯 附加用户标记（点赞、收藏、关注状态）
-  await attachUserFlags(list, user.id)
-
-  console.log('[VideoHistory] 返回数据:', {
-    count: count ?? 0,
-    listLength: list.length,
-    pageNo,
-    pageSize
-  })
-
-  return successResponse({
-    list,
-    total: count ?? 0,
-    pageNo,
-    pageSize
-  })
+  return successResponse({ list, total: count ?? 0, pageNo, pageSize })
 }
 
-/**
- * 清空观看历史
- * DELETE /video/history
- * 删除用户的所有观看历史记录
- */
 export async function handleClearVideoHistory(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
-
-  console.log('[ClearVideoHistory] 清空用户观看历史:', { userId: user.id })
-
-  const { error } = await supabaseAdmin.from('watch_history').delete().eq('user_id', user.id)
-
-  if (error) {
-    console.error('[ClearVideoHistory] 清空观看历史失败:', error)
-    return errorResponse('Failed to clear history', 1, 500)
-  }
-
-  console.log('[ClearVideoHistory] 成功清空观看历史')
-
+  await supabaseAdmin.from('watch_history').delete().eq('user_id', user.id)
   return successResponse({ success: true })
 }
 
-/**
- * 累计观看时长
- * POST /video/watch-time
- * body: { seconds: number, video_id?: string }
- *
- * 注意：去重逻辑已移到前端，后端不再做去重
- * video_id 仅用于统计记录，不影响累计逻辑
- */
 export async function handleIncrementWatchTime(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
   const body = await parseJsonBody(req)
   const { seconds, video_id } = body
+  if (!seconds || seconds <= 0) return errorResponse('Invalid seconds', 1, 400)
 
-  if (!seconds || seconds <= 0) {
-    return errorResponse('seconds must be a positive number', 1, 400)
-  }
+  const { data, error } = await supabaseAdmin.rpc('increment_daily_watch_time', {
+    p_user_id: user.id,
+    p_seconds: Math.floor(seconds),
+    p_video_id: video_id || null
+  })
 
-  try {
-    const { data, error } = await supabaseAdmin.rpc('increment_daily_watch_time', {
-      p_user_id: user.id,
-      p_seconds: Math.floor(seconds),
-      p_video_id: video_id || null // 🎯 仅用于统计记录，不做去重
-    })
-
-    if (error) {
-      console.error('[watch-time] RPC increment_daily_watch_time failed:', error)
-      return errorResponse('Failed to increment watch time', 1, 500)
-    }
-
-    return successResponse(data)
-  } catch (error) {
-    console.error('[watch-time] Unexpected error:', error)
-    return successResponse({ success: true }) // 即使失败也返回成功，不影响用户体验
-  }
+  if (error) return errorResponse('Failed', 1, 500)
+  return successResponse(data)
 }
 
-/**
- * 获取观看时长奖励状态
- * GET /video/watch-time/status
- */
 export async function handleGetWatchTimeStatus(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
-
-  try {
-    const { data, error } = await supabaseAdmin.rpc('get_watch_time_reward_status', {
-      p_user_id: user.id
-    })
-
-    if (error) {
-      console.error('[watch-time] RPC get_watch_time_reward_status failed:', error)
-      return errorResponse('Failed to get watch time status', 1, 500)
-    }
-
-    return successResponse(data)
-  } catch (error) {
-    console.error('[watch-time] Unexpected error:', error)
-    return errorResponse('Internal server error', 1, 500)
-  }
+  const { data, error } = await supabaseAdmin.rpc('get_watch_time_reward_status', {
+    p_user_id: user.id
+  })
+  if (error) return errorResponse('Failed', 1, 500)
+  return successResponse(data)
 }
 
-/**
- * 领取观看时长奖励
- * POST /video/watch-time/claim
- */
 export async function handleClaimWatchTimeReward(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
-
-  try {
-    const { data, error } = await supabaseAdmin.rpc('claim_watch_time_reward', {
-      p_user_id: user.id
-    })
-
-    if (error) {
-      console.error('[watch-time] RPC claim_watch_time_reward failed:', error)
-      return errorResponse('Failed to claim reward', 1, 500)
-    }
-
-    if (data.success === false) {
-      return errorResponse(data.message || '领取失败', 1, 400)
-    }
-
-    return successResponse(data)
-  } catch (error) {
-    console.error('[watch-time] Unexpected error:', error)
-    return errorResponse('Internal server error', 1, 500)
-  }
+  const { data, error } = await supabaseAdmin.rpc('claim_watch_time_reward', {
+    p_user_id: user.id
+  })
+  if (error) return errorResponse('Failed', 1, 500)
+  return successResponse(data)
 }
