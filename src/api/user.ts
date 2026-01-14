@@ -64,6 +64,7 @@ async function requestAppServer(path: string, method: string = 'GET', body?: any
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
     Authorization: `Bearer ${accessToken}`
   }
 
@@ -107,7 +108,9 @@ async function requestAppServerList(path: string, params?: any) {
     accessToken = null
   }
 
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = {
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+  }
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`
   // Telegram initData（可选）
   try {

@@ -19,13 +19,29 @@ if (!supabaseUrl || !supabaseAnonKey) {
   // 在实际调用时会失败，但至少 UI 能显示出来
 }
 
-export const supabase = createClient(supabaseUrl || 'https://example.supabase.co', supabaseAnonKey || 'anon-key', {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true
+export const supabase = createClient(
+  supabaseUrl || 'https://example.supabase.co',
+  supabaseAnonKey || 'anon-key',
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true
+    },
+    global: {
+      headers: {
+        apikey: supabaseAnonKey || ''
+      }
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      },
+      // 🎯 优化：增加重连尝试和超时配置，增强移动端稳定性
+      timeout: 20000
+    }
   }
-})
+)
 
 // 类型定义
 export interface Profile {

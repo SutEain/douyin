@@ -502,7 +502,9 @@ async function requestSupabaseVideoList(
   const query = search.toString()
 
   // 🎯 构建请求头
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = {
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+  }
 
   // 添加认证令牌
   if (accessToken) {

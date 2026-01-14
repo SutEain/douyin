@@ -45,7 +45,9 @@ async function resolveAccessToken() {
  * 获取混合直播列表（包括自建和后台转播）
  */
 export async function fetchLiveRooms(): Promise<LiveRoom[]> {
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = {
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+  }
 
   // 有 token 就带上（兼容后端未来加鉴权/限流）
   const accessToken = await resolveAccessToken()

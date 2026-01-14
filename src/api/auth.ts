@@ -56,6 +56,7 @@ export async function loginWithTelegram(initData: string): Promise<TelegramLogin
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
       },
       body: JSON.stringify({ initData }),
@@ -119,6 +120,7 @@ export async function loginWithVerificationCode(code: string): Promise<TelegramL
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
       },
       body: JSON.stringify({ code }),

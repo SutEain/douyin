@@ -21,7 +21,8 @@ export async function searchCombined(keyword: string, pageNo = 0, pageSize = 20)
   const accessToken = await getAccessToken(false)
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
   }
 
   if (accessToken) {
@@ -64,7 +65,8 @@ export async function searchVideos(
   const accessToken = await getAccessToken(false) // 可选认证
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
   }
 
   if (accessToken) {
@@ -102,7 +104,8 @@ export async function searchUsers(keyword: string, pageNo = 0, pageSize = 20) {
   const accessToken = await getAccessToken(false) // 可选认证
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
   }
 
   if (accessToken) {
@@ -138,7 +141,8 @@ export async function getHotKeywords(limit = 30) {
   const accessToken = await getAccessToken(false) // 🎯 可选认证
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
   }
 
   if (accessToken) {
