@@ -144,7 +144,7 @@ export const Dashboard = () => {
           totalUsersRes,
           usersWithVideosRes,
           newUsersRes,
-          activeUsersRes,
+          activeUsersRes, // 这里将存储今日播放人数
           totalVideosRes,
           totalNormalVideosRes,
           totalAdultVideosRes,
@@ -152,12 +152,8 @@ export const Dashboard = () => {
           newVideosRes,
           newNormalVideosRes,
           newAdultVideosRes,
-          newFirstPublishersRes, // 🎯 新增
-          usersWithHistoryRes, // 🎯 新增
-          totalCoinsRes, // 🎯 平台抖币总余额
-          todaySystemRewardsRes, // 🎯 今日系统发放的抖币奖励
-          todayManualAdjustmentsRes, // 🎯 今日手动调整的抖币
-          todayCommissionRes // 🎯 今日抖币抽水（包含各个来源）
+          newFirstPublishersRes,
+          usersWithHistoryRes
         ] = await Promise.all([
           supabaseClient.from('profiles').select('*', { count: 'exact', head: true }),
           supabaseClient
@@ -168,10 +164,8 @@ export const Dashboard = () => {
             .from('profiles')
             .select('*', { count: 'exact', head: true })
             .gte('created_at', startISO),
-          supabaseClient
-            .from('profiles')
-            .select('*', { count: 'exact', head: true })
-            .gte('last_active_at', startISO),
+          // 🎯 修改：今日活跃人数 改为 统计今日播放人数
+          supabaseClient.rpc('get_watch_users_count', { p_start_iso: startISO, p_end_iso: endISO }),
           supabaseClient
             .from('videos')
             .select('*', { count: 'exact', head: true })
@@ -311,8 +305,8 @@ export const Dashboard = () => {
           totalUsers: totalUsersRes.count ?? 0,
           usersWithVideos: usersWithVideosRes.count ?? 0,
           newUsersToday: newUsersRes.count ?? 0,
-          activeUsersToday: activeUsersRes.count ?? 0,
-          newFirstPublishersToday: Number(newFirstPublishersRes.data) || 0, // 🎯 新增
+          activeUsersToday: Number(activeUsersRes.data) || 0, // 🎯 这里的 data 就是 RPC 返回的今日播放人数
+          newFirstPublishersToday: Number(newFirstPublishersRes.data) || 0,
           totalVideos: totalVideosRes.count ?? 0,
           totalNormalVideos: totalNormalVideosRes.count ?? 0,
           totalAdultVideos: totalAdultVideosRes.count ?? 0,
@@ -320,14 +314,14 @@ export const Dashboard = () => {
           newVideosToday: newVideosRes.count ?? 0,
           newNormalVideosToday: newNormalVideosRes.count ?? 0,
           newAdultVideosToday: newAdultVideosRes.count ?? 0,
-          usersWithHistory: Number(usersWithHistoryRes.data) || 0, // 🎯 新增
-          totalCoinsBalance: Number(totalCoinsRes.data) || 0, // 🎯 平台抖币总余额
-          todaySystemRewards: Number(todaySystemRewardsRes.data) || 0, // 🎯 今日系统发放的抖币奖励
-          todayManualAdjustments: Number(todayManualAdjustmentsRes.data) || 0, // 🎯 今日手动调整的抖币
-          todayGiftCommission: Number(todayCommissionRes.data?.giftCommission) || 0, // 🎯 今日打赏/直播礼物抽水
-          todayDiceCommission: Number(todayCommissionRes.data?.diceCommission) || 0, // 🎯 今日骰子游戏抽水
-          todayRpsCommission: Number(todayCommissionRes.data?.rpsCommission) || 0, // 🎯 今日石头剪刀布游戏抽水
-          todayTotalCommission: Number(todayCommissionRes.data?.totalCommission) || 0 // 🎯 今日总抽水
+          usersWithHistory: Number(usersWithHistoryRes.data) || 0,
+          totalCoinsBalance: Number(totalCoinsRes.data) || 0,
+          todaySystemRewards: Number(todaySystemRewardsRes.data) || 0,
+          todayManualAdjustments: Number(todayManualAdjustmentsRes.data) || 0,
+          todayGiftCommission: Number(todayCommissionRes.data?.giftCommission) || 0,
+          todayDiceCommission: Number(todayCommissionRes.data?.diceCommission) || 0,
+          todayRpsCommission: Number(todayCommissionRes.data?.rpsCommission) || 0,
+          todayTotalCommission: Number(todayCommissionRes.data?.totalCommission) || 0
         })
       } catch (error) {
         console.error('[Dashboard] 获取统计数据失败:', error)
@@ -346,16 +340,22 @@ export const Dashboard = () => {
       const to = from + pageSize - 1
 
       if (mode === 'activeUsersToday') {
-        const res = await supabaseClient
-          .from('profiles')
-          .select('id,nickname,username,numeric_id,last_active_at', { count: 'exact' })
-          .gte('last_active_at', startISO)
-          .order('last_active_at', { ascending: false })
-          .range(from, to)
+        // 🎯 修改：获取今日播放用户列表
+        const res = await supabaseClient.rpc('get_watch_users_list', {
+          p_start_iso: startISO,
+          p_end_iso: endISO,
+          p_limit: pageSize,
+          p_offset: from
+        })
 
         if (res.error) throw res.error
-        setActiveUsers((res.data ?? []) as ActiveUserRow[])
-        setActiveTotal(res.count ?? 0)
+        setActiveUsers((res.data ?? []) as any[])
+        // 同步获取总数
+        const countRes = await supabaseClient.rpc('get_watch_users_count', {
+          p_start_iso: startISO,
+          p_end_iso: endISO
+        })
+        setActiveTotal(Number(countRes.data) || 0)
         return
       }
 
@@ -465,7 +465,7 @@ export const Dashboard = () => {
   }
 
   const drawerTitle = useMemo(() => {
-    if (drawerMode === 'activeUsersToday') return '今日活跃用户（北京时间）'
+    if (drawerMode === 'activeUsersToday') return '今日播放用户（北京时间）'
     if (drawerMode === 'newUsersToday') return '今日新增用户（北京时间）'
     if (drawerMode === 'newFirstPublishersToday') return '今日首次发作品用户（北京时间）'
     if (drawerMode === 'newAdultVideosToday') return '今日新增成人视频（北京时间）'
@@ -484,8 +484,8 @@ export const Dashboard = () => {
           render: (v: any) => (v == null ? '-' : String(v))
         },
         {
-          title: '最后活跃时间(北京)',
-          dataIndex: 'last_active_at',
+          title: '最后播放时间(北京)',
+          dataIndex: 'last_watch_at',
           width: 200,
           render: (v: any) => formatShanghaiTime(v)
         }
@@ -763,7 +763,8 @@ export const Dashboard = () => {
           <Text type="secondary">
             {drawerMode === 'activeUsersToday' && (
               <>
-                统计口径：profiles.last_active_at ≥ {formatShanghaiTime(startISO)}（Asia/Shanghai）
+                统计口径：今日北京时间有过播放历史（watch_history.updated_at ≥{' '}
+                {formatShanghaiTime(startISO)}）的用户
               </>
             )}
             {drawerMode === 'newUsersToday' && (
