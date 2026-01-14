@@ -28,19 +28,27 @@ export async function handleTaskReward(chatId: number, messageId?: number) {
     let text = `🎁 <b>创作者奖励中心</b>\n\n`
 
     if (v) {
+      const pendingCount = v.pending_count || 0
+      const rewardAmount = Number(v.reward_amount || 0)
+      const nextDistance = v.next_reward_distance || 0
+
       text +=
-        `📺 <b>作品播放奖励 (${v.threshold}次=${v.reward_amount}币)</b>\n` +
-        `• 总播放：<code>${v.current_total}</code> 次\n` +
-        `• 待领取：<code>${v.pending_count * Number(v.reward_amount)}</code> 抖币 (${v.pending_count}份)\n` +
-        `• 下一份还差：<code>${v.next_reward_distance}</code> 次\n\n`
+        `📺 <b>作品播放奖励 (${v.threshold || 0}次=${rewardAmount}币)</b>\n` +
+        `• 总播放：<code>${v.current_total || 0}</code> 次\n` +
+        `• 待领取：<code>${pendingCount * rewardAmount}</code> 抖币 (${pendingCount}份)\n` +
+        `• 下一份还差：<code>${nextDistance}</code> 次\n\n`
     }
 
     if (l) {
+      const pendingCount = l.pending_count || 0
+      const rewardAmount = Number(l.reward_amount || 0)
+      const nextDistance = l.next_reward_distance || 0
+
       text +=
-        `❤️ <b>作品获赞奖励 (${l.threshold}个赞=${l.reward_amount}币)</b>\n` +
-        `• 总获赞：<code>${l.current_total}</code> 次\n` +
-        `• 待领取：<code>${l.pending_count * Number(l.reward_amount)}</code> 抖币 (${l.pending_count}份)\n` +
-        `• 下一份还差：<code>${l.next_reward_distance}</code> 个赞\n\n`
+        `❤️ <b>作品获赞奖励 (${l.threshold || 0}个赞=${rewardAmount}币)</b>\n` +
+        `• 总获赞：<code>${l.current_total || 0}</code> 次\n` +
+        `• 待领取：<code>${pendingCount * rewardAmount}</code> 抖币 (${pendingCount}份)\n` +
+        `• 下一份还差：<code>${nextDistance}</code> 个赞\n\n`
     }
 
     if (!v && !l) {
