@@ -477,9 +477,10 @@ const vClick = useClick()
 .toolbar {
   //width: 40px;
   position: absolute;
-  bottom: 52rem; // ✅ 整体上移 (原为 20rem，增加约 2 个字体高度)
+  // 🎯 强制提升位置并置顶
+  bottom: calc(52rem + var(--footer-height) + env(safe-area-inset-bottom)) !important;
   right: 10rem;
-  z-index: 100; // ✅ 提高层级，确保在 ItemDesc 的按钮之上
+  z-index: 1001; // 💡 高于 Footer (100)
   color: #fff;
   display: flex;
   flex-direction: column;

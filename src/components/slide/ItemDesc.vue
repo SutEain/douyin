@@ -185,7 +185,9 @@ const publishDate = computed(() => {
 <style scoped lang="less">
 .item-desc {
   position: absolute;
-  bottom: 10rem;
+  // 🎯 强制提升位置并置顶，防止被 Footer 挡住
+  bottom: calc(var(--footer-height) + env(safe-area-inset-bottom) + 20rem) !important;
+  z-index: 1001; // 💡 高于 Footer (100)
   width: 76%;
 
   .content {

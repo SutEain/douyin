@@ -2212,7 +2212,9 @@ defineExpose({
 // 新的进度条样式
 .video-progress {
   position: absolute;
-  bottom: 0; // 🎯 贴在底部，上面有 ItemDesc 撑开空间
+  // 🎯 强制提升位置并置顶，紧贴 Footer 上方
+  bottom: calc(var(--footer-height) + env(safe-area-inset-bottom)) !important;
+  z-index: 1002; // 💡 高于 Footer 和 ItemDesc
   left: 0;
   right: 0;
   z-index: 1000; // 🎯 绝对置顶，确保在描述文字上方
