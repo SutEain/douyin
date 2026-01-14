@@ -491,9 +491,11 @@ export async function handleGraphicFeed(req: Request): Promise<Response> {
     .from('videos')
     .select('*', { count: 'exact' })
     .eq('status', 'published')
+    .eq('review_status', 'approved') // 🎯 必须审核通过
+    .eq('storage_type', 'r2') // 🎯 仅限 R2
     .eq('is_adult', false)
     .eq('is_private', false)
-    .in('content_type', ['image', 'album'])
+    .in('content_type', ['image', 'album', 'collection']) // 🎯 包含图文和相册
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
     .range(from, to)
@@ -678,53 +680,31 @@ export async function handleVideoFollowing(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
   const url = new URL(req.url)
   const { pageNo, pageSize, from, to } = parsePagination(url)
+  const seed = parseFloat(url.searchParams.get('seed') || '0.5')
+  const visitorKey = url.searchParams.get('visitor_key') || 'anon'
 
-  // 查询当前用户关注的作者
-  const { data: follows, error: followError } = await supabaseAdmin
-    .from('follows')
-    .select('followee_id')
-    .eq('follower_id', user.id)
-
-  if (followError) {
-    console.error('[FollowFeed] 查询关注列表失败:', followError)
-    return errorResponse('Failed to load following feed', 1, 500)
+  const rpcParams = {
+    p_user_id: user.id,
+    p_limit: pageSize,
+    p_offset: from,
+    p_seed: seed,
+    p_visitor_key: visitorKey
   }
 
-  const followeeIds = (follows ?? []).map((f) => f.followee_id).filter(Boolean)
-  if (!followeeIds.length) {
-    return successResponse({
-      list: [],
-      total: 0,
-      pageNo,
-      pageSize
-    })
-  }
-
-  // 按发布时间倒序拉取关注作者的公开作品（包含成人内容）
-  const {
-    data: rows,
-    error: videoError,
-    count
-  } = await supabaseAdmin
-    .from('videos')
-    .select('*', { count: 'exact' })
-    .in('author_id', followeeIds)
-    .eq('status', 'published')
-    .eq('is_private', false)
-    .order('published_at', { ascending: false })
-    .order('created_at', { ascending: false })
-    .range(from, to)
+  console.log('[FollowFeed] 调用 RPC get_following_feed:', JSON.stringify(rpcParams))
+  const { data, error: videoError } = await supabaseAdmin.rpc('get_following_feed', rpcParams)
 
   if (videoError) {
     console.error('[FollowFeed] 查询视频失败:', videoError)
     return errorResponse('Failed to load following feed', 1, 500)
   }
 
-  await attachUserFlags(rows ?? [], user.id)
+  const rows = data || []
+  await attachUserFlags(rows, user.id)
 
   const profileCache = new Map<string, any>()
   const list = []
-  for (const row of rows ?? []) {
+  for (const row of rows) {
     const authorProfile = await getVideoAuthorProfile(row, profileCache)
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
@@ -735,7 +715,7 @@ export async function handleVideoFollowing(req: Request): Promise<Response> {
 
   return successResponse({
     list,
-    total: count ?? 0,
+    total: list.length >= pageSize ? (pageNo + 2) * pageSize : (pageNo + 1) * pageSize, // 简化分页总数
     pageNo,
     pageSize
   })
