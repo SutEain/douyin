@@ -263,14 +263,14 @@
                     :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 900 }"
                   >
                     <div class="milestone-dot"></div>
-                    <div class="milestone-label">15分钟<br />+20抖币</div>
+                    <div class="milestone-label">15分钟<br />+15抖币</div>
                   </div>
                   <div
                     class="milestone"
                     :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 1800 }"
                   >
                     <div class="milestone-dot"></div>
-                    <div class="milestone-label">30分钟<br />+50抖币</div>
+                    <div class="milestone-label">30分钟<br />+30抖币</div>
                   </div>
                 </div>
               </div>
