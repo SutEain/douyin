@@ -153,7 +153,11 @@ export const Dashboard = () => {
           newNormalVideosRes,
           newAdultVideosRes,
           newFirstPublishersRes,
-          usersWithHistoryRes
+          usersWithHistoryRes,
+          totalCoinsRes, // 🎯 平台抖币总余额
+          todaySystemRewardsRes, // 🎯 今日系统发放的抖币奖励
+          todayManualAdjustmentsRes, // 🎯 今日手动调整的抖币
+          todayCommissionRes // 🎯 今日抖币抽水（包含各个来源）
         ] = await Promise.all([
           supabaseClient.from('profiles').select('*', { count: 'exact', head: true }),
           supabaseClient
