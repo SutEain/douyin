@@ -78,21 +78,21 @@
               <div class="comment" :key="msg.id" v-for="msg in messages" :class="msg.type">
                 <template v-if="msg.type === 'system'">
                   <span class="system-text">
-                    <span class="name" @click="goUser(msg.user_id)">{{
+                    <span class="name" @click.stop="goUser(msg.user_id)">{{
                       _truncate(msg.user_nickname, 15)
                     }}</span>
                     {{ msg.content }}
                   </span>
                 </template>
                 <template v-else-if="msg.type === 'gift'">
-                  <span class="name" @click="goUser(msg.user_id)">{{
+                  <span class="name" @click.stop="goUser(msg.user_id)">{{
                     _truncate(msg.user_nickname, 15)
                   }}</span>
                   <span class="gift-text">送出了 {{ msg.content }}</span>
                   <span class="combo-num" v-if="msg.combo > 1">x{{ msg.combo }}</span>
                 </template>
                 <template v-else>
-                  <span class="name" @click="goUser(msg.user_id)"
+                  <span class="name" @click.stop="goUser(msg.user_id)"
                     >{{ _truncate(msg.user_nickname, 15) }}:</span
                   >
                   <span class="text">{{ msg.content }}</span>
@@ -1214,6 +1214,7 @@ async function fetchHistoryMessages() {
         messages.value = fallbackData.reverse().map((m: any) => ({
           id: m.id,
           content: m.content,
+          user_id: m.user_id,
           user_nickname: '用户',
           type: m.msg_type || 'chat',
           combo: m.payload?.combo || 1
@@ -1228,6 +1229,7 @@ async function fetchHistoryMessages() {
     messages.value = data.reverse().map((m: any) => ({
       id: m.id,
       content: m.content,
+      user_id: m.user_id,
       user_nickname: m.profiles?.nickname || '路人',
       type: m.msg_type || 'chat',
       combo: m.payload?.combo || 1
@@ -1307,6 +1309,7 @@ async function attention() {
 }
 
 function goUser(uid: string) {
+  console.log('[LivePage] goUser:', uid)
   if (!uid) return
   router.push(`/user/${uid}`)
 }
