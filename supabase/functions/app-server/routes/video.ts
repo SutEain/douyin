@@ -281,9 +281,9 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
   })
 
   // 🎯 验证：检查返回的视频是否在排除列表中
-  if (excludeVideoIds.length > 0 && data && data.length > 0) {
+  if (finalExcludeIds.length > 0 && data && data.length > 0) {
     const returnedIds = data.map((r: any) => r.id)
-    const duplicates = returnedIds.filter((id: string) => excludeVideoIds.includes(id))
+    const duplicates = returnedIds.filter((id: string) => finalExcludeIds.includes(id))
     if (duplicates.length > 0) {
       console.error('[LongFeed] ⚠️ 警告：返回的视频中包含已排除的视频:', duplicates)
     } else {
@@ -556,9 +556,9 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
   })
 
   // 🎯 验证：检查返回的视频是否在排除列表中
-  if (excludeVideoIds.length > 0 && data && data.length > 0) {
+  if (finalExcludeIds.length > 0 && data && data.length > 0) {
     const returnedIds = data.map((r: any) => r.id)
-    const duplicates = returnedIds.filter((id: string) => excludeVideoIds.includes(id))
+    const duplicates = returnedIds.filter((id: string) => finalExcludeIds.includes(id))
     if (duplicates.length > 0) {
       console.error('[AdultFeed] ⚠️ 警告：返回的视频中包含已排除的视频:', duplicates)
     } else {
