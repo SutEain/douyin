@@ -112,7 +112,7 @@ export async function requireAuth(req: Request, options: AuthOptions = {}) {
     error
   } = await supabaseAdmin.auth.getUser(accessToken)
 
-  if (error || !user) {
+  if (error || !user || !user.id || user.id === 'undefined') {
     throw new HttpError('Invalid session', 401)
   }
 
