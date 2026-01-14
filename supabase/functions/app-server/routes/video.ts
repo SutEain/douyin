@@ -77,7 +77,20 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
 
   // 🎯 深链接处理（仅首页第一次加载）
   if (pageNo === 0) {
-    startVideoId = url.searchParams.get('start_video_id')
+    let rawStartVideoId = url.searchParams.get('start_video_id')
+
+    // 如果 query param 里有值，先尝试处理它
+    if (rawStartVideoId) {
+      if (rawStartVideoId.startsWith('video_')) {
+        rawStartVideoId = rawStartVideoId.replace('video_', '')
+      }
+      if (rawStartVideoId.includes('_i')) {
+        rawStartVideoId = rawStartVideoId.split('_i')[0]
+      }
+      startVideoId = rawStartVideoId
+    }
+
+    // 如果 query param 没值，再尝试从 header 里的 Telegram initData 解析
     if (!startVideoId) {
       const initData = req.headers.get('X-Telegram-Init-Data')
       if (initData) {

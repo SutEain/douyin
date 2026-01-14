@@ -1,6 +1,7 @@
 import { request } from '@/utils/request'
 import { supabase } from '@/utils/supabase'
 import { useVideoStore } from '@/stores/video'
+import { useBaseStore } from '@/store/pinia'
 
 export function historyOther(params?: any, data?: any) {
   return request({ url: '/video/historyOther', method: 'get', params, data })
@@ -48,12 +49,16 @@ export function recommendedVideo(params?: any) {
 
   // 🎯 注入本地已看列表 (用于游客去重)
   const videoStore = useVideoStore()
+  const baseStore = useBaseStore()
   const exclude_ids = videoStore.seenIds?.join(',')
 
-  // 🎯 深链接由后端自动处理（通过 Telegram initData）
+  // 🎯 深链接由后端自动处理
+  // 为确保稳定性，如果 store 中存在 startVideoId，则显式传递给后端
+  const start_video_id = baseStore.startVideoId
+
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/feed`,
-    { pageNo, pageSize, seed, exclude_ids },
+    { pageNo, pageSize, seed, exclude_ids, start_video_id },
     {
       requireAuth: false,
       includeAuthIfAvailable: true
