@@ -452,7 +452,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { supabase } from '@/utils/supabase'
 import { _checkImgUrl, _notice, _copy, _truncate } from '@/utils'
-import { toggleFollowUser, sendReward, sendRedPacket } from '@/api/videos'
+import { toggleFollowUser, sendReward, sendRedPacket, incrementWatchTime } from '@/api/videos'
 import DPPlayer from '@/components/live/DPPlayer.vue'
 import VapPlayer from '@/components/live/VapPlayer.vue'
 import RedPacketOverlay from '@/components/live/RedPacketOverlay.vue'
@@ -494,6 +494,7 @@ const giftEffectQueue = ref<GiftEffectItem[]>([])
 const isPlayingEffect = ref(false) // 当前是否有特效正在播放
 const viewerCount = ref(0)
 const viewers = ref<any[]>([]) // 存储前几名观众
+let watchTimeTimer: any = null // 观看时长定时器
 const fallbackAvatar = new URL('../../assets/img/icon/avatar/0.png', import.meta.url).href
 
 // --- 礼物相关 ---
@@ -1529,10 +1530,25 @@ function setupSubscription() {
 onMounted(async () => {
   await fetchGifts()
   await initRoom()
+
+  // 🎯 观看时长上报：每10秒上报一次
+  watchTimeTimer = setInterval(() => {
+    // 只有在直播状态才上报
+    if (roomInfo.value?.status === 'live') {
+      console.log(`[WatchTime] 直播间心跳上报: 10秒, roomId=${roomId.value}`)
+      incrementWatchTime(10, roomId.value).catch((e) => {
+        console.warn('[WatchTime] 直播间上报失败:', e)
+      })
+    }
+  }, 10000)
 })
 
 onBeforeUnmount(() => {
   if (channel) supabase.removeChannel(channel)
+  if (watchTimeTimer) {
+    clearInterval(watchTimeTimer)
+    watchTimeTimer = null
+  }
 })
 </script>
 

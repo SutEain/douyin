@@ -35,7 +35,8 @@ export const supabase = createClient(
     },
     realtime: {
       params: {
-        eventsPerSecond: 10
+        eventsPerSecond: 10,
+        apikey: supabaseAnonKey || ''
       },
       // 🎯 优化：增加重连尝试和超时配置，增强移动端稳定性
       timeout: 20000

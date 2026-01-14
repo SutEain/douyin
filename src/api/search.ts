@@ -178,6 +178,7 @@ export async function getSearchHistory(limit = 10) {
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
     Authorization: `Bearer ${accessToken}`
   }
 
@@ -211,6 +212,7 @@ export async function deleteSearchHistory(keyword?: string) {
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
     Authorization: `Bearer ${accessToken}`
   }
 
