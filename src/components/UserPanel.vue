@@ -9,6 +9,7 @@
             <img
               v-lazy="_checkImgUrl(props.currentItem.author.avatar_168x168.url_list[0])"
               class="avatar"
+              referrerpolicy="no-referrer"
             />
             <img
               v-if="!props.currentItem.author.follow_status"
@@ -34,6 +35,12 @@
             }}</span>
           </div>
         </transition>
+        <Icon
+          class="icon refresh-icon"
+          icon="mdi:refresh"
+          @click.stop="handleRefresh"
+          :class="{ loading: state.loadings.profile }"
+        />
         <!-- ✅ 隐藏搜索和三个点按钮
         <Icon class="icon" icon="ion:search" @click.stop="_no" />
         <Icon class="icon" icon="ri:more-line" @click.stop="emit('showFollowSetting')" />
@@ -67,6 +74,7 @@
             <img
               :src="_checkImgUrl(props.currentItem.author.avatar_168x168.url_list[0])"
               class="avatar"
+              referrerpolicy="no-referrer"
               @click="
                 state.previewImg = _checkImgUrl(props.currentItem.author.avatar_300x300.url_list[0])
               "
@@ -137,20 +145,46 @@
               />
               <span>{{ props.currentItem.author.user_age }}岁</span>
             </div>
-            <div class="item" v-if="props.currentItem.author.ip_location">
-              <img src="@/assets/img/icon/me/ditu.png" alt="" />
-              {{ props.currentItem.author.ip_location }}
-            </div>
             <div
               class="item"
-              v-if="props.currentItem.author.province || props.currentItem.author.city"
+              v-if="
+                props.currentItem.author.country ||
+                props.currentItem.author.province ||
+                props.currentItem.author.city ||
+                props.currentItem.author.ip_location
+              "
             >
               <img src="@/assets/img/icon/me/ditu.png" alt="" />
-              {{ props.currentItem.author.province }}
-              <template v-if="props.currentItem.author.province && props.currentItem.author.city">
+              <template v-if="props.currentItem.author.country">{{
+                props.currentItem.author.country
+              }}</template>
+              <template
+                v-if="
+                  props.currentItem.author.country &&
+                  (props.currentItem.author.province || props.currentItem.author.city)
+                "
+              >
                 ·
               </template>
-              {{ props.currentItem.author.city }}
+              <template v-if="props.currentItem.author.province">{{
+                props.currentItem.author.province
+              }}</template>
+              <template v-if="props.currentItem.author.province && props.currentItem.author.city">
+                -
+              </template>
+              <template v-if="props.currentItem.author.city">{{
+                props.currentItem.author.city
+              }}</template>
+              <template
+                v-if="
+                  !props.currentItem.author.country &&
+                  !props.currentItem.author.province &&
+                  !props.currentItem.author.city &&
+                  props.currentItem.author.ip_location
+                "
+              >
+                {{ props.currentItem.author.ip_location }}
+              </template>
             </div>
             <div class="item" v-if="props.currentItem.author.school?.name">
               {{ props.currentItem.author.school?.name }}
@@ -502,6 +536,18 @@ const isCollectPublic = computed(() => {
   return author?.show_collect !== false
 })
 
+async function handleRefresh() {
+  if (state.loadings.profile) return
+  console.log('[UserPanel] 🔄 刷新作者信息...')
+  try {
+    await loadAuthorInfo()
+    _no('刷新成功')
+  } catch (e) {
+    console.error('[UserPanel] handleRefresh error:', e)
+    _no('刷新失败')
+  }
+}
+
 async function handleRequestUpdate() {
   try {
     const authorId = props.currentItem?.author?.user_id
@@ -705,6 +751,19 @@ function copyAuthorTgUsername() {
 
 defineExpose({ cancelFollow })
 
+function calculateAge(birthday: string) {
+  if (!birthday) return -1
+  const birthDate = new Date(birthday)
+  if (Number.isNaN(birthDate.getTime())) return -1
+  const today = new Date()
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const m = today.getMonth() - birthDate.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--
+  }
+  return age < 0 ? -1 : age
+}
+
 // ✅ 加载作者详细信息（个人信息 + 统计数据）
 async function loadAuthorInfo() {
   try {
@@ -744,6 +803,10 @@ async function loadAuthorInfo() {
         signature: profile.bio || profile.signature || props.currentItem.author.signature,
         gender: profile.gender,
         birthday: profile.birthday,
+        user_age: calculateAge(profile.birthday),
+        country: profile.country,
+        province: profile.province,
+        city: profile.city,
         // 统计数据
         total_favorited: profile.total_favorited ?? props.currentItem.author.total_favorited,
         following_count: profile.following_count ?? props.currentItem.author.following_count,
@@ -1443,22 +1506,25 @@ onUnmounted(() => {
       }
 
       .more {
-        padding: 0 0 10rem 10rem; // ✅ 上 右 下 左
-        color: var(--second-text-color);
         display: flex;
+        flex-wrap: wrap;
+        gap: 10rem;
+        padding: 0 0 10rem 10rem; // ✅ 上 右 下 左
+        font-size: 13rem;
+        color: rgba(255, 255, 255, 0.8);
+        cursor: pointer;
 
         .item {
-          padding: 2rem 5rem;
-          border-radius: 2rem;
-          background: var(--second-btn-color-tran);
-          font-size: 10rem;
           display: flex;
           align-items: center;
-          margin-right: 5rem;
+          gap: 5rem;
+          padding: 5rem 10rem;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 4rem;
 
           img {
-            height: 10rem;
-            margin-right: 2rem;
+            width: 16rem;
+            height: 16rem;
           }
         }
       }
@@ -1593,6 +1659,12 @@ onUnmounted(() => {
 
       img {
         background: var(--main-bg) !important;
+      }
+    }
+
+    .refresh-icon {
+      &.loading {
+        animation: rotate 1s linear infinite;
       }
     }
 

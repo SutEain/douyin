@@ -27,6 +27,7 @@
               :src="_checkImgUrl(user.avatar_url)"
               alt=""
               class="avatar"
+              referrerpolicy="no-referrer"
               @error="handleAvatarError"
             />
             <div class="info">

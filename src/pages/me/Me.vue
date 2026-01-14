@@ -91,6 +91,7 @@
             <img
               :src="_checkImgUrl(userinfo.avatar_168x168?.url_list?.[0])"
               class="avatar"
+              referrerpolicy="no-referrer"
               @click.stop="state.previewImg = _checkImgUrl(userinfo.avatar_300x300?.url_list?.[0])"
             />
             <div class="right">

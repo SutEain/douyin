@@ -5,6 +5,7 @@
       <img
         :src="avatarUrl"
         class="avatar"
+        referrerpolicy="no-referrer"
         @error="handleAvatarError"
         @click.stop="handleGoUserPanel"
       />

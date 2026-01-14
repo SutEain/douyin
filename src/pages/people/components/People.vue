@@ -4,6 +4,7 @@
       :src="_checkImgUrl(people.avatar || people.avatar_url)"
       alt=""
       class="head-image pull-left"
+      referrerpolicy="no-referrer"
       @click.stop="$emit('clickAvatar', people)"
     />
     <div class="content" @click.stop="$emit('clickAvatar', people)">

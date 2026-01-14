@@ -39,6 +39,7 @@
               class="avatar"
               :src="_checkImgUrl(roomInfo.anchor_info?.avatar_url) || fallbackAvatar"
               alt=""
+              referrerpolicy="no-referrer"
             />
             <div class="desc-wrapper">
               <div class="name">{{ _truncate(roomInfo.anchor_info?.nickname || '主播', 15) }}</div>
@@ -57,6 +58,7 @@
                 :key="v.renderKey"
                 :src="_checkImgUrl(v.avatar) || fallbackAvatar"
                 class="v-avatar"
+                referrerpolicy="no-referrer"
                 @error="(e: any) => (e.target.src = fallbackAvatar)"
               />
             </div>

@@ -90,6 +90,7 @@
               <img
                 :src="_checkImgUrl(item.avatar)"
                 class="avatar"
+                referrerpolicy="no-referrer"
                 @click="handleAvatarClick(item)"
               />
               <div class="comment-body">
@@ -155,6 +156,7 @@
                 <img
                   :src="_checkImgUrl(child.avatar)"
                   class="avatar"
+                  referrerpolicy="no-referrer"
                   @click="handleAvatarClick(child)"
                 />
                 <div class="reply-body">

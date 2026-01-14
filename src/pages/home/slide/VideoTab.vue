@@ -281,6 +281,7 @@ function onAvatarError(e) {
                     v-lazy="_checkImgUrl(item.author.avatar_168x168.url_list[0])"
                     alt=""
                     class="avatar"
+                    referrerpolicy="no-referrer"
                     @error="onAvatarError"
                   />
                   <div class="name">{{ _truncate(item.author.nickname, 10) }}</div>
