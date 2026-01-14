@@ -61,17 +61,22 @@ export default {
   font-size: 14rem;
   position: fixed;
   width: 100%;
-  height: var(--footer-height);
-  //border-top: 1px solid #7b7878;
+  // 🎯 适配刘海屏：高度 = 基础高度 + 底部安全区高度
+  height: calc(var(--footer-height) + env(safe-area-inset-bottom));
   z-index: 100; /* 提高层级，确保在所有tab之上 */
-  //不用bottom：0是因为，在进行页面切换的时候，vue的transition
-  // 会使footer的bottom：0失效，不能准确定位
-  top: calc(var(--vh, 1vh) * 100 - var(--footer-height));
-  //bottom: 0;
+
+  // 🎯 修复定位：放弃 top 动态计算，使用最可靠的 bottom: 0 方案
+  // 解决在安卓/iOS Safari 浏览器中因地址栏伸缩导致的定位偏差
+  bottom: 0;
+  // top: calc(var(--vh, 1vh) * 100 - var(--footer-height));
+
+  // 🎯 内部避开底部横条占位
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
+
   background: var(--footer-color);
   color: white;
   display: flex;
-  //justify-content: space-between;
 
   &.isWhite {
     background: white !important;
@@ -85,6 +90,8 @@ export default {
     align-items: center;
     position: relative;
     font-size: 16rem;
+    // 🎯 按钮高度固定为 footer 高度，不受安全区 padding 影响
+    height: var(--footer-height);
 
     span {
       cursor: pointer;
@@ -106,7 +113,7 @@ export default {
   // ✅ 中间分割线
   .divider {
     width: 1px;
-    height: 50%;
+    height: 40%;
     background: rgba(128, 128, 128, 0.3); // 灰色半透明
     align-self: center;
   }
