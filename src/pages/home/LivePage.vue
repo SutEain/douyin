@@ -623,9 +623,14 @@ async function handleSendPacket() {
   try {
     // 🎯 深度克隆并清理未启用的条件
     const finalForm = JSON.parse(JSON.stringify(packetForm))
-    if (!showKeywordInput.value) {
-      finalForm.claim_conditions.keyword = ''
+    if (!showKeywordInput.value || !finalForm.claim_conditions.keyword) {
+      delete finalForm.claim_conditions.keyword
     }
+    if (!finalForm.claim_conditions.follow) {
+      delete finalForm.claim_conditions.follow
+    }
+
+    console.log('[RedPacket] 发送红包参数:', finalForm)
 
     const res = await sendRedPacket({
       room_id: roomId.value,

@@ -29,11 +29,19 @@
             <div class="coins" v-if="currentPacket">{{ currentPacket.total_coins }} 抖币</div>
 
             <div class="conditions" v-if="hasConditions">
-              <div class="cond-item" :class="{ ok: condStatus.follow }">
+              <div
+                class="cond-item"
+                :class="{ ok: condStatus.follow }"
+                v-if="currentPacket.claim_conditions?.follow"
+              >
                 <Icon :icon="condStatus.follow ? 'ion:checkmark-circle' : 'ion:ellipse-outline'" />
                 关注主播
               </div>
-              <div class="cond-item" :class="{ ok: condStatus.chat }">
+              <div
+                class="cond-item"
+                :class="{ ok: condStatus.chat }"
+                v-if="currentPacket.claim_conditions?.keyword"
+              >
                 <Icon :icon="condStatus.chat ? 'ion:checkmark-circle' : 'ion:ellipse-outline'" />
                 发送指定弹幕: "{{ currentPacket.claim_conditions?.keyword }}"
                 <div
