@@ -381,7 +381,8 @@ export const useBaseStore = defineStore('base', {
 
         // 🎯 Windows 修复：优先从 URL 中解析 startapp 参数（适用于通知链接）
         const urlParams = new URLSearchParams(window.location.search)
-        const startappParam = urlParams.get('startapp')
+        // 🎯 修复：Telegram 在某些环境下会把参数放进 tgWebAppStartParam
+        const startappParam = urlParams.get('startapp') || urlParams.get('tgWebAppStartParam')
         console.log('[parseStartParam] startappParam from URL:', startappParam)
 
         if (startappParam) {

@@ -41,6 +41,23 @@ const transitionName = ref('go')
 // 🎯 全局深链接处理
 async function handleDeepLink() {
   console.log('[App.handleDeepLink] ========== 调用深链接处理 ==========')
+
+  // 🎯 核心修复：如果 store 还没准备好，或者正在初始化，先等待
+  if (!store.isAppReady) {
+    console.log('[App.handleDeepLink] ⏳ 等待 store 就绪...')
+    await new Promise((resolve) => {
+      const unwatch = watch(
+        () => store.isAppReady,
+        (ready) => {
+          if (ready) {
+            unwatch()
+            resolve(true)
+          }
+        }
+      )
+    })
+  }
+
   console.log('[App.handleDeepLink] store.startLiveId:', store.startLiveId)
 
   if (store.startLiveId) {
@@ -54,6 +71,11 @@ async function handleDeepLink() {
 
     // 延迟一小会儿确保稳定
     setTimeout(() => {
+      // 🎯 如果当前已经在直播页且 ID 相同，可能不会触发更新，所以这里强制处理
+      if (route.path === '/home/live' && route.query.id === roomId) {
+        console.log('[App.handleDeepLink] 📍 已在目标直播间，无需跳转')
+        return
+      }
       console.log('[App.handleDeepLink] 🚀 准备跳转到直播间:', `/home/live?id=${roomId}`)
       router.push({ path: '/home/live', query: { id: roomId } })
       console.log('[App.handleDeepLink] ✅ router.push 已调用')
