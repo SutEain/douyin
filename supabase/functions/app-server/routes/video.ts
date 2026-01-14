@@ -131,7 +131,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_type: 'recommend',
     p_limit: targetCount,
-    p_offset: excludeIds.length > 0 ? 0 : from,
+    p_offset: from, // 🎯 恢复：始终使用 from 作为偏移
     p_seed: seed || 0.5,
     p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon',
     p_exclude_ids: excludeIds.length > 0 ? excludeIds : null
@@ -265,7 +265,7 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
     p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_exclude_ids: finalExcludeIds.length > 0 ? finalExcludeIds : null,
     p_limit: pageSize,
-    p_offset: finalExcludeIds.length > 0 ? 0 : from,
+    p_offset: from, // 🎯 恢复：始终使用 from 作为偏移
     p_seed: seed || 0.5,
     p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon'
   }
@@ -377,7 +377,7 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
     p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_exclude_ids: finalExcludeIds.length > 0 ? finalExcludeIds : null,
     p_limit: pageSize,
-    p_offset: finalExcludeIds.length > 0 ? 0 : from,
+    p_offset: from, // 🎯 恢复：始终使用 from 作为偏移
     p_seed: seed || 0.5,
     p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon'
   }
@@ -574,7 +574,7 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
     p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_exclude_ids: finalExcludeIds.length > 0 ? finalExcludeIds : null,
     p_limit: pageSize,
-    p_offset: finalExcludeIds.length > 0 ? 0 : from,
+    p_offset: from, // 🎯 恢复：始终使用 from 作为偏移
     p_seed: seed || 0.5,
     p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon'
   }
