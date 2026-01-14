@@ -487,43 +487,47 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
   const seed = parseFloat(url.searchParams.get('seed') || '0.5')
   const { user } = await tryGetAuth(req)
 
-  console.log('[AdultFeed] 请求参数:', { pageNo, pageSize, seed, userId: user?.id })
+  // 🎯 解析前端传入的排除列表
+  const excludeIdsRaw = url.searchParams.get('exclude_ids')
+  const clientExcludeIds = excludeIdsRaw
+    ? excludeIdsRaw.split(',').filter((id) => id.length === 36)
+    : []
 
-  // 🎯 调试：检查用户是否有观看历史
-  if (user?.id) {
-    const { count } = await supabaseAdmin
-      .from('watch_history')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-    console.log('[AdultFeed] 用户观看历史总数:', count)
-  }
+  console.log('[AdultFeed] 请求参数:', {
+    pageNo,
+    pageSize,
+    seed,
+    userId: user?.id,
+    clientExcludeCount: clientExcludeIds.length
+  })
 
-  // 🎯 获取用户最近观看历史（排除最近 500 条，确保覆盖更多历史）
-  let excludeVideoIds: string[] = []
+  // 🎯 获取用户最近观看历史
+  let backendExcludeIds: string[] = []
   if (user?.id) {
     const { data: historyData } = await supabaseAdmin
       .from('watch_history')
       .select('video_id')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
-      .limit(500) // 🎯 增加到 500 条，确保覆盖更多观看历史
+      .limit(500)
 
     if (historyData) {
-      excludeVideoIds = historyData.map((h: any) => h.video_id).filter(Boolean)
-      console.log('[LongFeed] 排除已观看视频数量:', excludeVideoIds.length)
+      backendExcludeIds = historyData.map((h: any) => h.video_id).filter(Boolean)
     }
   }
 
-  // 🎯 增加访客特征：如果用户未登录，优先使用 IP 作为指纹，确保不同用户看到的随机内容不一致
+  const finalExcludeIds = Array.from(new Set([...clientExcludeIds, ...backendExcludeIds]))
+
+  // 🎯 增加访客特征
   const clientIp = req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for') || 'anon'
   const visitorKey = user?.id || clientIp
 
   // 🎯 使用加权随机算法 (WRS) + Seed
-  console.log('[AdultFeed] 调用 RPC，排除视频数量:', excludeVideoIds.length)
+  console.log('[AdultFeed] 调用 RPC，排除视频数量:', finalExcludeIds.length)
   console.log('[AdultFeed] RPC参数:', {
     p_user_id: user?.id || null,
-    p_exclude_ids_count: excludeVideoIds.length,
-    p_exclude_ids_sample: excludeVideoIds.slice(0, 3), // 打印前3个ID用于调试
+    p_exclude_ids_count: finalExcludeIds.length,
+    p_exclude_ids_sample: finalExcludeIds.slice(0, 3),
     p_limit: pageSize,
     p_offset: from,
     p_seed: seed,
@@ -532,7 +536,7 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
 
   const { data, error } = await supabaseAdmin.rpc('get_adult_feed', {
     p_user_id: user?.id || null,
-    p_exclude_ids: excludeVideoIds.length > 0 ? excludeVideoIds : null, // 🎯 空数组改为 null，避免 RPC 函数判断错误
+    p_exclude_ids: finalExcludeIds.length > 0 ? finalExcludeIds : null,
     p_limit: pageSize,
     p_offset: from,
     p_seed: seed,

@@ -1,5 +1,6 @@
 import { request } from '@/utils/request'
 import { supabase } from '@/utils/supabase'
+import { useVideoStore } from '@/stores/video'
 
 export function historyOther(params?: any, data?: any) {
   return request({ url: '/video/historyOther', method: 'get', params, data })
@@ -45,10 +46,14 @@ export function recommendedVideo(params?: any) {
   const pageNo = Math.floor(start / pageSize)
   const seed = params?.seed ?? 0.5
 
+  // 🎯 注入本地已看列表 (用于游客去重)
+  const videoStore = useVideoStore()
+  const exclude_ids = videoStore.seenIds?.join(',')
+
   // 🎯 深链接由后端自动处理（通过 Telegram initData）
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/feed`,
-    { pageNo, pageSize, seed },
+    { pageNo, pageSize, seed, exclude_ids },
     {
       requireAuth: false,
       includeAuthIfAvailable: true
@@ -60,9 +65,14 @@ export function recommendedLongVideo(params?: any) {
   const pageNo = params?.pageNo ?? 0
   const pageSize = params?.pageSize ?? 10
   const seed = params?.seed ?? 0.5
+
+  // 🎯 注入本地已看列表
+  const videoStore = useVideoStore()
+  const exclude_ids = videoStore.seenIds?.join(',')
+
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/long-feed`,
-    { pageNo, pageSize, seed },
+    { pageNo, pageSize, seed, exclude_ids },
     { requireAuth: false, includeAuthIfAvailable: true }
   )
 }
@@ -73,9 +83,13 @@ export function recommendedVideoTab(params?: any) {
   const pageSize = params?.pageSize ?? 10
   const seed = params?.seed ?? 0.5
 
+  // 🎯 注入本地已看列表
+  const videoStore = useVideoStore()
+  const exclude_ids = videoStore.seenIds?.join(',')
+
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/video-tab-feed`,
-    { pageNo, pageSize, seed },
+    { pageNo, pageSize, seed, exclude_ids },
     { requireAuth: false, includeAuthIfAvailable: true }
   )
 }
@@ -98,9 +112,13 @@ export function adultVideoFeed(params?: any) {
   const pageNo = Math.floor(start / pageSize)
   const seed = params?.seed ?? 0.5
 
+  // 🎯 注入本地已看列表
+  const videoStore = useVideoStore()
+  const exclude_ids = videoStore.seenIds?.join(',')
+
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/adult-feed`,
-    { pageNo, pageSize, seed },
+    { pageNo, pageSize, seed, exclude_ids },
     { requireAuth: false, includeAuthIfAvailable: true }
   )
 }

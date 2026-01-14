@@ -32,6 +32,22 @@ export const useVideoStore = defineStore('video', () => {
   // 评论的视频 ID
   const commentVideoId = ref<string>('')
 
+  // 🎯 最近看过但未记录到后端的视频 ID (用于游客去重)
+  const seenIds = ref<string[]>([])
+
+  // 初始化时从 localStorage 加载最近看过的 ID
+  try {
+    const savedSeenIds = localStorage.getItem('seen_video_ids')
+    if (savedSeenIds) {
+      const parsed = JSON.parse(savedSeenIds)
+      if (Array.isArray(parsed)) {
+        seenIds.value = parsed.filter((id) => typeof id === 'string' && id.length > 0)
+      }
+    }
+  } catch (e) {
+    console.warn('[VideoStore] 加载 seen_video_ids 失败:', e)
+  }
+
   // 是否静音（默认静音以兼容浏览器自动播放策略）
   const isMuted = ref(true)
   // 同步到 window，兼容旧代码
@@ -66,6 +82,12 @@ export const useVideoStore = defineStore('video', () => {
     currentVideo.value = video
     if (index !== undefined) {
       currentIndex.value = index
+    }
+
+    // 🎯 只要刷到了这个视频，就记录到已看列表（用于排除重复）
+    const id = video?.aweme_id || video?.id
+    if (id) {
+      addSeenId(id)
     }
   }
 
@@ -147,6 +169,35 @@ export const useVideoStore = defineStore('video', () => {
     isFullscreen.value = false
     showComments.value = false
     commentVideoId.value = ''
+  }
+
+  /**
+   * 🎯 记录看过的一个视频 ID (用于去重)
+   */
+  function addSeenId(id: string) {
+    if (!id) return
+    // 如果已经存在，先移除再放到最前面（更新活跃度）
+    const index = seenIds.value.indexOf(id)
+    if (index > -1) {
+      seenIds.value.splice(index, 1)
+    }
+    seenIds.value.unshift(id)
+    // 保持最多 100 条
+    if (seenIds.value.length > 100) {
+      seenIds.value.pop()
+    }
+    // 异步存储到 localStorage
+    setTimeout(() => {
+      localStorage.setItem('seen_video_ids', JSON.stringify(seenIds.value))
+    }, 0)
+  }
+
+  /**
+   * 🎯 清空本地去重记录
+   */
+  function clearSeenIds() {
+    seenIds.value = []
+    localStorage.removeItem('seen_video_ids')
   }
 
   // ========== 🎯 全局视频播放管理 ==========
@@ -247,6 +298,7 @@ export const useVideoStore = defineStore('video', () => {
     commentVideoId,
     isMuted,
     activeVideoElement,
+    seenIds,
 
     // 计算属性
     isPlaying,
@@ -260,6 +312,8 @@ export const useVideoStore = defineStore('video', () => {
     toggleFullscreen,
     toggleMuted,
     reset,
+    addSeenId,
+    clearSeenIds,
 
     // 🎯 全局视频管理
     registerVideoElement,
