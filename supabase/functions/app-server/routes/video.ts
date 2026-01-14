@@ -131,7 +131,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_type: 'recommend',
     p_limit: targetCount,
-    p_offset: from,
+    p_offset: excludeIds.length > 0 ? 0 : from,
     p_seed: seed || 0.5,
     p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon',
     p_exclude_ids: excludeIds.length > 0 ? excludeIds : null
@@ -153,7 +153,6 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
       .from('videos')
       .select('*')
       .eq('status', 'published')
-      .eq('review_status', 'approved') // 🎯 对齐审核过滤
       .eq('is_adult', false)
       .eq('is_private', false)
       .order('created_at', { ascending: false })
@@ -199,10 +198,10 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     .select('*', { count: 'exact', head: true })
     .eq('status', 'published')
     .eq('is_adult', false)
-    .eq('is_private', false) // 🎯 增加私密过滤
+    .eq('is_private', false)
 
-  // 🎯 优化 hasMore 判断：如果返回的数量达到了请求的数量，说明可能还有更多
-  const hasMore = rows.length >= targetCount
+  // 🎯 优化 hasMore 判断：只要返回了数据，就认为可能还有更多（因为有排除列表逻辑）
+  const hasMore = (rows?.length || 0) > 0
 
   return successResponse(
     {
@@ -266,7 +265,7 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
     p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_exclude_ids: finalExcludeIds.length > 0 ? finalExcludeIds : null,
     p_limit: pageSize,
-    p_offset: from,
+    p_offset: finalExcludeIds.length > 0 ? 0 : from,
     p_seed: seed || 0.5,
     p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon'
   }
@@ -313,8 +312,8 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
     }
   }
 
-  // 🎯 获取总数（用于判断hasMore）
-  const hasMore = list.length >= pageSize
+  // 🎯 优化 hasMore 判断：只要本次 RPC 返回了数据，就认为可能还有更多（因为是排除式去重）
+  const hasMore = (data?.length || 0) > 0
 
   return successResponse({
     list,
@@ -378,7 +377,7 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
     p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_exclude_ids: finalExcludeIds.length > 0 ? finalExcludeIds : null,
     p_limit: pageSize,
-    p_offset: from,
+    p_offset: finalExcludeIds.length > 0 ? 0 : from,
     p_seed: seed || 0.5,
     p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon'
   }
@@ -414,9 +413,8 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
     }
   }
 
-  // 🎯 获取总数（用于判断hasMore）
-  // 注意：RPC不返回count，这里简化为根据返回数量判断
-  const hasMore = list.length >= pageSize
+  // 🎯 优化 hasMore 判断：只要本次 RPC 返回了数据，就认为可能还有更多（因为是排除式去重）
+  const hasMore = (data?.length || 0) > 0
 
   return successResponse({
     list,
@@ -476,7 +474,7 @@ export async function handleShortDramaFeed(req: Request): Promise<Response> {
     total: count ?? 0,
     pageNo,
     pageSize,
-    hasMore: list.length >= pageSize
+    hasMore: (data?.length || 0) >= pageSize
   })
 }
 
@@ -523,7 +521,7 @@ export async function handleGraphicFeed(req: Request): Promise<Response> {
     total: count ?? 0,
     pageNo,
     pageSize,
-    hasMore: list.length >= pageSize
+    hasMore: (data?.length || 0) >= pageSize
   })
 }
 
@@ -576,7 +574,7 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
     p_user_id: user?.id && user.id !== 'undefined' ? user.id : null,
     p_exclude_ids: finalExcludeIds.length > 0 ? finalExcludeIds : null,
     p_limit: pageSize,
-    p_offset: from,
+    p_offset: finalExcludeIds.length > 0 ? 0 : from,
     p_seed: seed || 0.5,
     p_visitor_key: visitorKey && visitorKey !== 'undefined' ? visitorKey : 'anon'
   }
@@ -623,8 +621,8 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
     }
   }
 
-  // 🎯 获取总数（用于判断hasMore）
-  const hasMore = list.length >= pageSize
+  // 🎯 优化 hasMore 判断：只要本次 RPC 返回了数据，就认为可能还有更多（因为是排除式去重）
+  const hasMore = (data?.length || 0) > 0
 
   return successResponse({
     list,
