@@ -120,9 +120,26 @@ export const authProvider: AuthProvider = {
     return null
   },
   onError: async (error: any) => {
+    // 🎯 处理认证错误
     if (error?.code === 'PGRST301') {
       return {
         logout: true
+      }
+    }
+
+    // 🎯 处理 JSON 解析错误（返回单个 } 的情况）
+    if (
+      error?.message?.includes('JSON') ||
+      error?.message?.includes('Unexpected token') ||
+      error?.message === '}' ||
+      (typeof error === 'string' && error.trim() === '}')
+    ) {
+      console.error('[AuthProvider] JSON 解析错误:', error)
+      return {
+        error: {
+          name: 'JSONParseError',
+          message: '服务器响应格式错误，请刷新页面重试'
+        }
       }
     }
 

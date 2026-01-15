@@ -101,6 +101,13 @@ function App() {
             authProvider={authProvider}
             routerProvider={routerProvider}
             notificationProvider={useNotificationProvider}
+            options={{
+              // 🎯 启用错误追踪
+              mutationMode: 'pessimistic',
+              // 🎯 禁用实时更新，避免频繁请求
+              liveMode: 'off'
+            }}
+            catchAll={<ErrorComponent />}
             resources={[
               {
                 name: 'dashboard',

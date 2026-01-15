@@ -1,6 +1,6 @@
 import { List, useTable } from '@refinedev/antd'
 import { Table, Space, Tag, Button, Modal, Input, Select, Form, message, Tooltip } from 'antd'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useInvalidate, useUpdate, useDelete } from '@refinedev/core'
 import { useNavigate } from 'react-router-dom'
 import Hls from 'hls.js'
@@ -117,6 +117,9 @@ export const VideoList = () => {
     mediaVideo?: { video: HTMLVideoElement; hls: Hls | null }
   }>({})
 
+  // 🎯 防抖定时器引用
+  const searchDebounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+
   const { tableProps, searchFormProps, setFilters } = useTable({
     // ✅ 后台视频列表使用视图（支持业务优先级排序 + 用户多字段搜索）
     resource: 'admin_videos_list',
@@ -134,54 +137,81 @@ export const VideoList = () => {
       pageSize: 20
     } as any,
     queryOptions: {
-      staleTime: 0, // ✅ 禁用缓存，确保每次进入页面都重新获取最新数据
-      refetchOnMount: 'always' // ✅ 强制挂载时重新获取
+      staleTime: 30000, // 🎯 30秒缓存，减少频繁请求
+      refetchOnMount: false, // 🎯 不在挂载时强制重新获取，避免重复请求
+      retry: 1, // 🎯 失败时只重试1次
+      retryDelay: 1000 // 🎯 重试延迟1秒
     }
   })
 
   // 🎯 核心修复：点搜索时，根据当前有哪些条件，构建全新的过滤器
-  const handleSearch = (params: any) => {
-    const filters: any[] = []
+  // 🎯 添加防抖处理，避免快速连续搜索导致请求冲突
+  const handleSearch = useCallback(
+    (params: any) => {
+      // 清除之前的定时器
+      if (searchDebounceTimerRef.current) {
+        clearTimeout(searchDebounceTimerRef.current)
+      }
 
-    if (params.video_id?.trim()) {
-      filters.push({ field: 'id', operator: 'eq', value: params.video_id.trim() })
-    }
-    if (params.description?.trim()) {
-      filters.push({ field: 'description', operator: 'contains', value: params.description.trim() })
-    }
-    if (params.user_q?.trim()) {
-      filters.push({
-        field: 'author_search',
-        operator: 'contains',
-        value: params.user_q.trim().toLowerCase()
-      })
-    }
-    if (params.status) {
-      filters.push({ field: 'status', operator: 'eq', value: params.status })
-    }
-    if (params.review_status) {
-      filters.push({ field: 'review_status', operator: 'eq', value: params.review_status })
-    }
-    if (params.content_type) {
-      filters.push({ field: 'content_type', operator: 'eq', value: params.content_type })
-    }
-    if (params.is_recommended === 'true' || params.is_recommended === 'false') {
-      filters.push({
-        field: 'is_recommended',
-        operator: 'eq',
-        value: params.is_recommended === 'true'
-      })
-    }
-    if (params.is_adult === 'true' || params.is_adult === 'false') {
-      filters.push({ field: 'is_adult', operator: 'eq', value: params.is_adult === 'true' })
-    }
-    if (params.is_sea === 'true' || params.is_sea === 'false') {
-      filters.push({ field: 'is_sea', operator: 'eq', value: params.is_sea === 'true' })
-    }
+      // 设置新的防抖定时器（300ms延迟）
+      searchDebounceTimerRef.current = setTimeout(() => {
+        const filters: any[] = []
 
-    // 🎯 这里的 "replace" 是关键！它会清除之前的所有旧条件，只用当前这几个。
-    setFilters(filters, 'replace')
-  }
+        if (params.video_id?.trim()) {
+          filters.push({ field: 'id', operator: 'eq', value: params.video_id.trim() })
+        }
+        if (params.description?.trim()) {
+          filters.push({
+            field: 'description',
+            operator: 'contains',
+            value: params.description.trim()
+          })
+        }
+        if (params.user_q?.trim()) {
+          filters.push({
+            field: 'author_search',
+            operator: 'contains',
+            value: params.user_q.trim().toLowerCase()
+          })
+        }
+        if (params.status) {
+          filters.push({ field: 'status', operator: 'eq', value: params.status })
+        }
+        if (params.review_status) {
+          filters.push({ field: 'review_status', operator: 'eq', value: params.review_status })
+        }
+        if (params.content_type) {
+          filters.push({ field: 'content_type', operator: 'eq', value: params.content_type })
+        }
+        if (params.is_recommended === 'true' || params.is_recommended === 'false') {
+          filters.push({
+            field: 'is_recommended',
+            operator: 'eq',
+            value: params.is_recommended === 'true'
+          })
+        }
+        if (params.is_adult === 'true' || params.is_adult === 'false') {
+          filters.push({ field: 'is_adult', operator: 'eq', value: params.is_adult === 'true' })
+        }
+        if (params.is_sea === 'true' || params.is_sea === 'false') {
+          filters.push({ field: 'is_sea', operator: 'eq', value: params.is_sea === 'true' })
+        }
+
+        // 🎯 这里的 "replace" 是关键！它会清除之前的所有旧条件，只用当前这几个。
+        setFilters(filters, 'replace')
+      }, 300)
+    },
+    [setFilters]
+  )
+
+  // 🎯 清理防抖定时器
+  useEffect(() => {
+    return () => {
+      if (searchDebounceTimerRef.current) {
+        clearTimeout(searchDebounceTimerRef.current)
+      }
+    }
+  }, [])
 
   // 格式化北京时间
   const formatBeijingTime = (dateStr: string) => {
