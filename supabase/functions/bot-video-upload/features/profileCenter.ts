@@ -1286,7 +1286,9 @@ export async function handleTransactions(chatId: number, messageId?: number) {
       }
 
       txs.forEach((t: any) => {
+        // 🎯 使用北京时间（UTC+8）格式化时间
         const time = new Date(t.created_at).toLocaleString('zh-CN', {
+          timeZone: 'Asia/Shanghai',
           month: 'numeric',
           day: 'numeric',
           hour: 'numeric',
