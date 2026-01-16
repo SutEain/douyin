@@ -233,7 +233,6 @@ function App() {
             authProvider={authProvider}
             routerProvider={routerProvider}
             notificationProvider={useNotificationProvider}
-            catchAll={<ErrorComponent />}
             resources={filteredResources}
             options={{
               // 🎯 启用错误追踪
