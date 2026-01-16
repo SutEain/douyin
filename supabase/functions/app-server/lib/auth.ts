@@ -39,8 +39,20 @@ export async function checkAdminIpWhitelist(req: Request) {
     whitelistStr = setting?.value_text
   }
 
-  // 如果未配置白名单，则放行
-  if (!whitelistStr || whitelistStr.trim() === '*') return
+  // 🚨 安全加固：如果未配置白名单，默认拒绝（必须显式配置）
+  if (!whitelistStr || whitelistStr.trim() === '') {
+    console.warn(`[IP_BLOCK] 管理员访问被拒绝：IP=${ip}，原因：未配置 IP 白名单`)
+    throw new HttpError(
+      `管理员访问被拒绝：未配置 IP 白名单。请联系系统管理员配置 ADMIN_IP_WHITELIST。`,
+      403
+    )
+  }
+
+  // 如果配置为 '*'，则放行所有 IP（不推荐，仅用于开发环境）
+  if (whitelistStr.trim() === '*') {
+    console.warn(`[IP_WHITELIST] ⚠️ 警告：IP 白名单配置为 '*'，允许所有 IP 访问管理员接口`)
+    return
+  }
 
   const whitelist = whitelistStr
     .split(',')

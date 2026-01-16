@@ -8,7 +8,15 @@ import {
   getVideoAuthorProfile,
   mapVideoRow
 } from '../lib/video.ts'
-import { HttpError, parseJsonBody, parsePagination, requireAuth, tryGetAuth } from '../lib/auth.ts'
+import {
+  HttpError,
+  parseJsonBody,
+  parsePagination,
+  requireAuth,
+  requireAdminAuth,
+  tryGetAuth
+} from '../lib/auth.ts'
+import { checkRateLimit } from '../lib/rateLimit.ts'
 
 export async function handleVideoMy(req: Request): Promise<Response> {
   const { user, profile } = await requireAuth(req, { withProfile: true })
@@ -1090,6 +1098,9 @@ export async function handleVideoCollect(req: Request): Promise<Response> {
 }
 
 export async function handleBatchReview(req: Request): Promise<Response> {
+  // 🚨 安全加固：仅管理员可以批量审核
+  await requireAdminAuth(req)
+
   const body = await parseJsonBody(req)
   const { video_ids, action, reject_reason } = body
 
@@ -1136,6 +1147,9 @@ export async function handleBatchReview(req: Request): Promise<Response> {
 }
 
 export async function handleApproveVideo(req: Request): Promise<Response> {
+  // 🚨 安全加固：仅管理员可以审核视频
+  await requireAdminAuth(req)
+
   const body = await parseJsonBody(req)
   const { video_id } = body
   if (!video_id) return errorResponse('video_id required', 1, 400)
@@ -1228,15 +1242,44 @@ export async function handleIncrementWatchTime(req: Request): Promise<Response> 
   const { user } = await requireAuth(req)
   const body = await parseJsonBody(req)
   const { seconds, video_id } = body
-  if (!seconds || seconds <= 0) return errorResponse('Invalid seconds', 1, 400)
+
+  // 🚨 安全验证 1: 每次只能接受小于等于20秒的数值
+  const secondsInt = Math.floor(seconds)
+  if (!seconds || secondsInt <= 0 || secondsInt > 20) {
+    return successResponse({ success: false })
+  }
+
+  // 🚨 安全验证 2: 检查距离上次上报是否相隔大于20秒
+  const { data: lastUpdate, error: lastUpdateError } = await supabaseAdmin
+    .from('user_daily_watch_time')
+    .select('last_updated_at')
+    .eq('user_id', user.id)
+    .order('last_updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!lastUpdateError && lastUpdate?.last_updated_at) {
+    const lastUpdateTime = new Date(lastUpdate.last_updated_at).getTime()
+    const now = Date.now()
+    const timeSinceLastUpdate = now - lastUpdateTime
+
+    // 距离上次上报必须相隔大于20秒
+    if (timeSinceLastUpdate < 20000) {
+      return successResponse({ success: false })
+    }
+  }
 
   const { data, error } = await supabaseAdmin.rpc('increment_daily_watch_time', {
     p_user_id: user.id,
-    p_seconds: Math.floor(seconds),
+    p_seconds: secondsInt,
     p_video_id: video_id || null
   })
 
-  if (error) return errorResponse('Failed', 1, 500)
+  if (error) {
+    console.error('[handleIncrementWatchTime] RPC error:', error)
+    return successResponse({ success: false })
+  }
+
   return successResponse(data)
 }
 
@@ -1251,9 +1294,58 @@ export async function handleGetWatchTimeStatus(req: Request): Promise<Response> 
 
 export async function handleClaimWatchTimeReward(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
+
+  // 🚨 紧急安全修复：添加频率限制，防止无限刷抖币
+  // 1分钟内最多调用3次，超过后锁定5分钟
+  const rateLimitResult = await checkRateLimit(user.id, 'tg_user_id', 'claim_watch_time', {
+    maxAttempts: 3,
+    windowMs: 60000, // 1分钟
+    lockDurationMs: 300000 // 5分钟锁定
+  })
+
+  if (!rateLimitResult.allowed) {
+    const lockedMsg = rateLimitResult.lockedUntil
+      ? `，已锁定至 ${new Date(rateLimitResult.lockedUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`
+      : ''
+    throw new HttpError(`请求过于频繁，请稍后再试${lockedMsg}`, 429)
+  }
+
+  // 🚨 额外检查：检查最近一次领取时间，防止并发攻击
+  const { data: lastClaim, error: lastClaimError } = await supabaseAdmin
+    .from('coin_transactions')
+    .select('created_at')
+    .eq('user_id', user.id)
+    .eq('type', 'watch_time_reward')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!lastClaimError && lastClaim) {
+    const lastClaimTime = new Date(lastClaim.created_at).getTime()
+    const now = Date.now()
+    const timeSinceLastClaim = now - lastClaimTime
+
+    // 同一档位领取后，至少需要等待2秒才能再次检查（防止并发竞态）
+    if (timeSinceLastClaim < 2000) {
+      throw new HttpError('请求过于频繁，请稍后再试', 429)
+    }
+  }
+
   const { data, error } = await supabaseAdmin.rpc('claim_watch_time_reward', {
     p_user_id: user.id
   })
-  if (error) return errorResponse('Failed', 1, 500)
+
+  if (error) {
+    console.error('[handleClaimWatchTimeReward] RPC error:', error)
+    return errorResponse(error.message || 'Failed', 1, 500)
+  }
+
+  // 🚨 验证返回结果，确保没有异常奖励
+  if (data && typeof data === 'object' && 'success' in data) {
+    if (!data.success) {
+      return errorResponse(data.message || '领取失败', 1, 400)
+    }
+  }
+
   return successResponse(data)
 }

@@ -209,9 +209,26 @@ async function setSource(src: string) {
       try {
         const Hls = await loadHlsFromCdn()
         if (Hls?.isSupported?.()) {
+          // 🎯 Windows 平台优化：检测操作系统，调整 HLS 配置以解决音画不同步问题
+          const isWindows = /Win/i.test(navigator.platform) || /Windows/i.test(navigator.userAgent)
+
           hls = new Hls({
             enableWorker: true,
-            lowLatencyMode: true
+            // 🎯 Windows 平台：关闭低延迟模式，增加缓冲以确保音视频同步
+            // 低延迟模式在 Windows 上可能导致缓冲不足，造成音画不同步
+            lowLatencyMode: !isWindows,
+            // 🎯 Windows 平台：增加最大缓冲长度，确保有足够的音视频数据
+            maxBufferLength: isWindows ? 30 : undefined, // 30秒缓冲
+            maxMaxBufferLength: isWindows ? 60 : undefined, // 最大60秒缓冲
+            // 🎯 Windows 平台：设置直播同步持续时间，确保音视频同步
+            liveSyncDurationCount: isWindows ? 3 : undefined, // 3个片段
+            liveMaxLatencyDurationCount: isWindows ? 5 : undefined, // 最大延迟5个片段
+            // 🎯 启用自动级别切换，根据网络情况自动调整
+            autoStartLoad: true,
+            // 🎯 启用音视频同步修复
+            abrEwmaDefaultEstimate: 500000, // 初始带宽估计
+            abrBandWidthFactor: 0.95, // 带宽因子
+            abrBandWidthUpFactor: 0.7 // 带宽上升因子
           })
           try {
             hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
@@ -321,11 +338,11 @@ onMounted(() => {
         // 如果是横屏视频 (宽 > 高)，使用 contain 以免剪掉太多内容，上下留黑边是正常的
         // 如果是竖屏视频 (高 >= 宽)，使用 cover 以填充全屏，消除左右黑边
         videoFit.value = video.videoWidth > video.videoHeight ? 'contain' : 'cover'
-        pushDebug('video.fit', { 
-          event: type, 
-          width: video.videoWidth, 
-          height: video.videoHeight, 
-          fit: videoFit.value 
+        pushDebug('video.fit', {
+          event: type,
+          width: video.videoWidth,
+          height: video.videoHeight,
+          fit: videoFit.value
         })
       }
     }

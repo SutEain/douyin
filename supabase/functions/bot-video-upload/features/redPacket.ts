@@ -62,6 +62,11 @@ export async function handleRedPacketCommand(chatId: number, text: string, messa
     }
 
     if (sender.is_banned) {
+      // 🚨 群组消息静默处理，不发送提示（chatId < 0 表示群组）
+      if (chatId < 0) {
+        return
+      }
+      // 私聊消息仍然发送提示
       const reason = sender.ban_reason || '由于违反社区规范，您的账号已被封禁。'
       await sendMessage(chatId, `🚫 <b>您的账号已被封禁</b>\n\n原因: ${reason}`, {
         reply_to_message_id: message.message_id
@@ -972,6 +977,13 @@ export async function handleClaimRedPacket(
     console.log(`[RedPacket] ✅ 用户信息: userId=${user.id}, nickname=${user.nickname}`)
 
     if (user.is_banned) {
+      // 🚨 群组消息静默处理，不发送提示（chatId < 0 表示群组）
+      if (chatId < 0) {
+        // 群组中静默返回，不显示任何提示
+        await answerCallbackQuery(callbackQueryId, '', false)
+        return
+      }
+      // 私聊消息仍然发送提示
       const reason = user.ban_reason || '由于违反社区规范，您的账号已被封禁。'
       console.log(`[RedPacket] ❌ 用户已封禁: userId=${user.id}, reason=${reason}`)
       await answerCallbackQuery(callbackQueryId, `🚫 账号已封禁\n${reason}`, true)

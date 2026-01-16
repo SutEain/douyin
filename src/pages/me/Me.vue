@@ -670,9 +670,9 @@ async function handleClaimWatchTimeReward() {
   try {
     const res = await claimWatchTimeReward()
     if (res.success && res.data) {
-      const { reward_amount, reward_level, today_total_claimed } = res.data
-      // 🎯 显示本次奖励和今日累计已领金额
-      _no(`✅ 领取成功！获得 ${reward_amount} 抖币，今日已领 ${today_total_claimed} 抖币`)
+      const { reward_amount, reward_level } = res.data
+      // 🎯 显示本次奖励
+      _no(`✅ 领取成功！获得 ${reward_amount || 0} 抖币`)
       // 刷新用户信息和观看时长状态
       await Promise.all([baseStore.init(), loadWatchTimeStatus()])
     } else {

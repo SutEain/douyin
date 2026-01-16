@@ -610,7 +610,7 @@ export async function handleVideo(
         const processingMsg = await sendMessage(
           chatId,
           `🔄 <b>正在处理合辑内容...</b>\n\n` +
-            `📦 收到第 ${result.media_count} 个媒体项\n` +
+            `📦 收到第 ${result.media_count || 1} 个媒体项\n` +
             `⏳ 正在转码并同步数据...\n` +
             `💡 处理完成后会自动显示编辑菜单`
         )

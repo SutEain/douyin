@@ -72,16 +72,25 @@ export async function handleRequest(req: Request): Promise<Response> {
 
           if ((update.message || update.edited_message) && targetChatId) {
             const msg = update.message || update.edited_message
-            const replyOptions =
-              msg.chat.type !== 'private' ? { reply_to_message_id: msg.message_id } : {}
-            await sendMessage(targetChatId, banNotice, replyOptions)
+            // 🚨 群组消息静默处理，不发送提示
+            if (msg.chat.type !== 'private') {
+              // 群组中静默返回，不发送任何提示
+              return new Response('OK', { status: 200 })
+            }
+            // 私聊消息仍然发送提示
+            await sendMessage(targetChatId, banNotice, {})
           } else if (update.callback_query) {
-            // 弹出警告提示框
-            const { answerCallbackQuery } = await import('./telegram.ts')
-            await answerCallbackQuery(update.callback_query.id, {
-              text: `🚫 账号已封禁\n原因: ${banReason}`,
-              show_alert: true
-            })
+            // 弹出警告提示框（仅在私聊中）
+            const callbackChatId = update.callback_query.message?.chat?.id
+            if (callbackChatId && callbackChatId > 0) {
+              // 私聊中的回调查询才提示
+              const { answerCallbackQuery } = await import('./telegram.ts')
+              await answerCallbackQuery(update.callback_query.id, {
+                text: `🚫 账号已封禁\n原因: ${banReason}`,
+                show_alert: true
+              })
+            }
+            // 群组中的回调查询静默处理
           } else if (update.inline_query) {
             // 对于搜索分享，返回一个告知封禁的单条结果
             const { TG_BOT_TOKEN } = await import('./env.ts')

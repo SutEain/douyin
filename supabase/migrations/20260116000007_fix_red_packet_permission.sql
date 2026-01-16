@@ -1,13 +1,5 @@
--- 添加红包验证码字段
-
--- 1. 添加验证码相关字段和消息ID字段
-ALTER TABLE public.group_red_packets
-ADD COLUMN IF NOT EXISTS verification_question TEXT,
-ADD COLUMN IF NOT EXISTS verification_answer TEXT,
-ADD COLUMN IF NOT EXISTS origin_message_id BIGINT;
-
--- 2. 删除并重新创建红包创建函数（添加验证码参数）
-DROP FUNCTION IF EXISTS public.create_group_red_packet(UUID, BIGINT, TEXT, NUMERIC, INT, UUID);
+-- 修复群组发红包权限问题
+-- 确保 8 参数版本的 create_group_red_packet 函数也有正确的权限检查
 
 CREATE OR REPLACE FUNCTION public.create_group_red_packet(
     p_sender_id UUID,
@@ -71,4 +63,3 @@ BEGIN
     RETURN json_build_object('success', true, 'packet_id', v_packet_id, 'balance_after', v_final_balance);
 END;
 $$;
-

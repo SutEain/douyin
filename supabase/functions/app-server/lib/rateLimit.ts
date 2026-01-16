@@ -17,7 +17,7 @@ export interface RateLimitConfig {
 export async function checkRateLimit(
   identifier: string,
   type: 'ip' | 'tg_user_id',
-  action: 'generate' | 'verify',
+  action: 'generate' | 'verify' | 'claim_watch_time' | string,
   config: RateLimitConfig
 ): Promise<{ allowed: boolean; remainingAttempts: number; lockedUntil: Date | null }> {
   const now = new Date()

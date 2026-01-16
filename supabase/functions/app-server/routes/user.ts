@@ -476,6 +476,40 @@ export async function handleGetUserProfile(req: Request): Promise<Response> {
 export async function handleCheckIn(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
 
+  // 🚨 安全验证：添加频率限制，防止恶意调用
+  // 1分钟内最多调用3次，超过后锁定5分钟
+  const { checkRateLimit } = await import('../lib/rateLimit.ts')
+  const rateLimitResult = await checkRateLimit(user.id, 'tg_user_id', 'checkin', {
+    maxAttempts: 3,
+    windowMs: 60000, // 1分钟
+    lockDurationMs: 300000 // 5分钟锁定
+  })
+
+  if (!rateLimitResult.allowed) {
+    const lockedMsg = rateLimitResult.lockedUntil
+      ? `，已锁定至 ${new Date(rateLimitResult.lockedUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`
+      : ''
+    throw new HttpError(`请求过于频繁，请稍后再试${lockedMsg}`, 429)
+  }
+
+  // 🚨 额外检查：检查最近一次签到时间，防止并发攻击
+  const { data: lastCheckin, error: lastCheckinError } = await supabaseAdmin
+    .from('profiles')
+    .select('last_checkin_at')
+    .eq('id', user.id)
+    .single()
+
+  if (!lastCheckinError && lastCheckin?.last_checkin_at) {
+    const lastCheckinTime = new Date(lastCheckin.last_checkin_at).getTime()
+    const now = Date.now()
+    const timeSinceLastCheckin = now - lastCheckinTime
+
+    // 距离上次签到，至少需要等待1秒才能再次检查（防止并发竞态）
+    if (timeSinceLastCheckin < 1000) {
+      throw new HttpError('请求过于频繁，请稍后再试', 429)
+    }
+  }
+
   const { data, error } = await supabaseAdmin.rpc('execute_user_checkin', {
     p_user_id: user.id
   })
@@ -485,11 +519,14 @@ export async function handleCheckIn(req: Request): Promise<Response> {
     return errorResponse(error.message, 1, 500)
   }
 
-  if (data.success) {
-    return successResponse(data)
-  } else {
-    return errorResponse(data.message, 1, 400)
+  // 🚨 验证返回结果，确保没有异常奖励
+  if (data && typeof data === 'object' && 'success' in data) {
+    if (!data.success) {
+      return errorResponse(data.message || '签到失败', 1, 400)
+    }
   }
+
+  return successResponse(data)
 }
 
 import { validateTelegramInitData } from '../../_shared/telegram.ts'

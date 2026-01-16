@@ -2,10 +2,23 @@ import { successResponse, errorResponse } from '../../_shared/response.ts'
 import { supabaseAdmin } from '../lib/env.ts'
 import { requireAuth, parseJsonBody, HttpError } from '../lib/auth.ts'
 import { checkAndSendNotification } from '../lib/notification.ts'
+import { checkRateLimit } from '../lib/rateLimit.ts'
 
 export async function handleSendReward(req: Request): Promise<Response> {
   try {
     const { user, profile } = await requireAuth(req, { withProfile: true })
+
+    // 🚨 安全验证 1: 添加频率限制，防止恶意刷打赏
+    // 1分钟内最多10次打赏，超过后锁定5分钟
+    const rateLimitResult = await checkRateLimit(user.id, 'tg_user_id', 'send_gift', {
+      maxAttempts: 10,
+      windowMs: 60000, // 1分钟
+      lockDurationMs: 300000 // 5分钟锁定
+    })
+
+    if (!rateLimitResult.allowed) {
+      return errorResponse('', 1, 429)
+    }
     const body = await parseJsonBody<{
       receiver_id: string
       gift_amount: number
@@ -57,6 +70,53 @@ export async function handleSendReward(req: Request): Promise<Response> {
       finalGiftAmount = Number(frontendGiftAmount)
       if (isNaN(finalGiftAmount) || finalGiftAmount <= 0) {
         throw new HttpError('打赏金额无效', 400)
+      }
+      // 🚨 安全验证 2: 视频打赏单次最大金额限制（2000抖币）
+      if (finalGiftAmount > 2000) {
+        return errorResponse('', 1, 400)
+      }
+    }
+
+    // 🚨 安全验证 3: 单次打赏最大金额限制（2000抖币）
+    if (finalGiftAmount > 2000) {
+      return errorResponse('', 1, 400)
+    }
+
+    // 🚨 安全验证 4: 检查最近一次打赏时间，防止并发攻击
+    const { data: lastGift, error: lastGiftError } = await supabaseAdmin
+      .from('coin_transactions')
+      .select('created_at')
+      .eq('user_id', user.id)
+      .eq('type', 'gift_out')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!lastGiftError && lastGift) {
+      const lastGiftTime = new Date(lastGift.created_at).getTime()
+      const now = Date.now()
+      const timeSinceLastGift = now - lastGiftTime
+
+      // 两次打赏之间至少间隔10秒（防止并发竞态）
+      if (timeSinceLastGift < 10000) {
+        return errorResponse('', 1, 429)
+      }
+    }
+
+    // 🚨 安全验证 5: 检查今日打赏总额（不超过10000抖币）
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const { data: todayGifts, error: todayGiftsError } = await supabaseAdmin
+      .from('coin_transactions')
+      .select('amount')
+      .eq('user_id', user.id)
+      .eq('type', 'gift_out')
+      .gte('created_at', todayStart.toISOString())
+
+    if (!todayGiftsError && todayGifts) {
+      const todayTotal = todayGifts.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0)
+      if (todayTotal + finalGiftAmount > 10000) {
+        return errorResponse('', 1, 400)
       }
     }
 

@@ -47,6 +47,11 @@ export async function handleDiceCommand(chatId: number, text: string, message: a
     }
 
     if (sender.is_banned) {
+      // 🚨 群组消息静默处理，不发送提示（chatId < 0 表示群组）
+      if (chatId < 0) {
+        return
+      }
+      // 私聊消息仍然发送提示
       const reason = sender.ban_reason || '由于违反社区规范，您的账号已被封禁。'
       await sendMessage(chatId, `🚫 <b>您的账号已被封禁</b>\n\n原因: ${reason}`, {
         reply_to_message_id: message.message_id
@@ -125,6 +130,13 @@ export async function handleJoinDiceGame(
     }
 
     if (user.is_banned) {
+      // 🚨 群组消息静默处理，不发送提示（chatId < 0 表示群组）
+      if (chatId < 0) {
+        // 群组中静默返回，不显示任何提示
+        await answerCallbackQuery(callbackQueryId, '', false)
+        return
+      }
+      // 私聊消息仍然发送提示
       const reason = user.ban_reason || '由于违反社区规范，您的账号已被封禁。'
       await answerCallbackQuery(callbackQueryId, `🚫 账号已封禁\n原因: ${reason}`, true)
       return
@@ -179,8 +191,16 @@ export async function handleJoinDiceGame(
       // 移除加入按钮并更新状态
       await editMessage(chatId, messageId, diceText, { reply_markup: { inline_keyboard: [] } })
 
-      // 触发开奖流程
-      await startRolling(chatId, roomId)
+      // 🎯 异步触发开奖流程，避免 Edge Function 超时（60秒限制）
+      // 使用 fire-and-forget 模式，让开奖流程在后台执行
+      startRolling(chatId, roomId).catch((err) => {
+        console.error('[DiceGame] 开奖流程异常:', err)
+        // 如果开奖失败，发送错误消息
+        sendMessage(
+          chatId,
+          `🚨 <b>开奖过程发生异常:</b>\n${sanitizeError(err.message)}\n\n💰 正在尝试为您自动退回本金...`
+        ).catch((e) => console.error('[DiceGame] 发送错误消息失败:', e))
+      })
     } else {
       // 3. 未满员，仅更新人数和名单
       const { data: room } = await supabase
@@ -296,9 +316,9 @@ async function startRolling(chatId: number, roomId: string) {
     const results: any[] = []
 
     for (const player of players) {
-      // 🎲 使用带重试机制的发送骰子函数（最多重试5次，指数退避）
+      // 🎲 使用带重试机制的发送骰子函数（最多重试3次，减少超时风险）
       console.log(`[DiceGame] 🎲 开始为玩家 ${player.user?.nickname || '未知'} 发送骰子...`)
-      const res = await sendDiceWithRetry(chatId, { emoji: '🎲' }, 5, 1000)
+      const res = await sendDiceWithRetry(chatId, { emoji: '🎲' }, 3, 800)
 
       if (!res.ok || !res.result?.dice) {
         const errorMsg = res.description || res.error_code || 'Unknown error'
@@ -321,7 +341,8 @@ async function startRolling(chatId: number, roomId: string) {
         const updateText = `🎲 <b>对局进行中...</b>\n\n${currentBoard}\n\n⏳ 正在等待下一位玩家...`
         await editMessage(chatId, progressMsgId, updateText)
       }
-      await new Promise((r) => setTimeout(r, 1500))
+      // 🎯 减少等待时间，避免 Edge Function 超时
+      await new Promise((r) => setTimeout(r, 1000))
     }
 
     // 4. 结算逻辑 (使用开头获取到的 roomInfo)
