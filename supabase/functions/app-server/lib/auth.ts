@@ -23,8 +23,15 @@ export function getClientIp(req: Request): string | null {
 
 /**
  * 🎯 校验管理员 IP 白名单
+ * ⚠️ 临时禁用：暂时无法固定IP，已临时取消IP白名单限制
  */
 export async function checkAdminIpWhitelist(req: Request) {
+  // 🚨 临时禁用IP白名单检查
+  console.warn(`[IP_WHITELIST] ⚠️ 警告：IP 白名单检查已临时禁用`)
+  return
+
+  // 以下代码暂时被禁用，需要时取消注释即可恢复
+  /*
   const ip = getClientIp(req)
   if (!ip) return // 无法获取 IP 时不拦截 (边缘情况)
 
@@ -62,6 +69,7 @@ export async function checkAdminIpWhitelist(req: Request) {
     console.warn(`[IP_BLOCK] 非法访问尝试: IP=${ip}`)
     throw new HttpError(`您的 IP (${ip}) 不在白名单中，拒绝访问。`, 403)
   }
+  */
 }
 
 /**

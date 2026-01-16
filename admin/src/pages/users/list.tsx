@@ -21,8 +21,11 @@ import {
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useUpdate } from '@refinedev/core'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabaseClient } from '../../supabaseClient'
+
+// 🎯 审核员邮箱列表（仅针对 shenhe1@review.local：隐藏调整余额按钮）
+const REVIEWER_EMAILS = ['shenhe1@review.local']
 
 export const UserList = () => {
   const navigate = useNavigate()
@@ -34,6 +37,20 @@ export const UserList = () => {
   const [banModalVisible, setBanModalVisible] = useState(false)
   const [banningUser, setBanningUser] = useState<any>(null)
   const [banForm] = Form.useForm()
+  const [isReviewer, setIsReviewer] = useState(false)
+
+  // 🎯 检查当前用户是否为审核员
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const { data } = await supabaseClient.auth.getSession()
+        const email = data?.session?.user?.email
+        setIsReviewer(email ? REVIEWER_EMAILS.includes(email) : false)
+      } catch (e) {
+        console.error('[UserList] Failed to get user email:', e)
+      }
+    })()
+  }, [])
 
   const table = useTable({
     // ✅ 用视图直接 join 邀请人，避免 PostgREST 自关联 embed（PGRST200）
@@ -404,16 +421,19 @@ export const UserList = () => {
                 icon={<EditOutlined />}
                 onClick={() => navigate(`/users/edit/${record.id}`)}
               />
-              <Button
-                type="text"
-                size="small"
-                icon={<DollarOutlined />}
-                style={{ color: '#faad14' }}
-                onClick={() => {
-                  setAdjustingUser(record)
-                  setAdjustModalVisible(true)
-                }}
-              />
+              {/* 审核员隐藏调整余额按钮 */}
+              {!isReviewer && (
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<DollarOutlined />}
+                  style={{ color: '#faad14' }}
+                  onClick={() => {
+                    setAdjustingUser(record)
+                    setAdjustModalVisible(true)
+                  }}
+                />
+              )}
               {record.live_status === 1 && (
                 <>
                   <Button
