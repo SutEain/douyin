@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient.ts'
 import { sendMessage, answerCallbackQuery, editMessage, sendDiceWithRetry } from '../telegram.ts'
 import { escapeHTML, sanitizeError } from '../utils/text.ts'
+import { checkDiceTimeout } from './diceTimeout.ts'
 
 /**
  * 处理骰子比大小指令: tz [金额] [人数]
@@ -58,6 +59,11 @@ export async function handleDiceCommand(chatId: number, text: string, message: a
       })
       return
     }
+
+    // 🎯 先异步检查过期房间并发送消息（不阻塞主流程）
+    checkDiceTimeout().catch((e) => {
+      console.error('[DICE-TIMEOUT] 检查过期房间异常:', e)
+    })
 
     // 3. 调用 RPC 创建房间
     const { data: res, error } = await supabase.rpc('create_dice_room', {
@@ -155,6 +161,11 @@ export async function handleJoinDiceGame(
     }
 
     await answerCallbackQuery(callbackQueryId, '✅ 成功加入游戏！', false)
+
+    // 🎯 异步检查过期房间并发送消息（不阻塞主流程）
+    checkDiceTimeout().catch((e) => {
+      console.error('[DICE-TIMEOUT] 检查过期房间异常:', e)
+    })
 
     // 3. 只有当 RPC 明确返回 is_full 时，才由当前请求触发开奖流程
     if (res.is_full) {

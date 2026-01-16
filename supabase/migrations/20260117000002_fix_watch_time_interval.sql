@@ -1,6 +1,6 @@
--- 🚨 优化观看时长上报接口：添加安全验证
--- 1. 每次只能接受小于等于20秒的数值
--- 2. 距离上次上报还要相隔大于等于10秒（允许每10秒上报一次）
+-- 🚨 修复观看时长上报间隔限制问题
+-- 问题：前端每10秒上报一次，但后端要求间隔大于20秒，导致大量上报被拒绝
+-- 修复：将间隔限制从"大于20秒"改为"大于等于10秒"，允许每10秒上报一次
 
 CREATE OR REPLACE FUNCTION public.increment_daily_watch_time(
     p_user_id UUID,
@@ -77,4 +77,4 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.increment_daily_watch_time IS '🚨 优化观看时长上报接口：每次最多20秒，距离上次上报必须相隔大于等于10秒';
+COMMENT ON FUNCTION public.increment_daily_watch_time IS '🚨 修复观看时长上报间隔限制：每次最多20秒，距离上次上报必须相隔大于等于10秒（允许每10秒上报一次）';

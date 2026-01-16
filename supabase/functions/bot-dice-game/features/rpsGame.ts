@@ -245,12 +245,7 @@ export async function handleRpsChoice(
       `👤 玩家A：<b>${escapeHTML(room.owner.nickname)}</b> ${ownerStatus}\n` +
       `👤 玩家B：<b>${escapeHTML(room.opponent.nickname)}</b> ${opponentStatus}\n` +
       `💰 赌注：<b>${Number(room.bet_amount).toFixed(2)}</b> 抖币/人\n` +
-      `🎁 奖池：<b>${(room.bet_amount * 2).toFixed(2)}</b> 抖币\n\n` +
-      (room.owner_choice && !room.opponent_choice
-        ? `⏳ 请 <b>${escapeHTML(room.opponent.nickname)}</b> 选择出手！`
-        : !room.owner_choice && room.opponent_choice
-          ? `⏳ 请 <b>${escapeHTML(room.owner.nickname)}</b> 选择出手！`
-          : `⏳ 请双方选择出手！`)
+      `🎁 奖池：<b>${(room.bet_amount * 2).toFixed(2)}</b> 抖币`
 
     await editMessage(chatId, messageId, waitingText, {
       reply_markup: {

@@ -1249,7 +1249,7 @@ export async function handleIncrementWatchTime(req: Request): Promise<Response> 
     return successResponse({ success: false })
   }
 
-  // 🚨 安全验证 2: 检查距离上次上报是否相隔大于20秒
+  // 🚨 安全验证 2: 检查距离上次上报是否相隔大于等于10秒（允许每10秒上报一次）
   const { data: lastUpdate, error: lastUpdateError } = await supabaseAdmin
     .from('user_daily_watch_time')
     .select('last_updated_at')
@@ -1263,8 +1263,8 @@ export async function handleIncrementWatchTime(req: Request): Promise<Response> 
     const now = Date.now()
     const timeSinceLastUpdate = now - lastUpdateTime
 
-    // 距离上次上报必须相隔大于20秒
-    if (timeSinceLastUpdate < 20000) {
+    // 距离上次上报必须相隔大于等于10秒（允许每10秒上报一次）
+    if (timeSinceLastUpdate < 10000) {
       return successResponse({ success: false })
     }
   }
