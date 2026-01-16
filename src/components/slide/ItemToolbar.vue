@@ -269,11 +269,16 @@ function shareToTelegramDirect() {
 const showMoreDrawer = ref(false)
 
 function openMoreDrawer() {
+  console.log('[ItemToolbar] 🚀 openMoreDrawer called')
   showMoreDrawer.value = true
 }
 
 // 🎯 视频打赏
 const showRewardPanel = ref(false)
+function openRewardPanel() {
+  console.log('[ItemToolbar] 💰 openRewardPanel called')
+  showRewardPanel.value = true
+}
 const rewardAmount = ref('')
 const rewardPresets = [10, 50, 100, 500]
 const isRewarding = ref(false)
@@ -365,111 +370,123 @@ const vClick = useClick()
     </div>
 
     <!-- 打赏按钮（从抽屉中解放出来） -->
-    <div class="reward mb2r" v-click="() => (showRewardPanel = true)">
+    <div class="reward mb2r" @click.stop="openRewardPanel">
       <Icon icon="basil:award-solid" class="icon" style="color: #face15" />
     </div>
 
     <!-- 更多选项按钮 -->
-    <div class="more-toggle mb2r" v-click="openMoreDrawer" @click.stop="openMoreDrawer">
+    <div class="more-toggle mb2r" @click.stop="openMoreDrawer">
       <Icon icon="solar:menu-dots-bold" class="icon" style="color: white" />
       <span>更多</span>
     </div>
 
     <!-- 静音开关 -->
-    <div class="mute-toggle mb2r" v-click="toggleMute" @click.stop>
+    <div class="mute-toggle mb2r" @click.stop="toggleMute">
       <Icon v-if="isMuted" icon="ph:speaker-simple-slash-fill" class="icon" style="color: white" />
       <Icon v-else icon="ph:speaker-simple-high-fill" class="icon" style="color: white" />
     </div>
 
     <!-- 更多选项抽屉 -->
-    <transition name="slide-up">
-      <div v-if="showMoreDrawer" class="more-drawer-overlay" @click.self="showMoreDrawer = false">
-        <div class="more-drawer">
-          <div class="drawer-header">
-            <span>更多选项</span>
-            <Icon
-              icon="solar:close-circle-bold"
-              class="close-btn"
-              @click="showMoreDrawer = false"
-            />
-          </div>
-
-          <div class="action-grid">
-            <!-- TG 直接分享 -->
-            <div class="action-item" v-click="shareToTelegramDirect">
-              <div class="icon-wrap" style="background: rgba(36, 161, 222, 0.2); color: #24a1de">
-                <Icon icon="logos:telegram" />
-              </div>
-              <span>TG 分享</span>
+    <teleport to="body">
+      <transition name="slide-up">
+        <div
+          v-if="showMoreDrawer"
+          class="more-drawer-overlay global-overlay"
+          @click.self="showMoreDrawer = false"
+        >
+          <div class="more-drawer">
+            <div class="drawer-header">
+              <span>更多选项</span>
+              <Icon
+                icon="solar:close-circle-bold"
+                class="close-btn"
+                @click="showMoreDrawer = false"
+              />
             </div>
 
-            <!-- 复制链接 -->
-            <div class="action-item" v-click="copyVideoLink">
-              <div class="icon-wrap">
-                <Icon icon="solar:link-bold" />
+            <div class="action-grid">
+              <!-- TG 直接分享 -->
+              <div class="action-item" v-click="shareToTelegramDirect">
+                <div class="icon-wrap" style="background: rgba(36, 161, 222, 0.2); color: #24a1de">
+                  <Icon icon="logos:telegram" />
+                </div>
+                <span>TG 分享</span>
               </div>
-              <span>复制链接</span>
+
+              <!-- 复制链接 -->
+              <div class="action-item" v-click="copyVideoLink">
+                <div class="icon-wrap">
+                  <Icon icon="solar:link-bold" />
+                </div>
+                <span>复制链接</span>
+              </div>
+
+              <!-- 收藏视频 -->
+              <div class="action-item" v-click="collected">
+                <div class="icon-wrap" :class="{ active: item.isCollect }">
+                  <Icon :icon="item.isCollect ? 'solar:star-bold' : 'solar:star-outline'" />
+                </div>
+                <span>{{ item.isCollect ? '已收藏' : '收藏' }}</span>
+              </div>
             </div>
 
-            <!-- 收藏视频 -->
-            <div class="action-item" v-click="collected">
-              <div class="icon-wrap" :class="{ active: item.isCollect }">
-                <Icon :icon="item.isCollect ? 'solar:star-bold' : 'solar:star-outline'" />
-              </div>
-              <span>{{ item.isCollect ? '已收藏' : '收藏' }}</span>
-            </div>
-          </div>
-
-          <!-- 倍速选择 -->
-          <div class="speed-section">
-            <div class="section-title">播放倍速 ({{ playbackRateText }})</div>
-            <div class="speed-options">
-              <div
-                v-for="r in speedOptions"
-                :key="r"
-                class="speed-btn"
-                :class="{ active: (injectedPlaybackRate?.value ?? 1) === r }"
-                v-click="() => choosePlaybackRate(r)"
-              >
-                {{ r }}x
+            <!-- 倍速选择 -->
+            <div class="speed-section">
+              <div class="section-title">播放倍速 ({{ playbackRateText }})</div>
+              <div class="speed-options">
+                <div
+                  v-for="r in speedOptions"
+                  :key="r"
+                  class="speed-btn"
+                  :class="{ active: (injectedPlaybackRate?.value ?? 1) === r }"
+                  v-click="() => choosePlaybackRate(r)"
+                >
+                  {{ r }}x
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </transition>
+      </transition>
+    </teleport>
 
     <!-- 打赏面板弹窗 -->
-    <transition name="fade">
-      <div v-if="showRewardPanel" class="reward-overlay" @click.self="showRewardPanel = false">
-        <div class="reward-panel" @click.stop>
-          <div class="reward-title">打赏作者</div>
-          <div class="reward-presets">
-            <div
-              v-for="p in rewardPresets"
-              :key="p"
-              class="preset-item"
-              v-click="() => selectPreset(p)"
-            >
-              {{ p }}
+    <teleport to="body">
+      <transition name="fade">
+        <div
+          v-if="showRewardPanel"
+          class="reward-overlay global-overlay"
+          @click.self="showRewardPanel = false"
+        >
+          <div class="reward-panel" @click.stop>
+            <div class="reward-title">打赏作者</div>
+            <div class="reward-presets">
+              <div
+                v-for="p in rewardPresets"
+                :key="p"
+                class="preset-item"
+                v-click="() => selectPreset(p)"
+              >
+                {{ p }}
+              </div>
             </div>
-          </div>
-          <div class="reward-input-wrap">
-            <input
-              type="number"
-              v-model="rewardAmount"
-              placeholder="自定义金额"
-              class="reward-input"
-              @click.stop
-            />
-            <div class="reward-send" :class="{ loading: isRewarding }" v-click="handleReward">
-              {{ isRewarding ? '发送中...' : '确认打赏' }}
+            <div class="reward-input-wrap">
+              <input
+                type="number"
+                v-model="rewardAmount"
+                placeholder="自定义金额"
+                class="reward-input"
+                @click.stop
+              />
+              <div class="reward-send" :class="{ loading: isRewarding }" v-click="handleReward">
+                {{ isRewarding ? '发送中...' : '确认打赏' }}
+              </div>
             </div>
+            <div class="reward-close" v-click="() => (showRewardPanel = false)">取消</div>
           </div>
-          <div class="reward-close" v-click="() => (showRewardPanel = false)">取消</div>
         </div>
-      </div>
-    </transition>
+      </transition>
+    </teleport>
   </div>
 </template>
 
@@ -594,130 +611,123 @@ const vClick = useClick()
   .loved {
     background: red;
   }
+}
 
-  // 🎯 更多选项抽屉样式
-  .more-drawer-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 2000;
-    background: rgba(0, 0, 0, 0.4);
+// 🎯 全局覆盖层样式 (脱离 .toolbar 以支持 Teleport)
+:deep(.global-overlay),
+.more-drawer-overlay,
+.reward-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999 !important; // 💡 绝对置顶
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 
-    .more-drawer {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: rgba(22, 24, 35, 0.98);
-      backdrop-filter: blur(20px);
-      border-top-left-radius: 16rem;
-      border-top-right-radius: 16rem;
-      padding: 20rem 20rem calc(20rem + env(safe-area-inset-bottom));
-      color: white;
+  .more-drawer {
+    background: rgba(22, 24, 35, 0.98);
+    backdrop-filter: blur(20px);
+    border-top-left-radius: 16rem;
+    border-top-right-radius: 16rem;
+    padding: 20rem 20rem calc(20rem + var(--footer-height) + env(safe-area-inset-bottom));
+    color: white;
+    width: 100%;
 
-      .drawer-header {
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25rem;
+      font-size: 16rem;
+      font-weight: bold;
+
+      .close-btn {
+        font-size: 24rem;
+        opacity: 0.5;
+      }
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20rem;
+      margin-bottom: 30rem;
+
+      .action-item {
         display: flex;
-        justify-content: space-between;
+        flex-direction: column;
         align-items: center;
-        margin-bottom: 25rem;
-        font-size: 16rem;
-        font-weight: bold;
+        gap: 8rem;
 
-        .close-btn {
+        .icon-wrap {
+          width: 50rem;
+          height: 50rem;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 12rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           font-size: 24rem;
-          opacity: 0.5;
+
+          &.active {
+            color: #face15;
+            background: rgba(250, 206, 21, 0.15);
+          }
+        }
+
+        span {
+          font-size: 12rem;
+          color: rgba(255, 255, 255, 0.7);
+        }
+
+        &:active {
+          opacity: 0.7;
         }
       }
+    }
 
-      .action-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 20rem;
-        margin-bottom: 30rem;
+    .speed-section {
+      .section-title {
+        font-size: 14rem;
+        margin-bottom: 15rem;
+        color: rgba(255, 255, 255, 0.6);
+      }
 
-        .action-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8rem;
+      .speed-options {
+        display: flex;
+        gap: 10rem;
+        flex-wrap: wrap;
 
-          .icon-wrap {
-            width: 50rem;
-            height: 50rem;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 12rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24rem;
+        .speed-btn {
+          padding: 8rem 16rem;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 8rem;
+          font-size: 14rem;
+          transition: all 0.2s;
 
-            &.active {
-              color: #face15;
-              background: rgba(250, 206, 21, 0.15);
-            }
-          }
-
-          span {
-            font-size: 12rem;
-            color: rgba(255, 255, 255, 0.7);
+          &.active {
+            background: #fe2c55;
+            color: white;
           }
 
           &:active {
-            opacity: 0.7;
-          }
-        }
-      }
-
-      .speed-section {
-        .section-title {
-          font-size: 14rem;
-          margin-bottom: 15rem;
-          color: rgba(255, 255, 255, 0.6);
-        }
-
-        .speed-options {
-          display: flex;
-          gap: 10rem;
-          flex-wrap: wrap;
-
-          .speed-btn {
-            padding: 8rem 16rem;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8rem;
-            font-size: 14rem;
-            transition: all 0.2s;
-
-            &.active {
-              background: #fe2c55;
-              color: white;
-            }
-
-            &:active {
-              transform: scale(0.95);
-            }
+            transform: scale(0.95);
           }
         }
       }
     }
   }
+}
 
-  // 🎯 打赏弹窗背景
-  .reward-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 2100;
-    background: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
+.reward-overlay {
+  background: rgba(0, 0, 0, 0.6);
+  justify-content: center;
+  align-items: center;
 
-  // 🎯 打赏面板样式更新
   .reward-panel {
     background: #1e1e1e;
     border-radius: 20rem;
@@ -795,18 +805,18 @@ const vClick = useClick()
       font-size: 14rem;
     }
   }
+}
 
-  // 🎯 抽屉动画
-  .slide-up-enter-active,
-  .slide-up-leave-active {
-    transition: all 0.3s ease;
-  }
-  .slide-up-enter-from,
-  .slide-up-leave-to {
-    opacity: 0;
-    .more-drawer {
-      transform: translateY(100%);
-    }
+// 🎯 抽屉动画
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s ease;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  .more-drawer {
+    transform: translateY(100%);
   }
 }
 </style>
