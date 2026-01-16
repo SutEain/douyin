@@ -377,12 +377,42 @@ export async function handleCancelRpsRoom(
 
     await answerCallbackQuery(callbackQueryId, '✅ 房间已取消，本金已退回')
 
+    // 获取房间信息，判断是否有对手
+    const { data: room } = await supabase
+      .from('rps_rooms')
+      .select(
+        'opponent_id, owner:profiles!rps_rooms_owner_id_fkey(nickname), opponent:profiles!rps_rooms_opponent_id_fkey(nickname)'
+      )
+      .eq('id', roomId)
+      .single()
+
+    // 编辑原消息
     const cancelText =
       `🪨✂️📄 <b>石头剪刀布挑战</b>\n\n` + `❌ 游戏已被发起人取消\n` + `💰 本金已退回`
 
     await editMessage(chatId, messageId, cancelText, {
       reply_markup: { inline_keyboard: [] }
     })
+
+    // 发送取消通知消息
+    let cancelMessage = ''
+    if (!room || !room.opponent_id) {
+      // 没有对手加入
+      cancelMessage =
+        `🪨✂️📄 <b>猜拳游戏已解散</b>\n\n` +
+        `👤 发起人：<b>${escapeHTML(user.nickname)}</b>\n` +
+        `❌ 原因：没有人加入\n` +
+        `💰 本金已退回`
+    } else {
+      // 有对手但未出拳
+      cancelMessage =
+        `🪨✂️📄 <b>猜拳游戏已解散</b>\n\n` +
+        `👤 发起人：<b>${escapeHTML(room.owner?.nickname || user.nickname)}</b>\n` +
+        `❌ 原因：发起人取消游戏\n` +
+        `💰 本金已退回`
+    }
+
+    await sendMessage(chatId, cancelMessage)
   } catch (err: any) {
     console.error('[RPS-BOT] Cancel Error:', err)
     await answerCallbackQuery(callbackQueryId, `❌ 取消失败: ${sanitizeError(err.message)}`, true)

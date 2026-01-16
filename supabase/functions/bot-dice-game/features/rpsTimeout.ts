@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient.ts'
-import { editMessage } from '../telegram.ts'
+import { editMessage, sendMessage } from '../telegram.ts'
 import { escapeHTML } from '../utils/text.ts'
 
 /**
@@ -59,6 +59,8 @@ export async function checkRpsTimeout() {
 
       // 根据超时阶段生成不同的消息
       let timeoutText = ''
+      let timeoutMessage = ''
+
       if (reason === 'waiting') {
         // 等待加入阶段超时
         timeoutText =
@@ -68,6 +70,12 @@ export async function checkRpsTimeout() {
           `⏰ <b>游戏已超时解散</b>\n` +
           `原因：等待对手加入超过 30 秒\n` +
           `💸 本金已退回发起人账户`
+
+        timeoutMessage =
+          `🪨✂️📄 <b>猜拳游戏已解散</b>\n\n` +
+          `👤 发起人：<b>${escapeHTML(room.owner.nickname)}</b>\n` +
+          `❌ 原因：没有人加入\n` +
+          `💰 本金已退回`
       } else if (reason === 'playing') {
         // 出手阶段超时
         timeoutText =
@@ -78,6 +86,31 @@ export async function checkRpsTimeout() {
           `⏰ <b>游戏已超时解散</b>\n` +
           `原因：双方出手超过 60 秒\n` +
           `💸 本金已退回双方账户`
+
+        // 判断谁未出拳
+        const { data: choices } = await supabase
+          .from('rps_choices')
+          .select('user_id')
+          .eq('room_id', roomId)
+
+        const ownerChose = choices?.some((c) => c.user_id === room.owner_id)
+        const opponentChose = choices?.some((c) => c.user_id === room.opponent_id)
+
+        let whoNotChose = ''
+        if (!ownerChose && !opponentChose) {
+          whoNotChose = '双方均未出拳'
+        } else if (!ownerChose) {
+          whoNotChose = `${escapeHTML(room.owner.nickname)}未出拳`
+        } else if (!opponentChose) {
+          whoNotChose = `${escapeHTML(room.opponent.nickname)}未出拳`
+        }
+
+        timeoutMessage =
+          `🪨✂️📄 <b>猜拳游戏已解散</b>\n\n` +
+          `👤 玩家A：<b>${escapeHTML(room.owner.nickname)}</b>\n` +
+          `👤 玩家B：<b>${escapeHTML(room.opponent.nickname)}</b>\n` +
+          `❌ 原因：${whoNotChose || '超时未出拳'}\n` +
+          `💰 本金已退回双方账户`
       }
 
       // 编辑群组消息
@@ -86,6 +119,11 @@ export async function checkRpsTimeout() {
           reply_markup: { inline_keyboard: [] } // 移除所有按钮
         })
         console.log(`[RPS-TIMEOUT] 已更新群组消息: roomId=${roomId}, messageId=${messageId}`)
+
+        // 发送超时通知消息
+        if (timeoutMessage) {
+          await sendMessage(groupId, timeoutMessage)
+        }
       } catch (err) {
         console.error(`[RPS-TIMEOUT] 编辑消息失败: roomId=${roomId}`, err)
       }

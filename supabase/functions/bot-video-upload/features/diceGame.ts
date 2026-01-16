@@ -259,13 +259,20 @@ export async function handleCancelDiceGame(
     // 1. 获取用户信息
     const { data: user } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, nickname')
       .eq('tg_user_id', tgUserId)
       .single()
 
     if (!user) return
 
-    // 2. 调用 RPC 取消房间
+    // 2. 获取房间信息（用于判断取消原因）
+    const { data: room } = await supabase
+      .from('dice_rooms')
+      .select('current_count, target_count, owner:profiles!dice_rooms_owner_id_fkey(nickname)')
+      .eq('id', roomId)
+      .single()
+
+    // 3. 调用 RPC 取消房间
     const { data: res, error } = await supabase.rpc('cancel_dice_room', {
       p_room_id: roomId,
       p_user_id: user.id
@@ -278,7 +285,31 @@ export async function handleCancelDiceGame(
     }
 
     await answerCallbackQuery(callbackQueryId, '✅ 房间已取消，本金已退还', false)
-    await editMessage(chatId, messageId, '❌ <b>本局游戏已被房主取消。</b>')
+
+    // 4. 编辑原消息
+    await editMessage(chatId, messageId, '❌ <b>本局游戏已被房主取消。</b>', {
+      reply_markup: { inline_keyboard: [] }
+    })
+
+    // 5. 发送取消通知消息
+    let cancelMessage = ''
+    if (room && room.current_count === 1) {
+      // 只有房主一人，没有人加入
+      cancelMessage =
+        `🎲 <b>骰子游戏已解散</b>\n\n` +
+        `👤 房主：<b>${escapeHTML(room.owner.nickname)}</b>\n` +
+        `❌ 原因：没有人加入\n` +
+        `💰 本金已退回`
+    } else {
+      // 有其他玩家加入，但房主取消了
+      cancelMessage =
+        `🎲 <b>骰子游戏已解散</b>\n\n` +
+        `👤 房主：<b>${escapeHTML(room?.owner?.nickname || user.nickname)}</b>\n` +
+        `❌ 原因：房主取消游戏\n` +
+        `💰 本金已退回所有玩家`
+    }
+
+    await sendMessage(chatId, cancelMessage)
   } catch (err: any) {
     console.error('Cancel Dice Error:', err)
     await answerCallbackQuery(callbackQueryId, `❌ 操作失败: ${sanitizeError(err.message)}`, true)
@@ -396,10 +427,6 @@ async function startRolling(chatId: number, roomId: string) {
     }
   } catch (err: any) {
     console.error('Rolling Error:', err)
-    await sendMessage(
-      chatId,
-      `🚨 <b>结算过程发生异常:</b>\n${sanitizeError(err.message)}\n\n💰 正在尝试为您自动退回本金...`
-    )
 
     try {
       const { data: refundRes, error: refundError } = await supabase.rpc('refund_dice_room', {
@@ -409,14 +436,28 @@ async function startRolling(chatId: number, roomId: string) {
       if (refundError || !refundRes?.success) {
         await sendMessage(
           chatId,
-          `❌ <b>自动退款失败:</b> ${refundRes?.message || refundError?.message}\n请联系管理员处理房ID: <code>${roomId}</code>`
+          `🚨 <b>骰子游戏没结算 已退回</b>\n\n` +
+            `❌ 原因：结算过程发生异常\n` +
+            `💰 本金已退回所有玩家\n\n` +
+            `⚠️ 如遇问题请联系管理员，房ID: <code>${roomId}</code>`
         )
       } else {
-        await sendMessage(chatId, `✅ <b>退款成功！</b> 本金已原路退回您的余额。`)
+        await sendMessage(
+          chatId,
+          `🎲 <b>骰子游戏没结算 已退回</b>\n\n` +
+            `❌ 原因：结算过程发生异常\n` +
+            `💰 本金已退回所有玩家`
+        )
       }
     } catch (finalErr: any) {
       console.error('Critical Refund Error:', finalErr)
-      await sendMessage(chatId, `🚨 <b>严重错误:</b> 无法完成退款，请务必保留截图联系管理员。`)
+      await sendMessage(
+        chatId,
+        `🚨 <b>骰子游戏没结算 已退回</b>\n\n` +
+          `❌ 原因：结算过程发生异常\n` +
+          `💰 正在处理退款，如未到账请联系管理员\n` +
+          `房ID: <code>${roomId}</code>`
+      )
     }
   }
 }
