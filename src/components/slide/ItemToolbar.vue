@@ -269,14 +269,12 @@ function shareToTelegramDirect() {
 const showMoreDrawer = ref(false)
 
 function openMoreDrawer() {
-  console.log('[ItemToolbar] 🚀 openMoreDrawer called')
   showMoreDrawer.value = true
 }
 
 // 🎯 视频打赏
 const showRewardPanel = ref(false)
 function openRewardPanel() {
-  console.log('[ItemToolbar] 💰 openRewardPanel called')
   showRewardPanel.value = true
 }
 const rewardAmount = ref('')
@@ -342,13 +340,7 @@ const vClick = useClick()
         class="avatar"
         :src="item.author?.avatar_168x168?.url_list?.[0]"
         alt=""
-        v-click="
-          () => {
-            console.log('[ItemToolbar] 🖱️ 头像被点击了！')
-            console.log('[ItemToolbar] 发送 GO_USERINFO 事件')
-            bus.emit(EVENT_KEY.GO_USERINFO)
-          }
-        "
+        v-click="() => bus.emit(EVENT_KEY.GO_USERINFO)"
       />
       <transition name="fade">
         <div v-if="!item.isAttention" v-click="attention" class="options">
@@ -391,7 +383,7 @@ const vClick = useClick()
       <transition name="slide-up">
         <div
           v-if="showMoreDrawer"
-          class="more-drawer-overlay global-overlay"
+          class="global-drawer-overlay"
           @click.self="showMoreDrawer = false"
         >
           <div class="more-drawer">
@@ -439,7 +431,7 @@ const vClick = useClick()
                   :key="r"
                   class="speed-btn"
                   :class="{ active: (injectedPlaybackRate?.value ?? 1) === r }"
-                  v-click="() => choosePlaybackRate(r)"
+                  @click.stop="choosePlaybackRate(r)"
                 >
                   {{ r }}x
                 </div>
@@ -453,11 +445,7 @@ const vClick = useClick()
     <!-- 打赏面板弹窗 -->
     <teleport to="body">
       <transition name="fade">
-        <div
-          v-if="showRewardPanel"
-          class="reward-overlay global-overlay"
-          @click.self="showRewardPanel = false"
-        >
+        <div v-if="showRewardPanel" class="reward-overlay" @click.self="showRewardPanel = false">
           <div class="reward-panel" @click.stop>
             <div class="reward-title">打赏作者</div>
             <div class="reward-presets">
@@ -465,7 +453,7 @@ const vClick = useClick()
                 v-for="p in rewardPresets"
                 :key="p"
                 class="preset-item"
-                v-click="() => selectPreset(p)"
+                @click.stop="selectPreset(p)"
               >
                 {{ p }}
               </div>
@@ -478,11 +466,11 @@ const vClick = useClick()
                 class="reward-input"
                 @click.stop
               />
-              <div class="reward-send" :class="{ loading: isRewarding }" v-click="handleReward">
+              <div class="reward-send" :class="{ loading: isRewarding }" @click.stop="handleReward">
                 {{ isRewarding ? '发送中...' : '确认打赏' }}
               </div>
             </div>
-            <div class="reward-close" v-click="() => (showRewardPanel = false)">取消</div>
+            <div class="reward-close" @click.stop="showRewardPanel = false">取消</div>
           </div>
         </div>
       </transition>
@@ -612,18 +600,18 @@ const vClick = useClick()
     background: red;
   }
 }
+</style>
 
-// 🎯 全局覆盖层样式 (脱离 .toolbar 以支持 Teleport)
-:deep(.global-overlay),
-.more-drawer-overlay,
-.reward-overlay {
+<!-- 🎯 全局样式 (Teleport 后的元素需要非 scoped 样式) -->
+<style lang="less">
+.global-drawer-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 9999 !important; // 💡 绝对置顶
-  background: rgba(0, 0, 0, 0.4);
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -648,6 +636,7 @@ const vClick = useClick()
       .close-btn {
         font-size: 24rem;
         opacity: 0.5;
+        cursor: pointer;
       }
     }
 
@@ -662,6 +651,7 @@ const vClick = useClick()
         flex-direction: column;
         align-items: center;
         gap: 8rem;
+        cursor: pointer;
 
         .icon-wrap {
           width: 50rem;
@@ -708,6 +698,8 @@ const vClick = useClick()
           border-radius: 8rem;
           font-size: 14rem;
           transition: all 0.2s;
+          cursor: pointer;
+          color: white;
 
           &.active {
             background: #fe2c55;
@@ -724,7 +716,14 @@ const vClick = useClick()
 }
 
 .reward-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
   background: rgba(0, 0, 0, 0.6);
+  display: flex;
   justify-content: center;
   align-items: center;
 
@@ -757,6 +756,7 @@ const vClick = useClick()
         text-align: center;
         font-size: 15rem;
         color: white;
+        cursor: pointer;
 
         &:active {
           background: rgba(250, 206, 21, 0.2);
@@ -791,6 +791,7 @@ const vClick = useClick()
         text-align: center;
         font-size: 16rem;
         font-weight: bold;
+        cursor: pointer;
 
         &.loading {
           opacity: 0.5;
@@ -803,6 +804,7 @@ const vClick = useClick()
       text-align: center;
       color: rgba(255, 255, 255, 0.5);
       font-size: 14rem;
+      cursor: pointer;
     }
   }
 }
@@ -812,9 +814,11 @@ const vClick = useClick()
 .slide-up-leave-active {
   transition: all 0.3s ease;
 }
+
 .slide-up-enter-from,
 .slide-up-leave-to {
   opacity: 0;
+
   .more-drawer {
     transform: translateY(100%);
   }
