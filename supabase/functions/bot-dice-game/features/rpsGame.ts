@@ -12,9 +12,17 @@ import { escapeHTML, sanitizeError } from '../utils/text.ts'
  */
 export async function handleRpsCommand(chatId: number, text: string, message: any) {
   const diceGroupId = Deno.env.get('DICE_GROUP_ID')
+  console.log(`[RPS-BOT] handleRpsCommand 被调用:`, {
+    chatId,
+    diceGroupId,
+    chatIdMatch: String(chatId) === String(diceGroupId),
+    text,
+    userId: message.from?.id
+  })
 
   // 1. 验证权限 (仅限游戏群)
   if (String(chatId) !== String(diceGroupId)) {
+    console.log(`[RPS-BOT] 群组 ID 不匹配，拒绝执行: chatId=${chatId}, diceGroupId=${diceGroupId}`)
     return
   }
 

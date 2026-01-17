@@ -141,8 +141,17 @@ export async function handleRequest(req: Request): Promise<Response> {
             text.startsWith('/tz@')
 
           if (isRpsCmd) {
-            console.log(`[RPS-BOT] 匹配到猜拳指令，准备执行...`)
-            await handleRpsCommand(chatId, message.text, message)
+            console.log(`[RPS-BOT] 匹配到猜拳指令，准备执行...`, {
+              chatId,
+              text: message.text,
+              userId: message.from?.id,
+              chatType: message.chat?.type
+            })
+            try {
+              await handleRpsCommand(chatId, message.text, message)
+            } catch (err) {
+              console.error('[RPS-BOT] 执行猜拳指令时发生错误:', err)
+            }
             return new Response('OK', { status: 200 })
           }
 
