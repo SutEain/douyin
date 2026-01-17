@@ -305,6 +305,35 @@ export const Dashboard = () => {
           }))
         ])
 
+        // 🎯 检查 RPC 调用是否有错误
+        if (activeUsersRes.error) {
+          console.error('[Dashboard] get_watch_users_count 错误:', activeUsersRes.error)
+        }
+        if (newFirstPublishersRes.error) {
+          console.error(
+            '[Dashboard] get_today_first_publishers_count 错误:',
+            newFirstPublishersRes.error
+          )
+        }
+        if (usersWithHistoryRes.error) {
+          console.error('[Dashboard] get_active_user_count 错误:', usersWithHistoryRes.error)
+        }
+        if (totalCoinsRes.error) {
+          console.error('[Dashboard] get_total_coins_balance 错误:', totalCoinsRes.error)
+        }
+        if (todaySystemRewardsRes.error) {
+          console.error('[Dashboard] get_today_system_rewards 错误:', todaySystemRewardsRes.error)
+        }
+        if (todayManualAdjustmentsRes.error) {
+          console.error(
+            '[Dashboard] get_today_manual_adjustments 错误:',
+            todayManualAdjustmentsRes.error
+          )
+        }
+        if (todayCommissionRes.error) {
+          console.error('[Dashboard] get_today_gift_commission 错误:', todayCommissionRes.error)
+        }
+
         setStats({
           totalUsers: totalUsersRes.count ?? 0,
           usersWithVideos: usersWithVideosRes.count ?? 0,

@@ -95,17 +95,15 @@ function AdminGuard() {
 
 function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // 🎯 异步获取用户邮箱，不阻塞应用渲染
     ;(async () => {
       try {
         const { data } = await supabaseClient.auth.getSession()
         setUserEmail(data?.session?.user?.email || null)
       } catch (e) {
         console.error('[App] Failed to get user email:', e)
-      } finally {
-        setLoading(false)
       }
     })()
   }, [])
@@ -218,10 +216,6 @@ function App() {
 
   // 🎯 检查是否为审核员
   const isReviewer = userEmail ? REVIEWER_EMAILS.includes(userEmail) : false
-
-  if (loading) {
-    return <div style={{ padding: 24 }}>加载中...</div>
-  }
 
   return (
     <BrowserRouter>
