@@ -1713,13 +1713,12 @@ onMounted(() => {
   })
 
   // 🎯 启动观看时长心跳（每10秒检查一次，只在视频播放时上报）
+  // 🎯 优化：放宽状态检查，增加容错机制，避免因状态不同步导致上报丢失
+  let lastReportTime = 0 // 记录上次上报时间，用于重试机制
+  let pendingReport: { videoId: string; seconds: number; timestamp: number } | null = null // 待重试的上报
+
   watchTimeHeartbeatTimer = setInterval(() => {
     try {
-      // 检查是否正在播放视频
-      if (!isPlaying.value) {
-        return // 未播放，跳过本次心跳
-      }
-
       // 获取当前视频
       const currentItem = props.items[currentIndex.value]
       if (!currentItem?.aweme_id) {
@@ -1732,21 +1731,73 @@ onMounted(() => {
         return // 非视频内容，不累计时长
       }
 
-      // 获取当前视频元素，确认真的在播放
+      // 🎯 优化：放宽状态检查，只要视频元素存在且未暂停就上报
+      // 不再依赖 isPlaying.value，因为状态可能不同步
       const currentSlot = slots.find((s) => s.role === 'current')
       if (!currentSlot) {
         return
       }
       const video = slotRefs.get(currentSlot.key)
-      if (!video || video.paused) {
-        return // 视频元素不存在或已暂停
+      if (!video) {
+        return // 视频元素不存在
+      }
+
+      const now = Date.now()
+
+      // 🎯 如果有待重试的上报，且距离上次上报已超过10秒，先尝试重试
+      if (pendingReport && now - pendingReport.timestamp >= 10000) {
+        console.log(
+          `[WatchTime] 🔄 重试上报: ${pendingReport.seconds}秒, videoId=${pendingReport.videoId.substring(0, 8)}`
+        )
+        incrementWatchTime(pendingReport.seconds, pendingReport.videoId)
+          .then((result) => {
+            if (result.success) {
+              pendingReport = null
+              lastReportTime = now
+            } else {
+              // 重试失败，更新重试时间戳
+              pendingReport.timestamp = now
+            }
+          })
+          .catch(() => {
+            // 重试失败，更新重试时间戳
+            if (pendingReport) {
+              pendingReport.timestamp = now
+            }
+          })
+        return // 重试时不再进行新的上报
+      }
+
+      // 🎯 优化：如果视频暂停，跳过本次上报，但不阻止重试
+      if (video.paused) {
+        return
+      }
+
+      // 🎯 确保至少间隔10秒才上报（避免频繁上报）
+      if (now - lastReportTime < 10000) {
+        return
       }
 
       // ✅ 发送心跳：累计10秒观看时长
       console.log(`[WatchTime] 💓 心跳上报: 10秒, videoId=${currentItem.aweme_id.substring(0, 8)}`)
-      incrementWatchTime(10, currentItem.aweme_id).catch((e) =>
-        console.warn('[WatchTime] 心跳上报失败:', e)
-      )
+      lastReportTime = now
+      const reportInfo = { videoId: currentItem.aweme_id, seconds: 10, timestamp: now }
+
+      incrementWatchTime(10, currentItem.aweme_id)
+        .then((result) => {
+          if (result.success) {
+            pendingReport = null // 上报成功，清除待重试记录
+          } else {
+            // 上报失败，保留待重试记录，下次重试
+            pendingReport = reportInfo
+            console.warn('[WatchTime] 上报失败，将在下次心跳时重试')
+          }
+        })
+        .catch((e) => {
+          console.warn('[WatchTime] 心跳上报异常:', e)
+          // 保留待重试记录
+          pendingReport = reportInfo
+        })
     } catch (error) {
       console.error('[WatchTime] 心跳处理异常:', error)
     }

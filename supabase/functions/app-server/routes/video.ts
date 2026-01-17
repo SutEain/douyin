@@ -1249,26 +1249,8 @@ export async function handleIncrementWatchTime(req: Request): Promise<Response> 
     return successResponse({ success: false })
   }
 
-  // 🚨 安全验证 2: 检查距离上次上报是否相隔大于等于10秒（允许每10秒上报一次）
-  const { data: lastUpdate, error: lastUpdateError } = await supabaseAdmin
-    .from('user_daily_watch_time')
-    .select('last_updated_at')
-    .eq('user_id', user.id)
-    .order('last_updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (!lastUpdateError && lastUpdate?.last_updated_at) {
-    const lastUpdateTime = new Date(lastUpdate.last_updated_at).getTime()
-    const now = Date.now()
-    const timeSinceLastUpdate = now - lastUpdateTime
-
-    // 距离上次上报必须相隔大于等于10秒（允许每10秒上报一次）
-    if (timeSinceLastUpdate < 10000) {
-      return successResponse({ success: false })
-    }
-  }
-
+  // 🎯 优化：移除 Edge Function 层的间隔检查，只保留数据库函数层的检查
+  // 数据库函数使用 SELECT FOR UPDATE 保证并发安全，避免双重检查导致的边界问题
   const { data, error } = await supabaseAdmin.rpc('increment_daily_watch_time', {
     p_user_id: user.id,
     p_seconds: secondsInt,

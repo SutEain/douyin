@@ -6,38 +6,29 @@
 - ✅ 猜拳游戏超时检查并发送消息
 - ✅ 骰子游戏超时检查并发送消息
 
-## 设置步骤（非常简单！）
+## 设置步骤（已自动完成！）
 
-### 1. 进入 Supabase Dashboard
+Cron 任务已通过数据库迁移自动创建，无需手动配置。
 
-1. 登录 Supabase Dashboard
-2. 进入 **Integrations** → **Cron Jobs**
-3. 点击 **Create a new cron job**
+### 验证 Cron 任务
 
-### 2. 配置 Cron Job
+执行以下 SQL 查询确认：
 
-填写以下信息：
-
-- **Name**: `check-timeout-edge-function`
-- **Schedule**: `* * * * *`（每分钟执行一次）
-- **SQL**:
 ```sql
-SELECT net.http_post(
-  url := 'https://zhlkanxfucnsatafeqdp.supabase.co/functions/v1/bot-dice-game/check-timeout',
-  headers := '{"Content-Type": "application/json"}'::jsonb
-);
+SELECT 
+    jobid,
+    schedule,
+    command,
+    active
+FROM cron.job
+WHERE jobname = 'check-timeout-edge-function';
 ```
 
-### 3. 保存并启用
+应该看到：
+- `schedule`: `* * * * *`（每分钟执行一次）
+- `active`: `true`
 
-点击 **Save**，Supabase 会自动：
-- ✅ 使用 `service_role` 权限调用 Edge Function（无需手动配置 key）
-- ✅ 每分钟执行一次
-- ✅ 记录执行日志
-
-### 4. 验证 Cron 任务
-
-在 Dashboard → **Integrations** → **Cron Jobs** 中可以看到：
+或者在 Supabase Dashboard → **Integrations** → **Cron Jobs** 中查看：
 - 任务状态：`Active`
 - 执行历史：最近执行时间和结果
 
@@ -125,14 +116,24 @@ LIMIT 10;
 
 ## 相关文件
 
+- 迁移文件：`supabase/migrations/20260118000008_simplify_edge_function_cron.sql`
 - Edge Function：`supabase/functions/bot-dice-game/app.ts`
 - 超时检查函数：
   - `supabase/functions/bot-dice-game/features/rpsTimeout.ts`
   - `supabase/functions/bot-dice-game/features/diceTimeout.ts`
 
-## 为什么使用 Dashboard Cron 而不是 SQL 迁移？
+## 工作原理
 
-1. **更简单**：无需手动配置 service_role_key
-2. **更安全**：权限由 Supabase 平台统一管理
-3. **更直观**：在 Dashboard 中可以直接看到执行历史和状态
-4. **更灵活**：可以随时在 Dashboard 中修改或禁用任务
+1. **数据库 Cron 任务**（每分钟执行）
+   - 使用 `pg_net` 扩展发送 HTTP POST 请求
+   - 自动使用 `service_role` 权限（无需手动配置 key）
+   - 调用 Edge Function 的 `/check-timeout` 端点
+
+2. **Edge Function 处理**
+   - 接收 `/check-timeout` 请求
+   - 调用 `checkRpsTimeout()` 和 `checkDiceTimeout()`
+   - 检查超时房间并发送消息
+
+3. **数据库函数退款**
+   - `refund_expired_dice_rooms()` 和 `check_rps_timeout()` 确保资金安全
+   - 即使 Edge Function 失败，退款仍会执行

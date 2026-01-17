@@ -1,16 +1,19 @@
--- 🎯 简化版：使用 Supabase Dashboard Cron Jobs
--- Supabase Dashboard → Integrations → Cron 可以直接配置调用 Edge Function
--- 不需要手动设置 service_role_key，Supabase 会自动处理认证
--- 
--- 这个迁移文件只是删除之前复杂的函数，实际配置在 Dashboard 中完成
+-- 🎯 创建 Supabase Edge Functions Cron 任务
+-- 使用 pg_net 扩展通过 HTTP 请求调用 Edge Function 的 /check-timeout 端点
+-- Supabase cron 会自动使用 service_role 权限，无需手动配置 key
 
 -- -----------------------------------------------------------------------------
--- 删除之前创建的复杂函数（如果存在）
+-- 1. 确保 pg_net 扩展已启用
+-- -----------------------------------------------------------------------------
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+-- -----------------------------------------------------------------------------
+-- 2. 删除之前创建的复杂函数（如果存在）
 -- -----------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.call_check_timeout_edge_function() CASCADE;
 
 -- -----------------------------------------------------------------------------
--- 删除之前创建的 cron 任务（如果存在）
+-- 3. 删除可能存在的旧 cron 任务
 -- -----------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -22,15 +25,19 @@ BEGIN
   END IF;
 END $$;
 
--- 注释：实际配置请使用 Supabase Dashboard → Integrations → Cron
--- 配置步骤：
--- 1. 进入 Supabase Dashboard → Integrations → Cron
--- 2. 点击 "Create a new cron job"
--- 3. 配置如下：
---    - Name: check-timeout-edge-function
---    - Schedule: * * * * * (每分钟执行一次)
---    - SQL: SELECT net.http_post(
---             url := 'https://zhlkanxfucnsatafeqdp.supabase.co/functions/v1/bot-dice-game/check-timeout',
---             headers := '{"Content-Type": "application/json"}'::jsonb
---           );
--- 4. Supabase 会自动使用 service_role 权限调用 Edge Function
+-- -----------------------------------------------------------------------------
+-- 4. 创建 cron 任务（每分钟执行一次）
+-- -----------------------------------------------------------------------------
+SELECT cron.schedule(
+  'check-timeout-edge-function',
+  '* * * * *',  -- 每分钟执行一次
+  $$
+  SELECT net.http_post(
+    url := 'https://zhlkanxfucnsatafeqdp.supabase.co/functions/v1/bot-dice-game/check-timeout',
+    headers := '{"Content-Type": "application/json"}'::jsonb
+  );
+  $$
+);
+
+-- 注释
+COMMENT ON EXTENSION pg_net IS 'PostgreSQL 扩展，用于发送 HTTP 请求（调用 Edge Function）';
