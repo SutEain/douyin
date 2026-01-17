@@ -223,12 +223,27 @@ async function setSource(src: string) {
             // 🎯 Windows 平台：设置直播同步持续时间，确保音视频同步
             liveSyncDurationCount: isWindows ? 3 : undefined, // 3个片段
             liveMaxLatencyDurationCount: isWindows ? 5 : undefined, // 最大延迟5个片段
+            // 🎯 Windows 平台：增加最小缓冲长度，避免缓冲不足
+            minBufferLength: isWindows ? 10 : undefined, // 最小10秒缓冲
+            // 🎯 Windows 平台：设置缓冲区大小，确保有足够的音视频数据
+            maxBufferSize: isWindows ? 60 * 1000 * 1000 : undefined, // 60MB 缓冲区
             // 🎯 启用自动级别切换，根据网络情况自动调整
             autoStartLoad: true,
             // 🎯 启用音视频同步修复
             abrEwmaDefaultEstimate: 500000, // 初始带宽估计
             abrBandWidthFactor: 0.95, // 带宽因子
-            abrBandWidthUpFactor: 0.7 // 带宽上升因子
+            abrBandWidthUpFactor: 0.7, // 带宽上升因子
+            // 🎯 Windows 平台：启用音视频同步修复
+            capLevelToPlayerSize: !isWindows, // Windows 上关闭自动分辨率调整，避免频繁切换导致同步问题
+            // 🎯 Windows 平台：设置音频轨道切换策略
+            audioPreference: isWindows ? 'main' : undefined, // 优先使用主音频轨道
+            // 🎯 Windows 平台：启用音视频同步修复机制
+            maxBufferHole: isWindows ? 0.5 : undefined, // 最大缓冲空洞0.5秒
+            maxStarvationDelay: isWindows ? 4 : undefined, // 最大饥饿延迟4秒
+            maxLoadingDelay: isWindows ? 4 : undefined, // 最大加载延迟4秒
+            // 🎯 Windows 平台：设置片段加载超时
+            fragLoadingTimeOut: isWindows ? 20000 : undefined, // 20秒超时
+            manifestLoadingTimeOut: isWindows ? 10000 : undefined // 10秒超时
           })
           try {
             hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
@@ -243,6 +258,97 @@ async function setSource(src: string) {
                 firstLevel: data?.levels?.[0]?.height
               })
             })
+
+            // 🎯 Windows 平台：监听音视频同步事件，主动修复不同步问题
+            if (isWindows) {
+              // 🎯 Windows 平台：监听片段加载完成事件，确保音视频数据同步
+              hls.on(Hls.Events.FRAG_LOADED, (_evt: any, data: any) => {
+                pushDebug('hls.frag_loaded', {
+                  frag: data?.frag?.relurl,
+                  type: data?.frag?.type
+                })
+              })
+
+              // 🎯 Windows 平台：监听缓冲区更新，检测可能的同步问题
+              let lastBufferedEnd = 0
+              hls.on(Hls.Events.BUFFER_APPENDED, (_evt: any, data: any) => {
+                if (!video) return
+
+                try {
+                  const buffered = video.buffered
+                  if (buffered && buffered.length > 0) {
+                    const currentBufferedEnd = buffered.end(buffered.length - 1)
+
+                    // 检测缓冲区是否正常增长
+                    if (currentBufferedEnd === lastBufferedEnd && video.readyState >= 3) {
+                      pushDebug('hls.buffer_stalled', {
+                        bufferedEnd: currentBufferedEnd,
+                        currentTime: video.currentTime
+                      })
+                    }
+
+                    lastBufferedEnd = currentBufferedEnd
+                  }
+                } catch (e) {
+                  // 忽略错误
+                }
+              })
+
+              // 🎯 Windows 平台：监听播放时间更新，检测视频卡顿
+              let lastVideoTime = 0
+              let stalledCount = 0
+              const timeUpdateHandler = () => {
+                if (!video) return
+
+                const currentTime = video.currentTime
+
+                // 检测视频时间是否正常更新（允许小幅度变化）
+                if (
+                  Math.abs(currentTime - lastVideoTime) < 0.01 &&
+                  video.readyState >= 3 &&
+                  !video.paused
+                ) {
+                  stalledCount++
+
+                  // 如果连续3次检测到卡顿，尝试修复
+                  if (stalledCount >= 3) {
+                    pushDebug('video.stalled_detected', {
+                      currentTime,
+                      readyState: video.readyState,
+                      networkState: video.networkState
+                    })
+
+                    // 尝试重新加载当前片段
+                    if (hls && hls.media) {
+                      try {
+                        // 先停止加载
+                        hls.stopLoad()
+                        // 等待一小段时间后重新开始加载
+                        setTimeout(() => {
+                          if (hls && hls.media) {
+                            hls.startLoad()
+                            pushDebug('hls.restart_attempted', {})
+                          }
+                        }, 500)
+                      } catch (e) {
+                        pushDebug('hls.restart_failed', { error: e })
+                      }
+                    }
+
+                    stalledCount = 0 // 重置计数器
+                  }
+                } else {
+                  stalledCount = 0 // 正常播放，重置计数器
+                }
+
+                lastVideoTime = currentTime
+              }
+
+              video.addEventListener('timeupdate', timeUpdateHandler)
+
+              // 保存处理器以便清理
+              ;(video as any).__dpSyncHandler = timeUpdateHandler
+            }
           } catch {
             /* noop */
           }
@@ -409,6 +515,17 @@ onBeforeUnmount(() => {
     }
     ;(video as any).__dpHandlers = null
   }
+
+  // 🎯 清理 Windows 平台的音视频同步处理器
+  if (video && (video as any).__dpSyncHandler) {
+    try {
+      video.removeEventListener('timeupdate', (video as any).__dpSyncHandler)
+    } catch {
+      /* noop */
+    }
+    ;(video as any).__dpSyncHandler = null
+  }
+
   destroyHls()
 })
 </script>
