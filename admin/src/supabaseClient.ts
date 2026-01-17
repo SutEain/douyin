@@ -45,13 +45,26 @@ export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
           const clonedResponse = response.clone()
           try {
             const text = await clonedResponse.text()
-            // 🎯 检查是否是有效的 JSON（避免单个 } 的情况）
-            if (text.trim() && !text.trim().startsWith('{') && !text.trim().startsWith('[')) {
-              console.error('[SupabaseClient] 无效的 JSON 响应:', text.substring(0, 100))
-              throw new Error('服务器返回了无效的响应格式')
-            }
-            // 🎯 尝试解析 JSON，确保格式正确
+            // 🎯 检查是否是有效的 JSON（允许对象、数组、数字、字符串、布尔值、null）
+            // RPC 函数可能返回纯数字（如 2780.00），这也是有效的 JSON
             if (text.trim()) {
+              const trimmed = text.trim()
+              // 允许的 JSON 格式：对象 { }, 数组 [ ], 数字 123, 字符串 "abc", 布尔值 true/false, null
+              const isValidJson =
+                trimmed.startsWith('{') ||
+                trimmed.startsWith('[') ||
+                /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(trimmed) || // 数字
+                trimmed.startsWith('"') ||
+                trimmed === 'true' ||
+                trimmed === 'false' ||
+                trimmed === 'null'
+
+              if (!isValidJson && trimmed !== '}') {
+                // 如果不是有效的 JSON 格式，且不是单个 }，才报错
+                console.error('[SupabaseClient] 无效的 JSON 响应:', text.substring(0, 100))
+                throw new Error('服务器返回了无效的响应格式')
+              }
+              // 🎯 尝试解析 JSON，确保格式正确
               JSON.parse(text)
             }
           } catch (parseError: any) {
