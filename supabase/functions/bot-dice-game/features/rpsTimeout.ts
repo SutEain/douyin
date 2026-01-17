@@ -57,6 +57,10 @@ export async function checkRpsTimeout() {
         continue
       }
 
+      // 🎯 优先使用数据库返回的选择信息（如果存在）
+      const ownerChoice = roomInfo.owner_choice ?? room.owner_choice
+      const opponentChoice = roomInfo.opponent_choice ?? room.opponent_choice
+
       // 根据超时阶段生成不同的消息
       let timeoutText = ''
       let timeoutMessage = ''
@@ -76,7 +80,7 @@ export async function checkRpsTimeout() {
           `👤 发起人：<b>${escapeHTML(room.owner.nickname)}</b>\n` +
           `❌ 原因：没有人加入\n` +
           `💰 本金已退回`
-      } else if (reason === 'playing') {
+      } else if (reason === 'playing_timeout' || reason === 'long_playing_timeout') {
         // 出手阶段超时
         timeoutText =
           `🪨✂️📄 <b>石头剪刀布对决</b>\n\n` +
@@ -87,14 +91,9 @@ export async function checkRpsTimeout() {
           `原因：双方出手超过 60 秒\n` +
           `💸 本金已退回双方账户`
 
-        // 判断谁未出拳
-        const { data: choices } = await supabase
-          .from('rps_choices')
-          .select('user_id')
-          .eq('room_id', roomId)
-
-        const ownerChose = choices?.some((c) => c.user_id === room.owner_id)
-        const opponentChose = choices?.some((c) => c.user_id === room.opponent_id)
+        // 🎯 修复：使用数据库返回的选择信息或房间信息判断谁未出拳
+        const ownerChose = !!ownerChoice
+        const opponentChose = !!opponentChoice
 
         let whoNotChose = ''
         if (!ownerChose && !opponentChose) {
