@@ -18,13 +18,19 @@ const UPDATE_INTERVAL_MS = 5000 // 每5秒更新一次
  */
 export async function handleRedPacketCommand(chatId: number, text: string, message: any) {
   const officialGroupId = Deno.env.get('OFFICIAL_GROUP_ID')
-  console.log(`[RedPacket-Cmd] chatId=${chatId}, officialGroupId=${officialGroupId}`)
+  const diceGroupId = Deno.env.get('DICE_GROUP_ID')
+  console.log(
+    `[RedPacket-Cmd] chatId=${chatId}, officialGroupId=${officialGroupId}, diceGroupId=${diceGroupId}`
+  )
 
-  // 1. 验证群组权限
-  if (String(chatId) !== String(officialGroupId)) {
+  // 1. 验证群组权限：允许在官方群或游戏群发红包
+  const isOfficialGroup = String(chatId) === String(officialGroupId)
+  const isDiceGroup = String(chatId) === String(diceGroupId)
+
+  if (!isOfficialGroup && !isDiceGroup) {
     console.log(`[RedPacket-Cmd] 群组 ID 不匹配，跳过。`)
-    // 如果不是在官方群，且不是私聊，则忽略
-    if (chatId < 0) return // 群组消息，但不是官方群
+    // 如果不是在官方群或游戏群，且不是私聊，则忽略
+    if (chatId < 0) return // 群组消息，但不是允许的群组
   }
 
   const parts = text.trim().split(/\s+/)

@@ -1,5 +1,5 @@
 <template>
-  <div class="LivePage" ref="page">
+  <div class="LivePage" ref="page" :class="{ 'landscape-mode': isLandscape }">
     <div class="live-wrapper" id="live-wrapper" v-love="'live-wrapper'">
       <!-- 🎯 已下播状态展示 -->
       <div
@@ -119,6 +119,16 @@
               @click="showSendPacket = true"
             >
               <img src="/hongbao-.svg" style="width: 24rem; height: 24rem" />
+            </div>
+            <!-- 🎯 新增：横屏切换按钮 -->
+            <div
+              class="option-item landscape-toggle"
+              @click="isLandscape = !isLandscape"
+              style="font-size: 22rem"
+            >
+              <Icon
+                :icon="isLandscape ? 'solar:quit-full-screen-bold' : 'solar:full-screen-bold'"
+              />
             </div>
             <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
           </div>
@@ -476,6 +486,19 @@ const commentInput = ref<HTMLInputElement | null>(null) // 新增 Ref
 const isSendingComment = ref(false)
 const isSendingGift = ref(false)
 const isSendingPacket = ref(false)
+const isLandscape = ref(false) // 🎯 新增：横屏状态
+
+// 🎯 横屏模式切换时，自动清理当前正在播放和队列中的特效
+watch(isLandscape, (val) => {
+  if (val) {
+    giftEffectQueue.value = []
+    isPlayingEffect.value = false
+    vapSrc.value = ''
+    // 移除所有正在显示的 CSS 礼物横幅和大礼物特效
+    document.querySelectorAll('.send-gift, .large-gift-effect').forEach((el) => el.remove())
+  }
+})
+
 const vapPlayerRef = ref<any>(null)
 const vapSrc = ref('') // 初始值为空
 
@@ -940,7 +963,7 @@ function triggerGiftAnim(
   amount: number,
   duration: number = 3
 ) {
-  if (!page.value) return
+  if (!page.value || isLandscape.value) return // 🎯 横屏模式下不播放礼物横幅
   // 为每一个送礼动作生成一个完全唯一的 ID，强制触发进入动画
   const bannerId = `gift-banner-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
@@ -1074,6 +1097,7 @@ function triggerLargeGiftEffect(
   titleIcon?: string,
   effectUrl?: string
 ) {
+  if (isLandscape.value) return // 🎯 横屏模式下不播放大礼物特效
   // 🎁 将特效加入队列
   const effectItem: GiftEffectItem = {
     giftName,
@@ -1864,6 +1888,51 @@ onBeforeUnmount(() => {
   top: 0;
   left: 0;
   overflow: hidden;
+
+  /* 🎯 横屏模式支持 */
+  &.landscape-mode {
+    position: fixed !important;
+    top: 0 !important;
+    left: 100vw !important;
+    width: 100vh !important;
+    height: 100vw !important;
+    transform: rotate(90deg);
+    transform-origin: top left;
+    z-index: 9999;
+    background: #000;
+
+    .live-wrapper {
+      width: 100vh;
+      height: 100vw;
+    }
+
+    /* 横屏下隐藏一些不需要的 UI 或调整位置 */
+    .float {
+      .top {
+        padding-top: 10rem;
+      }
+      .bottom {
+        padding-bottom: 15rem;
+      }
+    }
+
+    /* 确保特效组件在横屏下铺满 */
+    :deep(.vap-container) {
+      width: 100vh !important;
+      height: 100vw !important;
+    }
+
+    /* 兼容大礼物动画特效 */
+    :deep(.large-gift-effect) {
+      width: 100vh !important;
+      height: 100vw !important;
+    }
+
+    /* 礼物横幅位置调整 */
+    :deep(.send-gift) {
+      left: 30rem;
+    }
+  }
 
   .live-wrapper {
     position: relative;
