@@ -41,8 +41,9 @@
               :src="_checkImgUrl(roomInfo.anchor_info?.avatar_url) || fallbackAvatar"
               alt=""
               referrerpolicy="no-referrer"
+              @click="goUser(roomInfo.anchor_id)"
             />
-            <div class="desc-wrapper">
+            <div class="desc-wrapper" @click="goUser(roomInfo.anchor_id)">
               <div class="name">{{ _truncate(roomInfo.anchor_info?.nickname || '主播', 15) }}</div>
               <div class="count">{{ viewerCount }} 人正在看</div>
             </div>
@@ -454,6 +455,17 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 🎯 用户信息弹窗 -->
+    <Transition name="slide-up">
+      <UserPanel
+        v-if="showUserPanel"
+        :currentItem="selectedUser"
+        :active="showUserPanel"
+        @back="showUserPanel = false"
+        @update:currentItem="handleUpdateUser"
+      />
+    </Transition>
   </div>
 </template>
 
@@ -466,8 +478,10 @@ import { _checkImgUrl, _notice, _copy, _truncate } from '@/utils'
 import { toggleFollowUser, sendReward, sendRedPacket, incrementWatchTime } from '@/api/videos'
 import DPPlayer from '@/components/live/DPPlayer.vue'
 import VapPlayer from '@/components/live/VapPlayer.vue'
+import UserPanel from '@/components/UserPanel.vue'
 import RedPacketOverlay from '@/components/live/RedPacketOverlay.vue'
 import Dom from '@/utils/dom'
+import { DefaultUser } from '@/utils/const_var'
 
 import { useBaseStore } from '@/store/pinia'
 
@@ -494,6 +508,8 @@ const isSendingComment = ref(false)
 const isSendingGift = ref(false)
 const isSendingPacket = ref(false)
 const isLandscape = ref(false) // 🎯 新增：横屏状态
+const showUserPanel = ref(false)
+const selectedUser = ref<any>(null)
 
 // 🎯 横屏模式切换时，自动清理当前正在播放和队列中的特效
 watch(isLandscape, (val) => {
@@ -1350,7 +1366,21 @@ async function attention() {
 function goUser(uid: string) {
   console.log('[LivePage] goUser:', uid)
   if (!uid) return
-  router.push(`/user/${uid}`)
+
+  // 🎯 修改为弹窗模式，不中断直播
+  selectedUser.value = {
+    author: {
+      ...DefaultUser,
+      user_id: uid,
+      uid: uid
+    },
+    aweme_list: []
+  }
+  showUserPanel.value = true
+}
+
+function handleUpdateUser(newItem: any) {
+  selectedUser.value = newItem
 }
 
 let channel: any = null
