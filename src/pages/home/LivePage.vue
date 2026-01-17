@@ -475,6 +475,12 @@ const route = useRoute()
 const router = useRouter()
 const baseStore = useBaseStore()
 const roomId = computed(() => route.query.id as string)
+
+// 🎯 切换直播间时，强制恢复竖屏
+watch(roomId, () => {
+  isLandscape.value = false
+})
+
 const page = ref<HTMLElement | null>(null)
 
 const roomInfo = ref<any>({})
@@ -1569,6 +1575,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  isLandscape.value = false // 退出时重置状态
   if (channel) supabase.removeChannel(channel)
   if (watchTimeTimer) {
     clearInterval(watchTimeTimer)
@@ -1890,21 +1897,29 @@ onBeforeUnmount(() => {
   left: 0;
   overflow: hidden;
 
-  /* 🎯 横屏模式支持 */
+  /* 🎯 横屏模式支持 - 优化 WebView2 兼容性 */
   &.landscape-mode {
     position: fixed !important;
-    top: 0 !important;
-    left: 100vw !important;
+    top: 50% !important;
+    left: 50% !important;
     width: 100vh !important;
     height: 100vw !important;
-    transform: rotate(90deg);
-    transform-origin: top left;
+    transform: translate(-50%, -50%) rotate(90deg);
     z-index: 9999;
     background: #000;
+    overflow: hidden;
 
     .live-wrapper {
-      width: 100vh;
-      height: 100vw;
+      width: 100vh !important;
+      height: 100vw !important;
+    }
+
+    /* 确保播放器和特效容器在横屏下强制铺满 */
+    :deep(.dp-player),
+    :deep(.vap-container),
+    :deep(.large-gift-effect) {
+      width: 100vh !important;
+      height: 100vw !important;
     }
 
     /* 横屏下隐藏一些不需要的 UI 或调整位置 */
@@ -1915,18 +1930,6 @@ onBeforeUnmount(() => {
       .bottom {
         padding-bottom: 15rem;
       }
-    }
-
-    /* 确保特效组件在横屏下铺满 */
-    :deep(.vap-container) {
-      width: 100vh !important;
-      height: 100vw !important;
-    }
-
-    /* 兼容大礼物动画特效 */
-    :deep(.large-gift-effect) {
-      width: 100vh !important;
-      height: 100vw !important;
     }
 
     /* 礼物横幅位置调整 */

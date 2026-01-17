@@ -756,5 +756,8 @@ onBeforeUnmount(() => {
   height: 100%;
   object-fit: contain;
   background: #000;
+  /* 🎯 修复：强制 3D 渲染，解决部分 WebView 下 transform 继承失效问题 */
+  transform: translateZ(0);
+  will-change: transform;
 }
 </style>
