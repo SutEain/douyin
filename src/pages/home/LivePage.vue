@@ -23,6 +23,7 @@
         :poster="roomInfo.cover_url"
         :muted="false"
         :controls="false"
+        :landscape="isLandscape"
         @error="onPlayerError"
         @contextmenu.prevent
       />

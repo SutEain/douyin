@@ -33,6 +33,7 @@ interface Props {
   controls?: boolean
   playbackRate?: number
   debug?: boolean
+  landscape?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -41,7 +42,8 @@ const props = withDefaults(defineProps<Props>(), {
   muted: true,
   controls: true,
   playbackRate: 1,
-  debug: false
+  debug: false,
+  landscape: false
 })
 
 const videoRef = ref<HTMLVideoElement>()
@@ -553,6 +555,20 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => props.landscape,
+  () => {
+    const video = videoRef.value
+    if (video && video.videoWidth && video.videoHeight) {
+      if (props.landscape && video.videoWidth < video.videoHeight) {
+        videoFit.value = 'contain'
+      } else {
+        videoFit.value = video.videoWidth > video.videoHeight ? 'contain' : 'cover'
+      }
+    }
+  }
+)
+
 onMounted(() => {
   const video = videoRef.value
   if (!video) return
@@ -564,9 +580,8 @@ onMounted(() => {
 
   if (isDesktop) {
     try {
-      // 🚨 方法1: 禁用 CSS 硬件加速
+      // 🚨 方法1: 禁用 CSS 硬件加速 (修改：不要强制 transform: none，否则会影响父级的 rotate)
       video.style.willChange = 'auto'
-      video.style.transform = 'none'
       video.style.backfaceVisibility = 'visible'
 
       // 🚨 方法2: 设置视频元素属性
@@ -604,14 +619,20 @@ onMounted(() => {
     let extra: any = undefined
     if (type === 'loadedmetadata' || type === 'playing' || type === 'resize') {
       if (video.videoWidth && video.videoHeight) {
-        // 如果是横屏视频 (宽 > 高)，使用 contain 以免剪掉太多内容，上下留黑边是正常的
-        // 如果是竖屏视频 (高 >= 宽)，使用 cover 以填充全屏，消除左右黑边
-        videoFit.value = video.videoWidth > video.videoHeight ? 'contain' : 'cover'
+        // 🎯 修复：横屏模式下，竖屏视频强制使用 contain 避免裁剪
+        if (props.landscape && video.videoWidth < video.videoHeight) {
+          videoFit.value = 'contain'
+        } else {
+          // 如果是横屏视频 (宽 > 高)，使用 contain 以免剪掉太多内容，上下留黑边是正常的
+          // 如果是竖屏视频 (高 >= 宽)，使用 cover 以填充全屏，消除左右黑边
+          videoFit.value = video.videoWidth > video.videoHeight ? 'contain' : 'cover'
+        }
         pushDebug('video.fit', {
           event: type,
           width: video.videoWidth,
           height: video.videoHeight,
-          fit: videoFit.value
+          fit: videoFit.value,
+          landscape: props.landscape
         })
       }
     }
