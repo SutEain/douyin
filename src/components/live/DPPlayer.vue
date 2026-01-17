@@ -11,6 +11,7 @@
       webkit-playsinline
       x5-playsinline
       x5-video-player-type="h5-page"
+      preload="auto"
     />
   </div>
 </template>
@@ -194,6 +195,11 @@ async function setSource(src: string) {
   pushDebug('maybeHls', { maybeHls })
 
   if (maybeHls) {
+    // 🚨 桌面平台检测：Windows 和 Mac 都需要强制使用 hls.js 以解决音视频同步问题
+    const isWindows = /Win/i.test(navigator.platform) || /Windows/i.test(navigator.userAgent)
+    const isMac = /Mac/i.test(navigator.platform) || /Macintosh/i.test(navigator.userAgent)
+    const isDesktop = isWindows || isMac
+
     // 先尝试原生（iOS Safari / 部分 WebView 原生支持 HLS）
     // 如果不支持，再尝试注入 hls.js
     const canNativeHls =
@@ -201,50 +207,37 @@ async function setSource(src: string) {
       (video.canPlayType('application/vnd.apple.mpegurl') ||
         video.canPlayType('application/x-mpegURL'))
 
-    pushDebug('nativeHlsSupport', { canNativeHls })
+    pushDebug('nativeHlsSupport', { canNativeHls, isWindows, isMac, isDesktop })
 
-    if (canNativeHls) {
+    // 🚨 桌面平台（Windows/Mac）：即使浏览器原生支持 HLS，也强制使用 hls.js，以便应用音视频同步修复
+    // 移动端（iOS Safari）继续使用原生 HLS，性能更好
+    if (canNativeHls && !isDesktop) {
       video.src = src
     } else {
       try {
         const Hls = await loadHlsFromCdn()
         if (Hls?.isSupported?.()) {
-          // 🎯 Windows 平台优化：检测操作系统，调整 HLS 配置以解决音画不同步问题
-          const isWindows = /Win/i.test(navigator.platform) || /Windows/i.test(navigator.userAgent)
-
-          hls = new Hls({
+          // 🚨 桌面平台：使用最简化的 HLS 配置，避免过度配置导致的问题
+          const hlsConfig: any = {
             enableWorker: true,
-            // 🎯 Windows 平台：关闭低延迟模式，增加缓冲以确保音视频同步
-            // 低延迟模式在 Windows 上可能导致缓冲不足，造成音画不同步
-            lowLatencyMode: !isWindows,
-            // 🎯 Windows 平台：增加最大缓冲长度，确保有足够的音视频数据
-            maxBufferLength: isWindows ? 30 : undefined, // 30秒缓冲
-            maxMaxBufferLength: isWindows ? 60 : undefined, // 最大60秒缓冲
-            // 🎯 Windows 平台：设置直播同步持续时间，确保音视频同步
-            liveSyncDurationCount: isWindows ? 3 : undefined, // 3个片段
-            liveMaxLatencyDurationCount: isWindows ? 5 : undefined, // 最大延迟5个片段
-            // 🎯 Windows 平台：增加最小缓冲长度，避免缓冲不足
-            minBufferLength: isWindows ? 10 : undefined, // 最小10秒缓冲
-            // 🎯 Windows 平台：设置缓冲区大小，确保有足够的音视频数据
-            maxBufferSize: isWindows ? 60 * 1000 * 1000 : undefined, // 60MB 缓冲区
-            // 🎯 启用自动级别切换，根据网络情况自动调整
-            autoStartLoad: true,
-            // 🎯 启用音视频同步修复
-            abrEwmaDefaultEstimate: 500000, // 初始带宽估计
-            abrBandWidthFactor: 0.95, // 带宽因子
-            abrBandWidthUpFactor: 0.7, // 带宽上升因子
-            // 🎯 Windows 平台：启用音视频同步修复
-            capLevelToPlayerSize: !isWindows, // Windows 上关闭自动分辨率调整，避免频繁切换导致同步问题
-            // 🎯 Windows 平台：设置音频轨道切换策略
-            audioPreference: isWindows ? 'main' : undefined, // 优先使用主音频轨道
-            // 🎯 Windows 平台：启用音视频同步修复机制
-            maxBufferHole: isWindows ? 0.5 : undefined, // 最大缓冲空洞0.5秒
-            maxStarvationDelay: isWindows ? 4 : undefined, // 最大饥饿延迟4秒
-            maxLoadingDelay: isWindows ? 4 : undefined, // 最大加载延迟4秒
-            // 🎯 Windows 平台：设置片段加载超时
-            fragLoadingTimeOut: isWindows ? 20000 : undefined, // 20秒超时
-            manifestLoadingTimeOut: isWindows ? 10000 : undefined // 10秒超时
-          })
+            autoStartLoad: true
+          }
+
+          // 🚨 桌面平台（Windows/Mac）：只设置必要的参数，避免配置冲突
+          if (isDesktop) {
+            // 关键配置：关闭低延迟模式，这是桌面平台音画不同步的主要原因
+            hlsConfig.lowLatencyMode = false
+            // 适中的缓冲长度，不要太大也不要太小
+            hlsConfig.maxBufferLength = 20
+            hlsConfig.maxMaxBufferLength = 40
+            // 直播同步参数
+            hlsConfig.liveSyncDurationCount = 3
+            hlsConfig.liveMaxLatencyDurationCount = 6
+            // 最小缓冲
+            hlsConfig.minBufferLength = 8
+          }
+
+          hls = new Hls(hlsConfig)
           try {
             hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
               lastError.value = `[hls.js] ${data?.type || ''} ${data?.details || ''} fatal=${
@@ -259,95 +252,222 @@ async function setSource(src: string) {
               })
             })
 
-            // 🎯 Windows 平台：监听音视频同步事件，主动修复不同步问题
-            if (isWindows) {
-              // 🎯 Windows 平台：监听片段加载完成事件，确保音视频数据同步
-              hls.on(Hls.Events.FRAG_LOADED, (_evt: any, data: any) => {
-                pushDebug('hls.frag_loaded', {
-                  frag: data?.frag?.relurl,
-                  type: data?.frag?.type
+            // 🚨 桌面平台：详细的调试日志和同步检测
+            if (isDesktop) {
+              // 🚨 桌面平台：确保视频元素使用正确的播放速率
+              try {
+                video.defaultPlaybackRate = 1.0
+                video.playbackRate = 1.0
+                pushDebug('desktop_playback_rate_set', {
+                  playbackRate: video.playbackRate,
+                  platform: isWindows ? 'Windows' : 'Mac'
                 })
+              } catch (e) {
+                pushDebug('desktop_playback_rate_failed', {
+                  error: e,
+                  platform: isWindows ? 'Windows' : 'Mac'
+                })
+              }
+
+              // 🚨 桌面平台：详细的音视频同步调试日志
+              let lastLogTime = Date.now()
+              let lastVideoTime = 0
+              let audioTrackCount = 0
+              let videoTrackCount = 0
+              let lastAudioPTS = 0
+              let lastVideoPTS = 0
+
+              // 监听所有 HLS 事件，记录音视频时间戳
+              hls.on(Hls.Events.FRAG_LOADED, (_evt: any, data: any) => {
+                const frag = data?.frag
+                if (frag) {
+                  pushDebug('hls.frag_loaded', {
+                    type: frag.type,
+                    relurl: frag.relurl,
+                    start: frag.start,
+                    startPTS: frag.startPTS,
+                    endPTS: frag.endPTS,
+                    duration: frag.duration,
+                    sn: frag.sn
+                  })
+
+                  if (frag.type === 'audio') {
+                    audioTrackCount++
+                    if (frag.startPTS !== undefined) {
+                      lastAudioPTS = frag.startPTS
+                    }
+                  } else if (frag.type === 'video') {
+                    videoTrackCount++
+                    if (frag.startPTS !== undefined) {
+                      lastVideoPTS = frag.startPTS
+                    }
+                  }
+
+                  // 如果音视频时间戳都存在，计算差异
+                  if (lastAudioPTS > 0 && lastVideoPTS > 0) {
+                    const syncDiff = Math.abs(lastAudioPTS - lastVideoPTS)
+                    pushDebug('hls.pts_sync_check', {
+                      audioPTS: lastAudioPTS.toFixed(3),
+                      videoPTS: lastVideoPTS.toFixed(3),
+                      diff: syncDiff.toFixed(3),
+                      audioCount: audioTrackCount,
+                      videoCount: videoTrackCount
+                    })
+                  }
+                }
               })
 
-              // 🎯 Windows 平台：监听缓冲区更新，检测可能的同步问题
-              let lastBufferedEnd = 0
+              hls.on(Hls.Events.FRAG_PARSED, (_evt: any, data: any) => {
+                const frag = data?.frag
+                if (frag && video) {
+                  pushDebug('hls.frag_parsed', {
+                    type: frag.type,
+                    startPTS: frag.startPTS,
+                    endPTS: frag.endPTS,
+                    videoCurrentTime: video.currentTime,
+                    videoReadyState: video.readyState
+                  })
+                }
+              })
+
+              // 监听缓冲区更新
               hls.on(Hls.Events.BUFFER_APPENDED, (_evt: any, data: any) => {
                 if (!video) return
-
                 try {
                   const buffered = video.buffered
                   if (buffered && buffered.length > 0) {
-                    const currentBufferedEnd = buffered.end(buffered.length - 1)
-
-                    // 检测缓冲区是否正常增长
-                    if (currentBufferedEnd === lastBufferedEnd && video.readyState >= 3) {
-                      pushDebug('hls.buffer_stalled', {
-                        bufferedEnd: currentBufferedEnd,
-                        currentTime: video.currentTime
+                    const bufferedRanges = []
+                    for (let i = 0; i < buffered.length; i++) {
+                      bufferedRanges.push({
+                        start: buffered.start(i).toFixed(3),
+                        end: buffered.end(i).toFixed(3)
                       })
                     }
-
-                    lastBufferedEnd = currentBufferedEnd
+                    pushDebug('hls.buffer_appended', {
+                      ranges: bufferedRanges,
+                      currentTime: video.currentTime.toFixed(3),
+                      readyState: video.readyState,
+                      networkState: video.networkState
+                    })
                   }
                 } catch (e) {
                   // 忽略错误
                 }
               })
 
-              // 🎯 Windows 平台：监听播放时间更新，检测视频卡顿
-              let lastVideoTime = 0
-              let stalledCount = 0
+              // 🚨 桌面平台：详细的播放状态监控
+              let timeUpdateCount = 0
               const timeUpdateHandler = () => {
                 if (!video) return
 
+                timeUpdateCount++
+                const now = Date.now()
                 const currentTime = video.currentTime
 
-                // 检测视频时间是否正常更新（允许小幅度变化）
-                if (
-                  Math.abs(currentTime - lastVideoTime) < 0.01 &&
-                  video.readyState >= 3 &&
-                  !video.paused
-                ) {
-                  stalledCount++
-
-                  // 如果连续3次检测到卡顿，尝试修复
-                  if (stalledCount >= 3) {
-                    pushDebug('video.stalled_detected', {
-                      currentTime,
-                      readyState: video.readyState,
-                      networkState: video.networkState
-                    })
-
-                    // 尝试重新加载当前片段
-                    if (hls && hls.media) {
-                      try {
-                        // 先停止加载
-                        hls.stopLoad()
-                        // 等待一小段时间后重新开始加载
-                        setTimeout(() => {
-                          if (hls && hls.media) {
-                            hls.startLoad()
-                            pushDebug('hls.restart_attempted', {})
-                          }
-                        }, 500)
-                      } catch (e) {
-                        pushDebug('hls.restart_failed', { error: e })
+                // 每50次 timeupdate（约2-3秒）记录一次详细状态
+                if (timeUpdateCount % 50 === 0) {
+                  try {
+                    const buffered = video.buffered
+                    const bufferedInfo = []
+                    if (buffered && buffered.length > 0) {
+                      for (let i = 0; i < buffered.length; i++) {
+                        bufferedInfo.push({
+                          start: buffered.start(i).toFixed(3),
+                          end: buffered.end(i).toFixed(3)
+                        })
                       }
                     }
 
-                    stalledCount = 0 // 重置计数器
-                  }
-                } else {
-                  stalledCount = 0 // 正常播放，重置计数器
-                }
+                    const timeDiff = currentTime - lastVideoTime
+                    const realTimeDiff = (now - lastLogTime) / 1000
 
-                lastVideoTime = currentTime
+                    pushDebug('desktop.playback_status', {
+                      platform: isWindows ? 'Windows' : 'Mac',
+                      currentTime: currentTime.toFixed(3),
+                      lastVideoTime: lastVideoTime.toFixed(3),
+                      timeDiff: timeDiff.toFixed(3),
+                      realTimeDiff: realTimeDiff.toFixed(3),
+                      playbackRate: video.playbackRate,
+                      paused: video.paused,
+                      readyState: video.readyState,
+                      networkState: video.networkState,
+                      buffered: bufferedInfo,
+                      videoWidth: video.videoWidth,
+                      videoHeight: video.videoHeight,
+                      audioPTS: lastAudioPTS > 0 ? lastAudioPTS.toFixed(3) : 'N/A',
+                      videoPTS: lastVideoPTS > 0 ? lastVideoPTS.toFixed(3) : 'N/A',
+                      ptsDiff:
+                        lastAudioPTS > 0 && lastVideoPTS > 0
+                          ? Math.abs(lastAudioPTS - lastVideoPTS).toFixed(3)
+                          : 'N/A'
+                    })
+
+                    // 检测时间推进异常
+                    if (lastVideoTime > 0 && !video.paused) {
+                      const expectedTimeDiff = realTimeDiff * video.playbackRate
+                      const actualTimeDiff = timeDiff
+                      const drift = Math.abs(expectedTimeDiff - actualTimeDiff)
+
+                      if (drift > 0.2) {
+                        pushDebug('desktop.time_drift_detected', {
+                          platform: isWindows ? 'Windows' : 'Mac',
+                          expected: expectedTimeDiff.toFixed(3),
+                          actual: actualTimeDiff.toFixed(3),
+                          drift: drift.toFixed(3),
+                          playbackRate: video.playbackRate
+                        })
+                      }
+                    }
+
+                    lastVideoTime = currentTime
+                    lastLogTime = now
+                  } catch (e) {
+                    pushDebug('desktop.playback_status_error', {
+                      error: e,
+                      platform: isWindows ? 'Windows' : 'Mac'
+                    })
+                  }
+                }
               }
 
               video.addEventListener('timeupdate', timeUpdateHandler)
 
+              // 监听所有视频事件
+              const eventTypes = [
+                'play',
+                'pause',
+                'seeking',
+                'seeked',
+                'waiting',
+                'stalled',
+                'canplay',
+                'canplaythrough',
+                'loadedmetadata',
+                'loadeddata'
+              ]
+              const eventHandlers = new Map<string, () => void>()
+
+              eventTypes.forEach((eventType) => {
+                const handler = () => {
+                  if (!video) return
+                  pushDebug(`video.${eventType}`, {
+                    currentTime: video.currentTime.toFixed(3),
+                    readyState: video.readyState,
+                    networkState: video.networkState,
+                    paused: video.paused,
+                    buffered:
+                      video.buffered.length > 0
+                        ? `${video.buffered.start(0).toFixed(3)}-${video.buffered.end(video.buffered.length - 1).toFixed(3)}`
+                        : 'empty'
+                  })
+                }
+                eventHandlers.set(eventType, handler)
+                video.addEventListener(eventType, handler)
+              })
+
               // 保存处理器以便清理
-              ;(video as any).__dpSyncHandler = timeUpdateHandler
+              ;(video as any).__dpDesktopTimeUpdateHandler = timeUpdateHandler
+              ;(video as any).__dpDesktopEventHandlers = eventHandlers
             }
           } catch {
             /* noop */
@@ -437,6 +557,49 @@ onMounted(() => {
   const video = videoRef.value
   if (!video) return
 
+  // 🚨 桌面平台：尝试多种方法解决音画不同步问题
+  const isWindows = /Win/i.test(navigator.platform) || /Windows/i.test(navigator.userAgent)
+  const isMac = /Mac/i.test(navigator.platform) || /Macintosh/i.test(navigator.userAgent)
+  const isDesktop = isWindows || isMac
+
+  if (isDesktop) {
+    try {
+      // 🚨 方法1: 禁用 CSS 硬件加速
+      video.style.willChange = 'auto'
+      video.style.transform = 'none'
+      video.style.backfaceVisibility = 'visible'
+
+      // 🚨 方法2: 设置视频元素属性
+      video.setAttribute('preload', 'auto')
+      video.setAttribute('playsinline', 'true')
+
+      // 🚨 方法3: 强制设置播放速率，确保音视频同步
+      video.defaultPlaybackRate = 1.0
+      video.playbackRate = 1.0
+
+      // 🚨 方法4: 尝试禁用某些可能导致不同步的浏览器特性
+      // 注意：这些属性可能不被所有浏览器支持，但尝试设置不会出错
+      try {
+        ;(video as any).mozMediaKeys = null
+        ;(video as any).webkitMediaKeys = null
+      } catch {
+        // 忽略不支持的情况
+      }
+
+      pushDebug('desktop_video_config', {
+        platform: isWindows ? 'Windows' : 'Mac',
+        willChange: video.style.willChange,
+        playbackRate: video.playbackRate,
+        preload: video.preload
+      })
+    } catch (e) {
+      pushDebug('desktop_video_config_failed', {
+        error: e,
+        platform: isWindows ? 'Windows' : 'Mac'
+      })
+    }
+  }
+
   const onEvent = (type: string) => () => {
     let extra: any = undefined
     if (type === 'loadedmetadata' || type === 'playing' || type === 'resize') {
@@ -516,14 +679,43 @@ onBeforeUnmount(() => {
     ;(video as any).__dpHandlers = null
   }
 
-  // 🎯 清理 Windows 平台的音视频同步处理器
-  if (video && (video as any).__dpSyncHandler) {
+  // 🎯 清理桌面平台的音视频同步处理器
+  if (video) {
     try {
-      video.removeEventListener('timeupdate', (video as any).__dpSyncHandler)
+      // 清理旧的处理器（如果存在）
+      if ((video as any).__dpSyncHandler) {
+        video.removeEventListener('timeupdate', (video as any).__dpSyncHandler)
+        ;(video as any).__dpSyncHandler = null
+      }
+      if ((video as any).__dpSeekingHandler) {
+        video.removeEventListener('seeking', (video as any).__dpSeekingHandler)
+        ;(video as any).__dpSeekingHandler = null
+      }
+      if ((video as any).__dpStalledHandler) {
+        video.removeEventListener('stalled', (video as any).__dpStalledHandler)
+        video.removeEventListener('waiting', (video as any).__dpStalledHandler)
+        ;(video as any).__dpStalledHandler = null
+      }
+
+      // 🚨 清理桌面平台的调试处理器
+      if ((video as any).__dpDesktopTimeUpdateHandler) {
+        video.removeEventListener('timeupdate', (video as any).__dpDesktopTimeUpdateHandler)
+        ;(video as any).__dpDesktopTimeUpdateHandler = null
+      }
+      if ((video as any).__dpDesktopEventHandlers) {
+        const handlers: Map<string, () => void> = (video as any).__dpDesktopEventHandlers
+        handlers.forEach((handler, eventType) => {
+          try {
+            video.removeEventListener(eventType, handler)
+          } catch {
+            /* noop */
+          }
+        })
+        ;(video as any).__dpDesktopEventHandlers = null
+      }
     } catch {
       /* noop */
     }
-    ;(video as any).__dpSyncHandler = null
   }
 
   destroyHls()
