@@ -82,6 +82,12 @@ export async function handleSendReward(req: Request): Promise<Response> {
       return errorResponse('', 1, 400)
     }
 
+    // 🚨 安全验证 3.5: 最小金额限制（防止精度漏洞：极小值如 1e-12 会被数据库四舍五入为 0）
+    // 最小打赏金额为 0.01 抖币
+    if (finalGiftAmount < 0.01) {
+      return errorResponse('', 1, 400)
+    }
+
     // 🚨 安全验证 4: 检查最近一次打赏时间，防止并发攻击
     const { data: lastGift, error: lastGiftError } = await supabaseAdmin
       .from('coin_transactions')
@@ -195,9 +201,28 @@ export async function handleSendReward(req: Request): Promise<Response> {
     // 3. 发送通知给作者/主播
     // 只有真实主播才发送通知，如果是转播间（管理员代收）则不发机器人通知
     if (receiver_id) {
+      // 🎯 修复精度漏洞：使用数据库中实际记录的金额，而不是前端传入的值
+      // 查询最近一次打赏记录，获取实际扣除的金额
+      const { data: lastGiftRecord } = await supabaseAdmin
+        .from('coin_transactions')
+        .select('amount')
+        .eq('user_id', user.id)
+        .eq('type', 'gift_out')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      // 使用实际扣除的金额（取绝对值，因为 gift_out 是负数）
+      const actualAmount = lastGiftRecord
+        ? Math.abs(Number(lastGiftRecord.amount))
+        : finalGiftAmount
+
       const senderName = profile.nickname || profile.username || '神秘用户'
       const targetType = gift_type === 'live' ? '直播间' : '作品'
-      const notificationMsg = `💰 <b>${senderName}</b> 给你的${targetType}打赏了 <b>${finalGiftAmount}</b> 抖币！`
+      // 🎯 格式化金额，避免科学计数法显示（如 1e-12）
+      const formattedAmount =
+        actualAmount < 0.01 ? '0.01' : actualAmount.toFixed(2).replace(/\.?0+$/, '')
+      const notificationMsg = `💰 <b>${senderName}</b> 给你的${targetType}打赏了 <b>${formattedAmount}</b> 抖币！`
 
       // 如果是视频，带上跳转链接
       const startParam = gift_type === 'video' ? `video_${room_or_video_id}` : undefined

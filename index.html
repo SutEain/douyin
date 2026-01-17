@@ -20,7 +20,10 @@
     <title>TGDouyin - Telegram 短视频平台</title>
     <!-- v1.0.1-cache-fix -->
     <script>
-      // ✅ 彻底禁用所有控制台输出（仅非本地环境生效，除非 URL 包含 debug=1）
+      // ✅ 彻底禁用所有控制台输出（仅非本地环境生效，除非 URL 包含 debug=1 或 console=1）
+      // 🎯 生产环境启用 console 的方法：
+      // 1. URL 添加 ?debug=1 或 ?console=1
+      // 2. 在浏览器控制台执行：window.__enableConsole__()
       ;(function () {
         try {
           const host = window.location.hostname
@@ -57,7 +60,17 @@
                 log: window.console.log,
                 info: window.console.info,
                 warn: window.console.warn,
-                error: window.console.error
+                error: window.console.error,
+                debug: window.console.debug,
+                trace: window.console.trace,
+                table: window.console.table,
+                group: window.console.group,
+                groupCollapsed: window.console.groupCollapsed,
+                groupEnd: window.console.groupEnd,
+                time: window.console.time,
+                timeEnd: window.console.timeEnd,
+                count: window.console.count,
+                assert: window.console.assert
               }
             } catch (e) {}
 
@@ -69,6 +82,25 @@
                 }
               } catch (e) {}
             })
+
+            // 🎯 提供恢复 console 的方法（方便调试）
+            window.__enableConsole__ = function () {
+              if (window.__rawConsole__) {
+                Object.keys(window.__rawConsole__).forEach(function (m) {
+                  try {
+                    if (typeof window.__rawConsole__[m] === 'function') {
+                      window.console[m] = window.__rawConsole__[m]
+                    }
+                  } catch (e) {}
+                })
+                console.log('[Console] ✅ Console 已启用！')
+              }
+            }
+          } else {
+            // 开发环境或已启用调试，提供空函数避免报错
+            window.__enableConsole__ = function () {
+              console.log('[Console] Console 已经是启用状态')
+            }
           }
         } catch (e) {
           // ignore

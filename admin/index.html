@@ -7,6 +7,9 @@
     <title>抖音管理后台</title>
     <script>
       // ✅ 彻底禁用所有控制台输出（仅非本地环境生效，除非 URL 包含 debug=1）
+      // 🎯 生产环境启用 console 的方法：
+      // 1. URL 添加 ?debug=1
+      // 2. 在浏览器控制台执行：window.__enableConsole__()
       ;(function () {
         try {
           const host = window.location.hostname
@@ -35,7 +38,7 @@
               'count',
               'assert'
             ]
-            // 保存原始 console 引用，备用
+            // 🎯 保存原始 console 引用，备用
             window.__rawConsole__ = {}
             for (const key in window.console) {
               window.__rawConsole__[key] = window.console[key]
@@ -46,6 +49,28 @@
                 window.console[m] = noop
               }
             })
+
+            // 🎯 提供恢复 console 的方法（方便调试）
+            window.__enableConsole__ = function () {
+              if (window.__rawConsole__) {
+                Object.keys(window.__rawConsole__).forEach(function (m) {
+                  try {
+                    if (typeof window.__rawConsole__[m] === 'function') {
+                      window.console[m] = window.__rawConsole__[m]
+                    }
+                  } catch (e) {}
+                })
+                // 使用原始 console.log 输出提示
+                if (window.__rawConsole__.log) {
+                  window.__rawConsole__.log('[Console] ✅ Console 已启用！')
+                }
+              }
+            }
+          } else {
+            // 开发环境或已启用调试，提供空函数避免报错
+            window.__enableConsole__ = function () {
+              console.log('[Console] Console 已经是启用状态')
+            }
           }
         } catch (e) {
           // ignore
