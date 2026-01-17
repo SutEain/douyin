@@ -45,13 +45,20 @@ export async function checkDiceTimeout() {
           `👤 房主：<b>${escapeHTML(ownerNickname || '玩家')}</b>\n` +
           `❌ 原因：没有人加入\n` +
           `💰 本金已退回`
-      } else {
+      } else if (currentCount > 1) {
         // 有其他玩家加入，但过期了
         timeoutMessage =
           `🎲 <b>骰子游戏已解散</b>\n\n` +
           `👤 房主：<b>${escapeHTML(ownerNickname || '玩家')}</b>\n` +
           `❌ 原因：游戏超时\n` +
           `💰 本金已退回所有玩家`
+      } else {
+        // 异常情况：currentCount 为 0 或 null
+        timeoutMessage =
+          `🎲 <b>骰子游戏已解散</b>\n\n` +
+          `👤 房主：<b>${escapeHTML(ownerNickname || '玩家')}</b>\n` +
+          `❌ 原因：游戏超时\n` +
+          `💰 本金已退回`
       }
 
       try {
