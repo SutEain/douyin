@@ -585,16 +585,122 @@ function handleHeaderClick() {
   }
 }
 
-// 🎯 点击重试登录
+// 🎯 点击重试登录（增强版：更智能的重试机制）
 async function handleRetryLogin() {
   if (baseStore.loading) return
+
   baseStore.loading = true
+  errorMessage.value = ''
+
   try {
-    await baseStore.init()
-    if (userinfo.value.uid) {
-      loadMyVideos() // 登录成功后立即加载数据
-      loadWatchTimeStatus() // 🎯 加载观看时长状态
+    console.log('[Me] 🔄 开始重试登录流程...')
+
+    // 🎯 步骤1：检查并获取 initData
+    const { loginWithTelegram } = await import('@/api/auth')
+    const { waitForTelegram } = await import('@/pages/login/TelegramLogin')
+
+    // 1.1 优先从 URL 获取 initData
+    const getInitDataFromUrl = (): string | null => {
+      try {
+        const href = window.location.href || ''
+        const url = new URL(href)
+        const q = url.searchParams.get('tgWebAppData')
+        if (q) return decodeURIComponent(q)
+
+        const hash = window.location.hash || ''
+        if (hash.includes('tgWebAppData')) {
+          const raw = hash.startsWith('#') ? hash.slice(1) : hash
+          const params = new URLSearchParams(raw)
+          const v = params.get('tgWebAppData')
+          if (v) return decodeURIComponent(v)
+        }
+      } catch (e) {
+        console.warn('[Me] 解析 URL initData 失败:', e)
+      }
+      return null
     }
+
+    let initData = getInitDataFromUrl()
+
+    // 1.2 如果 URL 中没有，等待 Telegram WebApp 初始化并获取
+    if (!initData) {
+      console.log('[Me] ⏳ URL 中没有 initData，等待 Telegram WebApp 初始化...')
+      const tg = await waitForTelegram()
+
+      if (tg?.initData) {
+        initData = tg.initData
+        console.log('[Me] ✅ 从 Telegram WebApp 获取到 initData')
+      } else {
+        // 再等待一段时间，有些情况下 initData 会延迟加载
+        console.log('[Me] ⏳ initData 仍未就绪，等待最多 2 秒...')
+        for (let i = 0; i < 20; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          const tg2 = window.Telegram?.WebApp
+          if (tg2?.initData) {
+            initData = tg2.initData
+            console.log('[Me] ✅ 延迟获取到 initData（等待了', (i + 1) * 100, 'ms）')
+            break
+          }
+        }
+      }
+    }
+
+    // 1.3 如果还是没有 initData，给出明确提示
+    if (!initData) {
+      console.error('[Me] ❌ 无法获取 initData')
+      errorMessage.value =
+        '无法获取 Telegram 用户信息。请尝试：\n1. 刷新页面\n2. 重新打开应用\n3. 检查网络连接'
+      return
+    }
+
+    // 🎯 步骤2：尝试登录
+    console.log('[Me] 🔐 开始登录...')
+    const result = await loginWithTelegram(initData)
+
+    if (!result?.user) {
+      console.error('[Me] ❌ 登录返回结果异常:', result)
+      errorMessage.value = '登录失败，请重试'
+      return
+    }
+
+    // 🎯 步骤3：等待 session 写入并验证
+    console.log('[Me] ⏳ 等待 session 写入...')
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    if (!sessionData?.session) {
+      console.error('[Me] ❌ Session 写入失败')
+      errorMessage.value = '登录成功但 session 写入失败，请刷新页面重试'
+      return
+    }
+
+    // 🎯 步骤4：重新初始化 store
+    console.log('[Me] 🔄 重新初始化 baseStore...')
+    await baseStore.init()
+
+    // 🎯 步骤5：验证登录是否成功
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    if (userinfo.value.uid) {
+      console.log('[Me] ✅ 登录成功！')
+      loadMyVideos()
+      loadWatchTimeStatus()
+    } else {
+      console.warn('[Me] ⚠️ Session 存在但 userinfo.uid 为空，尝试获取 profile...')
+      const { getCurrentProfile } = await import('@/api/auth')
+      const profile = await getCurrentProfile()
+
+      if (profile) {
+        baseStore.applyProfile(profile)
+        loadMyVideos()
+        loadWatchTimeStatus()
+      } else {
+        errorMessage.value = '登录成功但获取用户信息失败，请刷新页面重试'
+      }
+    }
+  } catch (error: any) {
+    console.error('[Me] ❌ 重试登录失败:', error)
+    errorMessage.value = error?.message || '登录失败，请检查网络连接后重试'
   } finally {
     baseStore.loading = false
   }

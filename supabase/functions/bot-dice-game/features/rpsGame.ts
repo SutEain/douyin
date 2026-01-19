@@ -1,28 +1,15 @@
 import { supabase } from '../supabaseClient.ts'
-import {
-  sendMessage,
-  answerCallbackQuery,
-  editMessage,
-  editMessageReplyMarkup
-} from '../telegram.ts'
+import { sendMessage, answerCallbackQuery, editMessage } from '../telegram.ts'
 import { escapeHTML, sanitizeError } from '../utils/text.ts'
 
 /**
- * 处理猜拳指令: cq [金额]
+ * 🎯 简洁版：处理猜拳指令: cq [金额]
  */
 export async function handleRpsCommand(chatId: number, text: string, message: any) {
   const diceGroupId = Deno.env.get('DICE_GROUP_ID')
-  console.log(`[RPS-BOT] handleRpsCommand 被调用:`, {
-    chatId,
-    diceGroupId,
-    chatIdMatch: String(chatId) === String(diceGroupId),
-    text,
-    userId: message.from?.id
-  })
 
   // 1. 验证权限 (仅限游戏群)
   if (String(chatId) !== String(diceGroupId)) {
-    console.log(`[RPS-BOT] 群组 ID 不匹配，拒绝执行: chatId=${chatId}, diceGroupId=${diceGroupId}`)
     return
   }
 
@@ -40,7 +27,7 @@ export async function handleRpsCommand(chatId: number, text: string, message: an
     // 2. 获取发起者信息
     const { data: sender } = await supabase
       .from('profiles')
-      .select('id, nickname, tg_user_id, is_banned, ban_reason')
+      .select('id, nickname, is_banned, ban_reason')
       .eq('tg_user_id', message.from.id)
       .single()
 
@@ -51,13 +38,11 @@ export async function handleRpsCommand(chatId: number, text: string, message: an
 
     if (sender.is_banned) {
       const reason = sender.ban_reason || '由于违反社区规范，您的账号已被封禁。'
-      await sendMessage(chatId, `🚫 <b>您的账号已被封禁</b>\n\n原因: ${reason}`, {
-        reply_to_message_id: message.message_id
-      })
+      await sendMessage(chatId, `🚫 <b>您的账号已被封禁</b>\n\n原因: ${reason}`)
       return
     }
 
-    // 3. 调用 RPC 创建房间
+    // 3. 🎯 调用 RPC 创建房间（自动处理超时）
     const { data: res, error } = await supabase.rpc('create_rps_room', {
       p_owner_id: sender.id,
       p_group_id: chatId,
@@ -67,9 +52,7 @@ export async function handleRpsCommand(chatId: number, text: string, message: an
     if (error) throw error
     if (!res.success) {
       if (chatId > 0) {
-        await sendMessage(chatId, `❌ 创建失败: ${res.message}`)
-      } else {
-        console.log(`[RPS-BOT] 房间创建失败: ${res.message}, chatId=${chatId}`)
+        await sendMessage(chatId, `❌ ${res.message}`)
       }
       return
     }
@@ -90,19 +73,19 @@ export async function handleRpsCommand(chatId: number, text: string, message: an
     await sendMessage(chatId, rpsText, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '💪 接受挑战', callback_data: `rps_join_${roomId}` }],
-          [{ text: '❌ 取消 (仅发起人)', callback_data: `rps_cancel_${roomId}` }]
+          [{ text: '💰 点击加入', callback_data: `rps_join_${roomId}` }],
+          [{ text: '❌ 取消房间 (仅房主)', callback_data: `rps_cancel_${roomId}` }]
         ]
       }
     })
   } catch (err: any) {
-    console.error('[RPS-BOT] RPS Command Error:', err)
+    console.error('[RPS-BOT-V2] RPS Command Error:', err)
     await sendMessage(chatId, `❌ 游戏发起失败: ${sanitizeError(err.message)}`)
   }
 }
 
 /**
- * 处理加入游戏回调
+ * 🎯 简洁版：处理加入游戏回调
  */
 export async function handleJoinRpsGame(
   chatId: number,
@@ -112,10 +95,9 @@ export async function handleJoinRpsGame(
   tgUserId: number
 ) {
   try {
-    // 1. 获取用户信息
     const { data: user } = await supabase
       .from('profiles')
-      .select('id, nickname, is_banned, ban_reason')
+      .select('id, nickname, is_banned')
       .eq('tg_user_id', tgUserId)
       .single()
 
@@ -125,72 +107,71 @@ export async function handleJoinRpsGame(
     }
 
     if (user.is_banned) {
-      const reason = user.ban_reason || '由于违反社区规范，您的账号已被封禁。'
-      await answerCallbackQuery(callbackQueryId, `🚫 账号已封禁\n原因: ${reason}`, true)
+      await answerCallbackQuery(callbackQueryId, '', false)
       return
     }
 
-    // 2. 调用 RPC 加入房间
+    // 🎯 调用 RPC 加入房间（自动处理超时）
     const { data: res, error } = await supabase.rpc('join_rps_room', {
       p_room_id: roomId,
       p_user_id: user.id
     })
 
     if (error) throw error
-
     if (!res.success) {
-      await answerCallbackQuery(callbackQueryId, `❌ ${res.message}`, true)
+      // 🎯 判断是否是超时
+      const isTimeout = res.message?.includes('超时') || res.message?.includes('房间已超时')
+      if (isTimeout) {
+        await answerCallbackQuery(callbackQueryId, res.message, false)
+        // 🎯 超时：编辑原消息
+        const timeoutMessage =
+          `🪨✂️📄 <b>游戏已取消</b>\n\n` + `⏰ 房间已超时\n` + `💰 本金已自动退回所有玩家`
+        await editMessage(chatId, messageId, timeoutMessage)
+      } else {
+        // 🔥 其他错误（如房间已满）：也编辑原消息
+        await answerCallbackQuery(callbackQueryId, res.message, false)
+
+        // 判断是否是房间已满
+        const isFull = res.message?.includes('房间已满') || res.message?.includes('已满')
+        if (isFull) {
+          const fullMessage =
+            `🪨✂️📄 <b>游戏已取消</b>\n\n` + `❌ 房间已满\n` + `💰 本金已自动退回所有玩家`
+          await editMessage(chatId, messageId, fullMessage)
+        } else {
+          // 其他错误，显示原错误信息
+          const errorMessage =
+            `🪨✂️📄 <b>游戏已取消</b>\n\n` + `❌ ${res.message}\n` + `💰 本金已自动退回所有玩家`
+          await editMessage(chatId, messageId, errorMessage)
+        }
+      }
       return
     }
 
-    // 3. 获取更新后的房间信息
-    const { data: room } = await supabase
-      .from('rps_rooms')
-      .select(
-        `
-        *,
-        owner:owner_id (nickname),
-        opponent:opponent_id (nickname)
-      `
-      )
-      .eq('id', roomId)
-      .single()
+    await answerCallbackQuery(callbackQueryId, '✅ 成功加入游戏！', false)
 
-    if (!room) throw new Error('房间不存在')
-
-    await answerCallbackQuery(callbackQueryId, '✅ 成功加入游戏！请选择出手')
-
-    // 4. 更新消息：显示出手按钮
-    const updatedText =
-      `🪨✂️📄 <b>石头剪刀布对决</b>\n\n` +
-      `👤 玩家A：<b>${escapeHTML(room.owner.nickname)}</b>\n` +
-      `👤 玩家B：<b>${escapeHTML(room.opponent.nickname)}</b>\n` +
-      `💰 赌注：<b>${Number(room.bet_amount).toFixed(2)}</b> 抖币/人\n` +
-      `🎁 奖池：<b>${(room.bet_amount * 2).toFixed(2)}</b> 抖币\n\n` +
-      `⏳ 请双方选择出手！`
-
-    await editMessage(chatId, messageId, updatedText, {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: '🪨 石头', callback_data: `rps_choice_${roomId}_rock` },
-            { text: '✂️ 剪刀', callback_data: `rps_choice_${roomId}_scissors` },
-            { text: '📄 布', callback_data: `rps_choice_${roomId}_paper` }
-          ]
-        ]
-      }
-    })
-
-    // 保存消息ID
-    await supabase.from('rps_rooms').update({ message_id: messageId }).eq('id', roomId)
+    // 更新消息，显示出手按钮
+    await updateRpsRoomMessage(chatId, messageId, roomId)
   } catch (err: any) {
     console.error('[RPS-BOT] Join Error:', err)
-    await answerCallbackQuery(callbackQueryId, `❌ 加入失败: ${sanitizeError(err.message)}`, true)
+    const isTimeout =
+      err.message?.includes('超时') ||
+      err.message?.includes('timeout') ||
+      err.message?.includes('房间已超时')
+
+    if (isTimeout) {
+      await answerCallbackQuery(callbackQueryId, '⏰ 房间已超时', false)
+      // 🎯 超时：编辑原消息
+      const timeoutMessage =
+        `🪨✂️📄 <b>游戏已取消</b>\n\n` + `⏰ 房间已超时\n` + `💰 本金已自动退回所有玩家`
+      await editMessage(chatId, messageId, timeoutMessage)
+    } else {
+      await answerCallbackQuery(callbackQueryId, `❌ 操作失败: ${sanitizeError(err.message)}`, true)
+    }
   }
 }
 
 /**
- * 处理出手选择回调
+ * 🎯 简洁版：处理出手回调
  */
 export async function handleRpsChoice(
   chatId: number,
@@ -201,7 +182,6 @@ export async function handleRpsChoice(
   tgUserId: number
 ) {
   try {
-    // 1. 获取用户信息
     const { data: user } = await supabase
       .from('profiles')
       .select('id, nickname')
@@ -213,139 +193,226 @@ export async function handleRpsChoice(
       return
     }
 
-    // 2. 保存选择
-    const { data: res, error } = await supabase.rpc('save_rps_choice', {
+    // 🎯 调用 RPC 出手（如果双方都出手则自动结算）
+    const { data: res, error } = await supabase.rpc('make_rps_choice', {
       p_room_id: roomId,
       p_user_id: user.id,
       p_choice: choice
     })
 
     if (error) throw error
-
     if (!res.success) {
-      await answerCallbackQuery(callbackQueryId, `❌ ${res.message}`, true)
+      // 🎯 判断是否是超时
+      const isTimeout = res.message?.includes('超时') || res.message?.includes('房间已超时')
+      if (isTimeout) {
+        await answerCallbackQuery(callbackQueryId, res.message, false)
+        // 🎯 超时：编辑原消息
+        const timeoutMessage =
+          `🪨✂️📄 <b>游戏已取消</b>\n\n` + `⏰ 房间已超时\n` + `💰 本金已自动退回所有玩家`
+        await editMessage(chatId, messageId, timeoutMessage, {
+          reply_markup: { inline_keyboard: [] } // 移除按钮
+        })
+      } else {
+        // 🔥 其他错误（如已出手）：显示提示并更新消息
+        await answerCallbackQuery(callbackQueryId, res.message, false)
+        // 更新消息以反映当前状态
+        await updateRpsRoomMessage(chatId, messageId, roomId)
+      }
       return
     }
 
-    await answerCallbackQuery(callbackQueryId, `✅ 你选择了 ${getChoiceEmoji(choice)}`)
+    const choiceEmoji = choice === 'rock' ? '🪨' : choice === 'scissors' ? '✂️' : '📄'
+    await answerCallbackQuery(callbackQueryId, `✅ 你选择了 ${choiceEmoji}`, false)
 
-    // 3. 获取房间信息
-    const { data: room } = await supabase
-      .from('rps_rooms')
-      .select(
-        `
-        *,
-        owner:owner_id (nickname),
-        opponent:opponent_id (nickname)
-      `
-      )
-      .eq('id', roomId)
-      .single()
-
-    if (!room) throw new Error('房间不存在')
-
-    // 4. 更新消息显示
-    const ownerStatus = room.owner_choice ? '✅ 已出手' : '⏳ 等待中'
-    const opponentStatus = room.opponent_choice ? '✅ 已出手' : '⏳ 等待中'
-
-    const waitingText =
-      `🪨✂️📄 <b>石头剪刀布对决</b>\n\n` +
-      `👤 玩家A：<b>${escapeHTML(room.owner.nickname)}</b> ${ownerStatus}\n` +
-      `👤 玩家B：<b>${escapeHTML(room.opponent.nickname)}</b> ${opponentStatus}\n` +
-      `💰 赌注：<b>${Number(room.bet_amount).toFixed(2)}</b> 抖币/人\n` +
-      `🎁 奖池：<b>${(room.bet_amount * 2).toFixed(2)}</b> 抖币`
-
-    await editMessage(chatId, messageId, waitingText, {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: '🪨 石头', callback_data: `rps_choice_${roomId}_rock` },
-            { text: '✂️ 剪刀', callback_data: `rps_choice_${roomId}_scissors` },
-            { text: '📄 布', callback_data: `rps_choice_${roomId}_paper` }
-          ]
-        ]
-      }
-    })
-
-    // 5. 如果双方都出手了，触发结算
+    // 🎯 如果双方都出手了，显示结果
     if (res.both_chosen) {
-      await settleRpsGame(chatId, messageId, roomId)
+      console.log('[RPS-BOT] Both chosen, showing result:', {
+        roomId,
+        result: res.result,
+        winner_prize: res.winner_prize
+      })
+      await showRpsResult(chatId, messageId, roomId, res)
+    } else {
+      // 更新消息，显示当前状态
+      console.log('[RPS-BOT] Not both chosen yet, updating message')
+      await updateRpsRoomMessage(chatId, messageId, roomId)
     }
   } catch (err: any) {
     console.error('[RPS-BOT] Choice Error:', err)
-    await answerCallbackQuery(callbackQueryId, `❌ 操作失败: ${sanitizeError(err.message)}`, true)
+    const isTimeout =
+      err.message?.includes('超时') ||
+      err.message?.includes('timeout') ||
+      err.message?.includes('房间已超时')
+
+    if (isTimeout) {
+      await answerCallbackQuery(callbackQueryId, '⏰ 房间已超时', false)
+      // 🎯 超时：编辑原消息
+      const timeoutMessage =
+        `🪨✂️📄 <b>游戏已取消</b>\n\n` + `⏰ 房间已超时\n` + `💰 本金已自动退回所有玩家`
+      await editMessage(chatId, messageId, timeoutMessage)
+    } else {
+      await answerCallbackQuery(callbackQueryId, `❌ 操作失败: ${sanitizeError(err.message)}`, true)
+    }
   }
 }
 
 /**
- * 结算游戏
+ * 🎯 显示猜拳结果
  */
-async function settleRpsGame(chatId: number, messageId: number, roomId: string) {
+async function showRpsResult(chatId: number, messageId: number, roomId: string, result: any) {
   try {
-    // 1. 调用结算 RPC
-    const { data: res, error } = await supabase.rpc('settle_rps_room', {
-      p_room_id: roomId
-    })
+    console.log('[RPS-BOT] showRpsResult called:', { roomId, result })
 
-    if (error) throw error
-
-    // 2. 获取最终房间信息
-    const { data: room } = await supabase
+    // 🔥 简化查询，避免外键关联问题
+    const { data: room, error: roomError } = await supabase
       .from('rps_rooms')
       .select(
-        `
-        *,
-        owner:owner_id (nickname),
-        opponent:opponent_id (nickname),
-        winner:winner_id (nickname)
-      `
+        'owner_id, opponent_id, owner_choice, opponent_choice, winner_id, bet_amount, total_prize'
       )
       .eq('id', roomId)
       .single()
 
-    if (!room) throw new Error('房间不存在')
-
-    // 3. 生成结果文案
-    let resultText = ''
-
-    if (res.result === 'draw') {
-      // 平局
-      resultText =
-        `🤝 <b>石头剪刀布对决结果</b>\n\n` +
-        `👤 ${escapeHTML(room.owner.nickname)} 出了：${getChoiceEmoji(room.owner_choice)}\n` +
-        `👤 ${escapeHTML(room.opponent.nickname)} 出了：${getChoiceEmoji(room.opponent_choice)}\n\n` +
-        `🤝 <b>平局！</b>\n` +
-        `💰 本金已退回双方账户 (各 ${Number(room.bet_amount).toFixed(2)} 抖币)\n\n` +
-        `再来一局决胜负？`
-    } else {
-      // 有赢家
-      const winnerName = res.result === 'owner_win' ? room.owner.nickname : room.opponent.nickname
-      const winnerChoice = res.result === 'owner_win' ? room.owner_choice : room.opponent_choice
-      const loserName = res.result === 'owner_win' ? room.opponent.nickname : room.owner.nickname
-      const loserChoice = res.result === 'owner_win' ? room.opponent_choice : room.owner_choice
-
-      resultText =
-        `🎉 <b>石头剪刀布对决结果</b>\n\n` +
-        `👤 ${escapeHTML(room.owner.nickname)} 出了：${getChoiceEmoji(room.owner_choice)}\n` +
-        `👤 ${escapeHTML(room.opponent.nickname)} 出了：${getChoiceEmoji(room.opponent_choice)}\n\n` +
-        `🏆 赢家：<b>${escapeHTML(winnerName)}</b>\n` +
-        `💰 奖金：<b>${Number(res.winner_prize).toFixed(2)}</b> 抖币（已发放）\n` +
-        `💸 系统抽水：<b>${Number(res.commission).toFixed(2)}</b> 抖币 (2%)\n\n` +
-        `感谢参与！再来一局？`
+    if (roomError || !room) {
+      console.error('[RPS-BOT] Room query error:', roomError)
+      return
     }
 
-    // 4. 更新消息
+    console.log('[RPS-BOT] Room data:', {
+      owner_choice: room.owner_choice,
+      opponent_choice: room.opponent_choice,
+      winner_id: room.winner_id,
+      result: result.result
+    })
+
+    // 获取玩家昵称
+    const userIds: string[] = [room.owner_id]
+    if (room.opponent_id) {
+      userIds.push(room.opponent_id)
+    }
+    if (room.winner_id && !userIds.includes(room.winner_id)) {
+      userIds.push(room.winner_id)
+    }
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, nickname')
+      .in('id', userIds)
+
+    const nicknameMap = new Map<string, string>()
+    if (profiles) {
+      profiles.forEach((p) => nicknameMap.set(p.id, p.nickname))
+    }
+
+    const ownerName = nicknameMap.get(room.owner_id) || '玩家A'
+    const opponentName = nicknameMap.get(room.opponent_id) || '玩家B'
+    const winnerName = room.winner_id ? nicknameMap.get(room.winner_id) || '未知' : null
+
+    const ownerChoiceEmoji =
+      room.owner_choice === 'rock' ? '🪨' : room.owner_choice === 'scissors' ? '✂️' : '📄'
+    const opponentChoiceEmoji =
+      room.opponent_choice === 'rock' ? '🪨' : room.opponent_choice === 'scissors' ? '✂️' : '📄'
+
+    let resultText = ''
+    if (result.result === 'draw') {
+      resultText =
+        `🎊 <b>本局结算完成</b> 🎊\n\n` +
+        `👤 ${escapeHTML(ownerName)}: ${ownerChoiceEmoji}\n` +
+        `👤 ${escapeHTML(opponentName)}: ${opponentChoiceEmoji}\n\n` +
+        `🤝 <b>平局！</b>\n` +
+        `💰 本金已退回双方`
+    } else {
+      const winnerPrize = result.winner_prize || (room.total_prize ? room.total_prize * 0.98 : 0)
+      resultText =
+        `🎊 <b>本局结算完成</b> 🎊\n\n` +
+        `👤 ${escapeHTML(ownerName)}: ${ownerChoiceEmoji}\n` +
+        `👤 ${escapeHTML(opponentName)}: ${opponentChoiceEmoji}\n\n` +
+        `🏆 赢家：<b>${escapeHTML(winnerName || '未知')}</b>\n` +
+        `💰 获得奖励：<b>${Number(winnerPrize).toFixed(2)}</b> 抖币 (已扣除2%抽水)`
+    }
+
     await editMessage(chatId, messageId, resultText, {
-      reply_markup: { inline_keyboard: [] } // 移除所有按钮
+      reply_markup: { inline_keyboard: [] } // 移除按钮
     })
   } catch (err: any) {
-    console.error('[RPS-BOT] Settle Error:', err)
-    await sendMessage(chatId, `❌ 结算失败: ${sanitizeError(err.message)}\n请联系管理员处理`)
+    console.error('[RPS-BOT-V2] Show Result Error:', err)
   }
 }
 
 /**
- * 处理取消房间回调
+ * 🎯 更新猜拳房间消息
+ */
+async function updateRpsRoomMessage(chatId: number, messageId: number, roomId: string) {
+  try {
+    // 🔥 简化查询，避免外键关联问题
+    const { data: room, error: roomError } = await supabase
+      .from('rps_rooms')
+      .select('owner_id, opponent_id, bet_amount, owner_choice, opponent_choice, status')
+      .eq('id', roomId)
+      .single()
+
+    if (roomError || !room) {
+      console.error('[RPS-BOT] Room query error:', roomError)
+      return
+    }
+
+    // 获取玩家昵称
+    const userIds: string[] = [room.owner_id]
+    if (room.opponent_id) {
+      userIds.push(room.opponent_id)
+    }
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, nickname')
+      .in('id', userIds)
+
+    const nicknameMap = new Map<string, string>()
+    if (profiles) {
+      profiles.forEach((p) => nicknameMap.set(p.id, p.nickname))
+    }
+
+    const ownerName = nicknameMap.get(room.owner_id) || '未知'
+    const opponentName = room.opponent_id
+      ? nicknameMap.get(room.opponent_id) || '未知'
+      : '等待中...'
+
+    const ownerStatus = room.owner_choice ? '✅ 已出手' : '⏳ 等待中'
+    const opponentStatus = room.opponent_choice
+      ? '✅ 已出手'
+      : room.opponent_id
+        ? '⏳ 等待中'
+        : '⏳ 等待加入'
+
+    const waitingText =
+      `🪨✂️📄 <b>石头剪刀布对决</b>\n\n` +
+      `👤 玩家A：<b>${escapeHTML(ownerName)}</b> ${ownerStatus}\n` +
+      `👤 玩家B：<b>${escapeHTML(opponentName)}</b> ${opponentStatus}\n` +
+      `💰 赌注：<b>${Number(room.bet_amount).toFixed(2)}</b> 抖币/人\n` +
+      `🎁 奖池：<b>${(room.bet_amount * 2).toFixed(2)}</b> 抖币`
+
+    const keyboard: any = {
+      inline_keyboard: []
+    }
+
+    // 🔥 只要双方都加入且游戏未结束，就显示按钮（让用户自己选择，在 handleRpsChoice 中检查是否已出手）
+    if (room.opponent_id && room.status === 'waiting') {
+      keyboard.inline_keyboard = [
+        [
+          { text: '🪨 石头', callback_data: `rps_choice_${roomId}_rock` },
+          { text: '✂️ 剪刀', callback_data: `rps_choice_${roomId}_scissors` },
+          { text: '📄 布', callback_data: `rps_choice_${roomId}_paper` }
+        ]
+      ]
+    }
+
+    await editMessage(chatId, messageId, waitingText, { reply_markup: keyboard })
+  } catch (err: any) {
+    console.error('[RPS-BOT-V2] Update Message Error:', err)
+  }
+}
+
+/**
+ * 🎯 简洁版：处理取消房间回调
  */
 export async function handleCancelRpsRoom(
   chatId: number,
@@ -357,7 +424,7 @@ export async function handleCancelRpsRoom(
   try {
     const { data: user } = await supabase
       .from('profiles')
-      .select('id, nickname')
+      .select('id')
       .eq('tg_user_id', tgUserId)
       .single()
 
@@ -366,74 +433,24 @@ export async function handleCancelRpsRoom(
       return
     }
 
+    // 🎯 调用 RPC 取消房间
     const { data: res, error } = await supabase.rpc('cancel_rps_room', {
       p_room_id: roomId,
       p_user_id: user.id
     })
 
     if (error) throw error
-
     if (!res.success) {
-      await answerCallbackQuery(callbackQueryId, `❌ ${res.message}`, true)
+      await answerCallbackQuery(callbackQueryId, res.message, true)
       return
     }
 
-    await answerCallbackQuery(callbackQueryId, '✅ 房间已取消，本金已退回')
+    await answerCallbackQuery(callbackQueryId, '✅ 房间已取消，本金已退回', false)
 
-    // 获取房间信息，判断是否有对手
-    const { data: room } = await supabase
-      .from('rps_rooms')
-      .select(
-        'opponent_id, owner:profiles!rps_rooms_owner_id_fkey(nickname), opponent:profiles!rps_rooms_opponent_id_fkey(nickname)'
-      )
-      .eq('id', roomId)
-      .single()
-
-    // 编辑原消息
-    const cancelText =
-      `🪨✂️📄 <b>石头剪刀布挑战</b>\n\n` + `❌ 游戏已被发起人取消\n` + `💰 本金已退回`
-
-    await editMessage(chatId, messageId, cancelText, {
-      reply_markup: { inline_keyboard: [] }
-    })
-
-    // 发送取消通知消息
-    let cancelMessage = ''
-    if (!room || !room.opponent_id) {
-      // 没有对手加入
-      cancelMessage =
-        `🪨✂️📄 <b>猜拳游戏已解散</b>\n\n` +
-        `👤 发起人：<b>${escapeHTML(user.nickname)}</b>\n` +
-        `❌ 原因：没有人加入\n` +
-        `💰 本金已退回`
-    } else {
-      // 有对手但未出拳
-      cancelMessage =
-        `🪨✂️📄 <b>猜拳游戏已解散</b>\n\n` +
-        `👤 发起人：<b>${escapeHTML(room.owner?.nickname || user.nickname)}</b>\n` +
-        `❌ 原因：发起人取消游戏\n` +
-        `💰 本金已退回`
-    }
-
-    await sendMessage(chatId, cancelMessage)
+    // 更新消息
+    await editMessage(chatId, messageId, `🪨✂️📄 <b>房间已取消</b>\n\n本金已退回。`)
   } catch (err: any) {
-    console.error('[RPS-BOT] Cancel Error:', err)
-    await answerCallbackQuery(callbackQueryId, `❌ 取消失败: ${sanitizeError(err.message)}`, true)
-  }
-}
-
-/**
- * 获取选择对应的 emoji
- */
-function getChoiceEmoji(choice: string): string {
-  switch (choice) {
-    case 'rock':
-      return '🪨 石头'
-    case 'scissors':
-      return '✂️ 剪刀'
-    case 'paper':
-      return '📄 布'
-    default:
-      return '❓'
+    console.error('[RPS-BOT-V2] Cancel Error:', err)
+    await answerCallbackQuery(callbackQueryId, `❌ 操作失败: ${sanitizeError(err.message)}`, true)
   }
 }

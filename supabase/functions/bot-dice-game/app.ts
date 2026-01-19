@@ -7,12 +7,11 @@ import {
   handleRpsChoice,
   handleCancelRpsRoom
 } from './features/rpsGame.ts'
-import { checkRpsTimeout } from './features/rpsTimeout.ts'
-import { checkDiceTimeout } from './features/diceTimeout.ts'
 
-// 主服务（由 index.ts 作为入口调用）
+/**
+ * 🎯 简洁版：主服务入口
+ */
 export async function handleRequest(req: Request): Promise<Response> {
-  console.log('[DICE-BOT-APP] Incoming request:', req.method, req.url)
   try {
     const url = new URL(req.url)
 
@@ -23,35 +22,16 @@ export async function handleRequest(req: Request): Promise<Response> {
       })
     }
 
-    // 🎯 手动触发超时检查（管理端调用）
-    if (url.pathname.includes('/check-timeout')) {
-      try {
-        await Promise.all([checkRpsTimeout(), checkDiceTimeout()])
-        return new Response(JSON.stringify({ success: true, message: '超时检查已完成' }), {
-          headers: { 'Content-Type': 'application/json' }
-        })
-      } catch (e) {
-        console.error('[TIMEOUT] 检查异常:', e)
-        return new Response(JSON.stringify({ error: String(e) }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
-    }
-
     // 处理 Webhook
     if (req.method === 'POST') {
       let update: any
       try {
         update = await req.json()
       } catch (e) {
-        console.error('[DICE-BOT-APP] Failed to parse request JSON:', e)
         return new Response('Invalid JSON', { status: 400 })
       }
 
-      console.log('[DICE-BOT-APP] Update received:', JSON.stringify(update).substring(0, 500))
-
-      // 🎯 1. 提取用户 ID 进行黑名单检查
+      // 🎯 黑名单检查
       const userIdToCheck =
         update.message?.from?.id ||
         update.edited_message?.from?.id ||
@@ -65,66 +45,42 @@ export async function handleRequest(req: Request): Promise<Response> {
           .maybeSingle()
 
         if (profile?.is_banned) {
-          console.log(
-            `[DICE-BOT-BAN] 拦截到封禁用户操作: userId=${userIdToCheck}, updateType=${Object.keys(update).find((k) => k !== 'update_id')}`
-          )
-          const banReason = profile.ban_reason || '由于违反社区规范，您的账号已被封禁。'
-          const banNotice = `🚫 <b>您的账号已被封禁</b>\n\n原因: ${banReason}\n\n如有疑问，请联系管理员。`
-
-          // 确定发送通知的目标
           const targetChatId =
             update.message?.chat?.id ||
             update.edited_message?.chat?.id ||
             update.callback_query?.message?.chat?.id
 
-          if ((update.message || update.edited_message) && targetChatId) {
-            const msg = update.message || update.edited_message
-            // 🚨 群组消息静默处理，不发送提示
-            if (msg.chat.type !== 'private') {
-              // 群组中静默返回，不发送任何提示
-              return new Response('OK', { status: 200 })
-            }
-            // 私聊消息仍然发送提示
-            await sendMessage(targetChatId, banNotice, {})
-          } else if (update.callback_query) {
-            // 弹出警告提示框（仅在私聊中）
-            const callbackChatId = update.callback_query.message?.chat?.id
-            if (callbackChatId && callbackChatId > 0) {
-              // 私聊中的回调查询才提示
-              const { answerCallbackQuery } = await import('./telegram.ts')
-              await answerCallbackQuery(
-                update.callback_query.id,
-                `🚫 账号已封禁\n原因: ${banReason}`,
-                true
-              )
-            }
-            // 群组中的回调查询静默处理
+          // 群组中静默处理
+          if (targetChatId && targetChatId < 0) {
+            return new Response('OK', { status: 200 })
           }
+
+          // 私聊中发送提示
+          if (targetChatId && targetChatId > 0) {
+            const banReason = profile.ban_reason || '由于违反社区规范，您的账号已被封禁。'
+            await sendMessage(targetChatId, `🚫 <b>您的账号已被封禁</b>\n\n原因: ${banReason}`)
+          }
+
           return new Response('OK', { status: 200 })
         }
       }
-
-      console.log('收到更新:', JSON.stringify(update).substring(0, 200))
 
       // 🎯 处理消息
       if (update.message) {
         const message = update.message
         const chatId = message.chat.id
 
-        // 🎯 严格权限控制：仅接受骰子游戏群消息
+        // 🎯 权限控制：仅接受游戏群消息
         const diceGroupId = Deno.env.get('DICE_GROUP_ID')
         if (message.chat.type !== 'private' && String(chatId) !== String(diceGroupId)) {
-          console.log(
-            `[DICE-BOT-APP] 忽略非骰子游戏群消息: chatId=${chatId}, type=${message.chat.type}`
-          )
           return new Response('OK', { status: 200 })
         }
 
-        // 只处理文本消息（游戏指令）
+        // 只处理文本消息
         if (message.text) {
           const text = message.text.trim().toLowerCase()
 
-          // 🎯 猜拳指令
+          // 猜拳指令
           const isRpsCmd =
             text === 'cq' ||
             text.startsWith('cq ') ||
@@ -132,7 +88,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             text.startsWith('/cq ') ||
             text.startsWith('/cq@')
 
-          // 🎯 骰子指令
+          // 骰子指令
           const isDiceCmd =
             text === 'tz' ||
             text.startsWith('tz ') ||
@@ -141,48 +97,32 @@ export async function handleRequest(req: Request): Promise<Response> {
             text.startsWith('/tz@')
 
           if (isRpsCmd) {
-            console.log(`[RPS-BOT] 匹配到猜拳指令，准备执行...`, {
-              chatId,
-              text: message.text,
-              userId: message.from?.id,
-              chatType: message.chat?.type
-            })
-            try {
-              await handleRpsCommand(chatId, message.text, message)
-            } catch (err) {
-              console.error('[RPS-BOT] 执行猜拳指令时发生错误:', err)
-            }
+            await handleRpsCommand(chatId, message.text, message)
             return new Response('OK', { status: 200 })
           }
 
           if (isDiceCmd) {
-            console.log(`[DICE-BOT] 匹配到骰子指令，准备执行...`)
             await handleDiceCommand(chatId, message.text, message)
             return new Response('OK', { status: 200 })
           }
         }
       }
-      // 🎯 处理回调查询（骰子游戏相关）
+
+      // 🎯 处理回调查询
       else if (update.callback_query) {
         const callback = update.callback_query
         const chatId = callback.message?.chat?.id
         const messageId = callback.message?.message_id
         const data = callback.data
 
-        // 🎯 严格权限控制：仅接受骰子游戏群的回调
+        // 🎯 权限控制：仅接受游戏群的回调
         const diceGroupId = Deno.env.get('DICE_GROUP_ID')
         if (callback.message?.chat?.type !== 'private' && String(chatId) !== String(diceGroupId)) {
           return new Response('OK', { status: 200 })
         }
 
         if (chatId && messageId && data) {
-          console.log('[DICE-BOT] 收到回调查询:', {
-            chatId,
-            messageId,
-            data
-          })
-
-          // 处理猜拳游戏回调
+          // 猜拳游戏回调
           if (data.startsWith('rps_join_')) {
             const roomId = data.replace('rps_join_', '')
             await handleJoinRpsGame(chatId, messageId, callback.id, roomId, callback.from.id)
@@ -196,11 +136,10 @@ export async function handleRequest(req: Request): Promise<Response> {
           }
 
           if (data.startsWith('rps_choice_')) {
-            // rps_choice_{roomId}_{choice}
             const parts = data.replace('rps_choice_', '').split('_')
             if (parts.length >= 2) {
-              const choice = parts.pop() // 最后一个是选择 (rock/paper/scissors)
-              const roomId = parts.join('_') // 剩余部分是 roomId (可能包含下划线)
+              const choice = parts.pop()
+              const roomId = parts.join('_')
               await handleRpsChoice(
                 chatId,
                 messageId,
@@ -213,7 +152,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             return new Response('OK', { status: 200 })
           }
 
-          // 处理骰子游戏回调
+          // 骰子游戏回调
           if (data.startsWith('dice_join_')) {
             const roomId = data.replace('dice_join_', '')
             await handleJoinDiceGame(chatId, messageId, callback.id, roomId, callback.from.id)
@@ -233,8 +172,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     return new Response('Bot is running', { status: 200 })
   } catch (error) {
-    console.error('[DICE-BOT-APP] 处理请求时发生错误:', error)
-    console.error('[DICE-BOT-APP] 错误堆栈:', error instanceof Error ? error.stack : String(error))
+    console.error('[BOT-V2] Error:', error)
     return new Response(
       JSON.stringify({
         error: 'Internal Server Error',

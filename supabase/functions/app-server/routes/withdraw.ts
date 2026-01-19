@@ -52,7 +52,7 @@ export async function handleAdminProcessWithdraw(req: Request): Promise<Response
         notificationMsg =
           `✅ <b>提现已处理成功！</b>\n\n` +
           `💰 <b>提现金额：</b> ${order.amount} 抖币\n` +
-          (feeAmount > 0 ? `📌 <b>手续费：</b> -${feeAmount} 抖币\n` : '') +
+          (feeAmount > 0 ? `📌 <b>提现手续费1U</b>\n` : '') +
           `💵 <b>实际到账：</b> ${actualAmount.toFixed(2)} USDT\n` +
           `📍 <b>收款地址：</b> <code>${order.address}</code>\n` +
           `📑 <b>订单编号：</b> <code>${order.order_no || '-'}</code>\n\n` +

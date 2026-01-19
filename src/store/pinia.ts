@@ -296,25 +296,84 @@ export const useBaseStore = defineStore('base', {
         }
 
         // 🎯 自动登录：如果在 TG 环境且没登录（或者是刚才因为账号切换被清除了），则自动登录
-        if (!profile && tg?.initData) {
-          // 🛡️ 防死循环保护：如果单次生命周期内尝试登录超过 3 次，停止尝试
-          if (this._authRetryCount < 3) {
+        if (!profile) {
+          // 🎯 增强 initData 获取：优先从 URL 获取，然后等待 Telegram WebApp
+          let initData = tg?.initData
+
+          // 1. 如果 Telegram WebApp 没有 initData，尝试从 URL 获取
+          if (!initData) {
             try {
-              this._authRetryCount++
-              console.log(`[Auth] 🚀 正在执行 Telegram 自动登录 (第 ${this._authRetryCount} 次)...`)
-              await loginWithTelegram(tg.initData)
-              profile = await getCurrentProfile()
-              console.log('[Auth] ✅ 自动登录完成，profile:', profile ? '成功' : '失败')
+              const href = window.location.href || ''
+              const url = new URL(href)
+              const q = url.searchParams.get('tgWebAppData')
+              if (q) {
+                initData = decodeURIComponent(q)
+                console.log('[Auth] ✅ 从 URL 获取到 initData')
+              } else {
+                const hash = window.location.hash || ''
+                if (hash.includes('tgWebAppData')) {
+                  const raw = hash.startsWith('#') ? hash.slice(1) : hash
+                  const params = new URLSearchParams(raw)
+                  const v = params.get('tgWebAppData')
+                  if (v) {
+                    initData = decodeURIComponent(v)
+                    console.log('[Auth] ✅ 从 URL hash 获取到 initData')
+                  }
+                }
+              }
             } catch (e) {
-              console.error('[Auth] ❌ 自动登录失败:', e)
+              console.warn('[Auth] 解析 URL initData 失败:', e)
+            }
+          }
+
+          // 2. 如果还是没有 initData，等待 Telegram WebApp 初始化（最多等待 2 秒）
+          if (!initData && tg) {
+            console.log('[Auth] ⏳ initData 未就绪，等待最多 2 秒...')
+            for (let i = 0; i < 20; i++) {
+              await new Promise((resolve) => setTimeout(resolve, 100))
+              const tg2 = window.Telegram?.WebApp
+              if (tg2?.initData) {
+                initData = tg2.initData
+                console.log('[Auth] ✅ 延迟获取到 initData（等待了', (i + 1) * 100, 'ms）')
+                break
+              }
+            }
+          }
+
+          // 3. 如果有 initData，尝试登录
+          if (initData) {
+            // 🛡️ 防死循环保护：如果单次生命周期内尝试登录超过 3 次，停止尝试
+            if (this._authRetryCount < 3) {
+              try {
+                this._authRetryCount++
+                console.log(
+                  `[Auth] 🚀 正在执行 Telegram 自动登录 (第 ${this._authRetryCount} 次)...`
+                )
+                await loginWithTelegram(initData)
+
+                // 🎯 等待 session 写入
+                await new Promise((resolve) => setTimeout(resolve, 200))
+
+                // 🎯 验证 session 是否写入成功
+                const { data: sessionData } = await supabase.auth.getSession()
+                if (!sessionData?.session) {
+                  console.error('[Auth] ❌ Session 写入失败')
+                  throw new Error('Session 写入失败')
+                }
+
+                profile = await getCurrentProfile()
+                console.log('[Auth] ✅ 自动登录完成，profile:', profile ? '成功' : '失败')
+              } catch (e) {
+                console.error('[Auth] ❌ 自动登录失败:', e)
+              }
+            } else {
+              console.error('[Auth] 🛑 自动登录尝试次数过多，停止重试，防止 WebView 崩溃')
             }
           } else {
-            console.error('[Auth] 🛑 自动登录尝试次数过多，停止重试，防止 WebView 崩溃')
+            console.log(
+              '[Store.init] ℹ️ 无 profile 且无 TG initData，跳过自动登录（可能是验证码登录或网络问题）'
+            )
           }
-        } else if (!profile && !tg?.initData) {
-          console.log(
-            '[Store.init] ℹ️ 无 profile 且无 TG initData，跳过自动登录（可能是验证码登录）'
-          )
         }
 
         if (profile) {

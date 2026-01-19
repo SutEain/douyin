@@ -1,4 +1,4 @@
-// bot-dice-game: 环境变量集中管理
+// bot-dice-game-v2: 环境变量集中管理
 
 export const BOT_TOKEN = Deno.env.get('DICE_BOT_TOKEN')!
 export const TG_API_BASE =
