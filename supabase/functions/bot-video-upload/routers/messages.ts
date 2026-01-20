@@ -265,11 +265,20 @@ export async function handleText(
       return
     }
 
-    const amount = parseInt(text.trim())
+    // 🔥 如果用户发送的是命令（以 / 开头），清除提现状态
+    // 这样即使用户发送其他命令，状态也会被清除，避免卡在提现流程
+    const trimmedText = text.trim()
+    if (trimmedText.startsWith('/')) {
+      await updateUserState(chatId, { state: 'idle' })
+      // 清除状态后 return，让命令在 app.ts 或其他地方正常处理
+      return
+    }
+
+    const amount = parseInt(trimmedText)
     if (isNaN(amount) || amount < 1000) {
       await sendSelfDestructMessage(
         chatId,
-        '❌ 请输入有效的提现金额\n最少 1000 抖币 (扣除手续费后到账9 USDT)'
+        '❌ 请输入有效的提现金额\n最少 1000 抖币 (扣除手续费后到账9 USDT)\n\n💡 发送 /cancel 可取消提现操作'
       )
       return
     }
@@ -326,9 +335,18 @@ export async function handleText(
       return
     }
 
+    // 🔥 如果用户发送的是命令（以 / 开头），清除提现状态
+    if (address.startsWith('/')) {
+      await updateUserState(chatId, { state: 'idle' })
+      return
+    }
+
     // 简单的 TRC20 地址验证 (T开头，34位)
     if (!/^T[a-zA-Z0-9]{33}$/.test(address)) {
-      await sendSelfDestructMessage(chatId, '❌ 请输入有效的 USDT-TRC20 地址 (T开头，34位)')
+      await sendSelfDestructMessage(
+        chatId,
+        '❌ 请输入有效的 USDT-TRC20 地址 (T开头，34位)\n\n💡 发送 /cancel 可取消提现操作'
+      )
       return
     }
 
@@ -367,6 +385,12 @@ export async function handleText(
       return
     }
 
+    // 🔥 如果用户发送的是命令（以 / 开头），清除状态
+    if (text.trim().startsWith('/')) {
+      await updateUserState(chatId, { state: 'idle' })
+      return
+    }
+
     // 解析关键词（用空格分隔）
     const keywords = text
       .trim()
@@ -375,7 +399,7 @@ export async function handleText(
       .filter((kw) => kw.length > 0)
 
     if (keywords.length === 0) {
-      await sendSelfDestructMessage(chatId, '❌ 请输入有效的关键词')
+      await sendSelfDestructMessage(chatId, '❌ 请输入有效的关键词\n\n💡 发送 /cancel 可取消操作')
       return
     }
 
@@ -436,8 +460,17 @@ export async function handleText(
       return
     }
 
+    // 🔥 如果用户发送的是命令（以 / 开头），清除状态
+    if (title.startsWith('/')) {
+      await updateUserState(chatId, { state: 'idle' })
+      return
+    }
+
     if (title.length < 2 || title.length > 50) {
-      await sendSelfDestructMessage(chatId, '❌ 直播标题长度请在 2-50 字之间')
+      await sendSelfDestructMessage(
+        chatId,
+        '❌ 直播标题长度请在 2-50 字之间\n\n💡 发送 /cancel 可取消操作'
+      )
       return
     }
 

@@ -95,6 +95,41 @@ export async function handleJoinRpsGame(
   tgUserId: number
 ) {
   try {
+    // 🔥 0. 如果是群组消息，验证用户是否在群组中（防止退群后仍能自动加入）
+    if (chatId < 0) {
+      const { BOT_TOKEN, TG_API_BASE } = await import('../env.ts')
+      const getChatMemberUrl = `${TG_API_BASE}/bot${BOT_TOKEN}/getChatMember`
+
+      try {
+        const memberResponse = await fetch(getChatMemberUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            user_id: tgUserId
+          })
+        })
+
+        const memberResult = await memberResponse.json()
+
+        // 如果用户不在群组中（left, kicked, 或错误），拒绝加入
+        if (
+          !memberResult.ok ||
+          (memberResult.result?.status &&
+            ['left', 'kicked', 'restricted'].includes(memberResult.result.status))
+        ) {
+          console.log(
+            `[RPS-BOT] User ${tgUserId} is not in group ${chatId}, status: ${memberResult.result?.status}`
+          )
+          await answerCallbackQuery(callbackQueryId, '❌ 您已不在群组中，无法加入游戏', true)
+          return
+        }
+      } catch (checkError) {
+        // 如果检查失败，记录日志但继续处理（避免因 API 问题影响正常用户）
+        console.error('[RPS-BOT] Failed to check chat member:', checkError)
+      }
+    }
+
     const { data: user } = await supabase
       .from('profiles')
       .select('id, nickname, is_banned')

@@ -227,17 +227,9 @@
               </div>
             </div>
             <div class="progress-section">
-              <!-- 🎯 观看时间信息放在进度条上面 -->
+              <!-- 🎯 读取任务规则放在进度条上面 -->
               <div class="time-text">
-                <template v-if="(state.watchTimeStatus?.total_seconds || 0) >= 1800">
-                  <span class="highlight">已完成任务</span>
-                </template>
-                <template v-else>
-                  今日观看：<span class="highlight">{{
-                    state.watchTimeStatus?.total_minutes || 0
-                  }}</span>
-                  分钟
-                </template>
+                <span class="highlight">读取任务规则</span>
               </div>
 
               <!-- 🎯 进度条和里程碑 -->
@@ -246,7 +238,7 @@
                   <div
                     class="progress-fill"
                     :style="{
-                      width: `${Math.min(((state.watchTimeStatus?.total_seconds || 0) / 1800) * 100, 100)}%`
+                      width: `${Math.min(((state.watchTimeStatus?.total_seconds || 0) / 900) * 100, 100)}%`
                     }"
                   ></div>
                 </div>
@@ -254,23 +246,26 @@
                   <div
                     class="milestone"
                     :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 300 }"
+                    style="left: 33.33%"
                   >
                     <div class="milestone-dot"></div>
                     <div class="milestone-label">5分钟<br />+5抖币</div>
                   </div>
                   <div
                     class="milestone"
+                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 600 }"
+                    style="left: 66.67%"
+                  >
+                    <div class="milestone-dot"></div>
+                    <div class="milestone-label">10分钟<br />+10抖币</div>
+                  </div>
+                  <div
+                    class="milestone milestone-last"
                     :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 900 }"
+                    style="left: 100%"
                   >
                     <div class="milestone-dot"></div>
                     <div class="milestone-label">15分钟<br />+15抖币</div>
-                  </div>
-                  <div
-                    class="milestone"
-                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 1800 }"
-                  >
-                    <div class="milestone-dot"></div>
-                    <div class="milestone-label">30分钟<br />+30抖币</div>
                   </div>
                 </div>
               </div>
@@ -1682,19 +1677,23 @@ onBeforeUnmount(() => {
             }
 
             .milestones {
-              display: flex;
-              justify-content: space-between;
               position: absolute;
               top: 10px;
               left: 0;
               right: 0;
+              width: 100%;
 
               .milestone {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 gap: 4px;
-                flex: 1;
+                position: absolute;
+                transform: translateX(-50%);
+
+                &.milestone-last {
+                  transform: translateX(-100%);
+                }
 
                 .milestone-dot {
                   width: 12px;

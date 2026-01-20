@@ -113,6 +113,41 @@ export async function handleJoinDiceGame(
   tgUserId: number
 ) {
   try {
+    // 🔥 0. 如果是群组消息，验证用户是否在群组中（防止退群后仍能自动加入）
+    if (chatId < 0) {
+      const { BOT_TOKEN, TG_API_BASE } = await import('../env.ts')
+      const getChatMemberUrl = `${TG_API_BASE}/bot${BOT_TOKEN}/getChatMember`
+
+      try {
+        const memberResponse = await fetch(getChatMemberUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            user_id: tgUserId
+          })
+        })
+
+        const memberResult = await memberResponse.json()
+
+        // 如果用户不在群组中（left, kicked, 或错误），拒绝加入
+        if (
+          !memberResult.ok ||
+          (memberResult.result?.status &&
+            ['left', 'kicked', 'restricted'].includes(memberResult.result.status))
+        ) {
+          console.log(
+            `[DICE-BOT] User ${tgUserId} is not in group ${chatId}, status: ${memberResult.result?.status}`
+          )
+          await answerCallbackQuery(callbackQueryId, '❌ 您已不在群组中，无法加入游戏', true)
+          return
+        }
+      } catch (checkError) {
+        // 如果检查失败，记录日志但继续处理（避免因 API 问题影响正常用户）
+        console.error('[DICE-BOT] Failed to check chat member:', checkError)
+      }
+    }
+
     // 1. 获取用户信息
     const { data: user } = await supabase
       .from('profiles')
@@ -377,17 +412,58 @@ async function startDiceGame(chatId: number, messageId: number, roomId: string) 
       }
     }
 
-    // 7. 🎯 调用 RPC 结算（原子操作）
+    // 7. 🔥 在结算前再次检查房间状态（防止在发送骰子过程中房间被超时处理）
+    const { data: finalRoomCheck } = await supabase
+      .from('dice_rooms')
+      .select('status, created_at')
+      .eq('id', roomId)
+      .single()
+
+    if (!finalRoomCheck) {
+      throw new Error('房间不存在')
+    }
+
+    // 如果房间状态不是 waiting，说明已经被超时处理或其他原因取消了
+    if (finalRoomCheck.status !== 'waiting') {
+      console.warn(
+        `[DICE-BOT] Room status changed to ${finalRoomCheck.status} before settlement. Room ID: ${roomId}`
+      )
+
+      // 检查是否超时
+      const roomAge = Date.now() - new Date(finalRoomCheck.created_at).getTime()
+      if (roomAge > 30000 || finalRoomCheck.status === 'cancelled') {
+        throw new Error('房间已超时')
+      } else {
+        throw new Error(`房间状态不正确: ${finalRoomCheck.status}`)
+      }
+    }
+
+    // 8. 🎯 调用 RPC 结算（原子操作）
     const { data: settleRes, error: settleError } = await supabase.rpc('settle_dice_room', {
       p_room_id: roomId,
       p_roll_results: JSON.stringify(rollResults) // 传递 JSON 字符串
     })
 
     if (settleError || !settleRes?.success) {
+      // 🔥 如果错误是"房间状态不正确"，再次检查房间状态
+      if (settleRes?.message?.includes('房间状态不正确')) {
+        const { data: errorRoomCheck } = await supabase
+          .from('dice_rooms')
+          .select('status, created_at')
+          .eq('id', roomId)
+          .single()
+
+        if (errorRoomCheck) {
+          const roomAge = Date.now() - new Date(errorRoomCheck.created_at).getTime()
+          if (roomAge > 30000 || errorRoomCheck.status === 'cancelled') {
+            throw new Error('房间已超时')
+          }
+        }
+      }
       throw new Error(settleRes?.message || '结算失败')
     }
 
-    // 8. 显示最终结果
+    // 9. 显示最终结果
     const winnerNames = settleRes.winners
       .map((winnerId: string) => {
         const p = playersWithNicknames.find((p) => p.user_id === winnerId)
@@ -403,11 +479,14 @@ async function startDiceGame(chatId: number, messageId: number, roomId: string) 
       })
       .join('\n')
 
+    // 🔥 2人平局时不抽水，显示不同的文案
+    const commissionText = settleRes.is_draw_no_commission ? '(平局不抽水)' : '(已扣除2%抽水)'
+
     const resultText =
       `🎊 <b>本局结算完成</b> 🎊\n\n` +
       `📊 <b>比分榜：</b>\n${scoreBoard}\n\n` +
       `🏆 赢家：${winnerNames}\n` +
-      `💰 获得奖励：<b>${settleRes.per_winner_prize.toFixed(2)}</b> 抖币 (已扣除2%抽水)\n\n` +
+      `💰 获得奖励：<b>${settleRes.per_winner_prize.toFixed(2)}</b> 抖币 ${commissionText}\n\n` +
       `感谢大家的参与！`
 
     // 🔥 只编辑进度消息（第二条）显示最终结果，不编辑原消息（第一条）
@@ -428,7 +507,32 @@ async function startDiceGame(chatId: number, messageId: number, roomId: string) 
       err.message?.includes('超时') ||
       err.message?.includes('timeout') ||
       err.message?.includes('房间已超时') ||
-      err.message?.includes('无法获取房间信息')
+      err.message?.includes('无法获取房间信息') ||
+      err.message?.includes('房间状态不正确')
+
+    // 🔥 如果是"房间状态不正确"，再次检查房间实际状态
+    if (err.message?.includes('房间状态不正确')) {
+      try {
+        const { data: errorRoomCheck } = await supabase
+          .from('dice_rooms')
+          .select('status, created_at')
+          .eq('id', roomId)
+          .single()
+
+        if (errorRoomCheck) {
+          const roomAge = Date.now() - new Date(errorRoomCheck.created_at).getTime()
+          // 如果房间已取消或超时，当作超时处理
+          if (errorRoomCheck.status === 'cancelled' || roomAge > 30000) {
+            const timeoutMessage =
+              `🎲 <b>游戏已取消</b>\n\n` + `⏰ 房间已超时\n` + `💰 本金已自动退回所有玩家`
+            await editMessage(chatId, messageId, timeoutMessage)
+            return
+          }
+        }
+      } catch (checkErr) {
+        console.error('[DICE-BOT] Failed to check room status in error handler:', checkErr)
+      }
+    }
 
     if (isTimeout) {
       // 🎯 超时：编辑原消息
