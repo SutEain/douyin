@@ -227,6 +227,19 @@
               </div>
             </div>
             <div class="progress-section">
+              <!-- 🎯 观看时间信息放在进度条上面 -->
+              <div class="time-text">
+                <template v-if="(state.watchTimeStatus?.total_seconds || 0) >= 1800">
+                  <span class="highlight">已完成任务</span>
+                </template>
+                <template v-else>
+                  今日观看：<span class="highlight">{{
+                    state.watchTimeStatus?.total_minutes || 0
+                  }}</span>
+                  分钟
+                </template>
+              </div>
+
               <!-- 🎯 进度条和里程碑 -->
               <div class="progress-bar-wrapper">
                 <div class="progress-bar">
@@ -252,7 +265,7 @@
                     style="left: 50%"
                   >
                     <div class="milestone-dot"></div>
-                    <div class="milestone-label">15分钟<br />+15抖币</div>
+                    <div class="milestone-label">15分钟<br />+10抖币</div>
                   </div>
                   <div
                     class="milestone milestone-last"
@@ -260,7 +273,7 @@
                     style="left: 100%"
                   >
                     <div class="milestone-dot"></div>
-                    <div class="milestone-label">30分钟<br />+30抖币</div>
+                    <div class="milestone-label">30分钟<br />+15抖币</div>
                   </div>
                 </div>
               </div>
