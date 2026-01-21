@@ -139,10 +139,13 @@ onMounted(() => {
   // 🎯 增加平台识别类到 body
   const ua = navigator.userAgent
   const isAndroid = /Android/i.test(ua)
-  const isChrome = /Chrome/i.test(ua) && !/Edge/i.test(ua)
+  const isTG = !!(window as any).Telegram?.WebApp?.initData
+  // 🎯 纯 Chrome：包含 Chrome 字符且不包含 Edge，且不是 TG MiniApp
+  const isChrome = /Chrome/i.test(ua) && !/Edge/i.test(ua) && !isTG
+  
   if (isAndroid) document.body.classList.add('is-android')
   if (isChrome) document.body.classList.add('is-chrome')
-  if (window.Telegram?.WebApp?.initData) document.body.classList.add('is-tg-miniapp')
+  if (isTG) document.body.classList.add('is-tg-miniapp')
 
   console.log('[App.onMounted] Window Height:', window.innerHeight)
   // 🎯 初始化应用（登录时自动创建用户，无需额外调用）

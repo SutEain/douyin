@@ -113,7 +113,7 @@
           </div>
           <div class="options">
             <div class="input" @click="showInput = true">
-              <span>说点什么...</span>
+              <span>评论</span>
             </div>
             <div class="option-item share" @click="showShareDrawer = true">
               <Icon icon="solar:share-bold" />
@@ -173,7 +173,7 @@
           <input
             v-model="inputText"
             ref="commentInput"
-            placeholder="说点什么..."
+            placeholder="评论"
             @keyup.enter="handleSendComment"
             @blur="showInput = false"
           />
@@ -2127,13 +2127,13 @@ onBeforeUnmount(() => {
     pointer-events: none;
     display: flex;
     flex-direction: column;
-    /* 🎯 降低基础值至 25rem，适配 TG MiniApp */
-    padding: calc(10rem + env(safe-area-inset-top)) 15rem calc(25rem + env(safe-area-inset-bottom));
+    /* 🎯 再次降低基础值至 15rem，适配 TG MiniApp (解决偏高问题) */
+    padding: calc(10rem + env(safe-area-inset-top)) 15rem calc(15rem + env(safe-area-inset-bottom));
     box-sizing: border-box;
 
-    /* 🎯 针对安卓 Chrome 浏览器额外补偿，防止被地址栏遮挡 */
+    /* 🎯 针对安卓 Chrome 浏览器大幅补偿 (解决被完全遮挡问题) */
     :deep(body.is-chrome.is-android) & {
-      padding-bottom: calc(45rem + env(safe-area-inset-bottom));
+      padding-bottom: calc(65rem + env(safe-area-inset-bottom));
     }
 
     .top {

@@ -285,9 +285,9 @@ onDeactivated(() => {
   &.has-footer-offset {
     --footer-offset: calc(var(--footer-height) + env(safe-area-inset-bottom));
     
-    /* 🎯 安卓 Chrome 环境下，进度条容易被遮挡，额外上抬 12rem */
+    /* 🎯 安卓 Chrome 环境下，UI 被 Footer 和地址栏严重遮挡，大幅上抬 35rem */
     :deep(body.is-chrome.is-android) & {
-      --footer-offset: calc(var(--footer-height) + env(safe-area-inset-bottom) + 12rem);
+      --footer-offset: calc(var(--footer-height) + env(safe-area-inset-bottom) + 35rem);
     }
   }
 
