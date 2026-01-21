@@ -1322,13 +1322,6 @@ onBeforeUnmount(() => {
         .header-actions {
           position: absolute;
           top: 0;
-          
-          // 🎯 真全屏下，顶部操作栏下移 2 个字体高度 (30rem)
-          // 补偿：由于全局偏移减少了 15rem，这里增加到 45rem
-          :global(html.is-tg-fullscreen) & {
-            top: 45rem;
-          }
-
           left: 0;
           right: 0;
           height: 44px;

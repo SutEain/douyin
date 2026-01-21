@@ -364,16 +364,11 @@ function handleAvatarError(e: Event) {
     z-index: 4;
     background: var(--main-bg);
     height: 60rem;
-    height: calc(60rem + var(--tg-top-offset));
+    height: calc(60rem + constant(safe-area-inset-top));
+    height: calc(60rem + env(safe-area-inset-top));
     padding: 0 var(--page-padding);
-    padding-top: var(--tg-top-offset);
-
-    // 🎯 真全屏下，额外下调 1 个字体高度 (15rem)
-    // 补偿：增加到 30rem
-    :global(html.is-tg-fullscreen) & {
-      height: calc(60rem + var(--tg-top-offset) + 30rem);
-      padding-top: calc(var(--tg-top-offset) + 30rem);
-    }
+    padding-top: constant(safe-area-inset-top);
+    padding-top: env(safe-area-inset-top);
 
     font-size: 14rem;
     display: flex;
@@ -422,13 +417,9 @@ function handleAvatarError(e: Event) {
   }
 
   .search-results {
-    padding-top: calc(60rem + var(--tg-top-offset));
-    
-    // 🎯 真全屏下，结果区域也同步下移
-    :global(html.is-tg-fullscreen) & {
-      padding-top: calc(60rem + var(--tg-top-offset) + 30rem);
-    }
-    
+    padding-top: 60rem;
+    padding-top: calc(60rem + constant(safe-area-inset-top));
+    padding-top: calc(60rem + env(safe-area-inset-top));
     min-height: 100vh;
   }
 

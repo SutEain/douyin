@@ -36,8 +36,7 @@
             window.location.search.includes('debug=1') ||
             window.location.search.includes('console=1')
 
-          // 🎯 暂时强制开启 Console 以便调试全屏问题
-          if (false && !isDev && !isDebug) {
+          if (!isDev && !isDebug) {
             const noop = function () {}
             const methods = [
               'log',
@@ -132,14 +131,34 @@
       content="TGDouyin 是一个基于 Telegram 的短视频分享平台，提供海量精彩视频内容，支持直播、评论、点赞等互动功能。"
     />
     <script>
-      // ✅ 极简环境检测
+      // ✅ 优化：快速检测环境，不阻塞渲染
       ;(function () {
         try {
+          const host = window.location.hostname
+          const isDev =
+            host === 'localhost' ||
+            host === '127.0.0.1' ||
+            host.endsWith('.test') ||
+            host.endsWith('.local')
+
+          // 🚀 快速检测：不使用 setTimeout，立即检查环境
           const url = window.location.href
-          if (url.includes('tgWebAppData') || /Telegram/i.test(navigator.userAgent)) {
+          const hasTgData =
+            url.includes('tgWebAppData') ||
+            window.location.hash.includes('tgWebAppData') ||
+            window.location.search.includes('tgWebAppData')
+          const uaTelegram = /Telegram/i.test(navigator.userAgent)
+
+          // 🎯 记录环境类型（调试用）
+          if (hasTgData || uaTelegram) {
+            console.log('[Init] Telegram 环境检测成功')
             document.documentElement.classList.add('is-tg-miniapp')
+          } else {
+            console.log('[Init] 浏览器环境，跳过 Telegram SDK')
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Init] 环境检测失败，继续运行:', e)
+        }
       })()
     </script>
     <script>

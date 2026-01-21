@@ -249,15 +249,15 @@ export default {
 .indicator-home {
   position: absolute;
   font-size: 16rem;
-  top: var(--tg-top-offset, 0px);
+  top: 0;
   left: 0;
   z-index: 2;
   width: 100%;
   color: white;
   height: var(--home-header-height);
+  padding-top: 0;
   transition: all 0.3s;
   font-weight: bold;
-  box-sizing: border-box;
 
   .notice {
     opacity: 0;

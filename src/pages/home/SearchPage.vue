@@ -968,29 +968,56 @@ function toggle() {
     z-index: 4;
     background: var(--main-bg);
     height: 60rem;
+    // ✅ 适配安全区域
+    height: calc(60rem + constant(safe-area-inset-top));
+    height: calc(60rem + env(safe-area-inset-top));
     padding: 0 var(--page-padding);
-    
-    // ✅ [TG-V7] 强制使用偏移变量
-    padding-top: var(--tg-top-offset) !important;
-    height: calc(60rem + var(--tg-top-offset)) !important;
-    top: 0 !important;
-    left: 0 !important;
-
-    // 🎯 [TG-V7] 补偿微调
-    :global(html.is-tg-fullscreen) & {
-      padding-top: calc(var(--tg-top-offset) + 10px) !important;
-    }
+    padding-top: constant(safe-area-inset-top);
+    padding-top: env(safe-area-inset-top);
 
     font-size: 14rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
+
+    .search-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8rem;
+
+      .search-type-select {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4rem;
+        padding: 6rem 10rem;
+        font-size: 13rem;
+        cursor: pointer;
+        outline: none;
+        flex-shrink: 0;
+
+        option {
+          background: var(--main-bg);
+          color: white;
+        }
+      }
+    }
     border-bottom: 1px solid var(--line-color);
     position: fixed;
     width: 100%;
     box-sizing: border-box;
     top: 0;
-    left: 0;
+
+    .search-ctn {
+      flex: 1;
+    }
+
+    .scan {
+      transform: scale(2);
+      height: 10rem;
+      width: 10rem;
+    }
   }
 
   .content {
@@ -999,12 +1026,9 @@ function toggle() {
     -webkit-overflow-scrolling: touch;
     box-sizing: border-box;
 
-    padding-top: calc(60rem + var(--tg-top-offset));
-
-    // 🎯 真全屏下，内容区域也同步下移
-    :global(html.is-tg-fullscreen) & {
-      padding-top: calc(60rem + var(--tg-top-offset) + 15rem);
-    }
+    padding-top: 60rem;
+    padding-top: calc(60rem + constant(safe-area-inset-top));
+    padding-top: calc(60rem + env(safe-area-inset-top));
 
     .history {
       .row {

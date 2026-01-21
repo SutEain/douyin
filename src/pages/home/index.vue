@@ -1,10 +1,7 @@
 <template>
   <div class="home-page">
     <div class="home-container" id="home-index">
-      <!-- 🎯 [TG-V7] 物理安全区占位，防止 iOS 内容塌陷或黑屏 -->
-      <div class="tg-safe-top"></div>
-
-      <!-- ✅ 顶部导航栏 -->
+      <!-- ✅ 恢复顶部导航栏（IndicatorHome） -->
       <IndicatorHome
         v-if="!videoStore.isFullscreen"
         :loading="baseStore.loading"
@@ -12,8 +9,8 @@
         v-model:index="state.navIndex"
       />
 
-      <!-- ✅ 内容区域：直接占据剩余空间 -->
-      <div class="video-content">
+      <!-- ✅ 视频内容区域：关注 / 图文 / 视频 / 短剧 / 东南亚 / 直播 / 成人 / 推荐 -->
+      <div class="video-content has-footer-offset">
         <!-- 0=关注 -->
         <SlideFollow v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
         <!-- 1=图文 -->
@@ -46,38 +43,38 @@
 
       <!-- 底部导航栏 -->
       <BaseFooter :init-tab="1" />
+
+      <PlayFeedback v-model="state.showPlayFeedback" />
+      <DouyinCode
+        v-if="state.currentItem"
+        :item="state.currentItem"
+        v-model="state.showDouyinCode"
+      />
+      <ShareTo v-model:type="state.shareType" />
+
+      <FollowSetting
+        v-if="state.currentItem"
+        v-model:currentItem="state.currentItem"
+        @showChangeNote="state.showChangeNote = true"
+        @showBlockDialog="state.showBlockDialog = true"
+        @showShare="state.isSharing = true"
+        v-model="state.showFollowSetting"
+      />
+
+      <FollowSetting2
+        v-if="state.currentItem"
+        v-model:currentItem="state.currentItem"
+        v-model="state.showFollowSetting2"
+      />
+
+      <BlockDialog v-model="state.showBlockDialog" />
+
+      <ConfirmDialog title="设置备注名" ok-text="确认" v-model:visible="state.showChangeNote">
+        <Search mode="light" v-model="state.test" :isShowSearchIcon="false" />
+      </ConfirmDialog>
+
+      <ShareToFriend v-model="state.shareToFriend" />
     </div>
-
-    <PlayFeedback v-model="state.showPlayFeedback" />
-    <DouyinCode
-      v-if="state.currentItem"
-      :item="state.currentItem"
-      v-model="state.showDouyinCode"
-    />
-    <ShareTo v-model:type="state.shareType" />
-
-    <FollowSetting
-      v-if="state.currentItem"
-      v-model:currentItem="state.currentItem"
-      @showChangeNote="state.showChangeNote = true"
-      @showBlockDialog="state.showBlockDialog = true"
-      @showShare="state.isSharing = true"
-      v-model="state.showFollowSetting"
-    />
-
-    <FollowSetting2
-      v-if="state.currentItem"
-      v-model:currentItem="state.currentItem"
-      v-model="state.showFollowSetting2"
-    />
-
-    <BlockDialog v-model="state.showBlockDialog" />
-
-    <ConfirmDialog title="设置备注名" ok-text="确认" v-model:visible="state.showChangeNote">
-      <Search mode="light" v-model="state.test" :isShowSearchIcon="false" />
-    </ConfirmDialog>
-
-    <ShareToFriend v-model="state.shareToFriend" />
 
     <!-- ✅ 使用 Teleport 将弹窗传送到 body，避免定位问题 -->
     <Teleport to="body">
@@ -262,75 +259,43 @@ onDeactivated(() => {
 <style scoped lang="less">
 .home-page {
   width: 100%;
-  height: 100vh;
-  height: calc(var(--vh, 1vh) * 100); /* Android 兜底 */
-  position: relative;
-  overflow: hidden;
+  height: calc(var(--vh, 1dvh) * 100); /* 🎯 适配全平台 */
 }
 
 .home-container {
   position: relative;
   width: 100%;
-  height: 100%;
+  height: calc(var(--vh, 1dvh) * 100);
   background: black;
-  /* 🎯 非全屏：使用 Flex 布局（保持原样） */
-  display: flex;
-  flex-direction: column;
-  
-  /* 🎯 真全屏：改为绝对定位布局 */
-  :global(html.is-tg-fullscreen) & {
-    display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-  }
 }
-
-/* 🎯 顶部安全区占位 - 仅在真全屏时显示 */
-.tg-safe-top {
-  display: none; /* 默认隐藏 */
-  
-  :global(html.is-tg-fullscreen) & {
-    display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: var(--tg-top-offset, 0px);
-    background: black;
-    z-index: 1; /* 🎯 降低 z-index，避免阻挡按钮 */
-    pointer-events: none; /* 🎯 确保不阻挡点击 */
-  }
-}
-
-/* ✅ IndicatorHome 组件本身已经处理了 top: var(--tg-top-offset)，无需额外覆盖 */
 
 /* 视频内容区域 */
 .video-content {
-  /* 🎯 非全屏：Flex 布局 */
-  flex: 1;
   position: relative;
   width: 100%;
+  /* 🎯 方案升级：核心修复视频遮挡字幕问题 */
+  /* 使用 padding-top 而不是 margin-top，防止外边距折叠导致顶部黑边 */
+  padding-top: var(--home-header-height);
+  /* 这样 height: 100% 的子组件（视频）就正好止步于 Footer 上方 */
+  height: calc(
+    var(--vh, 1vh) * 100 - var(--footer-height) -
+      env(safe-area-inset-bottom)
+  );
+  box-sizing: border-box;
   overflow: hidden;
   z-index: 1;
-  background: black;
-  
-  /* 🎯 真全屏：绝对定位 */
-  :global(html.is-tg-fullscreen) & {
-    position: absolute;
-    top: calc(var(--home-header-height, 38rem) + var(--tg-top-offset, 0px));
-    left: 0;
-    right: 0;
-    /* 🎯 修复：Footer 本身已经处理了安全区，这里只需要 footer 高度 */
-    bottom: var(--footer-height, 56rem);
-    flex: none;
-  }
 
-  /* 🎯 定义底部偏移量 */
+  /* 🎯 定义底部偏移量：用于内部 UI 组件（如描述、作者）的定位基准 */
   &.has-footer-offset {
     --footer-offset: 0rem;
+
+    /* 🎯 安卓 Chrome 环境下，额外减去高度以应对地址栏和导航栏遮挡 */
+    :global(html.is-chrome.is-android) & {
+      height: calc(
+        var(--vh, 1vh) * 100 - var(--home-header-height) - var(--footer-height) -
+          env(safe-area-inset-bottom) - 35rem
+      );
+    }
   }
 
   /* 让每个 tab 的内容占满整个区域 */

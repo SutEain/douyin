@@ -36,20 +36,6 @@
   --mask-lightgray: rgba(0, 0, 0, 0.25);
   //消息页面
   --msg-subpage-card-bg: rgb(28, 30, 43); //二级页面，卡片背景
-
-  /* 🎯 Telegram Mini App 顶部偏移变量 */
-  // 默认使用系统安全区域（普通浏览器、非全面屏 TG）
-  --tg-top-offset: env(safe-area-inset-top, 0px);
-}
-
-/* 🎯 Telegram 真全屏环境适配：避开灵动岛/刘海屏/打孔屏 */
-html.is-tg-fullscreen {
-  // 🎯 [TG-V7] 基准偏移，由 JS 强控，CSS 仅做同步
-  --tg-top-offset: 0px; 
-  
-  // 🎯 同步更新全局高度
-  --home-header-height: 38rem !important;
-  --common-header-height: 50rem !important;
 }
 
 html,
@@ -69,9 +55,6 @@ body {
   overscroll-behavior: none;
   touch-action: pan-y;
 }
-
-// 🎯 移除之前可能导致布局崩溃的全局 box-sizing 改动
-// * { box-sizing: border-box; } 这一行已被移除
 
 /* 🎯 iOS 端：优先使用标准的 dvh，最丝滑且支持安全区 */
 @supports (height: 100dvh) {

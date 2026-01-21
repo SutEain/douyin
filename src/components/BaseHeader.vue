@@ -70,7 +70,6 @@ function back() {
     justify-content: center;
     align-items: center;
     height: var(--common-header-height);
-    padding-top: var(--tg-top-offset, 0px);
     box-sizing: border-box;
     border-bottom: 1px solid #cccccc11;
     position: relative;
