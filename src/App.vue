@@ -147,86 +147,67 @@ function resetVhAndPx() {
 onMounted(() => {
   console.log('[App.onMounted] ========== App 组件已挂载 ==========')
   
-  // 🎯 增加平台识别类到 body
   const ua = navigator.userAgent
   const isAndroid = /Android/i.test(ua)
   const isIOS = /iPhone|iPad|iPod/i.test(ua)
-  const isTG = !!(window as any).Telegram?.WebApp?.initData
-  // 🎯 纯 Chrome：包含 Chrome 字符且不包含 Edge，且不是 TG MiniApp
+  
+  // 🎯 核心改进：只要 URL 包含 tgWebAppData 标记，就铁定是 TG 环境
+  const url = window.location.href
+  const isTG = !!(window as any).Telegram?.WebApp?.initData || url.includes('tgWebAppData')
+  
   const isChrome = /Chrome/i.test(ua) && !/Edge/i.test(ua) && !isTG
   
   if (isAndroid) document.documentElement.classList.add('is-android')
   if (isIOS) document.documentElement.classList.add('is-ios')
   if (isChrome) document.documentElement.classList.add('is-chrome')
+  
   if (isTG) {
     document.documentElement.classList.add('is-tg-miniapp')
-    console.log('[TG-Debug] Telegram environment detected')
+    console.log('[TG-Debug] Telegram environment confirmed via initData or URL')
     
-    const tgWebApp = (window as any).Telegram?.WebApp
-    console.log('[TG-Debug] tgWebApp object:', tgWebApp)
-    
-    // 🎯 官方推荐方式：监听全屏状态变化
-    const handleFullscreen = () => {
-      // 🚀 核心改进：兼容官方 SDK 和 我们的降级 fallback 对象
-      const isOfficialSDK = tgWebApp && tgWebApp.version !== 'fallback'
-      
-      let isFull = false
-      if (isOfficialSDK) {
-        isFull = !!tgWebApp.isFullscreen
-      } else {
-        // 如果是降级对象，官方属性肯定拿不到，此时必须用高度判定作为“官方不可用时”的唯一手段
-        const screenH = window.screen.height
-        const windowH = window.innerHeight
-        isFull = isIOS && (screenH - windowH < 80)
-      }
-
-      const isExpanded = !!tgWebApp?.isExpanded
-      const windowH = window.innerHeight
+    const checkFullscreen = () => {
+      const tgWebApp = (window as any).Telegram?.WebApp
       const screenH = window.screen.height
-      const viewportH = tgWebApp?.viewportHeight
+      const windowH = window.innerHeight
       
-      console.log('[TG-Debug] handleFullscreen called:', {
-        isOfficialSDK,
-        isFull,
-        isExpanded,
+      // 🎯 终极判定逻辑 (根据你提供的日志数据优化):
+      // 1. 物理高度判定：如果窗口高度等于或大于屏幕高度（iOS 全屏典型特征），强制认为全屏
+      const isHeightFull = isIOS && (windowH >= screenH - 10)
+      
+      // 2. URL 参数判定：解析 URL 中的 tgWebAppFullscreen 参数
+      const isUrlFull = url.includes('tgWebAppFullscreen=1')
+      
+      // 3. 官方属性判定
+      const isOfficialFull = !!tgWebApp?.isFullscreen
+      
+      const isActuallyFull = isOfficialFull || isHeightFull || isUrlFull
+      
+      console.log('[TG-Debug] Fullscreen Status:', {
+        isActuallyFull,
+        isOfficialFull,
+        isHeightFull,
+        isUrlFull,
         windowH,
-        screenH,
-        viewportH,
-        diff: screenH - windowH,
-        platform: tgWebApp?.platform
+        screenH
       })
-
-      if (isFull) {
-        console.log('[TG-Debug] Adding is-tg-fullscreen class')
+      
+      if (isActuallyFull) {
         document.documentElement.classList.add('is-tg-fullscreen')
       } else {
-        console.log('[TG-Debug] Removing is-tg-fullscreen class')
         document.documentElement.classList.remove('is-tg-fullscreen')
       }
     }
-
-    // 初始状态同步
-    setTimeout(() => {
-      console.log('[TG-Debug] Initial sync after 100ms')
-      handleFullscreen()
-    }, 100)
     
-    // 注册官方事件
-    if (tgWebApp) {
-      console.log('[TG-Debug] Registering events')
-      tgWebApp.onEvent('fullscreenChanged', handleFullscreen)
-      tgWebApp.onEvent('viewportChanged', handleFullscreen)
-    } else {
-      console.warn('[TG-Debug] tgWebApp is null, cannot register events')
-    }
-
-    // 持续监控一段时间，防止启动时的状态抖动
-    [500, 1000, 2000, 5000].forEach(t => {
-      setTimeout(() => {
-        console.log(`[TG-Debug] Delayed sync at ${t}ms`)
-        handleFullscreen()
-      }, t)
-    })
+    // 多重频率检查，确保在不同加载阶段都能命中
+    checkFullscreen();
+    [(window as any).Telegram?.WebApp].forEach(tg => {
+      if (tg && tg.onEvent) {
+        tg.onEvent('fullscreenChanged', checkFullscreen)
+        tg.onEvent('viewportChanged', checkFullscreen)
+      }
+    });
+    
+    [100, 500, 1000, 2000, 5000].forEach(t => setTimeout(checkFullscreen, t))
   }
 
   console.log('[App.onMounted] Window Height:', window.innerHeight)
