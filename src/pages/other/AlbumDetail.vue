@@ -1,234 +1,236 @@
 <template>
   <div class="goods-detail" @dragstart="(e) => _stopPropagation(e)">
-    <div class="detail-container">
-      <header class="detail-header">
-        <Icon @click="close" icon="material-symbols-light:arrow-back-ios-new" />
-      </header>
+    <!-- 1. 底部背景/滚动层 -->
+    <div class="scroll" ref="scrollEl">
+      <div class="slide-imgs">
+        <SlideHorizontal v-model:index="state.index">
+          <SlideItem :key="i" v-for="(item, i) in props.detail.note_card?.image_list">
+            <!-- 🎬 视频类型 -->
+            <video
+              v-if="item.type === 'video'"
+              v-is-can-play="buildCdnUrl(item.info_list?.[0]?.url)"
+              style="height: 100%; width: 100%; object-fit: contain"
+              autoplay
+              loop
+              muted
+              playsinline
+              webkit-playsinline
+              x5-playsinline
+              x5-video-player-type="h5-page"
+            />
+            <!-- 🖼️ 图片类型 -->
+            <img
+              v-else
+              :src="buildCdnUrl(item.info_list?.[0]?.url)"
+              alt=""
+              @error="handleImageError"
+              style="background-color: #000; min-height: 100%; object-fit: contain"
+            />
+          </SlideItem>
+        </SlideHorizontal>
 
-      <div class="scroll" ref="scrollEl">
-        <div class="slide-imgs">
-          <SlideHorizontal v-model:index="state.index">
-            <SlideItem :key="i" v-for="(item, i) in props.detail.note_card?.image_list">
-              <!-- 🎬 视频类型 -->
-              <video
-                v-if="item.type === 'video'"
-                v-is-can-play="buildCdnUrl(item.info_list?.[0]?.url)"
-                style="height: 100%; width: 100%; object-fit: contain"
-                autoplay
-                loop
-                muted
-                playsinline
-                webkit-playsinline
-                x5-playsinline
-                x5-video-player-type="h5-page"
-              />
-              <!-- 🖼️ 图片类型 -->
-              <img
-                v-else
-                :src="buildCdnUrl(item.info_list?.[0]?.url)"
-                alt=""
-                @error="handleImageError"
-                style="background-color: #000; min-height: 100%; object-fit: contain"
-              />
-            </SlideItem>
-          </SlideHorizontal>
+        <div class="indicator-bar" v-if="props.detail.note_card?.image_list?.length > 1">
+          <div
+            class="indicator"
+            :class="[i <= state.index + 1 && 'active']"
+            :key="j"
+            v-for="(i, j) in props.detail.note_card?.image_list?.length"
+          ></div>
+        </div>
+      </div>
 
-          <div class="indicator-bar" v-if="props.detail.note_card?.image_list?.length > 1">
-            <div
-              class="indicator"
-              :class="[i <= state.index + 1 && 'active']"
-              :key="j"
-              v-for="(i, j) in props.detail.note_card?.image_list?.length"
-            ></div>
+      <div class="content">
+        <div class="shop">
+          <header>
+            <img class="avatar" :src="buildCdnUrl(props.detail.note_card?.user?.avatar)" />
+            <div class="right">
+              <div class="name">
+                {{
+                  _truncate(
+                    props.detail.note_card?.user?.nickname ||
+                      props.detail.note_card?.user?.nick_name ||
+                      props.detail.note_card?.user?.name ||
+                      '用户',
+                    15
+                  )
+                }}
+              </div>
+              <div
+                class="r"
+                :style="local.followLoading ? 'pointer-events:none;opacity:.6;' : ''"
+                @click.stop="toggleFollow"
+              >
+                {{ local.isAttention ? '取消关注' : '关注' }}
+              </div>
+            </div>
+          </header>
+          <div class="desc" style="white-space: pre-wrap">
+            {{ props.detail.note_card?.display_title }}
           </div>
+          <div class="date">{{ props.detail.note_card.createTime }}</div>
         </div>
 
-        <div class="content">
-          <div class="shop">
-            <header>
-              <img class="avatar" :src="buildCdnUrl(props.detail.note_card?.user?.avatar)" />
-              <div class="right">
-                <div class="name">
-                  {{
-                    _truncate(
-                      props.detail.note_card?.user?.nickname ||
-                        props.detail.note_card?.user?.nick_name ||
-                        props.detail.note_card?.user?.name ||
-                        '用户',
-                      15
-                    )
-                  }}
-                </div>
-                <div
-                  class="r"
-                  :style="local.followLoading ? 'pointer-events:none;opacity:.6;' : ''"
-                  @click.stop="toggleFollow"
-                >
-                  {{ local.isAttention ? '取消关注' : '关注' }}
+        <div class="card comments">
+          <header>
+            <span class="l">评论 {{ displayCommentCount }}</span>
+          </header>
+          <div v-if="comments.loading" class="loading">加载中...</div>
+          <div v-else-if="!comments.list.length" class="empty">暂无评论，快来抢沙发～</div>
+
+          <div v-else class="comment-items">
+            <div
+              v-for="(item, i) in comments.list"
+              :key="item.comment_id || i"
+              class="comment-item"
+              :class="{ 'show-delete': showDeleteActionId === item.comment_id }"
+              @touchstart="handleTouchStartLong(item)"
+              @touchend="handleTouchEndLong"
+              @mousedown="handleTouchStartLong(item)"
+              @mouseup="handleTouchEndLong"
+            >
+              <div class="comment-main">
+                <img
+                  :src="buildCdnUrl(item.avatar)"
+                  class="avatar"
+                  @click="handleAvatarClick(item)"
+                />
+                <div class="comment-body">
+                  <div class="username" @click="handleAvatarClick(item)">
+                    {{ _truncate(item.nickname, 15) }}
+                  </div>
+                  <div class="comment-text" :class="{ 'text-gray': item.user_buried }">
+                    {{ item.user_buried ? '该评论已折叠' : item.content }}
+                  </div>
+                  <div class="comment-footer">
+                    <div class="footer-left">
+                      <span class="time">{{ _time(item.create_time) }}</span>
+                      <span v-if="item.ip_location" class="location">{{ item.ip_location }}</span>
+                      <span class="reply-btn" @click="handleReply(item)">回复</span>
+                    </div>
+                    <div class="footer-right">
+                      <div
+                        class="action-btn"
+                        :class="{ active: item.user_digged }"
+                        @click="handleCommentLike(item)"
+                      >
+                        <Icon
+                          :icon="
+                            item.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
+                          "
+                        />
+                        <span v-if="item.digg_count">{{ _formatNumber(item.digg_count) }}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </header>
-            <div class="desc" style="white-space: pre-wrap">
-              {{ props.detail.note_card?.display_title }}
-            </div>
-            <div class="date">{{ props.detail.note_card.createTime }}</div>
-          </div>
 
-          <div class="card comments">
-            <header>
-              <span class="l">评论 {{ displayCommentCount }}</span>
-              <!-- ✅ 去掉右上角“查看全部” -->
-            </header>
-            <div v-if="comments.loading" class="loading">加载中...</div>
-            <div v-else-if="!comments.list.length" class="empty">暂无评论，快来抢沙发～</div>
-
-            <!-- ✅ 复用 CommentNew 的结构：主评论 + 回复 + 展开更多 + 评论点赞 -->
-            <div v-else class="comment-items">
+              <!-- 删除操作按钮 -->
               <div
-                v-for="(item, i) in comments.list"
-                :key="item.comment_id || i"
-                class="comment-item"
-                :class="{ 'show-delete': showDeleteActionId === item.comment_id }"
-                @touchstart="handleTouchStartLong(item)"
-                @touchend="handleTouchEndLong"
-                @mousedown="handleTouchStartLong(item)"
-                @mouseup="handleTouchEndLong"
+                v-if="showDeleteActionId === item.comment_id"
+                class="delete-overlay"
+                @click.stop="handleDeleteComment(item)"
               >
-                <div class="comment-main">
+                <div class="delete-btn">删除</div>
+                <div class="cancel-delete" @click.stop="showDeleteActionId = null">取消</div>
+              </div>
+
+              <div v-if="item.showChildren && item.children?.length" class="reply-list">
+                <div
+                  v-for="(child, j) in item.children"
+                  :key="child.comment_id || j"
+                  class="reply-item"
+                  :class="{ 'show-delete': showDeleteActionId === child.comment_id }"
+                  @touchstart="handleTouchStartLong(child)"
+                  @touchend="handleTouchEndLong"
+                  @mousedown="handleTouchStartLong(child)"
+                  @mouseup="handleTouchEndLong"
+                >
                   <img
-                    :src="buildCdnUrl(item.avatar)"
+                    :src="buildCdnUrl(child.avatar)"
                     class="avatar"
-                    @click="handleAvatarClick(item)"
+                    @click="handleAvatarClick(child)"
                   />
-                  <div class="comment-body">
-                    <div class="username" @click="handleAvatarClick(item)">
-                      {{ _truncate(item.nickname, 15) }}
+                  <div class="reply-body">
+                    <div class="username" @click="handleAvatarClick(child)">
+                      {{ _truncate(child.nickname, 15) }}
                     </div>
-                    <div class="comment-text" :class="{ 'text-gray': item.user_buried }">
-                      {{ item.user_buried ? '该评论已折叠' : item.content }}
+                    <div class="reply-text">
+                      <span v-if="child.reply_to_user" class="reply-to"
+                        >回复 @{{ _truncate(child.reply_to_user, 15) }}：</span
+                      >
+                      {{ child.content }}
                     </div>
-                    <div class="comment-footer">
+                    <div class="reply-footer">
                       <div class="footer-left">
-                        <span class="time">{{ _time(item.create_time) }}</span>
-                        <span v-if="item.ip_location" class="location">{{ item.ip_location }}</span>
+                        <span class="time">{{ _time(child.create_time) }}</span>
+                        <span v-if="child.ip_location" class="location">{{
+                          child.ip_location
+                        }}</span>
                         <span class="reply-btn" @click="handleReply(item)">回复</span>
                       </div>
                       <div class="footer-right">
                         <div
                           class="action-btn"
-                          :class="{ active: item.user_digged }"
-                          @click="handleCommentLike(item)"
+                          :class="{ active: child.user_digged }"
+                          @click="handleCommentLike(child)"
                         >
                           <Icon
                             :icon="
-                              item.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
+                              child.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
                             "
                           />
-                          <span v-if="item.digg_count">{{ _formatNumber(item.digg_count) }}</span>
+                          <span v-if="child.digg_count">{{ _formatNumber(child.digg_count) }}</span>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <!-- 删除操作按钮 -->
-                <div
-                  v-if="showDeleteActionId === item.comment_id"
-                  class="delete-overlay"
-                  @click.stop="handleDeleteComment(item)"
-                >
-                  <div class="delete-btn">删除</div>
-                  <div class="cancel-delete" @click.stop="showDeleteActionId = null">取消</div>
-                </div>
-
-                <div v-if="item.showChildren && item.children?.length" class="reply-list">
+                  <!-- 删除操作按钮 (回复) -->
                   <div
-                    v-for="(child, j) in item.children"
-                    :key="child.comment_id || j"
-                    class="reply-item"
-                    :class="{ 'show-delete': showDeleteActionId === child.comment_id }"
-                    @touchstart="handleTouchStartLong(child)"
-                    @touchend="handleTouchEndLong"
-                    @mousedown="handleTouchStartLong(child)"
-                    @mouseup="handleTouchEndLong"
+                    v-if="showDeleteActionId === child.comment_id"
+                    class="delete-overlay"
+                    @click.stop="handleDeleteComment(child)"
                   >
-                    <img
-                      :src="buildCdnUrl(child.avatar)"
-                      class="avatar"
-                      @click="handleAvatarClick(child)"
-                    />
-                    <div class="reply-body">
-                      <div class="username" @click="handleAvatarClick(child)">
-                        {{ _truncate(child.nickname, 15) }}
-                      </div>
-                      <div class="reply-text">
-                        <span v-if="child.reply_to_user" class="reply-to"
-                          >回复 @{{ _truncate(child.reply_to_user, 15) }}：</span
-                        >
-                        {{ child.content }}
-                      </div>
-                      <div class="reply-footer">
-                        <div class="footer-left">
-                          <span class="time">{{ _time(child.create_time) }}</span>
-                          <span v-if="child.ip_location" class="location">{{
-                            child.ip_location
-                          }}</span>
-                          <span class="reply-btn" @click="handleReply(item)">回复</span>
-                        </div>
-                        <div class="footer-right">
-                          <div
-                            class="action-btn"
-                            :class="{ active: child.user_digged }"
-                            @click="handleCommentLike(child)"
-                          >
-                            <Icon
-                              :icon="
-                                child.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
-                              "
-                            />
-                            <span v-if="child.digg_count">{{ _formatNumber(child.digg_count) }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 删除操作按钮 (回复) -->
-                    <div
-                      v-if="showDeleteActionId === child.comment_id"
-                      class="delete-overlay"
-                      @click.stop="handleDeleteComment(child)"
-                    >
-                      <div class="delete-btn">删除</div>
-                      <div class="cancel-delete" @click.stop="showDeleteActionId = null">取消</div>
-                    </div>
+                    <div class="delete-btn">删除</div>
+                    <div class="cancel-delete" @click.stop="showDeleteActionId = null">取消</div>
                   </div>
                 </div>
-
-                <div
-                  v-if="
-                    Number(item.sub_comment_count) &&
-                    (!item.showChildren || item.children.length < item.sub_comment_count)
-                  "
-                  class="expand-replies"
-                  @click="handleExpandReplies(item)"
-                >
-                  <div class="expand-line"></div>
-                  <span class="expand-text">
-                    展开{{ item.showChildren ? '更多' : `${item.sub_comment_count}条` }}回复
-                  </span>
-                  <Icon icon="ep:arrow-down-bold" />
-                </div>
               </div>
 
-              <div v-if="comments.loadingMore" class="loading-more">加载中...</div>
-              <div v-else-if="comments.hasMore" class="load-more" @click.stop="loadMoreComments">
-                加载更多
+              <div
+                v-if="
+                  Number(item.sub_comment_count) &&
+                  (!item.showChildren || item.children.length < item.sub_comment_count)
+                "
+                class="expand-replies"
+                @click="handleExpandReplies(item)"
+              >
+                <div class="expand-line"></div>
+                <span class="expand-text">
+                  展开{{ item.showChildren ? '更多' : `${item.sub_comment_count}条` }}回复
+                </span>
+                <Icon icon="ep:arrow-down-bold" />
               </div>
+            </div>
+
+            <div v-if="comments.loadingMore" class="loading-more">加载中...</div>
+            <div v-else-if="comments.hasMore" class="load-more" @click.stop="loadMoreComments">
+              加载更多
             </div>
           </div>
         </div>
       </div>
+    </div>
 
+    <!-- 2. 浮动 UI 层（参照直播间方案） -->
+    <div class="float-overlay">
+      <!-- 顶部返回 -->
+      <header class="detail-header">
+        <Icon @click="close" icon="material-symbols-light:arrow-back-ios-new" />
+      </header>
+
+      <!-- 底部工具栏 -->
       <div class="detail-footer">
         <div v-if="replyingTo" class="reply-hint-bar">
           <span>回复 @{{ _truncate(replyingTo.nickname, 15) }}</span>
@@ -245,7 +247,6 @@
             />
           </div>
 
-          <!-- ✅ 只有输入内容时才显示发送按钮，平时隐藏以腾出空间 -->
           <transition name="fade">
             <div
               v-if="comments.input.trim()"
@@ -283,7 +284,6 @@
               <div class="text">{{ _formatNumber(local.shareCount) }}</div>
             </div>
 
-            <!-- 🎯 打赏 -->
             <div class="option reward" @click.stop="showRewardPanel = true">
               <Icon icon="basil:award-solid" style="color: #face15" />
               <div class="text">打赏</div>
@@ -293,7 +293,7 @@
       </div>
     </div>
 
-    <!-- 🎯 打赏面板弹窗 (Teleport 到 body 避免层级问题) -->
+    <!-- 3. 其他弹窗 (Teleport) -->
     <teleport to="body">
       <transition name="fade">
         <div v-if="showRewardPanel" class="reward-overlay" @click.self="showRewardPanel = false">
@@ -322,7 +322,6 @@
       </transition>
     </teleport>
 
-    <!-- 🎯 分享抽屉 -->
     <teleport to="body">
       <transition name="slide-up">
         <div v-if="showShareDrawer" class="reward-overlay" @click.self="showShareDrawer = false">
@@ -354,7 +353,7 @@
 import SlideHorizontal from '@/components/slide/SlideHorizontal.vue'
 import SlideItem from '@/components/slide/SlideItem.vue'
 import Hls from 'hls.js'
-import { computed, onMounted, reactive, ref, watch, onUnmounted } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   _copy,
   _formatNumber,
@@ -378,6 +377,7 @@ import {
 } from '@/api/videos'
 import { useRouter } from 'vue-router'
 import { useBaseStore } from '@/store/pinia'
+import { supabase } from '@/utils/supabase'
 
 const baseStore = useBaseStore()
 const router = useRouter()
@@ -444,7 +444,6 @@ const commentList = computed(() => {
 const commentCount = computed(() => commentList.value.length)
 
 const displayCommentCount = computed(() => {
-  // 优先显示接口 total；其次显示已加载数量；否则用接口返回的 comment_count；否则 fallback
   if (comments.total) return comments.total
   if (comments.list.length) return comments.list.length
   const n = props.detail?.note_card?.interact_info?.comment_count
@@ -492,11 +491,9 @@ const rewardAmount = ref('')
 const rewardPresets = [10, 50, 100, 500]
 const isRewarding = ref(false)
 
-// 🎯 图片加载错误处理
 function handleImageError(event) {
   const img = event.target
   if (img) {
-    // 如果图片加载失败，隐藏图片或显示占位符
     img.style.display = 'none'
   }
 }
@@ -527,7 +524,7 @@ async function handleReward() {
         props.detail.note_card?.user?.id,
       gift_amount: amount,
       room_or_video_id: id,
-      gift_type: 'video', // 后端目前短视频和图文统一归类为 video
+      gift_type: 'video',
       gift_name: '图文打赏'
     })
 
@@ -551,7 +548,6 @@ function selectPreset(amount) {
   rewardAmount.value = amount.toString()
 }
 
-// 🎯 长按删除和点击头像逻辑
 const longPressTimer = ref(null)
 const showDeleteActionId = ref(null)
 
@@ -634,7 +630,6 @@ watch(
     )
     local.isAttention = !!(d?.isAttention ?? d?.note_card?.isAttention ?? d?.is_attention)
 
-    // 切换作品时重置评论并重新拉取
     comments.list = []
     comments.pageNo = 0
     comments.hasMore = false
@@ -662,7 +657,6 @@ async function toggleFollow() {
   const previous = local.isAttention
   local.isAttention = next
   local.followLoading = true
-  console.log('[AlbumDetail] toggleFollow:', { targetId, next })
   emitDetailUpdate()
   try {
     await toggleFollowUser(targetId, next)
@@ -692,7 +686,6 @@ function emitDetailUpdate() {
       }
     }
   }
-  console.log('[AlbumDetail] emit update:', patch)
   emit('update', patch)
 }
 
@@ -764,7 +757,6 @@ async function sendComment() {
   if (!content) return
   if (comments.sending) return
   comments.sending = true
-  console.log('[AlbumDetail] sendComment:', { videoId: id, length: content.length })
   try {
     const replyToId = replyingTo.value?.comment_id || null
     const result = await sendVideoComment(id, content, replyToId)
@@ -782,7 +774,6 @@ async function sendComment() {
         parent.sub_comment_count = (parent.sub_comment_count || 0) + 1
         parent.showChildren = true
         formatted.reply_to_user = replyingTo.value.nickname
-        // 默认只展示 1 条回复；如果已展开完整回复，则直接插入到列表
         if (parent.__fullRepliesLoaded) {
           parent.children = [formatted, ...(parent.children || [])]
         } else {
@@ -919,7 +910,6 @@ async function toggleCollect() {
   }
 }
 
-// --- 分享相关 ---
 const showShareDrawer = ref(false)
 const rawBotUsername = import.meta.env.VITE_TG_BOT_USERNAME || 'dydy'
 const botUsername = rawBotUsername.replace('@', '')
@@ -936,7 +926,6 @@ const albumDeepLink = computed(() => {
 })
 
 function copyAlbumLink() {
-  // 🎯 严格要求：前 15 个字，不要链接，不要省略号，用于触发 Inline Mode
   const title = (props.detail?.note_card?.display_title || '精彩内容').trim()
   const queryText = title.substring(0, 15)
   const copyText = `@dydy ${queryText}`
@@ -952,8 +941,6 @@ function shareAlbumDirect() {
   const title = props.detail?.note_card?.display_title || '精彩内容'
   const link = albumDeepLink.value
   const text = `📸 ${title}\n\n来自 #TG抖音`
-
-  // 🎯 改回标准分享协议，避免关闭 Mini App
   const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
 
   // @ts-ignore
@@ -964,10 +951,6 @@ function shareAlbumDirect() {
     window.open(shareUrl, '_blank')
   }
   showShareDrawer.value = false
-}
-
-function shareToTelegram() {
-  showShareDrawer.value = true
 }
 
 function close() {
@@ -986,56 +969,68 @@ function close() {
   background: var(--color-message);
   color: white;
   font-size: 14rem;
-  height: 100dvh;
   width: 100vw;
-  @c: #a2a2a2;
-  @c2: #c0c0c0;
-  @red: rgb(248, 38, 74);
+  height: 100dvh;
   position: relative;
   overflow: hidden;
 
-  .detail-container {
+  // 1. 滚动层布局
+  .scroll {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-  }
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 
-  .detail-header {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    z-index: 10;
-    display: flex;
-    justify-content: space-between;
-    padding: calc(15rem + env(safe-area-inset-top)) 15rem 15rem;
-    box-sizing: border-box;
-    pointer-events: none;
-
-    svg {
-      pointer-events: auto;
-      font-size: 20rem;
-      background: rgba(0, 0, 0, 0.4);
-      padding: 5rem;
-      color: white;
-      border-radius: 50%;
+    .content {
+      padding: 15rem;
+      // 🎯 关键：为浮动底部留出空间，防止内容被遮挡
+      padding-bottom: calc(80rem + env(safe-area-inset-bottom));
     }
   }
 
-  .scroll {
-    flex: 1;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .detail-footer {
+  // 2. 浮动 UI 层（完全参照直播间）
+  .float-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
-    background: var(--color-message);
-    border-top: 1px solid rgba(white, 0.1);
-    z-index: 11;
-    padding-bottom: env(safe-area-inset-bottom);
+    height: 100%;
+    pointer-events: none; // 💡 这一层不阻碍滚动
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+
+    // 允许内部特定按钮响应点击
+    .detail-header,
+    .detail-footer {
+      pointer-events: auto;
+    }
+
+    .detail-header {
+      padding: calc(15rem + env(safe-area-inset-top)) 15rem 15rem;
+      display: flex;
+      justify-content: space-between;
+
+      svg {
+        font-size: 20rem;
+        background: rgba(0, 0, 0, 0.4);
+        padding: 5rem;
+        color: white;
+        border-radius: 50%;
+      }
+    }
+
+    .detail-footer {
+      margin-top: auto; // 💡 关键：将 Footer 顶到底部
+      width: 100%;
+      background: rgba(0, 0, 0, 0.85); // 💡 增加半透明背景提升文字清晰度
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(white, 0.1);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
   }
 
   .slide-imgs {
@@ -1046,7 +1041,6 @@ function close() {
     img {
       height: 100%;
       width: 100%;
-      // ✅ 方案 A：完整展示，不裁切
       object-fit: contain;
     }
 
@@ -1069,17 +1063,6 @@ function close() {
         background: rgba(250, 246, 246, 0.58);
       }
     }
-
-    .index {
-      font-size: 12rem;
-      position: absolute;
-      padding: 3rem 10rem;
-      border-radius: 15rem;
-      background: rgba(91, 89, 89, 0.5);
-      right: 10rem;
-      bottom: 30rem;
-      color: white;
-    }
   }
 
   .card {
@@ -1089,286 +1072,174 @@ function close() {
     background: black;
   }
 
-  .arrow {
-    font-size: 16rem;
-  }
+  .comments {
+    .comment-items {
+      display: flex;
+      flex-direction: column;
+      gap: 12rem;
+    }
 
-  .content {
-    padding: 15rem;
-    padding-bottom: 20rem;
-    border-radius: 16rem 16rem 0 0;
-
-    .comments {
-      & > header {
-        margin-bottom: 16rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-
-        .l {
-          font-size: 15rem;
-        }
-
-        .r {
-          color: gray;
-          font-size: 12rem;
-          display: flex;
-          align-items: center;
-        }
-      }
-
-      // ✅ CommentNew 同款结构样式（主评论 + 回复 + 展开更多）
-      .comment-items {
-        display: flex;
-        flex-direction: column;
-        gap: 12rem;
-      }
-
-      .comment-item {
-        width: 100%;
-        position: relative; // 🎯 必须 relative
-
-        &.show-delete {
-          background: rgba(255, 255, 255, 0.05);
-        }
-      }
-
-      // 🎯 删除操作层
-      .delete-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.8);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 20rem;
-        z-index: 100;
-        border-radius: 8rem;
-        animation: fadeIn 0.2s ease;
-
-        .delete-btn {
-          padding: 6rem 20rem;
-          background: #fe2c55;
-          color: white;
-          border-radius: 20rem;
-          font-size: 13rem;
-          font-weight: 500;
-        }
-
-        .cancel-delete {
-          padding: 6rem 20rem;
-          background: rgba(255, 255, 255, 0.15);
-          color: #eee;
-          border-radius: 20rem;
-          font-size: 13rem;
-        }
-      }
-
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 1;
-        }
-      }
-
-      .comment-main,
-      .reply-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 8rem;
-        position: relative; // 🎯 必须 relative
-
-        &.show-delete {
-          background: rgba(255, 255, 255, 0.05);
-        }
-      }
-
-      .avatar {
-        width: 28rem;
-        height: 28rem;
-        border-radius: 50%;
-        flex-shrink: 0;
-      }
-
-      .comment-body,
-      .reply-body {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .username {
-        font-size: 13rem;
-        color: rgba(255, 255, 255, 0.95);
-        font-weight: 600;
-      }
-
-      .comment-text,
-      .reply-text {
-        margin-top: 4rem;
-        font-size: 13rem;
-        line-height: 18rem;
-        color: rgba(255, 255, 255, 0.9);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2; // ✅ 默认最多两行
-        line-clamp: 2;
-        word-break: break-word;
-      }
-
-      .text-gray {
-        color: rgba(255, 255, 255, 0.45);
-      }
-
-      .comment-footer,
-      .reply-footer {
-        margin-top: 6rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-size: 11rem;
-        color: rgba(255, 255, 255, 0.55);
-      }
-
-      .footer-left {
-        display: flex;
-        align-items: center;
-        gap: 8rem;
-        min-width: 0;
-      }
-
-      .time,
-      .location {
-        white-space: nowrap;
-      }
-
-      .reply-btn {
-        color: rgba(255, 255, 255, 0.75);
-        white-space: nowrap;
-      }
-
-      .footer-right {
-        display: flex;
-        align-items: center;
-        gap: 10rem;
-      }
-
-      .action-btn {
-        display: flex;
-        align-items: center;
-        gap: 4rem;
-        white-space: nowrap;
-        user-select: none;
-        cursor: pointer;
-        color: rgba(255, 255, 255, 0.75);
-
-        svg {
-          font-size: 14rem;
-        }
-      }
-
-      .action-btn.active {
-        color: var(--primary-btn-color);
-      }
-
-      .reply-list {
-        margin-left: 36rem;
-        margin-top: 8rem;
-        display: flex;
-        flex-direction: column;
-        gap: 8rem;
-      }
-
-      .reply-to {
-        color: rgba(255, 255, 255, 0.75);
-      }
-
-      .expand-replies {
-        margin-left: 36rem;
-        margin-top: 6rem;
-        display: flex;
-        align-items: center;
-        gap: 8rem;
-        font-size: 12rem;
-        color: rgba(255, 255, 255, 0.65);
-        cursor: pointer;
-
-        svg {
-          font-size: 14rem;
-        }
-
-        .expand-line {
-          width: 18rem;
-          height: 1px;
-          background: rgba(255, 255, 255, 0.25);
-        }
-      }
-
-      .loading,
-      .empty,
-      .loading-more {
-        color: gray;
-        font-size: 12rem;
-        padding: 8rem 0;
-        text-align: center;
-      }
-
-      .load-more {
-        margin-top: 8rem;
-        color: var(--primary-btn-color);
-        font-size: 12rem;
-        text-align: center;
-        padding: 10rem 0;
+    .comment-item {
+      width: 100%;
+      position: relative;
+      &.show-delete {
+        background: rgba(255, 255, 255, 0.05);
       }
     }
 
-    .shop {
-      & > header {
+    .delete-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20rem;
+      z-index: 100;
+      border-radius: 8rem;
+
+      .delete-btn {
+        padding: 6rem 20rem;
+        background: #fe2c55;
+        color: white;
+        border-radius: 20rem;
+        font-size: 13rem;
+      }
+
+      .cancel-delete {
+        padding: 6rem 20rem;
+        background: rgba(255, 255, 255, 0.15);
+        color: #eee;
+        border-radius: 20rem;
+        font-size: 13rem;
+      }
+    }
+
+    .comment-main,
+    .reply-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8rem;
+    }
+
+    .avatar {
+      width: 28rem;
+      height: 28rem;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .comment-body,
+    .reply-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .username {
+      font-size: 13rem;
+      color: rgba(255, 255, 255, 0.95);
+      font-weight: 600;
+    }
+
+    .comment-text,
+    .reply-text {
+      margin-top: 4rem;
+      font-size: 13rem;
+      line-height: 18rem;
+      color: rgba(255, 255, 255, 0.9);
+      word-break: break-word;
+    }
+
+    .comment-footer,
+    .reply-footer {
+      margin-top: 6rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11rem;
+      color: rgba(255, 255, 255, 0.55);
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 8rem;
+    }
+
+    .action-btn {
+      display: flex;
+      align-items: center;
+      gap: 4rem;
+      svg {
+        font-size: 14rem;
+      }
+      &.active {
+        color: var(--primary-btn-color);
+      }
+    }
+
+    .reply-list {
+      margin-left: 36rem;
+      margin-top: 8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 8rem;
+    }
+
+    .expand-replies {
+      margin-left: 36rem;
+      margin-top: 6rem;
+      display: flex;
+      align-items: center;
+      gap: 8rem;
+      font-size: 12rem;
+      color: rgba(255, 255, 255, 0.65);
+      cursor: pointer;
+      .expand-line {
+        width: 18rem;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.25);
+      }
+    }
+  }
+
+  .shop {
+    & > header {
+      display: flex;
+      align-items: center;
+      gap: 10rem;
+      img {
+        width: 36rem;
+        height: 36rem;
+        border-radius: 50%;
+      }
+      .right {
+        flex: 1;
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: 10rem;
-
-        img {
-          width: 36rem;
-          height: 36rem;
-          border-radius: 50%;
+        .name {
+          font-size: 16rem;
         }
-
-        .right {
-          flex: 1;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-
-          .name {
-            font-size: 16rem;
-          }
-
-          .r {
-            border-radius: 4rem;
-            padding: 6rem 16rem;
-            background: var(--primary-btn-color);
-            font-size: 12rem;
-            color: white;
-          }
+        .r {
+          border-radius: 4rem;
+          padding: 6rem 16rem;
+          background: var(--primary-btn-color);
+          font-size: 12rem;
+          color: white;
         }
       }
-
-      .desc {
-        margin-top: 10rem;
-      }
-
-      .date {
-        font-size: 12rem;
-        margin-top: 10rem;
-        color: gray;
-      }
+    }
+    .desc {
+      margin-top: 10rem;
+    }
+    .date {
+      font-size: 12rem;
+      margin-top: 10rem;
+      color: gray;
     }
   }
 
@@ -1376,101 +1247,72 @@ function close() {
     display: flex;
     align-items: center;
     padding: 8rem 12rem;
-    box-sizing: border-box;
-    gap: 10rem; // 🎯 增加整体间距
+    gap: 10rem;
 
     .input-wrap {
       flex: 1;
       height: 36rem;
       border-radius: 30rem;
-      background: rgba(255, 255, 255, 0.08);
-      color: white;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 0 12rem;
       display: flex;
       align-items: center;
-      padding: 0 12rem;
 
       .comment-input {
         flex: 1;
-        height: 100%;
-        outline: none;
-        border: none;
         background: transparent;
+        border: none;
+        outline: none;
         color: white;
         font-size: 14rem;
       }
     }
 
     .send-btn {
-      height: 34rem;
       padding: 0 15rem;
-      border-radius: 18rem;
+      height: 34rem;
       display: flex;
       align-items: center;
-      justify-content: center;
-      font-size: 13rem;
       background: var(--primary-btn-color);
-      color: white;
-      font-weight: 600;
-      white-space: nowrap;
+      border-radius: 18rem;
+      font-size: 13rem;
+      font-weight: bold;
     }
 
     .options {
       display: flex;
-      gap: 15rem; // 🎯 进一步增加图标间距，呼吸感更好
-      padding-left: 5rem;
-      align-items: flex-start; // 🎯 顶部对齐图标
-
+      gap: 15rem;
       .option {
         display: flex;
-        justify-content: center;
-        align-items: center;
         flex-direction: column;
-        min-width: 32rem;
-        color: white;
-        cursor: pointer;
-
+        align-items: center;
         svg {
           font-size: 22rem;
         }
-
         .text {
           font-size: 10rem;
           margin-top: 2rem;
           color: rgba(255, 255, 255, 0.7);
-          height: 12rem; // 🎯 固定高度，防止没有文字时高度抖动
-          line-height: 12rem;
         }
-      }
-
-      .option.reward {
-        justify-content: center;
-      }
-
-      .option.active {
-        color: var(--primary-btn-color);
-        .text {
+        &.active {
           color: var(--primary-btn-color);
+          .text {
+            color: var(--primary-btn-color);
+          }
         }
       }
     }
   }
 }
 
-// ✅ 回复提示条：现在在 detail-footer 内部
 .reply-hint-bar {
   display: flex;
-  align-items: center;
   justify-content: space-between;
   padding: 8rem 12rem;
-  box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.6);
   font-size: 12rem;
-
   .close {
     font-size: 16rem;
-    color: rgba(255, 255, 255, 0.85);
   }
 }
 </style>
