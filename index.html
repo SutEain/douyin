@@ -154,6 +154,35 @@
           if (hasTgData || uaTelegram) {
             console.log('[Init] Telegram 环境检测成功')
             document.documentElement.classList.add('is-tg-miniapp')
+            
+            // 🚀 核心增加：提前进行全屏识别（物理高度法 + URL参数法）
+            const checkFullscreen = function() {
+              const screenH = window.screen.height;
+              const windowH = window.innerHeight;
+              const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+              
+              // 判定逻辑：
+              // 1. URL 参数包含 tgWebAppFullscreen=1
+              const isUrlFull = window.location.href.includes('tgWebAppFullscreen=1');
+              // 2. iOS 真全屏下，物理高度几乎没有差值 (容差 10px)
+              const isHeightFull = isIOS && (windowH >= screenH - 10);
+              
+              const isActuallyFull = isUrlFull || isHeightFull;
+              
+              console.log('[Init-TG-Debug] Fullscreen Check:', {
+                isActuallyFull, isUrlFull, isHeightFull, windowH, screenH
+              });
+              
+              if (isActuallyFull) {
+                document.documentElement.classList.add('is-tg-fullscreen');
+              } else {
+                document.documentElement.classList.remove('is-tg-fullscreen');
+              }
+            };
+            
+            // 立即检查并轮询检查（应对容器展开动画）
+            checkFullscreen();
+            [100, 500, 1000, 2000, 5000].forEach(t => setTimeout(checkFullscreen, t));
           } else {
             console.log('[Init] 浏览器环境，跳过 Telegram SDK')
           }
