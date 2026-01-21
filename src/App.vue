@@ -159,23 +159,61 @@ onMounted(() => {
   if (isChrome) document.documentElement.classList.add('is-chrome')
   if (isTG) {
     document.documentElement.classList.add('is-tg-miniapp')
+    console.log('[TG-Debug] Telegram environment detected')
     
     const tgWebApp = (window as any).Telegram?.WebApp
+    console.log('[TG-Debug] tgWebApp object:', tgWebApp)
     
     // 🎯 官方推荐方式：监听全屏状态变化
     const handleFullscreen = () => {
-      if (tgWebApp?.isFullscreen) {
+      const isFull = !!tgWebApp?.isFullscreen
+      const isExpanded = !!tgWebApp?.isExpanded
+      const windowH = window.innerHeight
+      const screenH = window.screen.height
+      const viewportH = tgWebApp?.viewportHeight
+      
+      console.log('[TG-Debug] handleFullscreen called:', {
+        isFull,
+        isExpanded,
+        windowH,
+        screenH,
+        viewportH,
+        diff: screenH - windowH,
+        platform: tgWebApp?.platform,
+        headerHeight: getComputedStyle(document.documentElement).getPropertyValue('--home-header-height')
+      })
+
+      if (isFull) {
+        console.log('[TG-Debug] Adding is-tg-fullscreen class')
         document.documentElement.classList.add('is-tg-fullscreen')
       } else {
+        console.log('[TG-Debug] Removing is-tg-fullscreen class')
         document.documentElement.classList.remove('is-tg-fullscreen')
       }
     }
 
     // 初始状态同步
-    handleFullscreen()
+    setTimeout(() => {
+      console.log('[TG-Debug] Initial sync after 100ms')
+      handleFullscreen()
+    }, 100)
     
     // 注册官方事件
-    tgWebApp?.onEvent('fullscreenChanged', handleFullscreen)
+    if (tgWebApp) {
+      console.log('[TG-Debug] Registering events')
+      tgWebApp.onEvent('fullscreenChanged', handleFullscreen)
+      tgWebApp.onEvent('viewportChanged', handleFullscreen)
+    } else {
+      console.warn('[TG-Debug] tgWebApp is null, cannot register events')
+    }
+
+    // 持续监控一段时间，防止启动时的状态抖动
+    [500, 1000, 2000, 5000].forEach(t => {
+      setTimeout(() => {
+        console.log(`[TG-Debug] Delayed sync at ${t}ms`)
+        handleFullscreen()
+      }, t)
+    })
   }
 
   console.log('[App.onMounted] Window Height:', window.innerHeight)

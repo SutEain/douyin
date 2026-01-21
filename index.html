@@ -36,7 +36,8 @@
             window.location.search.includes('debug=1') ||
             window.location.search.includes('console=1')
 
-          if (!isDev && !isDebug) {
+          // 🎯 暂时强制开启 Console 以便调试全屏问题
+          if (false && !isDev && !isDebug) {
             const noop = function () {}
             const methods = [
               'log',

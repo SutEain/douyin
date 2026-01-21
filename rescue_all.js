@@ -26,7 +26,7 @@ const { createClient } = require('@supabase/supabase-js')
 // 1. 初始化 Supabase
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_KEY || process.env.SECRET_KEY
+  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   console.error('❌ 错误: 未找到 Supabase 配置 (SUPABASE_URL / SUPABASE_SERVICE_KEY)')
@@ -146,13 +146,9 @@ async function rescueAll() {
             let hasInvalidItems = false
             for (const item of list) {
               const itemPlayUrl = item.play_url ? String(item.play_url) : ''
-              const isNullOrEmpty =
-                !itemPlayUrl || itemPlayUrl === 'null' || itemPlayUrl.includes('undefined')
+              const isNullOrEmpty = !itemPlayUrl || itemPlayUrl === 'null' || itemPlayUrl.includes('undefined')
               const isMp4Format = itemPlayUrl && itemPlayUrl.endsWith('.mp4')
-              const isNotHls =
-                itemPlayUrl &&
-                !itemPlayUrl.endsWith('.m3u8') &&
-                !itemPlayUrl.includes('/index.m3u8')
+              const isNotHls = itemPlayUrl && !itemPlayUrl.endsWith('.m3u8') && !itemPlayUrl.includes('/index.m3u8')
               const missingIsHlsFlag = item.type === 'video' && !item.is_hls && isNotHls
               if (isNullOrEmpty || isMp4Format || missingIsHlsFlag) {
                 hasInvalidItems = true
@@ -188,9 +184,7 @@ async function rescueAll() {
         (v) => v.content_type === 'collection' && v.status === 'published'
       ).length
       if (collectionCount > 0) {
-        console.log(
-          `   🎬 其中 ${collectionCount} 个是已发布合辑需要重新处理（media_list 中有无效 play_url）`
-        )
+        console.log(`   🎬 其中 ${collectionCount} 个是已发布合辑需要重新处理（media_list 中有无效 play_url）`)
       }
     }
     console.log()
@@ -280,11 +274,9 @@ async function rescueAll() {
           // 2. play_url 是 .mp4 格式（不是 HLS，老合辑的问题）
           // 3. 缺少 is_hls 标记且 play_url 不是 .m3u8 格式
           // 4. storage_type 是 telegram（未上传）
-          const isNullOrEmpty =
-            !itemPlayUrl || itemPlayUrl === 'null' || itemPlayUrl.includes('undefined')
+          const isNullOrEmpty = !itemPlayUrl || itemPlayUrl === 'null' || itemPlayUrl.includes('undefined')
           const isMp4Format = itemPlayUrl && itemPlayUrl.endsWith('.mp4')
-          const isNotHls =
-            itemPlayUrl && !itemPlayUrl.endsWith('.m3u8') && !itemPlayUrl.includes('/index.m3u8')
+          const isNotHls = itemPlayUrl && !itemPlayUrl.endsWith('.m3u8') && !itemPlayUrl.includes('/index.m3u8')
           const missingIsHlsFlag = item.type === 'video' && !item.is_hls && isNotHls
           const needsUpload =
             isNullOrEmpty ||
