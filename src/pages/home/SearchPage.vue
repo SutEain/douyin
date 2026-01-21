@@ -968,60 +968,29 @@ function toggle() {
     z-index: 4;
     background: var(--main-bg);
     height: 60rem;
-    // ✅ 适配安全区域 (优先使用 TG 偏移)
-    height: calc(60rem + var(--tg-top-offset));
     padding: 0 var(--page-padding);
+    
+    // ✅ 适配安全区域
     padding-top: var(--tg-top-offset);
+    height: calc(60rem + var(--tg-top-offset));
 
-    // 🎯 真全屏下再额外下调一个文字高度 (15rem)
+    // 🎯 真全屏下，额外下移 1 个字体高度 (15rem)
+    // 补偿：全局偏移减少了 15rem，这里增加到 30rem
     :global(html.is-tg-fullscreen) & {
-      height: calc(60rem + var(--tg-top-offset) + 15rem);
-      padding-top: calc(var(--tg-top-offset) + 15rem);
+      padding-top: calc(var(--tg-top-offset) + 30rem);
+      height: calc(60rem + var(--tg-top-offset) + 30rem);
     }
 
     font-size: 14rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-
-    .search-container {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      gap: 8rem;
-
-      .search-type-select {
-        background: rgba(255, 255, 255, 0.1);
-        color: white;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 4rem;
-        padding: 6rem 10rem;
-        font-size: 13rem;
-        cursor: pointer;
-        outline: none;
-        flex-shrink: 0;
-
-        option {
-          background: var(--main-bg);
-          color: white;
-        }
-      }
-    }
     border-bottom: 1px solid var(--line-color);
     position: fixed;
     width: 100%;
     box-sizing: border-box;
     top: 0;
-
-    .search-ctn {
-      flex: 1;
-    }
-
-    .scan {
-      transform: scale(2);
-      height: 10rem;
-      width: 10rem;
-    }
+    left: 0;
   }
 
   .content {
@@ -1032,7 +1001,7 @@ function toggle() {
 
     padding-top: calc(60rem + var(--tg-top-offset));
 
-    // 🎯 真全屏下，内容区域也需要同步下移，防止被 Header 挡住
+    // 🎯 真全屏下，内容区域也同步下移
     :global(html.is-tg-fullscreen) & {
       padding-top: calc(60rem + var(--tg-top-offset) + 15rem);
     }

@@ -345,8 +345,9 @@ onDeactivated(() => {
     top: calc(10rem + var(--tg-top-offset)); // 🎯 适配刘海屏
 
     // 🎯 真全屏下，返回按钮再额外下移 2 个字体高度 (30rem)
+    // 补偿：由于全局偏移变量减少了 15rem，这里增加到 45rem
     :global(html.is-tg-fullscreen) & {
-      top: calc(10rem + var(--tg-top-offset) + 30rem);
+      top: calc(10rem + var(--tg-top-offset) + 45rem);
     }
 
     z-index: 999;

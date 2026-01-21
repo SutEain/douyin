@@ -2142,8 +2142,9 @@ onBeforeUnmount(() => {
       pointer-events: auto;
 
       // 🎯 真全屏下，顶部 UI 整体下移 4 个字体高度 (60rem)
+      // 补偿：由于全局偏移变量减少了 15rem，这里增加到 75rem
       :global(html.is-tg-fullscreen) & {
-        padding-top: 60rem;
+        padding-top: 75rem;
       }
 
       .liver {

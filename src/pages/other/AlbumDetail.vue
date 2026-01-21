@@ -1013,8 +1013,9 @@ function close() {
       padding: calc(15rem + var(--tg-top-offset)) 15rem 15rem;
 
       // 🎯 真全屏下，返回按钮容器再额外下移 2 个字体高度 (30rem)
+      // 补偿：由于全局偏移变量减少了 15rem，这里增加到 45rem
       :global(html.is-tg-fullscreen) & {
-        padding-top: calc(15rem + var(--tg-top-offset) + 30rem);
+        padding-top: calc(15rem + var(--tg-top-offset) + 45rem);
       }
 
       display: flex;

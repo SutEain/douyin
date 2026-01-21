@@ -44,20 +44,21 @@
 
 /* 🎯 Telegram 真全屏环境适配：避开灵动岛/刘海屏/打孔屏 */
 html.is-tg-fullscreen {
-  // 🎯 优化偏移逻辑：默认使用系统安全区 + 15rem 额外下移
-  --tg-top-offset: calc(env(safe-area-inset-top, 0px) + 15rem);
+  // 🎯 极简逻辑：仅使用系统提供的安全区
+  --tg-top-offset: env(safe-area-inset-top, 0px);
 
   &.is-ios {
-    // iOS 刘海屏如果获取不到 env，则强制兜底 44px
-    --tg-top-offset: calc(env(safe-area-inset-top, 44px) + 15rem);
+    // iOS 如果获取不到 env，通常是 44px
+    --tg-top-offset: env(safe-area-inset-top, 44px);
   }
 
   &.is-android {
-    // 安卓全面屏如果获取不到 env，则兜底 25px (通常比 iOS 小)
-    --tg-top-offset: calc(env(safe-area-inset-top, 25px) + 15rem);
+    // 安卓全面屏 TG 内部通常已经避开了状态栏，env 往往为 0
+    // 如果用户反馈留黑太多，之前兜底的 25px 太大了，改为 0
+    --tg-top-offset: env(safe-area-inset-top, 0px);
   }
   
-  // 🎯 核心修复：同步更新全局高度变量，确保依赖这些变量的组件（如视频容器）同步位移
+  // 🎯 全局高度变量同步
   --home-header-height: calc(38rem + var(--tg-top-offset));
   --common-header-height: calc(50rem + var(--tg-top-offset));
 }

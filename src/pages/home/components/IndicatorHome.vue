@@ -258,6 +258,7 @@ export default {
   padding-top: var(--tg-top-offset, 0px);
   transition: all 0.3s;
   font-weight: bold;
+  box-sizing: border-box;
 
   .notice {
     opacity: 0;
