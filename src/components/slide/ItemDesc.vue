@@ -186,8 +186,8 @@ const publishDate = computed(() => {
 <style scoped lang="less">
 .item-desc {
   position: absolute;
-  // 🎯 容器已减去 footer 高度，整体下移至 22rem
-  bottom: 22rem !important;
+  /* 🎯 针对安卓 Chrome 增加偏移，整体下移至 32rem（原为 22rem） */
+  bottom: 32rem !important;
   z-index: 1001;
   width: 76%;
 

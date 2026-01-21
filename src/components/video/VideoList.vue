@@ -2289,8 +2289,8 @@ defineExpose({
 // 新的进度条样式
 .video-progress {
   position: absolute;
-  // 🎯 容器已减去 footer 高度，此处下移，保持在导航栏上方 2rem
-  bottom: 2rem !important;
+  /* 🎯 针对安卓 Chrome 增加偏移，防止被 Footer 遮挡 */
+  bottom: 12rem !important;
   left: 0;
   right: 0;
   z-index: 1002; // 🎯 绝对置顶，确保在描述文字上方

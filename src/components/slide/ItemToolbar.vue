@@ -498,8 +498,8 @@ const vClick = useClick()
 .toolbar {
   //width: 40px;
   position: absolute;
-  // 🎯 容器已减去 footer 高度，整体下移至 52rem
-  bottom: 52rem !important;
+  /* 🎯 针对安卓 Chrome 增加偏移，整体上移至 62rem（原为 52rem） */
+  bottom: 62rem !important;
   right: 10rem;
   z-index: 1001;
   color: #fff;

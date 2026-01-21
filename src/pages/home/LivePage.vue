@@ -1,5 +1,11 @@
 <template>
-  <div class="LivePage" ref="page" :class="{ 'landscape-mode': isLandscape }">
+  <div 
+    class="LivePage" 
+    ref="page" 
+    :class="{ 'landscape-mode': isLandscape }"
+    @touchstart="handleFirstTouch"
+    @click="handleFirstTouch"
+  >
     <div class="live-wrapper" id="live-wrapper" v-love="'live-wrapper'">
       <!-- 🎯 已下播状态展示 -->
       <div
@@ -533,17 +539,28 @@ const isSendingGift = ref(false)
 const isSendingPacket = ref(false)
 const isLandscape = ref(false) // 🎯 新增：横屏状态
 const isCleanScreen = ref(false) // 🎯 清屏状态
-// 🎯 策略：非 TG MiniApp 环境默认静音，以绕过浏览器自动播放限制
-const isMuted = ref(!(window as any).Telegram?.WebApp?.initData)
+// 🎯 策略：安卓环境或非 TG MiniApp 环境默认静音，以绕过极其严格的自动播放限制
+const isAndroid = /Android/i.test(navigator.userAgent)
+const isMuted = ref(isAndroid || !(window as any).Telegram?.WebApp?.initData)
 const playerRef = ref<any>(null)
 const showUserPanel = ref(false)
 const followLoading = ref(false) // 🎯 防止重复点击关注
+
+const isInitialTouch = ref(true) // 🎯 用于安卓端首次触摸解锁播放
 
 async function toggleMute() {
   isMuted.value = !isMuted.value
   if (!isMuted.value) {
     // 🎯 开启声音：必须通过直接调用 video.play() 来满足浏览器的用户交互要求
     playerRef.value?.unmuteAndPlay()
+  }
+}
+
+// 🎯 安卓端兜底：用户首次点击页面时，尝试解锁播放（解决黑屏/无画面）
+function handleFirstTouch() {
+  if (isAndroid && isInitialTouch.value) {
+    isInitialTouch.value = false
+    playerRef.value?.play()
   }
 }
 const selectedUser = ref<any>(null)
@@ -2110,7 +2127,8 @@ onBeforeUnmount(() => {
     pointer-events: none;
     display: flex;
     flex-direction: column;
-    padding: calc(10rem + env(safe-area-inset-top)) 15rem calc(20rem + env(safe-area-inset-bottom));
+    /* 🎯 关键：增加底部安全边距，解决安卓 Chrome 遮挡 */
+    padding: calc(10rem + env(safe-area-inset-top)) 15rem calc(45rem + env(safe-area-inset-bottom));
     box-sizing: border-box;
 
     .top {
