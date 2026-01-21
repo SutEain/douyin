@@ -258,6 +258,16 @@ export default {
   padding-top: 0;
   transition: all 0.3s;
   font-weight: bold;
+  
+  /* 🎯 iOS 全屏：下移 44px 避开刘海/Dynamic Island */
+  :global(html.is-tg-fullscreen-ios) & {
+    top: 44px;
+  }
+  
+  /* 🎯 Android 全屏：下移 25px 避开状态栏 */
+  :global(html.is-tg-fullscreen-android) & {
+    top: 25px;
+  }
 
   .notice {
     opacity: 0;
