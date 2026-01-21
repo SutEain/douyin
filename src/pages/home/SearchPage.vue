@@ -1030,7 +1030,6 @@ function toggle() {
     -webkit-overflow-scrolling: touch;
     box-sizing: border-box;
 
-    padding-top: 60rem;
     padding-top: calc(60rem + var(--tg-top-offset));
 
     // 🎯 真全屏下，内容区域也需要同步下移，防止被 Header 挡住

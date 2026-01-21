@@ -163,38 +163,39 @@ onMounted(() => {
   
   if (isTG) {
     document.documentElement.classList.add('is-tg-miniapp')
-    console.log('[TG-Debug] Telegram environment confirmed via initData or URL')
+    console.log('[TG-Debug] Telegram environment confirmed')
     
     const checkFullscreen = () => {
-      const tgWebApp = (window as any).Telegram?.WebApp
-      const screenH = window.screen.height
-      const windowH = window.innerHeight
-      
-      // 🎯 终极判定逻辑 (根据你提供的日志数据优化):
-      // 1. 物理高度判定：如果窗口高度等于或大于屏幕高度（iOS 全屏典型特征），强制认为全屏
-      const isHeightFull = isIOS && (windowH >= screenH - 10)
-      
-      // 2. URL 参数判定：解析 URL 中的 tgWebAppFullscreen 参数
-      const isUrlFull = url.includes('tgWebAppFullscreen=1')
-      
-      // 3. 官方属性判定
-      const isOfficialFull = !!tgWebApp?.isFullscreen
-      
-      const isActuallyFull = isOfficialFull || isHeightFull || isUrlFull
-      
-      console.log('[TG-Debug] Fullscreen Status:', {
-        isActuallyFull,
-        isOfficialFull,
-        isHeightFull,
-        isUrlFull,
-        windowH,
-        screenH
-      })
-      
-      if (isActuallyFull) {
-        document.documentElement.classList.add('is-tg-fullscreen')
-      } else {
-        document.documentElement.classList.remove('is-tg-fullscreen')
+      try {
+        const tgWebApp = (window as any).Telegram?.WebApp
+        const screenH = window.screen.height
+        const windowH = window.innerHeight
+        
+        // 🎯 物理高度判定
+        const isHeightFull = windowH >= screenH - 20 
+        const isUrlFull = url.includes('tgWebAppFullscreen=1')
+        const isOfficialFull = !!tgWebApp?.isFullscreen
+        
+        const isActuallyFull = isOfficialFull || isHeightFull || isUrlFull
+        const isKeyboardUp = windowH < screenH * 0.75
+
+        console.log('[TG-Debug] Fullscreen Check:', {
+          isActuallyFull,
+          isOfficialFull,
+          isHeightFull,
+          isUrlFull,
+          isKeyboardUp,
+          windowH,
+          screenH
+        })
+        
+        if (isActuallyFull) {
+          document.documentElement.classList.add('is-tg-fullscreen')
+        } else if (!isKeyboardUp) {
+          document.documentElement.classList.remove('is-tg-fullscreen')
+        }
+      } catch (e) {
+        console.error('[TG-Debug] Fullscreen Check Error:', e)
       }
     }
     

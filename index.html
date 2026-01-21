@@ -132,12 +132,11 @@
       content="TGDouyin 是一个基于 Telegram 的短视频分享平台，提供海量精彩视频内容，支持直播、评论、点赞等互动功能。"
     />
     <script>
-      // ✅ 极简环境检测，避免与 App.vue 逻辑冲突
+      // ✅ 极简环境检测
       ;(function () {
         try {
           const url = window.location.href
-          const isTG = url.includes('tgWebAppData') || /Telegram/i.test(navigator.userAgent)
-          if (isTG) {
+          if (url.includes('tgWebAppData') || /Telegram/i.test(navigator.userAgent)) {
             document.documentElement.classList.add('is-tg-miniapp')
           }
         } catch (e) {}
