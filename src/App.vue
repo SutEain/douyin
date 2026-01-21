@@ -150,6 +150,7 @@ onMounted(() => {
   // 🎯 增加平台识别类到 body
   const ua = navigator.userAgent
   const isAndroid = /Android/i.test(ua)
+  const isIOS = /iPhone|iPad|iPod/i.test(ua)
   const isTG = !!(window as any).Telegram?.WebApp?.initData
   // 🎯 纯 Chrome：包含 Chrome 字符且不包含 Edge，且不是 TG MiniApp
   const isChrome = /Chrome/i.test(ua) && !/Edge/i.test(ua) && !isTG
@@ -166,21 +167,33 @@ onMounted(() => {
     
     // 🎯 官方推荐方式：监听全屏状态变化
     const handleFullscreen = () => {
-      const isFull = !!tgWebApp?.isFullscreen
+      // 🚀 核心改进：兼容官方 SDK 和 我们的降级 fallback 对象
+      const isOfficialSDK = tgWebApp && tgWebApp.version !== 'fallback'
+      
+      let isFull = false
+      if (isOfficialSDK) {
+        isFull = !!tgWebApp.isFullscreen
+      } else {
+        // 如果是降级对象，官方属性肯定拿不到，此时必须用高度判定作为“官方不可用时”的唯一手段
+        const screenH = window.screen.height
+        const windowH = window.innerHeight
+        isFull = isIOS && (screenH - windowH < 80)
+      }
+
       const isExpanded = !!tgWebApp?.isExpanded
       const windowH = window.innerHeight
       const screenH = window.screen.height
       const viewportH = tgWebApp?.viewportHeight
       
       console.log('[TG-Debug] handleFullscreen called:', {
+        isOfficialSDK,
         isFull,
         isExpanded,
         windowH,
         screenH,
         viewportH,
         diff: screenH - windowH,
-        platform: tgWebApp?.platform,
-        headerHeight: getComputedStyle(document.documentElement).getPropertyValue('--home-header-height')
+        platform: tgWebApp?.platform
       })
 
       if (isFull) {
