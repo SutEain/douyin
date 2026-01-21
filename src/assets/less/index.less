@@ -41,7 +41,8 @@ html,
 body {
   width: 100%;
   height: 100%;
-  height: calc(var(--vh, 1vh) * 100);
+  height: 100dvh; /* 🎯 优先使用 iOS 完美支持的 dvh */
+  height: calc(var(--vh, 1dvh) * 100); /* 🎯 安卓端由 JS 动态修正 */
   background: var(--main-bg);
   font-size: 1px;
   font-family:
@@ -54,14 +55,15 @@ body {
   overscroll-behavior: none;
   touch-action: pan-y;
 
-  // ✅ 默认使用 1vh，JS 挂载后会更新为像素值
-  --vh: 1vh;
+  // ✅ 默认使用 1dvh，JS 挂载后会更新为像素值
+  --vh: 1dvh;
 }
 
 #app {
   width: 100%;
   height: 100%;
-  height: calc(var(--vh, 1vh) * 100);
+  height: 100dvh;
+  height: calc(var(--vh, 1dvh) * 100);
   overflow: hidden;
   overscroll-behavior: contain;
 }

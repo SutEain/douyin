@@ -259,13 +259,13 @@ onDeactivated(() => {
 <style scoped lang="less">
 .home-page {
   width: 100%;
-  height: calc(var(--vh, 1vh) * 100); /* 🎯 适配全平台：使用 JS 计算的动态高度 */
+  height: calc(var(--vh, 1dvh) * 100); /* 🎯 适配全平台 */
 }
 
 .home-container {
   position: relative;
   width: 100%;
-  height: calc(var(--vh, 1vh) * 100);
+  height: calc(var(--vh, 1dvh) * 100);
   background: black;
 }
 

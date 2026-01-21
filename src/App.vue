@@ -28,7 +28,7 @@ try {navigator.control.longpressMenu(false);} catch (e) {} //关闭长按弹出�
 import routes from './router/routes'
 import Call from './components/Call.vue'
 import { Icon } from '@iconify/vue'
-import { useBaseStore } from '@/store/pinia.js'
+import { useBaseStore } from '@/store/pinia'
 import { onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
