@@ -147,16 +147,78 @@ function resetVhAndPx() {
 onMounted(() => {
   console.log('[App.onMounted] ========== App 组件已挂载 ==========')
   
-  // 🎯 增加平台识别类到 body
+  // 🎯 平台识别
   const ua = navigator.userAgent
   const isAndroid = /Android/i.test(ua)
-  const isTG = !!(window as any).Telegram?.WebApp?.initData
-  // 🎯 纯 Chrome：包含 Chrome 字符且不包含 Edge，且不是 TG MiniApp
+  const isIOS = /iPhone|iPad|iPod/i.test(ua)
+  const isTG = !!(window as any).Telegram?.WebApp?.initData || window.location.href.includes('tgWebAppData')
   const isChrome = /Chrome/i.test(ua) && !/Edge/i.test(ua) && !isTG
   
+  // 🎯 添加平台类名
   if (isAndroid) document.documentElement.classList.add('is-android')
+  if (isIOS) document.documentElement.classList.add('is-ios')
   if (isChrome) document.documentElement.classList.add('is-chrome')
   if (isTG) document.documentElement.classList.add('is-tg-miniapp')
+
+  // 🎯 全屏检测（仅检测，不修改布局）
+  if (isTG) {
+    const checkFullscreen = () => {
+      try {
+        const tgWebApp = (window as any).Telegram?.WebApp
+        const screenH = window.screen.height
+        const windowH = window.innerHeight
+        const url = window.location.href
+        
+        // 判定是否全屏
+        const isHeightFull = windowH >= screenH - 20
+        const isUrlFull = url.includes('tgWebAppFullscreen=1')
+        const isOfficialFull = !!tgWebApp?.isFullscreen
+        const isKeyboardUp = windowH < screenH * 0.6
+        
+        const isActuallyFull = (isOfficialFull || isHeightFull || isUrlFull) && !isKeyboardUp
+        
+        console.log('[Fullscreen] 检测结果:', {
+          isActuallyFull,
+          platform: isIOS ? 'iOS' : isAndroid ? 'Android' : 'Other',
+          windowH,
+          screenH,
+          isOfficialFull,
+          isHeightFull,
+          isUrlFull
+        })
+        
+        // 🎯 区分 iOS 和 Android，添加不同的类名
+        if (isActuallyFull) {
+          if (isIOS) {
+            document.documentElement.classList.add('is-tg-fullscreen-ios')
+            document.documentElement.classList.remove('is-tg-fullscreen-android')
+          } else if (isAndroid) {
+            document.documentElement.classList.add('is-tg-fullscreen-android')
+            document.documentElement.classList.remove('is-tg-fullscreen-ios')
+          }
+        } else {
+          document.documentElement.classList.remove('is-tg-fullscreen-ios', 'is-tg-fullscreen-android')
+        }
+      } catch (e) {
+        console.error('[Fullscreen] 检测错误:', e)
+      }
+    }
+    
+    // 立即检测
+    checkFullscreen()
+    
+    // 监听全屏变化
+    const tgWebApp = (window as any).Telegram?.WebApp
+    if (tgWebApp?.onEvent) {
+      tgWebApp.onEvent('fullscreenChanged', checkFullscreen)
+      tgWebApp.onEvent('viewportChanged', checkFullscreen)
+    }
+    
+    // 延迟检测（确保 SDK 加载完成）
+    setTimeout(checkFullscreen, 100)
+    setTimeout(checkFullscreen, 500)
+    setTimeout(checkFullscreen, 1000)
+  }
 
   console.log('[App.onMounted] Window Height:', window.innerHeight)
   // 🎯 初始化应用（登录时自动创建用户，无需额外调用）
