@@ -7,4 +7,4 @@ export const TG_API_BASE =
 // 本地开发用 SB_ 前缀，生产环境用 SUPABASE_ 前缀
 export const SUPABASE_URL = Deno.env.get('SB_URL') || Deno.env.get('SUPABASE_URL')!
 export const SUPABASE_SERVICE_KEY =
-  Deno.env.get('SB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  Deno.env.get('SB_SERVICE_KEY') || Deno.env.get('SECRET_KEY')!

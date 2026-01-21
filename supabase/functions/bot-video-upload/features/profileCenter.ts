@@ -365,7 +365,7 @@ export async function handleStartLive(chatId: number, messageId?: number, title?
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        Authorization: `Bearer ${Deno.env.get('SECRET_KEY')}`
       },
       body: JSON.stringify({
         action: 'start',

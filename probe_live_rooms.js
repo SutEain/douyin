@@ -4,7 +4,7 @@ require('dotenv').config();
 // --- 1. 初始化 Supabase 客户端 ---
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
+  process.env.SECRET_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.PUBLIC_KEY
 );
 
 // --- 2. 辅助函数 (严格同步自 Admin/App-Server 探测逻辑) ---

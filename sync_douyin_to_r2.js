@@ -20,9 +20,9 @@ const r2 = new S3Client({
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SECRET_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
-    process.env.SUPABASE_ANON_KEY
+    process.env.PUBLIC_KEY
 )
 
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-xxx.r2.dev'
