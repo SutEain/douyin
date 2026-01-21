@@ -48,37 +48,36 @@
       <BaseFooter :init-tab="1" />
     </div>
 
-      <PlayFeedback v-model="state.showPlayFeedback" />
-      <DouyinCode
-        v-if="state.currentItem"
-        :item="state.currentItem"
-        v-model="state.showDouyinCode"
-      />
-      <ShareTo v-model:type="state.shareType" />
+    <PlayFeedback v-model="state.showPlayFeedback" />
+    <DouyinCode
+      v-if="state.currentItem"
+      :item="state.currentItem"
+      v-model="state.showDouyinCode"
+    />
+    <ShareTo v-model:type="state.shareType" />
 
-      <FollowSetting
-        v-if="state.currentItem"
-        v-model:currentItem="state.currentItem"
-        @showChangeNote="state.showChangeNote = true"
-        @showBlockDialog="state.showBlockDialog = true"
-        @showShare="state.isSharing = true"
-        v-model="state.showFollowSetting"
-      />
+    <FollowSetting
+      v-if="state.currentItem"
+      v-model:currentItem="state.currentItem"
+      @showChangeNote="state.showChangeNote = true"
+      @showBlockDialog="state.showBlockDialog = true"
+      @showShare="state.isSharing = true"
+      v-model="state.showFollowSetting"
+    />
 
-      <FollowSetting2
-        v-if="state.currentItem"
-        v-model:currentItem="state.currentItem"
-        v-model="state.showFollowSetting2"
-      />
+    <FollowSetting2
+      v-if="state.currentItem"
+      v-model:currentItem="state.currentItem"
+      v-model="state.showFollowSetting2"
+    />
 
-      <BlockDialog v-model="state.showBlockDialog" />
+    <BlockDialog v-model="state.showBlockDialog" />
 
-      <ConfirmDialog title="设置备注名" ok-text="确认" v-model:visible="state.showChangeNote">
-        <Search mode="light" v-model="state.test" :isShowSearchIcon="false" />
-      </ConfirmDialog>
+    <ConfirmDialog title="设置备注名" ok-text="确认" v-model:visible="state.showChangeNote">
+      <Search mode="light" v-model="state.test" :isShowSearchIcon="false" />
+    </ConfirmDialog>
 
-      <ShareToFriend v-model="state.shareToFriend" />
-    </div>
+    <ShareToFriend v-model="state.shareToFriend" />
 
     <!-- ✅ 使用 Teleport 将弹窗传送到 body，避免定位问题 -->
     <Teleport to="body">
