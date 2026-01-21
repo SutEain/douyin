@@ -144,12 +144,11 @@
               style="font-size: 22rem"
             >
               <Icon
-                :icon="isLandscape ? 'solar:quit-full-screen-bold' : 'solar:full-screen-bold'"
-              />
-            </div>
-            <div style="flex: 1"></div> <!-- 🎯 占位符：将礼物图标推向最右侧 -->
-            <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
+              :icon="isLandscape ? 'solar:quit-full-screen-bold' : 'solar:full-screen-bold'"
+            />
           </div>
+          <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
+        </div>
         </div>
       </div>
     </div>
@@ -2331,7 +2330,7 @@ onBeforeUnmount(() => {
       .options {
         display: flex;
         align-items: center;
-        gap: 12rem; /* 稍微缩小间距，确保在窄屏下也能放下 */
+        justify-content: space-between; /* 🎯 均匀分布所有按钮 */
         margin-top: 10rem;
 
         .input {
