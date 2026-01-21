@@ -498,8 +498,8 @@ const vClick = useClick()
 .toolbar {
   //width: 40px;
   position: absolute;
-  /* 🎯 针对安卓 Chrome 增加偏移，整体上移至 62rem（原为 52rem） */
-  bottom: 62rem !important;
+  /* 🎯 统一偏移逻辑：基础间距 + 动态偏移量 */
+  bottom: calc(52rem + var(--footer-offset, 0rem)) !important;
   right: 10rem;
   z-index: 1001;
   color: #fff;

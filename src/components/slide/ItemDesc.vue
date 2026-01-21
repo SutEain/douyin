@@ -186,8 +186,8 @@ const publishDate = computed(() => {
 <style scoped lang="less">
 .item-desc {
   position: absolute;
-  /* 🎯 针对安卓 Chrome 增加偏移，整体下移至 32rem（原为 22rem） */
-  bottom: 32rem !important;
+  /* 🎯 统一偏移逻辑：基础间距 + 动态偏移量 */
+  bottom: calc(22rem + var(--footer-offset, 0rem)) !important;
   z-index: 1001;
   width: 76%;
 

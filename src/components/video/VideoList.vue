@@ -2289,8 +2289,8 @@ defineExpose({
 // 新的进度条样式
 .video-progress {
   position: absolute;
-  /* 🎯 针对安卓 Chrome 增加偏移，防止被 Footer 遮挡 */
-  bottom: 12rem !important;
+  /* 🎯 统一偏移逻辑：基础间距 + 动态偏移量 */
+  bottom: calc(2rem + var(--footer-offset, 0rem)) !important;
   left: 0;
   right: 0;
   z-index: 1002; // 🎯 绝对置顶，确保在描述文字上方

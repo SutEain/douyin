@@ -31,9 +31,9 @@
           <p>请前往 Bot，点击「邀请好友解锁🔞」获取你的专属邀请链接。</p>
         </div>
       </div>
-      <!-- 正常详情播放 -->
+    <!-- 正常详情播放 -->
+    <div class="video-container has-footer-offset" v-else>
       <VideoList
-        v-else
         :items="dynamicVideoItems"
         page="detail"
         :initial-index="initialIndex"
@@ -41,6 +41,7 @@
         :has-more="hasMore"
         @load-more="handleLoadMore"
       />
+    </div>
     </div>
 
     <!-- 🎯 加载中占位 -->
@@ -354,11 +355,16 @@ onDeactivated(() => {
 
   .video-container {
     width: 100%;
-    /* 🎯 关键：减去底部导航栏和安全区高度，确保内容不被 Footer 挡住 */
-    height: calc(var(--vh, 1vh) * 100 - var(--footer-height) - env(safe-area-inset-bottom));
+    /* 🎯 方案升级：不再减去高度，而是 100% 铺满，确保无缝隙 */
+    height: 100%;
     position: relative;
     transition: transform 0.2s ease-out;
     will-change: transform;
+
+    /* 🎯 定义底部偏移量 */
+    &.has-footer-offset {
+      --footer-offset: calc(var(--footer-height) + env(safe-area-inset-bottom));
+    }
 
     &.no-transition {
       transition: none;
@@ -367,7 +373,7 @@ onDeactivated(() => {
 
   .video-loading {
     width: 100%;
-    height: calc(var(--vh, 1vh) * 100 - var(--footer-height) - env(safe-area-inset-bottom));
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;

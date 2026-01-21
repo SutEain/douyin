@@ -10,7 +10,7 @@
       />
 
       <!-- ✅ 视频内容区域：关注 / 图文 / 视频 / 短剧 / 东南亚 / 直播 / 成人 / 推荐 -->
-      <div class="video-content">
+      <div class="video-content has-footer-offset">
         <!-- 0=关注 -->
         <SlideFollow v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
         <!-- 1=图文 -->
@@ -273,13 +273,18 @@ onDeactivated(() => {
 .video-content {
   position: relative;
   width: 100%;
-  /* 🎯 预留顶部 Tab 空间，并建立层级 */
+  /* 🎯 预留顶部 Tab 空间 */
   padding-top: var(--home-header-height);
-  /* 🎯 关键：减去底部导航栏和安全区高度 */
-  height: calc(var(--vh, 1vh) * 100 - var(--footer-height) - env(safe-area-inset-bottom));
+  /* 🎯 方案升级：不再减去高度，而是 100% 铺满，确保无缝隙 */
+  height: 100%;
   box-sizing: border-box;
   overflow: hidden;
   z-index: 1;
+
+  /* 🎯 定义底部偏移量：Footer 高度 + 安全区高度 */
+  &.has-footer-offset {
+    --footer-offset: calc(var(--footer-height) + env(safe-area-inset-bottom));
+  }
 
   /* 让每个 tab 的内容占满整个区域 */
   > * {
