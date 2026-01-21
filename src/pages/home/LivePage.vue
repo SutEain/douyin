@@ -2334,12 +2334,18 @@ onBeforeUnmount(() => {
         margin-top: 10rem;
 
         .input {
-          flex: 1;
+          width: 36rem;
+          height: 36rem;
           background: rgba(255, 255, 255, 0.2);
-          padding: 8rem 15rem;
-          border-radius: 25rem;
-          font-size: 14rem;
-          color: rgba(255, 255, 255, 0.6);
+          border-radius: 50%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          font-size: 10rem;
+          line-height: 1.1;
+          color: rgba(255, 255, 255, 0.8);
+          flex-shrink: 0;
         }
 
         .option-item {
