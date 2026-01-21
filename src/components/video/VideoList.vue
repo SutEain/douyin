@@ -2289,8 +2289,8 @@ defineExpose({
 // 新的进度条样式
 .video-progress {
   position: absolute;
-  // 🎯 容器已减去 footer 高度，此处向上偏移 10rem 以防在 Safari 中紧贴或被微弱遮挡
-  bottom: 10rem !important;
+  // 🎯 容器已减去 footer 高度，此处下移，保持在导航栏上方 2rem
+  bottom: 2rem !important;
   left: 0;
   right: 0;
   z-index: 1002; // 🎯 绝对置顶，确保在描述文字上方

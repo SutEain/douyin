@@ -186,8 +186,8 @@ const publishDate = computed(() => {
 <style scoped lang="less">
 .item-desc {
   position: absolute;
-  // 🎯 容器已减去 footer 高度，此处增加偏移以避开 Safari 底部工具栏
-  bottom: 30rem !important;
+  // 🎯 容器已减去 footer 高度，整体下移至 22rem
+  bottom: 22rem !important;
   z-index: 1001;
   width: 76%;
 
