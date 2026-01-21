@@ -342,7 +342,7 @@ onDeactivated(() => {
   .back-wrapper {
     position: fixed;
     left: 15rem;
-    top: calc(10rem + env(safe-area-inset-top)); // 🎯 适配刘海屏
+    top: calc(10rem + var(--tg-top-offset)); // 🎯 适配刘海屏
     z-index: 999;
 
     .back-icon {

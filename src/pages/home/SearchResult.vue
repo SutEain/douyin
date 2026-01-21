@@ -364,11 +364,9 @@ function handleAvatarError(e: Event) {
     z-index: 4;
     background: var(--main-bg);
     height: 60rem;
-    height: calc(60rem + constant(safe-area-inset-top));
-    height: calc(60rem + env(safe-area-inset-top));
+    height: calc(60rem + var(--tg-top-offset));
     padding: 0 var(--page-padding);
-    padding-top: constant(safe-area-inset-top);
-    padding-top: env(safe-area-inset-top);
+    padding-top: var(--tg-top-offset);
 
     font-size: 14rem;
     display: flex;
@@ -417,9 +415,7 @@ function handleAvatarError(e: Event) {
   }
 
   .search-results {
-    padding-top: 60rem;
-    padding-top: calc(60rem + constant(safe-area-inset-top));
-    padding-top: calc(60rem + env(safe-area-inset-top));
+    padding-top: calc(60rem + var(--tg-top-offset));
     min-height: 100vh;
   }
 

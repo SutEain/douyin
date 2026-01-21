@@ -1620,39 +1620,39 @@ onUnmounted(() => {
       }
     }
 
-    // 🎯 Tab 指示器区域
-    .tab-section {
-      background: var(--main-bg);
-      position: sticky;
-      top: 52rem;
-      z-index: 2;
-      padding: 0;
-    }
-
-    // 🎯 Tab 内容区域
-    .tab-content {
-      min-height: 200px;
-      background: var(--main-bg);
-    }
-
-    .videos {
-      padding: 0;
-      min-height: 50vh;
-    }
+  .tab-section {
+    background: var(--main-bg);
+    position: sticky;
+    top: calc(52rem + var(--tg-top-offset));
+    z-index: 2;
+    padding: 0;
   }
 
-  .float {
-    position: fixed;
-    box-sizing: border-box;
-    width: 100%;
-    z-index: 2;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    height: 52rem;
-    padding: 0 15rem;
-    background: transparent;
-    transition: all 0.2s;
+  // 🎯 Tab 内容区域
+  .tab-content {
+    min-height: 200px;
+    background: var(--main-bg);
+  }
+
+  .videos {
+    padding: 0;
+    min-height: 50vh;
+  }
+}
+
+.float {
+  position: fixed;
+  top: var(--tg-top-offset);
+  box-sizing: border-box;
+  width: 100%;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 52rem;
+  padding: 0 15rem;
+  background: transparent;
+  transition: all 0.2s;
 
     &.fixed {
       background: var(--main-bg);

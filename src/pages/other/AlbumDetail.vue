@@ -1010,7 +1010,7 @@ function close() {
     }
 
     .detail-header {
-      padding: calc(15rem + env(safe-area-inset-top)) 15rem 15rem;
+      padding: calc(15rem + var(--tg-top-offset)) 15rem 15rem;
       display: flex;
       justify-content: space-between;
 

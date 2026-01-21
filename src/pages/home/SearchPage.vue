@@ -968,12 +968,10 @@ function toggle() {
     z-index: 4;
     background: var(--main-bg);
     height: 60rem;
-    // ✅ 适配安全区域
-    height: calc(60rem + constant(safe-area-inset-top));
-    height: calc(60rem + env(safe-area-inset-top));
+    // ✅ 适配安全区域 (优先使用 TG 偏移)
+    height: calc(60rem + var(--tg-top-offset));
     padding: 0 var(--page-padding);
-    padding-top: constant(safe-area-inset-top);
-    padding-top: env(safe-area-inset-top);
+    padding-top: var(--tg-top-offset);
 
     font-size: 14rem;
     display: flex;
