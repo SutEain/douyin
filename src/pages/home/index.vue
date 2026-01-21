@@ -259,13 +259,13 @@ onDeactivated(() => {
 <style scoped lang="less">
 .home-page {
   width: 100%;
-  height: 100%;
+  height: 100dvh; /* 🎯 适配现代浏览器：动态视口高度 */
 }
 
 .home-container {
   position: relative;
   width: 100%;
-  height: 100%;
+  height: 100dvh; /* 🎯 适配现代浏览器：动态视口高度 */
   background: black;
 }
 
@@ -273,6 +273,7 @@ onDeactivated(() => {
 .video-content {
   position: relative;
   width: 100%;
+  height: 100dvh; /* 🎯 优先使用 dvh */
   height: calc(var(--vh, 1vh) * 100);
   overflow: hidden;
 

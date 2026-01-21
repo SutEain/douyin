@@ -885,7 +885,8 @@ function handleVideoClick(e: Event) {
 
     .normal {
       position: absolute;
-      bottom: 0;
+      /* 🎯 适配移动端 Chrome：如果有底部导航栏，向上偏移避免被挡 */
+      bottom: calc(var(--footer-height) + env(safe-area-inset-bottom));
       width: 100%;
       transition: all 0.3s;
 
@@ -966,7 +967,8 @@ function handleVideoClick(e: Event) {
     .progress-container {
       z-index: 5; // 保留可拖动热区，但让工具栏浮层优先
       position: absolute;
-      bottom: 0;
+      /* 🎯 适配移动端 Chrome：确保在底部导航栏上方 */
+      bottom: calc(var(--footer-height) + env(safe-area-inset-bottom));
       left: 0;
       width: 100%;
       height: 40rem; // 适当缩小，降低误触控件概率

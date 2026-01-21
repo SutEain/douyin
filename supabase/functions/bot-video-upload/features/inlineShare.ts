@@ -173,7 +173,7 @@ export async function handleInlineQuery(inlineQuery: any) {
         input_message_content: {
           message_text: `📺 <b><a href="${deepLink}">${escapeHTML(room.title || '精彩内容')}</a></b>\n\n主播：${escapeHTML(selfRoom?.anchor?.nickname || '抖音精选')}\n\n来自 #TG抖音 🚀`,
           parse_mode: 'HTML',
-          disable_web_page_preview: false
+          disable_web_page_preview: true
         },
         reply_markup: {
           inline_keyboard: [[{ text: '👉 立即进入直播间', url: deepLink }]]
@@ -226,7 +226,7 @@ export async function handleInlineQuery(inlineQuery: any) {
         input_message_content: {
           message_text: `🎬 <b><a href="${deepLink}">${escapeHTML(video.title || '视频分享')}</a></b>\n\n${escapeHTML(video.description || '这段视频太精彩了，不容错过！')}\n\n来自 #TG抖音 🚀`,
           parse_mode: 'HTML',
-          disable_web_page_preview: false
+          disable_web_page_preview: true
         },
         reply_markup: {
           inline_keyboard: [[{ text: '👉 立即观看', url: deepLink }]]
@@ -301,7 +301,7 @@ export async function handleInlineQuery(inlineQuery: any) {
       input_message_content: {
         message_text: `🎬 <b><a href="${deepLink}">${escapedTitle}</a></b>\n\n${escapedDesc || '这段视频太精彩了，不容错过！'}\n\n来自 #TG抖音 🚀`,
         parse_mode: 'HTML',
-        disable_web_page_preview: false
+        disable_web_page_preview: true
       },
       reply_markup: {
         inline_keyboard: [[{ text: '👉 立即观看', url: deepLink }]]

@@ -160,8 +160,11 @@ app.post('/process', async (req, res) => {
           }
 
           // 2. 执行切片 (使用 -c copy 极速转换)
+          // 🎬 优化：将切片时长从 5 秒改为 4 秒，减少卡顿和跳秒
+          // 原因：5秒切片在播放列表切换时缓冲时间过长，导致卡顿
+          // 4秒切片在流畅度和文件数量之间取得更好平衡
           execSync(
-            `ffmpeg -y -i "${localFilePath}" -c copy ${tagArgs} -hls_time 5 -hls_list_size 0 -f hls "${hlsOutputDir}/index.m3u8"`,
+            `ffmpeg -y -i "${localFilePath}" -c copy ${tagArgs} -hls_time 4 -hls_list_size 0 -f hls "${hlsOutputDir}/index.m3u8"`,
             {
               stdio: 'ignore'
             }

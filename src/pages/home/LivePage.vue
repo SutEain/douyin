@@ -19,9 +19,10 @@
 
       <DPPlayer
         v-else-if="roomInfo.stream_url"
+        ref="playerRef"
         :src="roomInfo.stream_url"
         :poster="roomInfo.cover_url"
-        :muted="false"
+        :muted="isMuted"
         :controls="false"
         :landscape="isLandscape"
         @error="onPlayerError"
@@ -110,6 +111,10 @@
             </div>
             <div class="option-item share" @click="showShareDrawer = true">
               <Icon icon="solar:share-bold" />
+            </div>
+            <!-- 🎯 新增：静音切换按钮 -->
+            <div class="option-item mute-toggle" @click="toggleMute">
+              <Icon :icon="isMuted ? 'solar:muted-bold' : 'solar:volume-loud-bold'" />
             </div>
             <div
               v-if="
@@ -508,7 +513,18 @@ const isSendingComment = ref(false)
 const isSendingGift = ref(false)
 const isSendingPacket = ref(false)
 const isLandscape = ref(false) // 🎯 新增：横屏状态
+// 🎯 策略：非 TG MiniApp 环境默认静音，以绕过浏览器自动播放限制
+const isMuted = ref(!(window as any).Telegram?.WebApp?.initData)
+const playerRef = ref<any>(null)
 const showUserPanel = ref(false)
+
+async function toggleMute() {
+  isMuted.value = !isMuted.value
+  if (!isMuted.value) {
+    // 🎯 开启声音：必须通过直接调用 video.play() 来满足浏览器的用户交互要求
+    playerRef.value?.unmuteAndPlay()
+  }
+}
 const selectedUser = ref<any>(null)
 
 // 🎯 横屏模式切换时，自动清理当前正在播放和队列中的特效
@@ -1920,6 +1936,7 @@ onBeforeUnmount(() => {
 .LivePage {
   width: 100%;
   height: 100vh;
+  height: 100dvh; /* 🎯 适配现代浏览器：动态视口高度，自动排除浏览器工具栏 */
   background: #000;
   color: white;
   position: fixed; /* 改为 fixed，防止键盘弹出时顶部被推走 */
@@ -1932,24 +1949,24 @@ onBeforeUnmount(() => {
     position: fixed !important;
     top: 50% !important;
     left: 50% !important;
-    width: 100vh !important;
-    height: 100vw !important;
+    width: 100dvh !important;
+    height: 100dvw !important;
     transform: translate(-50%, -50%) rotate(90deg);
     z-index: 9999;
     background: #000;
     overflow: hidden;
 
     .live-wrapper {
-      width: 100vh !important;
-      height: 100vw !important;
+      width: 100dvh !important;
+      height: 100dvw !important;
     }
 
     /* 确保播放器和特效容器在横屏下强制铺满 */
     :deep(.dp-player),
     :deep(.vap-container),
     :deep(.large-gift-effect) {
-      width: 100vh !important;
-      height: 100vw !important;
+      width: 100dvh !important;
+      height: 100dvw !important;
     }
 
     /* 横屏下隐藏一些不需要的 UI 或调整位置 */
@@ -2070,7 +2087,7 @@ onBeforeUnmount(() => {
     pointer-events: none;
     display: flex;
     flex-direction: column;
-    padding: calc(10rem + env(safe-area-inset-top)) 15rem 20rem;
+    padding: calc(10rem + env(safe-area-inset-top)) 15rem calc(20rem + env(safe-area-inset-bottom));
     box-sizing: border-box;
 
     .top {

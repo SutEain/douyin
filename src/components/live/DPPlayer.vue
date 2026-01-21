@@ -537,6 +537,13 @@ watch(
     const video = videoRef.value
     if (!video) return
     video.muted = !!muted
+    // 🎯 修复：如果从静音切换到有声，且当前是暂停状态，尝试播放
+    // 这能解决某些浏览器在解除静音时不会自动恢复播放的问题
+    if (!muted && video.paused) {
+      video.play().catch(() => {
+        /* 这里的失败通常是因为没有用户手势，静默失败即可 */
+      })
+    }
   },
   { immediate: true }
 )

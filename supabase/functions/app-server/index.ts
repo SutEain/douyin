@@ -904,16 +904,23 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
             .maybeSingle()
 
           if (inviterProfile) {
-            // 标记当前用户已完成转化（防止重复奖励）
-            await supabaseAdmin
+            // 🔥 使用原子操作标记当前用户已完成转化（防止并发重复奖励）
+            const { data: updateResult } = await supabaseAdmin
               .from('profiles')
               .update({
                 invited_by: inviterId,
                 invite_rewarded: true
               })
               .eq('id', userId)
+              .eq('invite_rewarded', false) // 🔥 只有未奖励的才能更新成功
+              .select('id')
+              .single()
 
-            // 发放奖励逻辑
+            // 🔥 如果更新失败（说明已经被其他请求处理了），跳过奖励逻辑
+            if (!updateResult) {
+              console.log('[Invite] 用户已被其他请求处理，跳过奖励')
+            } else {
+              // 发放奖励逻辑
             const now = new Date()
             const currentCount = inviterProfile.invite_success_count ?? 0
             const newCount = currentCount + 1
@@ -969,7 +976,7 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
               related_id: userId
             })
 
-            // 发送通知
+            // 发送通知（只发送一次）
             if (TG_BOT_TOKEN) {
               const { data: inviterUser } = await supabaseAdmin
                 .from('profiles')
@@ -984,8 +991,8 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
                 else if (newCount >= 3) rewardText = '获得 永久 🔞专区无限刷'
 
                 const msg =
-                  `🎉 <b>邀请转化成功！</b>\n\n` +
-                  `新用户已进入 Mini App，您当前已累计邀请 ${newCount} 人\n` +
+                  `🎉 <b>邀请成功！</b>\n\n` +
+                  `您当前已累计邀请 ${newCount} 人\n` +
                   `🎁 ${rewardText}\n` +
                   `💰 获得 ${rewardCoins} 抖币奖励！\n\n` +
                   `继续邀请可获得更多奖励！`
@@ -1000,6 +1007,7 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
                   })
                 }).catch((e) => console.error('[Invite] 发送通知失败:', e))
               }
+            }
             }
           }
         }
