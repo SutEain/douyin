@@ -333,7 +333,7 @@ onDeactivated(() => {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 100%;
+  height: 100dvh;
   width: 100%;
   background: black;
   z-index: 1;
@@ -341,7 +341,7 @@ onDeactivated(() => {
   .back-wrapper {
     position: fixed;
     left: 15rem;
-    top: 10rem;
+    top: calc(10rem + env(safe-area-inset-top)); // 🎯 适配刘海屏
     z-index: 999;
 
     .back-icon {
@@ -354,8 +354,8 @@ onDeactivated(() => {
 
   .video-container {
     width: 100%;
-    // 🎯 保持全屏高度。内部组件 ItemDesc 会通过 bottom: var(--footer-height) 自动对齐到 Footer 上方
-    height: 100%;
+    /* 🎯 关键：减去底部导航栏和安全区高度，确保内容不被 Footer 挡住 */
+    height: calc(100dvh - var(--footer-height) - env(safe-area-inset-bottom));
     position: relative;
     transition: transform 0.2s ease-out;
     will-change: transform;
@@ -367,7 +367,7 @@ onDeactivated(() => {
 
   .video-loading {
     width: 100%;
-    height: 100%;
+    height: calc(100dvh - var(--footer-height) - env(safe-area-inset-bottom));
     display: flex;
     align-items: center;
     justify-content: center;
