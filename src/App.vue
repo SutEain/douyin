@@ -171,7 +171,7 @@ onMounted(() => {
         const screenH = window.screen.height
         const windowH = window.innerHeight
         
-        // 🎯 [TG-V5] 物理高度判定
+        // 🎯 [TG-V6] 物理高度判定
         const isHeightFull = windowH >= screenH - 20 
         const isUrlFull = url.includes('tgWebAppFullscreen=1')
         const isOfficialFull = !!tgWebApp?.isFullscreen
@@ -179,7 +179,7 @@ onMounted(() => {
         const isActuallyFull = isOfficialFull || isHeightFull || isUrlFull
         const isKeyboardUp = windowH < screenH * 0.75
 
-        console.log('[TG-V5] Fullscreen Check:', {
+        console.log('[TG-V6] Fullscreen Check:', {
           isActuallyFull,
           isOfficialFull,
           isHeightFull,
@@ -191,10 +191,14 @@ onMounted(() => {
         
         if (isActuallyFull) {
           document.documentElement.classList.add('is-tg-fullscreen')
-          document.documentElement.setAttribute('data-v', 'v5')
-          // 🎯 [TG-V5] 直接通过 JS 强行注入，确保优先级最高，覆盖所有 CSS
-          const baseOffset = isIOS ? 44 : 25;
-          const totalOffset = baseOffset + 40; // 增加到 40 像素补偿确认效果
+          document.documentElement.setAttribute('data-v', 'v6')
+          
+          // 🎯 [TG-V6] 精细化 JS 注入
+          // iOS 默认 44px，安卓默认 0px (因为安卓 TG 内部通常不需要额外补偿)
+          const baseOffset = isIOS ? 44 : 0;
+          const extraCompensate = isIOS ? 15 : 10; // 仅保留 10-15px 的微调
+          const totalOffset = baseOffset + extraCompensate;
+          
           document.documentElement.style.setProperty('--tg-top-offset', `${totalOffset}px`, 'important')
         } else if (!isKeyboardUp) {
           document.documentElement.classList.remove('is-tg-fullscreen')
@@ -202,7 +206,7 @@ onMounted(() => {
           document.documentElement.style.removeProperty('--tg-top-offset')
         }
       } catch (e) {
-        console.error('[TG-V5] Fullscreen Check Error:', e)
+        console.error('[TG-V6] Fullscreen Check Error:', e)
       }
     }
     

@@ -273,14 +273,11 @@ onDeactivated(() => {
 /* 视频内容区域 */
 .video-content {
   position: absolute;
-  top: var(--home-header-height); // 🎯 关键：让内容区域从 Header 下方开始
+  top: var(--home-header-height);
   left: 0;
-  width: 100%;
-  /* 🎯 动态计算剩余高度：总高度 - Header - Footer - 底部安全区 */
-  height: calc(
-    100% - var(--home-header-height) - var(--footer-height) -
-      env(safe-area-inset-bottom)
-  );
+  right: 0;
+  /* 🎯 [TG-V6] 核心修复：改用 bottom 定位而不是 height 计算，彻底解决 iOS 撑不开的问题 */
+  bottom: calc(var(--footer-height) + env(safe-area-inset-bottom));
   overflow: hidden;
   z-index: 1;
   background: black;
