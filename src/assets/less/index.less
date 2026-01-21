@@ -8,6 +8,7 @@
 @import 'anim';
 
 :root {
+  --vh: 1dvh;
   --color-me: #000;
   --color-user: #000;
   --color-message: #000;
@@ -41,8 +42,7 @@ html,
 body {
   width: 100%;
   height: 100%;
-  height: 100dvh; /* 🎯 优先使用 iOS 完美支持的 dvh */
-  height: calc(var(--vh, 1dvh) * 100); /* 🎯 安卓端由 JS 动态修正 */
+  height: 100vh; /* 基础兜底 */
   background: var(--main-bg);
   font-size: 1px;
   font-family:
@@ -54,16 +54,39 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: pan-y;
+}
 
-  // ✅ 默认使用 1dvh，JS 挂载后会更新为像素值
-  --vh: 1dvh;
+/* 🎯 iOS 端：优先使用标准的 dvh，最丝滑且支持安全区 */
+@supports (height: 100dvh) {
+  html:not(.is-android):not(.is-tg-miniapp),
+  html:not(.is-android):not(.is-tg-miniapp) body {
+    height: 100dvh;
+  }
+}
+
+/* 🎯 安卓/TG 端：强制使用 JS 动态修正的像素值，解决 dvh 不稳定或不支持的问题 */
+html.is-android,
+html.is-android body,
+html.is-tg-miniapp,
+html.is-tg-miniapp body {
+  height: calc(var(--vh, 1vh) * 100) !important;
 }
 
 #app {
   width: 100%;
   height: 100%;
-  height: 100dvh;
-  height: calc(var(--vh, 1dvh) * 100);
   overflow: hidden;
   overscroll-behavior: contain;
+}
+
+/* 🎯 #app 的高度也需要根据平台同步 */
+html.is-android #app,
+html.is-tg-miniapp #app {
+  height: 100% !important;
+}
+
+@supports (height: 100dvh) {
+  html:not(.is-android):not(.is-tg-miniapp) #app {
+    height: 100%;
+  }
 }

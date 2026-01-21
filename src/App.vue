@@ -128,9 +128,20 @@ watch(
 )
 
 function resetVhAndPx() {
-  let innerHeight = window.innerHeight
-  let vh = innerHeight * 0.01
-  document.documentElement.style.setProperty('--vh', `${vh}px`)
+  const ua = navigator.userAgent
+  const isAndroid = /Android/i.test(ua)
+  const isTG = !!(window as any).Telegram?.WebApp?.initData
+
+  // 🎯 核心逻辑：仅在安卓或 TG MiniApp 环境下使用 JS 动态计算高度
+  // iOS 保持使用 CSS 原生的 100dvh 以获得最佳性能和丝滑体验
+  if (isAndroid || isTG) {
+    let innerHeight = window.innerHeight
+    let vh = innerHeight * 0.01
+    document.documentElement.style.setProperty('--vh', `${vh}px`)
+  } else {
+    // iOS 或其他环境使用 1dvh 作为基准
+    document.documentElement.style.setProperty('--vh', '1dvh')
+  }
 }
 
 onMounted(() => {
@@ -143,9 +154,9 @@ onMounted(() => {
   // 🎯 纯 Chrome：包含 Chrome 字符且不包含 Edge，且不是 TG MiniApp
   const isChrome = /Chrome/i.test(ua) && !/Edge/i.test(ua) && !isTG
   
-  if (isAndroid) document.body.classList.add('is-android')
-  if (isChrome) document.body.classList.add('is-chrome')
-  if (isTG) document.body.classList.add('is-tg-miniapp')
+  if (isAndroid) document.documentElement.classList.add('is-android')
+  if (isChrome) document.documentElement.classList.add('is-chrome')
+  if (isTG) document.documentElement.classList.add('is-tg-miniapp')
 
   console.log('[App.onMounted] Window Height:', window.innerHeight)
   // 🎯 初始化应用（登录时自动创建用户，无需额外调用）

@@ -2132,7 +2132,7 @@ onBeforeUnmount(() => {
     box-sizing: border-box;
 
     /* 🎯 针对安卓 Chrome 浏览器大幅补偿 (解决被完全遮挡问题) */
-    :deep(body.is-chrome.is-android) & {
+    :global(html.is-chrome.is-android) & {
       padding-bottom: calc(65rem + env(safe-area-inset-bottom));
     }
 
