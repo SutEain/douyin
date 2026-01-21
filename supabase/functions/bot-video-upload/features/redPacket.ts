@@ -503,11 +503,11 @@ export async function handleReplyClaimRedPacket(
   )
 
   try {
-    // 1. 获取对应的红包
+    // 1. 获取对应的红包（添加 target_user_id 字段用于专属红包权限检查）
     console.log(`[RedPacket-Reply] 步骤1: 查询红包 replyMsgId=${replyToMessageId}`)
     const { data: packet } = await supabase
       .from('group_red_packets')
-      .select('id, verification_answer, status, remaining_count, total_count, type')
+      .select('id, verification_answer, status, remaining_count, total_count, type, target_user_id')
       .eq('group_id', chatId)
       .eq('origin_message_id', replyToMessageId)
       .single()
@@ -567,6 +567,15 @@ export async function handleReplyClaimRedPacket(
     }
 
     console.log(`[RedPacket-Reply] ✅ 用户信息: userId=${user.id}, nickname=${user.nickname}`)
+
+    // 🎯 3.1 专属红包权限检查（在调用 RPC 之前检查，防止被他人误抢）
+    if (packet.type === 'single' && packet.target_user_id && packet.target_user_id !== user.id) {
+      console.log(
+        `[RedPacket-Reply] ❌ 专属红包权限检查失败: target_user_id=${packet.target_user_id}, user_id=${user.id}`
+      )
+      // 静默处理，不回复消息（避免群聊中刷屏）
+      return
+    }
 
     // 调用 RPC 抢红包
     console.log(`[RedPacket-Reply] 步骤4: 调用 RPC claim_group_red_packet`)

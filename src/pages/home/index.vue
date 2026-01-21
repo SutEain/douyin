@@ -273,10 +273,13 @@ onDeactivated(() => {
 .video-content {
   position: relative;
   width: 100%;
-  /* 🎯 关键：减去底部导航栏和安全区高度，确保内容不重叠 */
-  height: calc(100dvh - var(--footer-height) - env(safe-area-inset-bottom));
+  /* 🎯 预留顶部 Tab 空间，并建立层级 */
+  padding-top: var(--home-header-height);
+  /* 🎯 关键：减去底部导航栏和安全区高度。额外减去 4rem 冗余，解决 Safari 底部微弱遮挡问题 */
+  height: calc(100dvh - var(--footer-height) - env(safe-area-inset-bottom) - 4rem);
+  box-sizing: border-box;
   overflow: hidden;
-  z-index: 1; /* 🎯 建立基础层级 */
+  z-index: 1;
 
   /* 让每个 tab 的内容占满整个区域 */
   > * {

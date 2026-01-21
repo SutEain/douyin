@@ -144,7 +144,7 @@ function close() {
   _css(a, 'transition', `all ${t}s`)
   _css(a, 'opacity', '0')
   _css(a, 'width', '100vw')
-  _css(a, 'height', '100vh')
+  _css(a, 'height', '100dvh')
   _css(a, 'transform', `scale(${domRect.sw},${domRect.sh})`)
   _css(a, 'transform-origin', `0 0`)
 
@@ -196,7 +196,7 @@ function showDetail(e, item) {
   let a = document.querySelector('.goods-detail')
   _css(a, 'opacity', '0')
   _css(a, 'width', '100vw')
-  _css(a, 'height', '100vh')
+  _css(a, 'height', '100dvh')
   _css(a, 'transform', `scale(${domRect.sw},${domRect.sh})`)
   _css(a, 'transform-origin', `0 0`)
 
@@ -206,7 +206,7 @@ function showDetail(e, item) {
     _css(s, 'top', 0)
     _css(s, 'left', 0)
     _css(s, 'width', '100vw')
-    _css(s, 'height', '100vh')
+    _css(s, 'height', '100dvh')
 
     _css(d, 'opacity', '0')
     _css(d, 'z-index', '-1')
@@ -301,6 +301,7 @@ function showDetail(e, item) {
   left: 0;
   top: -200vh;
   width: 100%;
+  height: 100dvh; // 🎯 明确指定高度
   transition: all 0.3s;
   overflow: hidden;
   z-index: -100;

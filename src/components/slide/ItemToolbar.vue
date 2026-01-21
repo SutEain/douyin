@@ -2,7 +2,7 @@
 import { _formatNumber, cloneDeep, _notice, _copy } from '@/utils'
 import bus, { EVENT_KEY } from '@/utils/bus'
 import { useClick } from '@/utils/hooks/useClick'
-import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { toggleVideoLike, toggleVideoCollect, toggleFollowUser, sendReward } from '@/api/videos'
 import { useVideoStore } from '@/stores/video'
@@ -67,7 +67,7 @@ onMounted(() => {
   }
 })
 
-const emit = defineEmits(['update:item', 'goUserInfo', 'showComments', 'showShare', 'goMusic'])
+const emit = defineEmits(['update:item', 'goUserInfo', 'showComments', 'showShare', 'goMusic', 'toggleCleanScreen'])
 
 function syncItemState() {
   const snapshot = cloneDeep(props.item)
@@ -272,6 +272,14 @@ function openMoreDrawer() {
   showMoreDrawer.value = true
 }
 
+// 🎯 清屏功能 - 通过 emit 事件通知父组件
+function toggleCleanScreen() {
+  console.log('[ItemToolbar] toggleCleanScreen 被调用')
+  console.log('[ItemToolbar] 准备 emit toggleCleanScreen 事件')
+  emit('toggleCleanScreen')
+  console.log('[ItemToolbar] emit toggleCleanScreen 事件已发出')
+}
+
 // 🎯 视频打赏
 const showRewardPanel = ref(false)
 function openRewardPanel() {
@@ -360,6 +368,12 @@ const vClick = useClick()
       <Icon icon="mage:message-dots-round-fill" class="icon" style="color: white" />
       <span>{{ _formatNumber(item.statistics.comment_count) }}</span>
     </div>
+
+      <!-- 清屏按钮 -->
+      <div class="clean-screen mb2r" @click.stop="() => { console.log('[ItemToolbar] 清屏按钮被点击'); toggleCleanScreen() }">
+        <Icon icon="mdi:broom" class="icon" style="color: white" />
+        <span>清屏</span>
+      </div>
 
     <!-- 打赏按钮（从抽屉中解放出来） -->
     <div class="reward mb2r" @click.stop="openRewardPanel">
@@ -476,6 +490,7 @@ const vClick = useClick()
         </div>
       </transition>
     </teleport>
+
   </div>
 </template>
 
@@ -483,14 +498,15 @@ const vClick = useClick()
 .toolbar {
   //width: 40px;
   position: absolute;
-  // 🎯 容器已减去 footer 高度，此处只需常规偏移
-  bottom: 52rem !important;
+  // 🎯 容器已减去 footer 高度，此处增加偏移以避开 Safari 底部工具栏
+  bottom: 60rem !important;
   right: 10rem;
   z-index: 1001;
   color: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
+  transition: opacity 0.3s;
 
   // ✅ 全平台：更紧凑一点（A 档）
   .mb2r {
@@ -557,6 +573,7 @@ const vClick = useClick()
   .message,
   .share,
   .refresh,
+  .clean-screen,
   .reward,
   .more-toggle,
   .mute-toggle {
@@ -824,4 +841,5 @@ const vClick = useClick()
     transform: translateY(100%);
   }
 }
+
 </style>

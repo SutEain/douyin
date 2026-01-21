@@ -33,7 +33,7 @@
       </div>
     </div>
 
-    <div class="float">
+    <div class="float" v-if="!isCleanScreen">
       <div class="top">
         <div class="left">
           <div class="liver">
@@ -127,6 +127,10 @@
             >
               <img src="/hongbao-.svg" style="width: 24rem; height: 24rem" />
             </div>
+            <!-- 🎯 新增：清屏按钮 -->
+            <div class="option-item clean-screen" @click="isCleanScreen = !isCleanScreen">
+              <Icon icon="mdi:broom" />
+            </div>
             <!-- 🎯 新增：横屏切换按钮 -->
             <div
               class="option-item landscape-toggle"
@@ -142,6 +146,19 @@
         </div>
       </div>
     </div>
+
+    <!-- 还原按钮（清屏时显示在右下角） -->
+    <teleport to="body">
+      <transition name="fade">
+        <div
+          v-if="isCleanScreen"
+          class="restore-btn"
+          @click.stop="isCleanScreen = false"
+        >
+          <Icon icon="solar:restart-bold" class="restore-icon" />
+        </div>
+      </transition>
+    </teleport>
 
     <!-- 弹出的输入框 -->
     <Transition name="fade">
@@ -515,6 +532,7 @@ const isSendingComment = ref(false)
 const isSendingGift = ref(false)
 const isSendingPacket = ref(false)
 const isLandscape = ref(false) // 🎯 新增：横屏状态
+const isCleanScreen = ref(false) // 🎯 清屏状态
 // 🎯 策略：非 TG MiniApp 环境默认静音，以绕过浏览器自动播放限制
 const isMuted = ref(!(window as any).Telegram?.WebApp?.initData)
 const playerRef = ref<any>(null)
@@ -2881,5 +2899,42 @@ onBeforeUnmount(() => {
     transform: scale(1);
     opacity: 1;
   }
+}
+
+// 🎯 还原按钮样式
+.restore-btn {
+  position: fixed;
+  bottom: calc(100rem + env(safe-area-inset-bottom));
+  right: 20rem;
+  z-index: 10002;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  width: 48rem;
+  height: 48rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  .restore-icon {
+    font-size: 28rem;
+    color: white;
+  }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

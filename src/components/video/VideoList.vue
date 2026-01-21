@@ -98,10 +98,16 @@
 
       <!-- 🎯 UI 元素（描述、点赞、进度条等）：放在 slide-container 里，跟随整体移动 -->
       <div class="overlay" v-if="currentItem">
-        <ItemToolbar v-model:item="currentItemLocal" @update:item="handleItemUpdate" />
+        <ItemToolbar 
+          v-model:item="currentItemLocal" 
+          @update:item="handleItemUpdate" 
+          v-if="!isCleanScreen"
+          @toggle-clean-screen="toggleCleanScreen"
+        />
         <ItemDesc
           v-model:item="currentItemLocal"
           @update:item="handleItemUpdate"
+          v-if="!isCleanScreen"
           @view-detail="openGraphicDetail"
         />
 
@@ -147,6 +153,19 @@
         @update="handleGraphicDetailUpdate"
       />
     </div>
+  </teleport>
+
+  <!-- 还原按钮（清屏时显示在右下角） -->
+  <teleport to="body">
+    <transition name="fade">
+      <div
+        v-if="isCleanScreen"
+        class="restore-btn"
+        @click.stop="isCleanScreen = false"
+      >
+        <Icon icon="solar:restart-bold" class="restore-icon" />
+      </div>
+    </transition>
   </teleport>
 </template>
 
@@ -508,6 +527,13 @@ const currentItemLocal = ref<VideoItem | null>(
 )
 const isPlaying = ref(false)
 const isPausedOverlay = computed(() => !isPlaying.value)
+
+// 🎯 清屏功能
+const isCleanScreen = ref(false)
+function toggleCleanScreen() {
+  isCleanScreen.value = !isCleanScreen.value
+  console.log('[VideoList] 清屏状态:', isCleanScreen.value)
+}
 
 // 🎯 邀请链接
 /*
@@ -2263,8 +2289,8 @@ defineExpose({
 // 新的进度条样式
 .video-progress {
   position: absolute;
-  // 🎯 容器已减去 footer 高度，此处对齐底部即可
-  bottom: 0 !important;
+  // 🎯 容器已减去 footer 高度，此处向上偏移 10rem 以防在 Safari 中紧贴或被微弱遮挡
+  bottom: 10rem !important;
   left: 0;
   right: 0;
   z-index: 1002; // 🎯 绝对置顶，确保在描述文字上方
@@ -2448,5 +2474,42 @@ defineExpose({
       transform: translateY(-10px);
     }
   }
+}
+
+// 🎯 还原按钮样式
+.restore-btn {
+  position: fixed;
+  bottom: calc(100rem + env(safe-area-inset-bottom));
+  right: 20rem;
+  z-index: 10002;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  width: 48rem;
+  height: 48rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  .restore-icon {
+    font-size: 28rem;
+    color: white;
+  }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

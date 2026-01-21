@@ -36,16 +36,34 @@
       @touchend="handleVideoClick"
       style="pointer-events: auto; z-index: 1"
     >
-      <template v-if="isLive">
-        <div class="living">点击进入直播间</div>
-        <ItemDesc :is-live="true" v-model:item="state.localItem" :position="position" />
-      </template>
-      <template v-else>
-        <div :style="{ opacity: state.isMove ? 0 : 1 }" class="normal">
-          <template v-if="!state.commentVisible">
-            <ItemToolbar v-model:item="state.localItem" />
-            <ItemDesc v-model:item="state.localItem" />
+          <template v-if="isLive">
+            <div class="living">点击进入直播间</div>
+            <ItemDesc :is-live="true" v-model:item="state.localItem" :position="position" />
           </template>
+          <template v-else>
+            <div :style="{ opacity: state.isMove ? 0 : 1 }" class="normal">
+              <template v-if="!state.commentVisible">
+                <ItemToolbar 
+                  v-model:item="state.localItem" 
+                  ref="toolbarRef" 
+                />
+                <ItemDesc 
+                  v-model:item="state.localItem" 
+                />
+              </template>
+          
+          <!-- 还原按钮（清屏时显示在右下角） -->
+          <teleport to="body">
+            <transition name="fade">
+              <div
+                v-if="isCleanScreen"
+                class="restore-btn"
+                @click.stop="handleRestoreCleanScreen"
+              >
+                <Icon icon="solar:restart-bold" class="restore-icon" />
+              </div>
+            </transition>
+          </teleport>
           <div v-if="isMy" class="comment-status">
             <div class="comment">
               <div class="type-comment">
@@ -100,6 +118,7 @@ import bus, { EVENT_KEY } from '../../utils/bus'
 import { SlideItemPlayStatus } from '@/utils/const_var'
 import {
   computed,
+  inject,
   nextTick,
   onMounted,
   onUnmounted,
@@ -109,6 +128,7 @@ import {
   ref,
   watch
 } from 'vue'
+import type { Ref } from 'vue'
 import { _css } from '@/utils/dom'
 import { Icon } from '@iconify/vue'
 import { toggleVideoLike } from '@/api/videos'
@@ -154,6 +174,25 @@ const props = defineProps({
 })
 
 const videoStore = useVideoStore()
+
+// 🎯 清屏状态（在 BaseVideo 中管理）
+const isCleanScreen = ref(false)
+const toolbarRef = ref<any>(null)
+
+// 处理清屏切换
+function handleToggleCleanScreen() {
+  console.log('[BaseVideo] ⭐⭐⭐ handleToggleCleanScreen 被调用 ⭐⭐⭐')
+  console.log('[BaseVideo] 切换前 isCleanScreen:', isCleanScreen.value)
+  isCleanScreen.value = !isCleanScreen.value
+  console.log('[BaseVideo] 切换后 isCleanScreen:', isCleanScreen.value)
+}
+
+// 处理还原清屏
+function handleRestoreCleanScreen() {
+  console.log('[BaseVideo] handleRestoreCleanScreen 被调用')
+  isCleanScreen.value = false
+  console.log('[BaseVideo] 还原后 isCleanScreen:', isCleanScreen.value)
+}
 
 // 🎯 倍速播放：默认 1.0，仅对当前视频生效
 const playbackRate = ref<number>(1)
@@ -388,6 +427,8 @@ onMounted(() => {
 
   bus.on(EVENT_KEY.REMOVE_MUTED, removeMuted)
   bus.on(EVENT_KEY.ADD_MUTED, addMuted)
+
+  // 🎯 监听清屏事件（事件总线作为后备方案）
 
   // 监听视频加载错误（303等网络错误）
   if (videoEl.value) {
@@ -883,7 +924,7 @@ function handleVideoClick(e: Event) {
     height: 100%;
     width: 100%;
 
-    .normal {
+      .normal {
       position: absolute;
       bottom: 0;
       width: 100%;
@@ -1124,5 +1165,36 @@ function handleVideoClick(e: Event) {
   z-index: 12;
   pointer-events: none;
   filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.3));
+}
+
+// 🎯 还原按钮样式（右下角，在底部导航栏上方）
+.restore-btn {
+  position: fixed;
+  bottom: calc(var(--footer-height, 52rem) + 20rem + env(safe-area-inset-bottom));
+  right: 20rem;
+  z-index: 1002;
+  width: 48rem;
+  height: 48rem;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+  &:active {
+    transform: scale(0.95);
+    background: rgba(0, 0, 0, 0.8);
+  }
+
+  .restore-icon {
+    font-size: 24rem;
+    color: white;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  }
 }
 </style>
