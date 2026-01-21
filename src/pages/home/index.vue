@@ -16,7 +16,31 @@
       <div class="video-content">
         <!-- 0=关注 -->
         <SlideFollow v-if="state.navIndex === 0" :active="state.active && state.navIndex === 0" />
-        <!-- ... (保持原有 v-else-if 逻辑) ... -->
+        <!-- 1=图文 -->
+        <Community
+          v-else-if="state.navIndex === 1"
+          :active="state.active && state.navIndex === 1"
+        />
+        <!-- 2=视频 -->
+        <VideoTab v-else-if="state.navIndex === 2" :active="state.active && state.navIndex === 2" />
+        <!-- 3=短剧 -->
+        <ShortDramaTab
+          v-else-if="state.navIndex === 3"
+          :active="state.active && state.navIndex === 3"
+        />
+        <!-- 4=东南亚 -->
+        <LongVideo
+          v-else-if="state.navIndex === 4"
+          :active="state.active && state.navIndex === 4"
+        />
+        <!-- 5=直播 -->
+        <LiveTab v-else-if="state.navIndex === 5" :active="state.active && state.navIndex === 5" />
+        <!-- 6=成人 -->
+        <SlideAdult
+          v-else-if="state.navIndex === 6"
+          :active="state.active && state.navIndex === 6"
+        />
+        <!-- 7=推荐 -->
         <Slide4 v-else :active="state.active && state.navIndex === 7" />
       </div>
 
