@@ -537,6 +537,7 @@ const isCleanScreen = ref(false) // 🎯 清屏状态
 const isMuted = ref(!(window as any).Telegram?.WebApp?.initData)
 const playerRef = ref<any>(null)
 const showUserPanel = ref(false)
+const followLoading = ref(false) // 🎯 防止重复点击关注
 
 async function toggleMute() {
   isMuted.value = !isMuted.value
@@ -1377,12 +1378,13 @@ function onPlayerError(err: any) {
 }
 
 async function attention() {
-  if (!roomInfo.value.anchor_info?.id) {
+  if (!roomInfo.value.anchor_info?.id || followLoading.value) {
     return
   }
 
   const targetId = roomInfo.value.anchor_info.id
   const nextStatus = !isFollowed.value
+  followLoading.value = true
 
   try {
     const res = await toggleFollowUser(targetId, nextStatus)
@@ -1396,6 +1398,8 @@ async function attention() {
   } catch (e: any) {
     // 如果是 500 错误，可能是后端问题
     _notice('关注失败: ' + (e.message || '未知错误'))
+  } finally {
+    followLoading.value = false
   }
 }
 

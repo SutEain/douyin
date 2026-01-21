@@ -105,6 +105,7 @@ defineOptions({
 const router = useRouter()
 const route = useRoute()
 const baseStore = useBaseStore()
+const followLoading = ref(false) // 🎯 防止重复关注
 
 // 滚动容器引用
 const scrollContainer = ref<HTMLElement | null>(null)
@@ -298,10 +299,13 @@ function handleSearchBarClick() {
 
 // 处理视频列表关注
 async function handleFollow(userId: string) {
+  if (followLoading.value) return
   const targetVideo = videoList.value.find((v) => (v.author?.user_id || v.author?.uid) === userId)
   if (!targetVideo) return
 
   const newStatus = !targetVideo.is_following
+  followLoading.value = true
+  
   videoList.value.forEach((v) => {
     if ((v.author?.user_id || v.author?.uid) === userId) {
       v.is_following = newStatus
@@ -316,17 +320,24 @@ async function handleFollow(userId: string) {
         v.is_following = !newStatus
       }
     })
+  } finally {
+    followLoading.value = false
   }
 }
 
 // 处理用户列表关注
 async function handleFollowUser(user: any) {
+  if (followLoading.value) return
   const originalStatus = user.is_following
   user.is_following = !originalStatus
+  followLoading.value = true
+  
   try {
     await toggleFollowUser(user.id, user.is_following)
   } catch (error) {
     user.is_following = originalStatus
+  } finally {
+    followLoading.value = false
   }
 }
 

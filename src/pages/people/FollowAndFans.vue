@@ -113,6 +113,7 @@ const route = useRoute()
 const router = useRouter()
 const nav = useNav()
 const store = useBaseStore()
+const followLoading = ref(false) // 🎯 防止重复点击
 const data = reactive({
   slideIndex: 0,
   searchKey: '',
@@ -180,12 +181,16 @@ async function loadFollowers() {
 }
 
 async function handleUnfollow(userId: string) {
+  if (followLoading.value) return
+  followLoading.value = true
   try {
     await toggleFollowUser(userId, false)
     _notice('已取消关注')
     await loadFollowing()
   } catch (error: any) {
     _notice(error?.message || '取消关注失败')
+  } finally {
+    followLoading.value = false
   }
 }
 
