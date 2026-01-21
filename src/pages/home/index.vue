@@ -259,13 +259,13 @@ onDeactivated(() => {
 <style scoped lang="less">
 .home-page {
   width: 100%;
-  height: 100dvh; /* 🎯 适配现代浏览器：动态视口高度 */
+  height: calc(var(--vh, 1vh) * 100); /* 🎯 适配全平台：使用 JS 计算的动态高度 */
 }
 
 .home-container {
   position: relative;
   width: 100%;
-  height: 100dvh; /* 🎯 适配现代浏览器：动态视口高度 */
+  height: calc(var(--vh, 1vh) * 100);
   background: black;
 }
 
@@ -275,8 +275,8 @@ onDeactivated(() => {
   width: 100%;
   /* 🎯 预留顶部 Tab 空间，并建立层级 */
   padding-top: var(--home-header-height);
-  /* 🎯 关键：减去底部导航栏和安全区高度。移除之前的 -4rem 冗余，消除缝隙 */
-  height: calc(100dvh - var(--footer-height) - env(safe-area-inset-bottom));
+  /* 🎯 关键：减去底部导航栏和安全区高度 */
+  height: calc(var(--vh, 1vh) * 100 - var(--footer-height) - env(safe-area-inset-bottom));
   box-sizing: border-box;
   overflow: hidden;
   z-index: 1;

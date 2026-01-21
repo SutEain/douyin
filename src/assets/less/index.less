@@ -41,7 +41,7 @@ html,
 body {
   width: 100%;
   height: 100%;
-  height: 100dvh;
+  height: calc(var(--vh, 1vh) * 100);
   background: var(--main-bg);
   font-size: 1px;
   font-family:
@@ -54,14 +54,14 @@ body {
   overscroll-behavior: none;
   touch-action: pan-y;
 
-  // ✅ 兜底：如果 JS 还没计算出 --vh，默认使用 1vh
+  // ✅ 默认使用 1vh，JS 挂载后会更新为像素值
   --vh: 1vh;
 }
 
 #app {
   width: 100%;
   height: 100%;
-  height: 100dvh;
+  height: calc(var(--vh, 1vh) * 100);
   overflow: hidden;
   overscroll-behavior: contain;
 }

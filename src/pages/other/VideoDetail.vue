@@ -333,7 +333,7 @@ onDeactivated(() => {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 100dvh;
+  height: calc(var(--vh, 1vh) * 100);
   width: 100%;
   background: black;
   z-index: 1;
@@ -355,7 +355,7 @@ onDeactivated(() => {
   .video-container {
     width: 100%;
     /* 🎯 关键：减去底部导航栏和安全区高度，确保内容不被 Footer 挡住 */
-    height: calc(100dvh - var(--footer-height) - env(safe-area-inset-bottom));
+    height: calc(var(--vh, 1vh) * 100 - var(--footer-height) - env(safe-area-inset-bottom));
     position: relative;
     transition: transform 0.2s ease-out;
     will-change: transform;
@@ -367,7 +367,7 @@ onDeactivated(() => {
 
   .video-loading {
     width: 100%;
-    height: calc(100dvh - var(--footer-height) - env(safe-area-inset-bottom));
+    height: calc(var(--vh, 1vh) * 100 - var(--footer-height) - env(safe-area-inset-bottom));
     display: flex;
     align-items: center;
     justify-content: center;

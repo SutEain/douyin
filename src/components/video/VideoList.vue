@@ -2196,7 +2196,7 @@ defineExpose({
   left: 0;
   top: 0;
   width: 100vw;
-  height: 100dvh;
+  height: calc(var(--vh, 1vh) * 100);
   background: #000;
   z-index: 99999;
   overflow: hidden;

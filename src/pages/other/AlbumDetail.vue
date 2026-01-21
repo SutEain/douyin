@@ -970,7 +970,7 @@ function close() {
   color: white;
   font-size: 14rem;
   width: 100vw;
-  height: 100dvh;
+  height: calc(var(--vh, 1vh) * 100);
   position: relative;
   overflow: hidden;
 

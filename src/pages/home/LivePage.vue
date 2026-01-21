@@ -1959,7 +1959,7 @@ onBeforeUnmount(() => {
 
 .LivePage {
   width: 100%;
-  height: 100dvh; /* 🎯 适配现代浏览器：动态视口高度，自动排除浏览器工具栏 */
+  height: calc(var(--vh, 1vh) * 100); /* 🎯 适配全平台：使用 JS 计算的动态高度 */
   background: #000;
   color: white;
   position: fixed; /* 改为 fixed，防止键盘弹出时顶部被推走 */
@@ -1972,7 +1972,7 @@ onBeforeUnmount(() => {
     position: fixed !important;
     top: 50% !important;
     left: 50% !important;
-    width: 100dvh !important;
+    width: calc(var(--vh, 1vh) * 100) !important;
     height: 100dvw !important;
     transform: translate(-50%, -50%) rotate(90deg);
     z-index: 9999;
@@ -1980,7 +1980,7 @@ onBeforeUnmount(() => {
     overflow: hidden;
 
     .live-wrapper {
-      width: 100dvh !important;
+      width: calc(var(--vh, 1vh) * 100) !important;
       height: 100dvw !important;
     }
 
@@ -1988,7 +1988,7 @@ onBeforeUnmount(() => {
     :deep(.dp-player),
     :deep(.vap-container),
     :deep(.large-gift-effect) {
-      width: 100dvh !important;
+      width: calc(var(--vh, 1vh) * 100) !important;
       height: 100dvw !important;
     }
 
