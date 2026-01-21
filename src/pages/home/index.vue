@@ -300,8 +300,8 @@ onDeactivated(() => {
     right: 0;
     height: var(--tg-top-offset, 0px);
     background: black;
-    z-index: 100;
-    pointer-events: none;
+    z-index: 1; /* 🎯 降低 z-index，避免阻挡按钮 */
+    pointer-events: none; /* 🎯 确保不阻挡点击 */
   }
 }
 
@@ -323,7 +323,8 @@ onDeactivated(() => {
     top: calc(var(--home-header-height, 38rem) + var(--tg-top-offset, 0px));
     left: 0;
     right: 0;
-    bottom: calc(var(--footer-height, 56rem) + env(safe-area-inset-bottom, 0px));
+    /* 🎯 修复：Footer 本身已经处理了安全区，这里只需要 footer 高度 */
+    bottom: var(--footer-height, 56rem);
     flex: none;
   }
 
