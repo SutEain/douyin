@@ -155,8 +155,28 @@ onMounted(() => {
   const isChrome = /Chrome/i.test(ua) && !/Edge/i.test(ua) && !isTG
   
   if (isAndroid) document.documentElement.classList.add('is-android')
+  if (isIOS) document.documentElement.classList.add('is-ios')
   if (isChrome) document.documentElement.classList.add('is-chrome')
-  if (isTG) document.documentElement.classList.add('is-tg-miniapp')
+  if (isTG) {
+    document.documentElement.classList.add('is-tg-miniapp')
+    
+    const tgWebApp = (window as any).Telegram?.WebApp
+    
+    // 🎯 官方推荐方式：监听全屏状态变化
+    const handleFullscreen = () => {
+      if (tgWebApp?.isFullscreen) {
+        document.documentElement.classList.add('is-tg-fullscreen')
+      } else {
+        document.documentElement.classList.remove('is-tg-fullscreen')
+      }
+    }
+
+    // 初始状态同步
+    handleFullscreen()
+    
+    // 注册官方事件
+    tgWebApp?.onEvent('fullscreenChanged', handleFullscreen)
+  }
 
   console.log('[App.onMounted] Window Height:', window.innerHeight)
   // 🎯 初始化应用（登录时自动创建用户，无需额外调用）

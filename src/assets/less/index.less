@@ -36,6 +36,20 @@
   --mask-lightgray: rgba(0, 0, 0, 0.25);
   //消息页面
   --msg-subpage-card-bg: rgb(28, 30, 43); //二级页面，卡片背景
+
+  /* 🎯 Telegram Mini App 顶部偏移变量 */
+  --tg-top-offset: 0px;
+}
+
+/* 🎯 iOS 端 Telegram 真全屏环境适配：避开灵动岛/刘海屏 */
+html.is-ios.is-tg-fullscreen {
+  // 使用安全区域，如果无法获取则默认 44px (iPhone 典型状态栏高度)
+  // 并按照用户要求，额外多降下一段距离（约一个文字高度 15rem）
+  --tg-top-offset: calc(env(safe-area-inset-top, 44px) + 15rem);
+  
+  // 🎯 核心修复：同步更新全局高度变量，确保依赖这些变量的组件（如视频容器）同步位移
+  --home-header-height: calc(38rem + var(--tg-top-offset));
+  --common-header-height: calc(50rem + var(--tg-top-offset));
 }
 
 html,

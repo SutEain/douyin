@@ -255,7 +255,7 @@ export default {
   width: 100%;
   color: white;
   height: var(--home-header-height);
-  padding-top: 0;
+  padding-top: var(--tg-top-offset, 0px);
   transition: all 0.3s;
   font-weight: bold;
 
