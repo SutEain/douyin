@@ -483,10 +483,10 @@ const vClick = useClick()
 .toolbar {
   //width: 40px;
   position: absolute;
-  // 🎯 强制提升位置并置顶
-  bottom: calc(52rem + var(--footer-height) + env(safe-area-inset-bottom)) !important;
+  // 🎯 容器已减去 footer 高度，此处只需常规偏移
+  bottom: 52rem !important;
   right: 10rem;
-  z-index: 1001; // 💡 高于 Footer (100)
+  z-index: 1001;
   color: #fff;
   display: flex;
   flex-direction: column;

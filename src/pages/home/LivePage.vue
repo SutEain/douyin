@@ -495,9 +495,11 @@ const router = useRouter()
 const baseStore = useBaseStore()
 const roomId = computed(() => route.query.id as string)
 
-// 🎯 切换直播间时，强制恢复竖屏
+// 🎯 切换直播间时，强制恢复竖屏并重置静音状态
 watch(roomId, () => {
   isLandscape.value = false
+  // 🎯 每次进入新房间都默认静音，确保能自动播放
+  isMuted.value = !(window as any).Telegram?.WebApp?.initData
 })
 
 const page = ref<HTMLElement | null>(null)
@@ -1935,7 +1937,6 @@ onBeforeUnmount(() => {
 
 .LivePage {
   width: 100%;
-  height: 100vh;
   height: 100dvh; /* 🎯 适配现代浏览器：动态视口高度，自动排除浏览器工具栏 */
   background: #000;
   color: white;

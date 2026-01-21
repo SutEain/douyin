@@ -273,9 +273,10 @@ onDeactivated(() => {
 .video-content {
   position: relative;
   width: 100%;
-  height: 100dvh; /* 🎯 优先使用 dvh */
-  height: calc(var(--vh, 1vh) * 100);
+  /* 🎯 关键：减去底部导航栏和安全区高度，确保内容不重叠 */
+  height: calc(100dvh - var(--footer-height) - env(safe-area-inset-bottom));
   overflow: hidden;
+  z-index: 1; /* 🎯 建立基础层级 */
 
   /* 让每个 tab 的内容占满整个区域 */
   > * {

@@ -1,291 +1,294 @@
 <template>
   <div class="goods-detail" @dragstart="(e) => _stopPropagation(e)">
-    <header>
-      <Icon @click="close" icon="material-symbols-light:arrow-back-ios-new" />
-      <!-- ✅ 右上角搜索按钮移除 -->
-    </header>
+    <div class="detail-container">
+      <header class="detail-header">
+        <Icon @click="close" icon="material-symbols-light:arrow-back-ios-new" />
+      </header>
 
-    <div class="scroll" ref="scrollEl">
-      <div class="slide-imgs">
-        <SlideHorizontal v-model:index="state.index">
-          <SlideItem :key="i" v-for="(item, i) in props.detail.note_card?.image_list">
-            <!-- 🎬 视频类型 -->
-            <video
-              v-if="item.type === 'video'"
-              v-is-can-play="buildCdnUrl(item.info_list?.[0]?.url)"
-              style="height: 100%; width: 100%; object-fit: contain"
-              autoplay
-              loop
-              muted
-              playsinline
-              webkit-playsinline
-              x5-playsinline
-              x5-video-player-type="h5-page"
-            />
-            <!-- 🖼️ 图片类型 -->
-            <img
-              v-else
-              :src="buildCdnUrl(item.info_list?.[0]?.url)"
-              alt=""
-              @error="handleImageError"
-              style="background-color: #000; min-height: 100%; object-fit: contain"
-            />
-          </SlideItem>
-        </SlideHorizontal>
+      <div class="scroll" ref="scrollEl">
+        <div class="slide-imgs">
+          <SlideHorizontal v-model:index="state.index">
+            <SlideItem :key="i" v-for="(item, i) in props.detail.note_card?.image_list">
+              <!-- 🎬 视频类型 -->
+              <video
+                v-if="item.type === 'video'"
+                v-is-can-play="buildCdnUrl(item.info_list?.[0]?.url)"
+                style="height: 100%; width: 100%; object-fit: contain"
+                autoplay
+                loop
+                muted
+                playsinline
+                webkit-playsinline
+                x5-playsinline
+                x5-video-player-type="h5-page"
+              />
+              <!-- 🖼️ 图片类型 -->
+              <img
+                v-else
+                :src="buildCdnUrl(item.info_list?.[0]?.url)"
+                alt=""
+                @error="handleImageError"
+                style="background-color: #000; min-height: 100%; object-fit: contain"
+              />
+            </SlideItem>
+          </SlideHorizontal>
 
-        <div class="indicator-bar" v-if="props.detail.note_card?.image_list?.length > 1">
-          <div
-            class="indicator"
-            :class="[i <= state.index + 1 && 'active']"
-            :key="j"
-            v-for="(i, j) in props.detail.note_card?.image_list?.length"
-          ></div>
-        </div>
-      </div>
-
-      <div class="content">
-        <div class="shop">
-          <header>
-            <img class="avatar" :src="buildCdnUrl(props.detail.note_card?.user?.avatar)" />
-            <div class="right">
-              <div class="name">
-                {{
-                  _truncate(
-                    props.detail.note_card?.user?.nickname ||
-                      props.detail.note_card?.user?.nick_name ||
-                      props.detail.note_card?.user?.name ||
-                      '用户',
-                    15
-                  )
-                }}
-              </div>
-              <div
-                class="r"
-                :style="local.followLoading ? 'pointer-events:none;opacity:.6;' : ''"
-                @click.stop="toggleFollow"
-              >
-                {{ local.isAttention ? '取消关注' : '关注' }}
-              </div>
-            </div>
-          </header>
-          <div class="desc" style="white-space: pre-wrap">
-            {{ props.detail.note_card?.display_title }}
-          </div>
-          <div class="date">{{ props.detail.note_card.createTime }}</div>
-        </div>
-
-        <div class="card comments">
-          <header>
-            <span class="l">评论 {{ displayCommentCount }}</span>
-            <!-- ✅ 去掉右上角“查看全部” -->
-          </header>
-          <div v-if="comments.loading" class="loading">加载中...</div>
-          <div v-else-if="!comments.list.length" class="empty">暂无评论，快来抢沙发～</div>
-
-          <!-- ✅ 复用 CommentNew 的结构：主评论 + 回复 + 展开更多 + 评论点赞 -->
-          <div v-else class="comment-items">
+          <div class="indicator-bar" v-if="props.detail.note_card?.image_list?.length > 1">
             <div
-              v-for="(item, i) in comments.list"
-              :key="item.comment_id || i"
-              class="comment-item"
-              :class="{ 'show-delete': showDeleteActionId === item.comment_id }"
-              @touchstart="handleTouchStartLong(item)"
-              @touchend="handleTouchEndLong"
-              @mousedown="handleTouchStartLong(item)"
-              @mouseup="handleTouchEndLong"
-            >
-              <div class="comment-main">
-                <img
-                  :src="buildCdnUrl(item.avatar)"
-                  class="avatar"
-                  @click="handleAvatarClick(item)"
-                />
-                <div class="comment-body">
-                  <div class="username" @click="handleAvatarClick(item)">
-                    {{ _truncate(item.nickname, 15) }}
-                  </div>
-                  <div class="comment-text" :class="{ 'text-gray': item.user_buried }">
-                    {{ item.user_buried ? '该评论已折叠' : item.content }}
-                  </div>
-                  <div class="comment-footer">
-                    <div class="footer-left">
-                      <span class="time">{{ _time(item.create_time) }}</span>
-                      <span v-if="item.ip_location" class="location">{{ item.ip_location }}</span>
-                      <span class="reply-btn" @click="handleReply(item)">回复</span>
-                    </div>
-                    <div class="footer-right">
-                      <div
-                        class="action-btn"
-                        :class="{ active: item.user_digged }"
-                        @click="handleCommentLike(item)"
-                      >
-                        <Icon
-                          :icon="
-                            item.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
-                          "
-                        />
-                        <span v-if="item.digg_count">{{ _formatNumber(item.digg_count) }}</span>
-                      </div>
-                    </div>
-                  </div>
+              class="indicator"
+              :class="[i <= state.index + 1 && 'active']"
+              :key="j"
+              v-for="(i, j) in props.detail.note_card?.image_list?.length"
+            ></div>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="shop">
+            <header>
+              <img class="avatar" :src="buildCdnUrl(props.detail.note_card?.user?.avatar)" />
+              <div class="right">
+                <div class="name">
+                  {{
+                    _truncate(
+                      props.detail.note_card?.user?.nickname ||
+                        props.detail.note_card?.user?.nick_name ||
+                        props.detail.note_card?.user?.name ||
+                        '用户',
+                      15
+                    )
+                  }}
+                </div>
+                <div
+                  class="r"
+                  :style="local.followLoading ? 'pointer-events:none;opacity:.6;' : ''"
+                  @click.stop="toggleFollow"
+                >
+                  {{ local.isAttention ? '取消关注' : '关注' }}
                 </div>
               </div>
+            </header>
+            <div class="desc" style="white-space: pre-wrap">
+              {{ props.detail.note_card?.display_title }}
+            </div>
+            <div class="date">{{ props.detail.note_card.createTime }}</div>
+          </div>
 
-              <!-- 删除操作按钮 -->
+          <div class="card comments">
+            <header>
+              <span class="l">评论 {{ displayCommentCount }}</span>
+              <!-- ✅ 去掉右上角“查看全部” -->
+            </header>
+            <div v-if="comments.loading" class="loading">加载中...</div>
+            <div v-else-if="!comments.list.length" class="empty">暂无评论，快来抢沙发～</div>
+
+            <!-- ✅ 复用 CommentNew 的结构：主评论 + 回复 + 展开更多 + 评论点赞 -->
+            <div v-else class="comment-items">
               <div
-                v-if="showDeleteActionId === item.comment_id"
-                class="delete-overlay"
-                @click.stop="handleDeleteComment(item)"
+                v-for="(item, i) in comments.list"
+                :key="item.comment_id || i"
+                class="comment-item"
+                :class="{ 'show-delete': showDeleteActionId === item.comment_id }"
+                @touchstart="handleTouchStartLong(item)"
+                @touchend="handleTouchEndLong"
+                @mousedown="handleTouchStartLong(item)"
+                @mouseup="handleTouchEndLong"
               >
-                <div class="delete-btn">删除</div>
-                <div class="cancel-delete" @click.stop="showDeleteActionId = null">取消</div>
-              </div>
-
-              <div v-if="item.showChildren && item.children?.length" class="reply-list">
-                <div
-                  v-for="(child, j) in item.children"
-                  :key="child.comment_id || j"
-                  class="reply-item"
-                  :class="{ 'show-delete': showDeleteActionId === child.comment_id }"
-                  @touchstart="handleTouchStartLong(child)"
-                  @touchend="handleTouchEndLong"
-                  @mousedown="handleTouchStartLong(child)"
-                  @mouseup="handleTouchEndLong"
-                >
+                <div class="comment-main">
                   <img
-                    :src="buildCdnUrl(child.avatar)"
+                    :src="buildCdnUrl(item.avatar)"
                     class="avatar"
-                    @click="handleAvatarClick(child)"
+                    @click="handleAvatarClick(item)"
                   />
-                  <div class="reply-body">
-                    <div class="username" @click="handleAvatarClick(child)">
-                      {{ _truncate(child.nickname, 15) }}
+                  <div class="comment-body">
+                    <div class="username" @click="handleAvatarClick(item)">
+                      {{ _truncate(item.nickname, 15) }}
                     </div>
-                    <div class="reply-text">
-                      <span v-if="child.reply_to_user" class="reply-to"
-                        >回复 @{{ _truncate(child.reply_to_user, 15) }}：</span
-                      >
-                      {{ child.content }}
+                    <div class="comment-text" :class="{ 'text-gray': item.user_buried }">
+                      {{ item.user_buried ? '该评论已折叠' : item.content }}
                     </div>
-                    <div class="reply-footer">
+                    <div class="comment-footer">
                       <div class="footer-left">
-                        <span class="time">{{ _time(child.create_time) }}</span>
-                        <span v-if="child.ip_location" class="location">{{
-                          child.ip_location
-                        }}</span>
+                        <span class="time">{{ _time(item.create_time) }}</span>
+                        <span v-if="item.ip_location" class="location">{{ item.ip_location }}</span>
                         <span class="reply-btn" @click="handleReply(item)">回复</span>
                       </div>
                       <div class="footer-right">
                         <div
                           class="action-btn"
-                          :class="{ active: child.user_digged }"
-                          @click="handleCommentLike(child)"
+                          :class="{ active: item.user_digged }"
+                          @click="handleCommentLike(item)"
                         >
                           <Icon
                             :icon="
-                              child.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
+                              item.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
                             "
                           />
-                          <span v-if="child.digg_count">{{ _formatNumber(child.digg_count) }}</span>
+                          <span v-if="item.digg_count">{{ _formatNumber(item.digg_count) }}</span>
                         </div>
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  <!-- 删除操作按钮 (回复) -->
+                <!-- 删除操作按钮 -->
+                <div
+                  v-if="showDeleteActionId === item.comment_id"
+                  class="delete-overlay"
+                  @click.stop="handleDeleteComment(item)"
+                >
+                  <div class="delete-btn">删除</div>
+                  <div class="cancel-delete" @click.stop="showDeleteActionId = null">取消</div>
+                </div>
+
+                <div v-if="item.showChildren && item.children?.length" class="reply-list">
                   <div
-                    v-if="showDeleteActionId === child.comment_id"
-                    class="delete-overlay"
-                    @click.stop="handleDeleteComment(child)"
+                    v-for="(child, j) in item.children"
+                    :key="child.comment_id || j"
+                    class="reply-item"
+                    :class="{ 'show-delete': showDeleteActionId === child.comment_id }"
+                    @touchstart="handleTouchStartLong(child)"
+                    @touchend="handleTouchEndLong"
+                    @mousedown="handleTouchStartLong(child)"
+                    @mouseup="handleTouchEndLong"
                   >
-                    <div class="delete-btn">删除</div>
-                    <div class="cancel-delete" @click.stop="showDeleteActionId = null">取消</div>
+                    <img
+                      :src="buildCdnUrl(child.avatar)"
+                      class="avatar"
+                      @click="handleAvatarClick(child)"
+                    />
+                    <div class="reply-body">
+                      <div class="username" @click="handleAvatarClick(child)">
+                        {{ _truncate(child.nickname, 15) }}
+                      </div>
+                      <div class="reply-text">
+                        <span v-if="child.reply_to_user" class="reply-to"
+                          >回复 @{{ _truncate(child.reply_to_user, 15) }}：</span
+                        >
+                        {{ child.content }}
+                      </div>
+                      <div class="reply-footer">
+                        <div class="footer-left">
+                          <span class="time">{{ _time(child.create_time) }}</span>
+                          <span v-if="child.ip_location" class="location">{{
+                            child.ip_location
+                          }}</span>
+                          <span class="reply-btn" @click="handleReply(item)">回复</span>
+                        </div>
+                        <div class="footer-right">
+                          <div
+                            class="action-btn"
+                            :class="{ active: child.user_digged }"
+                            @click="handleCommentLike(child)"
+                          >
+                            <Icon
+                              :icon="
+                                child.user_digged ? 'icon-park-solid:like' : 'icon-park-outline:like'
+                              "
+                            />
+                            <span v-if="child.digg_count">{{ _formatNumber(child.digg_count) }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 删除操作按钮 (回复) -->
+                    <div
+                      v-if="showDeleteActionId === child.comment_id"
+                      class="delete-overlay"
+                      @click.stop="handleDeleteComment(child)"
+                    >
+                      <div class="delete-btn">删除</div>
+                      <div class="cancel-delete" @click.stop="showDeleteActionId = null">取消</div>
+                    </div>
                   </div>
+                </div>
+
+                <div
+                  v-if="
+                    Number(item.sub_comment_count) &&
+                    (!item.showChildren || item.children.length < item.sub_comment_count)
+                  "
+                  class="expand-replies"
+                  @click="handleExpandReplies(item)"
+                >
+                  <div class="expand-line"></div>
+                  <span class="expand-text">
+                    展开{{ item.showChildren ? '更多' : `${item.sub_comment_count}条` }}回复
+                  </span>
+                  <Icon icon="ep:arrow-down-bold" />
                 </div>
               </div>
 
-              <div
-                v-if="
-                  Number(item.sub_comment_count) &&
-                  (!item.showChildren || item.children.length < item.sub_comment_count)
-                "
-                class="expand-replies"
-                @click="handleExpandReplies(item)"
-              >
-                <div class="expand-line"></div>
-                <span class="expand-text">
-                  展开{{ item.showChildren ? '更多' : `${item.sub_comment_count}条` }}回复
-                </span>
-                <Icon icon="ep:arrow-down-bold" />
+              <div v-if="comments.loadingMore" class="loading-more">加载中...</div>
+              <div v-else-if="comments.hasMore" class="load-more" @click.stop="loadMoreComments">
+                加载更多
               </div>
-            </div>
-
-            <div v-if="comments.loadingMore" class="loading-more">加载中...</div>
-            <div v-else-if="comments.hasMore" class="load-more" @click.stop="loadMoreComments">
-              加载更多
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div v-if="replyingTo" class="reply-hint-bar">
-      <span>回复 @{{ _truncate(replyingTo.nickname, 15) }}</span>
-      <Icon icon="ic:round-close" class="close" @click.stop="cancelReply" />
-    </div>
-    <div class="toolbar">
-      <div class="input-wrap">
-        <input
-          v-model="comments.input"
-          class="comment-input"
-          type="text"
-          :placeholder="replyingTo ? `回复 @${_truncate(replyingTo.nickname, 15)}` : '说点什么...'"
-          @keyup.enter="sendComment"
-        />
-      </div>
-
-      <!-- ✅ 只有输入内容时才显示发送按钮，平时隐藏以腾出空间 -->
-      <transition name="fade">
-        <div
-          v-if="comments.input.trim()"
-          class="send-btn active"
-          :style="comments.sending ? 'pointer-events:none;opacity:.6;' : ''"
-          @click.stop="sendComment"
-        >
-          发送
+      <div class="detail-footer">
+        <div v-if="replyingTo" class="reply-hint-bar">
+          <span>回复 @{{ _truncate(replyingTo.nickname, 15) }}</span>
+          <Icon icon="ic:round-close" class="close" @click.stop="cancelReply" />
         </div>
-      </transition>
+        <div class="toolbar">
+          <div class="input-wrap">
+            <input
+              v-model="comments.input"
+              class="comment-input"
+              type="text"
+              :placeholder="replyingTo ? `回复 @${_truncate(replyingTo.nickname, 15)}` : '说点什么...'"
+              @keyup.enter="sendComment"
+            />
+          </div>
 
-      <div class="options">
-        <div
-          class="option"
-          :class="[local.isLoved && 'active']"
-          :style="local.likeLoading ? 'pointer-events:none;opacity:.6;' : ''"
-          @click.stop="toggleLike"
-        >
-          <Icon :icon="local.isLoved ? 'solar:heart-bold' : 'solar:heart-linear'" />
-          <div class="text">{{ _formatNumber(local.likeCount) }}</div>
-        </div>
+          <!-- ✅ 只有输入内容时才显示发送按钮，平时隐藏以腾出空间 -->
+          <transition name="fade">
+            <div
+              v-if="comments.input.trim()"
+              class="send-btn active"
+              :style="comments.sending ? 'pointer-events:none;opacity:.6;' : ''"
+              @click.stop="sendComment"
+            >
+              发送
+            </div>
+          </transition>
 
-        <div
-          class="option"
-          :class="[local.isCollect && 'active']"
-          :style="local.collectLoading ? 'pointer-events:none;opacity:.6;' : ''"
-          @click.stop="toggleCollect"
-        >
-          <Icon :icon="local.isCollect ? 'solar:star-bold' : 'mage:star'" />
-          <div class="text">{{ _formatNumber(local.collectCount) }}</div>
-        </div>
+          <div class="options">
+            <div
+              class="option"
+              :class="[local.isLoved && 'active']"
+              :style="local.likeLoading ? 'pointer-events:none;opacity:.6;' : ''"
+              @click.stop="toggleLike"
+            >
+              <Icon :icon="local.isLoved ? 'solar:heart-bold' : 'solar:heart-linear'" />
+              <div class="text">{{ _formatNumber(local.likeCount) }}</div>
+            </div>
 
-        <div class="option" @click.stop="showShareDrawer = true">
-          <Icon icon="ph:share-fat-light" />
-          <div class="text">{{ _formatNumber(local.shareCount) }}</div>
-        </div>
+            <div
+              class="option"
+              :class="[local.isCollect && 'active']"
+              :style="local.collectLoading ? 'pointer-events:none;opacity:.6;' : ''"
+              @click.stop="toggleCollect"
+            >
+              <Icon :icon="local.isCollect ? 'solar:star-bold' : 'mage:star'" />
+              <div class="text">{{ _formatNumber(local.collectCount) }}</div>
+            </div>
 
-        <!-- 🎯 打赏 -->
-        <div class="option reward" @click.stop="showRewardPanel = true">
-          <Icon icon="basil:award-solid" style="color: #face15" />
-          <div class="text">打赏</div>
+            <div class="option" @click.stop="showShareDrawer = true">
+              <Icon icon="ph:share-fat-light" />
+              <div class="text">{{ _formatNumber(local.shareCount) }}</div>
+            </div>
+
+            <!-- 🎯 打赏 -->
+            <div class="option reward" @click.stop="showRewardPanel = true">
+              <Icon icon="basil:award-solid" style="color: #face15" />
+              <div class="text">打赏</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -983,27 +986,38 @@ function close() {
   background: var(--color-message);
   color: white;
   font-size: 14rem;
-  height: 100%;
+  height: 100dvh;
+  width: 100vw;
   @c: #a2a2a2;
   @c2: #c0c0c0;
   @red: rgb(248, 38, 74);
   position: relative;
-  opacity: 0;
+  overflow: hidden;
 
-  & > header {
-    position: fixed;
+  .detail-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .detail-header {
+    position: absolute;
     left: 0;
     top: 0;
     width: 100%;
-    z-index: 9;
+    z-index: 10;
     display: flex;
     justify-content: space-between;
-    padding: 15rem;
+    padding: calc(15rem + env(safe-area-inset-top)) 15rem 15rem;
     box-sizing: border-box;
+    pointer-events: none;
 
     svg {
+      pointer-events: auto;
       font-size: 20rem;
-      background: rgba(176, 176, 176, 0.4);
+      background: rgba(0, 0, 0, 0.4);
       padding: 5rem;
       color: white;
       border-radius: 50%;
@@ -1011,8 +1025,17 @@ function close() {
   }
 
   .scroll {
-    height: 100dvh;
-    overflow: auto;
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .detail-footer {
+    width: 100%;
+    background: var(--color-message);
+    border-top: 1px solid rgba(white, 0.1);
+    z-index: 11;
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .slide-imgs {
@@ -1072,7 +1095,7 @@ function close() {
 
   .content {
     padding: 15rem;
-    padding-bottom: 10vh;
+    padding-bottom: 20rem;
     border-radius: 16rem 16rem 0 0;
 
     .comments {
@@ -1350,15 +1373,9 @@ function close() {
   }
 
   .toolbar {
-    position: fixed;
-    bottom: 0;
-    width: 100vw;
-    left: 0;
-    background: var(--color-message);
-    border-top: 1px solid rgba(white, 0.1);
     display: flex;
     align-items: center;
-    padding: 8rem 12rem calc(8rem + env(safe-area-inset-bottom));
+    padding: 8rem 12rem;
     box-sizing: border-box;
     gap: 10rem; // 🎯 增加整体间距
 
@@ -1439,155 +1456,8 @@ function close() {
   }
 }
 
-// 🎯 打赏弹窗样式 (全局样式或 scoped 均可)
-.reward-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 10000;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.reward-panel {
-  background: #1e1e1e;
-  border-radius: 20rem;
-  padding: 24rem;
-  width: 280rem;
-  box-shadow: 0 10rem 30rem rgba(0, 0, 0, 0.5);
-  color: white;
-
-  .reward-title {
-    font-size: 18rem;
-    margin-bottom: 20rem;
-    color: #face15;
-    text-align: center;
-    font-weight: bold;
-  }
-
-  .reward-presets {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12rem;
-    margin-bottom: 20rem;
-
-    .preset-item {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10rem;
-      padding: 12rem 0;
-      text-align: center;
-      font-size: 15rem;
-      color: white;
-
-      &:active {
-        background: rgba(250, 206, 21, 0.2);
-        border-color: #face15;
-      }
-    }
-  }
-
-  .reward-input-wrap {
-    .reward-input {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10rem;
-      padding: 12rem;
-      color: white;
-      font-size: 16rem;
-      text-align: center;
-      margin-bottom: 15rem;
-      outline: none;
-      box-sizing: border-box;
-
-      &:focus {
-        border-color: #face15;
-      }
-    }
-
-    .reward-send {
-      background: #face15;
-      color: black;
-      border-radius: 10rem;
-      padding: 12rem 0;
-      text-align: center;
-      font-size: 16rem;
-      font-weight: bold;
-
-      &.loading {
-        opacity: 0.5;
-      }
-    }
-  }
-
-  .reward-close {
-    margin-top: 15rem;
-    text-align: center;
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 14rem;
-  }
-}
-
-.share-drawer {
-  background: rgba(22, 24, 35, 0.98) !important;
-  backdrop-filter: blur(20px);
-
-  .share-grid {
-    display: flex;
-    justify-content: center;
-    gap: 40rem;
-    padding: 20rem 0;
-
-    .share-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10rem;
-
-      .icon-wrap {
-        width: 56rem;
-        height: 56rem;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 14rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 28rem;
-
-        &.tg {
-          background: rgba(36, 161, 222, 0.2);
-          color: #24a1de;
-        }
-        &.link {
-          background: rgba(255, 255, 255, 0.1);
-          color: white;
-        }
-      }
-
-      span {
-        font-size: 13rem;
-        color: rgba(255, 255, 255, 0.7);
-      }
-
-      &:active {
-        opacity: 0.7;
-      }
-    }
-  }
-}
-
-// ✅ 回复提示条：固定在输入框上方
+// ✅ 回复提示条：现在在 detail-footer 内部
 .reply-hint-bar {
-  position: fixed;
-  left: 0;
-  width: 100vw;
-  bottom: 56rem; // 约等于 toolbar 高度
-  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;

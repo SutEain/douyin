@@ -2170,7 +2170,7 @@ defineExpose({
   left: 0;
   top: 0;
   width: 100vw;
-  height: calc(var(--vh, 1vh) * 100);
+  height: 100dvh;
   background: #000;
   z-index: 99999;
   overflow: hidden;
@@ -2263,12 +2263,11 @@ defineExpose({
 // 新的进度条样式
 .video-progress {
   position: absolute;
-  // 🎯 强制提升位置并置顶，紧贴 Footer 上方
-  bottom: calc(var(--footer-height) + env(safe-area-inset-bottom)) !important;
-  z-index: 1002; // 💡 高于 Footer 和 ItemDesc
+  // 🎯 容器已减去 footer 高度，此处对齐底部即可
+  bottom: 0 !important;
   left: 0;
   right: 0;
-  z-index: 1000; // 🎯 绝对置顶，确保在描述文字上方
+  z-index: 1002; // 🎯 绝对置顶，确保在描述文字上方
   pointer-events: auto;
   padding: 15px 0 10px 0; // 🎯 调整点击区域
 
@@ -2364,7 +2363,7 @@ defineExpose({
   right: 0;
   bottom: 0;
   top: 0; // 覆盖整个区域
-  z-index: 50; // 提高层级，确保进度条和时间提示在最上层
+  z-index: 1001; // 💡 提高层级，确保在 Footer (100) 之上
   pointer-events: none;
 
   > * {
