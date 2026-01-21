@@ -135,6 +135,15 @@ function resetVhAndPx() {
 
 onMounted(() => {
   console.log('[App.onMounted] ========== App 组件已挂载 ==========')
+  
+  // 🎯 增加平台识别类到 body
+  const ua = navigator.userAgent
+  const isAndroid = /Android/i.test(ua)
+  const isChrome = /Chrome/i.test(ua) && !/Edge/i.test(ua)
+  if (isAndroid) document.body.classList.add('is-android')
+  if (isChrome) document.body.classList.add('is-chrome')
+  if (window.Telegram?.WebApp?.initData) document.body.classList.add('is-tg-miniapp')
+
   console.log('[App.onMounted] Window Height:', window.innerHeight)
   // 🎯 初始化应用（登录时自动创建用户，无需额外调用）
   console.log('[App.onMounted] 开始调用 store.init()')

@@ -2127,9 +2127,14 @@ onBeforeUnmount(() => {
     pointer-events: none;
     display: flex;
     flex-direction: column;
-    /* 🎯 关键：增加底部安全边距，解决安卓 Chrome 遮挡 */
-    padding: calc(10rem + env(safe-area-inset-top)) 15rem calc(45rem + env(safe-area-inset-bottom));
+    /* 🎯 降低基础值至 25rem，适配 TG MiniApp */
+    padding: calc(10rem + env(safe-area-inset-top)) 15rem calc(25rem + env(safe-area-inset-bottom));
     box-sizing: border-box;
+
+    /* 🎯 针对安卓 Chrome 浏览器额外补偿，防止被地址栏遮挡 */
+    :deep(body.is-chrome.is-android) & {
+      padding-bottom: calc(45rem + env(safe-area-inset-bottom));
+    }
 
     .top {
       display: flex;

@@ -284,6 +284,11 @@ onDeactivated(() => {
   /* 🎯 定义底部偏移量：Footer 高度 + 安全区高度 */
   &.has-footer-offset {
     --footer-offset: calc(var(--footer-height) + env(safe-area-inset-bottom));
+    
+    /* 🎯 安卓 Chrome 环境下，进度条容易被遮挡，额外上抬 12rem */
+    :deep(body.is-chrome.is-android) & {
+      --footer-offset: calc(var(--footer-height) + env(safe-area-inset-bottom) + 12rem);
+    }
   }
 
   /* 让每个 tab 的内容占满整个区域 */
