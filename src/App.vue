@@ -185,8 +185,8 @@ onMounted(() => {
           document.documentElement.classList.add('is-tg-fullscreen')
           document.documentElement.setAttribute('data-v', 'v7')
           
-          // 🎯 [TG-V7] 更加保守的偏移：iOS 44, Android 10 (只留一点点)
-          const offsetValue = isIOS ? 44 : 10;
+          // 🎯 首页专用：iOS 44px（避开刘海），Android 5px（微调）
+          const offsetValue = isIOS ? 44 : 5;
           document.documentElement.style.setProperty('--tg-top-offset', `${offsetValue}px`, 'important')
         } else if (!isKeyboardUp) {
           document.documentElement.classList.remove('is-tg-fullscreen')

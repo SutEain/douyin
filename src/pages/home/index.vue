@@ -263,7 +263,10 @@ onDeactivated(() => {
 <style scoped lang="less">
 .home-page {
   width: 100%;
-  height: calc(var(--vh, 1dvh) * 100); /* 🎯 适配全平台 */
+  height: 100vh;
+  height: calc(var(--vh, 1vh) * 100); /* Android 兜底 */
+  position: relative;
+  overflow: hidden;
 }
 
 .home-container {
@@ -271,25 +274,59 @@ onDeactivated(() => {
   width: 100%;
   height: 100%;
   background: black;
+  /* 🎯 非全屏：使用 Flex 布局（保持原样） */
   display: flex;
   flex-direction: column;
+  
+  /* 🎯 真全屏：改为绝对定位布局 */
+  :global(html.is-tg-fullscreen) & {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
 }
 
+/* 🎯 顶部安全区占位 - 仅在真全屏时显示 */
 .tg-safe-top {
-  height: var(--tg-top-offset, 0px);
-  width: 100%;
-  flex-shrink: 0;
-  background: black;
+  display: none; /* 默认隐藏 */
+  
+  :global(html.is-tg-fullscreen) & {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--tg-top-offset, 0px);
+    background: black;
+    z-index: 100;
+    pointer-events: none;
+  }
 }
+
+/* ✅ IndicatorHome 组件本身已经处理了 top: var(--tg-top-offset)，无需额外覆盖 */
 
 /* 视频内容区域 */
 .video-content {
+  /* 🎯 非全屏：Flex 布局 */
   flex: 1;
   position: relative;
   width: 100%;
   overflow: hidden;
   z-index: 1;
   background: black;
+  
+  /* 🎯 真全屏：绝对定位 */
+  :global(html.is-tg-fullscreen) & {
+    position: absolute;
+    top: calc(var(--home-header-height, 38rem) + var(--tg-top-offset, 0px));
+    left: 0;
+    right: 0;
+    bottom: calc(var(--footer-height, 56rem) + env(safe-area-inset-bottom, 0px));
+    flex: none;
+  }
 
   /* 🎯 定义底部偏移量 */
   &.has-footer-offset {
