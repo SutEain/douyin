@@ -282,9 +282,10 @@
           <div class="text">{{ _formatNumber(local.shareCount) }}</div>
         </div>
 
-        <!-- 🎯 打赏：去掉文字，保持图标风格统一 -->
+        <!-- 🎯 打赏 -->
         <div class="option reward" @click.stop="showRewardPanel = true">
           <Icon icon="basil:award-solid" style="color: #face15" />
+          <div class="text">打赏</div>
         </div>
       </div>
     </div>
@@ -1010,7 +1011,7 @@ function close() {
   }
 
   .scroll {
-    height: 100vh;
+    height: 100dvh;
     overflow: auto;
   }
 
@@ -1357,7 +1358,7 @@ function close() {
     border-top: 1px solid rgba(white, 0.1);
     display: flex;
     align-items: center;
-    padding: 8rem 12rem;
+    padding: 8rem 12rem calc(8rem + env(safe-area-inset-bottom));
     box-sizing: border-box;
     gap: 10rem; // 🎯 增加整体间距
 
@@ -1425,13 +1426,7 @@ function close() {
       }
 
       .option.reward {
-        padding-top: 0;
-        // 🎯 打赏没有数字，为了对齐其他带数字的图标，给它一个占位或调整居中
-        justify-content: flex-start;
-
-        svg {
-          margin-bottom: 14rem; // 🎯 视觉补偿，对齐旁边图标的中心
-        }
+        justify-content: center;
       }
 
       .option.active {

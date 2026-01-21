@@ -364,6 +364,7 @@ const vClick = useClick()
     <!-- 打赏按钮（从抽屉中解放出来） -->
     <div class="reward mb2r" @click.stop="openRewardPanel">
       <Icon icon="basil:award-solid" class="icon" style="color: #face15" />
+      <span>打赏</span>
     </div>
 
     <!-- 更多选项按钮 -->

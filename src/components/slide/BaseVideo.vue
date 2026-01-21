@@ -885,9 +885,9 @@ function handleVideoClick(e: Event) {
 
     .normal {
       position: absolute;
-      /* 🎯 适配移动端 Chrome：如果有底部导航栏，向上偏移避免被挡 */
-      bottom: calc(var(--footer-height) + env(safe-area-inset-bottom));
+      bottom: 0;
       width: 100%;
+      z-index: 1001;
       transition: all 0.3s;
 
       .comment-status {
@@ -965,7 +965,7 @@ function handleVideoClick(e: Event) {
 
     // 进度条触摸热区容器（大面积，方便拖动）
     .progress-container {
-      z-index: 5; // 保留可拖动热区，但让工具栏浮层优先
+      z-index: 1001; // 保留可拖动热区，但让工具栏浮层优先
       position: absolute;
       /* 🎯 适配移动端 Chrome：确保在底部导航栏上方 */
       bottom: calc(var(--footer-height) + env(safe-area-inset-bottom));
