@@ -44,16 +44,12 @@
 
 /* 🎯 Telegram 真全屏环境适配：避开灵动岛/刘海屏/打孔屏 */
 html.is-tg-fullscreen {
-  // 🎯 [TG-V6] 微调偏移量
-  --tg-top-offset: calc(env(safe-area-inset-top, 44px) + 15rem) !important;
-
-  &.is-android {
-    --tg-top-offset: calc(env(safe-area-inset-top, 0px) + 10px) !important;
-  }
+  // 🎯 [TG-V7] 基准偏移，由 JS 强控，CSS 仅做同步
+  --tg-top-offset: 0px; 
   
   // 🎯 同步更新全局高度
-  --home-header-height: calc(38rem + var(--tg-top-offset)) !important;
-  --common-header-height: calc(50rem + var(--tg-top-offset)) !important;
+  --home-header-height: 38rem !important;
+  --common-header-height: 50rem !important;
 }
 
 html,

@@ -970,15 +970,15 @@ function toggle() {
     height: 60rem;
     padding: 0 var(--page-padding);
     
-    // ✅ 适配安全区域
-    padding-top: var(--tg-top-offset);
-    height: calc(60rem + var(--tg-top-offset));
+    // ✅ [TG-V7] 强制使用偏移变量
+    padding-top: var(--tg-top-offset) !important;
+    height: calc(60rem + var(--tg-top-offset)) !important;
+    top: 0 !important;
+    left: 0 !important;
 
-    // 🎯 真全屏下，额外下移 1 个字体高度 (15rem)
-    // 补偿：全局偏移减少了 15rem，这里增加到 30rem
+    // 🎯 [TG-V7] 补偿微调
     :global(html.is-tg-fullscreen) & {
-      padding-top: calc(var(--tg-top-offset) + 30rem);
-      height: calc(60rem + var(--tg-top-offset) + 30rem);
+      padding-top: calc(var(--tg-top-offset) + 10px) !important;
     }
 
     font-size: 14rem;

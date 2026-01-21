@@ -168,45 +168,32 @@ onMounted(() => {
     const checkFullscreen = () => {
       try {
         const tgWebApp = (window as any).Telegram?.WebApp
-        const screenH = window.screen.height
         const windowH = window.innerHeight
+        const screenH = window.screen.height
         
-        // 🎯 [TG-V6] 物理高度判定
-        const isHeightFull = windowH >= screenH - 20 
+        // 🎯 [TG-V7] 极度宽松的判定：高度超过屏幕 85% 且在 TG 里就认为是全屏
+        const isHeightFull = windowH > screenH * 0.85
         const isUrlFull = url.includes('tgWebAppFullscreen=1')
         const isOfficialFull = !!tgWebApp?.isFullscreen
         
         const isActuallyFull = isOfficialFull || isHeightFull || isUrlFull
-        const isKeyboardUp = windowH < screenH * 0.75
+        const isKeyboardUp = windowH < screenH * 0.6 // 键盘弹出判定也调松一点
 
-        console.log('[TG-V6] Fullscreen Check:', {
-          isActuallyFull,
-          isOfficialFull,
-          isHeightFull,
-          isUrlFull,
-          isKeyboardUp,
-          windowH,
-          screenH
-        })
+        console.log('[TG-V7] Fullscreen Check:', { isActuallyFull, windowH, screenH })
         
-        if (isActuallyFull) {
+        if (isActuallyFull && !isKeyboardUp) {
           document.documentElement.classList.add('is-tg-fullscreen')
-          document.documentElement.setAttribute('data-v', 'v6')
+          document.documentElement.setAttribute('data-v', 'v7')
           
-          // 🎯 [TG-V6] 精细化 JS 注入
-          // iOS 默认 44px，安卓默认 0px (因为安卓 TG 内部通常不需要额外补偿)
-          const baseOffset = isIOS ? 44 : 0;
-          const extraCompensate = isIOS ? 15 : 10; // 仅保留 10-15px 的微调
-          const totalOffset = baseOffset + extraCompensate;
-          
-          document.documentElement.style.setProperty('--tg-top-offset', `${totalOffset}px`, 'important')
+          // 🎯 [TG-V7] 更加保守的偏移：iOS 44, Android 10 (只留一点点)
+          const offsetValue = isIOS ? 44 : 10;
+          document.documentElement.style.setProperty('--tg-top-offset', `${offsetValue}px`, 'important')
         } else if (!isKeyboardUp) {
           document.documentElement.classList.remove('is-tg-fullscreen')
-          document.documentElement.removeAttribute('data-v')
-          document.documentElement.style.removeProperty('--tg-top-offset')
+          document.documentElement.style.setProperty('--tg-top-offset', '0px', 'important')
         }
       } catch (e) {
-        console.error('[TG-V6] Fullscreen Check Error:', e)
+        console.error('[TG-V7] Error:', e)
       }
     }
     
