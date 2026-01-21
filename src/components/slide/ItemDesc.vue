@@ -115,6 +115,7 @@ const publishDate = computed(() => {
       <div v-if="publishDate" class="publish-date">发布于 {{ publishDate }}</div>
       <div
         class="description-wrapper"
+        :class="{ 'show-mask': state.expanded }"
         v-if="fullDescription"
         @touchstart.stop="state.expanded && $event.stopPropagation()"
         @touchmove.stop="state.expanded && $event.stopPropagation()"
@@ -254,8 +255,8 @@ const publishDate = computed(() => {
       z-index: 60; // ✅ 高于进度条热区(50)，与静音icon同级
     }
 
-    // ✅ 提升白色视频上的可读性：描述区域加渐变遮罩
-    .description-wrapper::before {
+    // ✅ 只有展开描述时才显示渐变遮罩，平时不打开
+    .description-wrapper.show-mask::before {
       content: '';
       position: absolute;
       width: 100vw;
