@@ -147,6 +147,7 @@
                 :icon="isLandscape ? 'solar:quit-full-screen-bold' : 'solar:full-screen-bold'"
               />
             </div>
+            <div style="flex: 1"></div> <!-- 🎯 占位符：将礼物图标推向最右侧 -->
             <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
           </div>
         </div>
@@ -2330,7 +2331,7 @@ onBeforeUnmount(() => {
       .options {
         display: flex;
         align-items: center;
-        gap: 15rem;
+        gap: 12rem; /* 稍微缩小间距，确保在窄屏下也能放下 */
         margin-top: 10rem;
 
         .input {

@@ -355,15 +355,24 @@ onDeactivated(() => {
 
   .video-container {
     width: 100%;
-    /* 🎯 方案升级：不再减去高度，而是 100% 铺满，确保无缝隙 */
+    /* 🎯 方案升级：核心修复视频遮挡字幕问题 */
+    /* 使用 padding-bottom 预留出 Footer 的空间，配合 box-sizing: border-box */
+    /* 这样 height: 100% 的子组件（视频）就正好止步于 Footer 上方 */
     height: 100%;
+    box-sizing: border-box;
     position: relative;
     transition: transform 0.2s ease-out;
     will-change: transform;
 
     /* 🎯 定义底部偏移量 */
     &.has-footer-offset {
-      --footer-offset: calc(var(--footer-height) + env(safe-area-inset-bottom));
+      padding-bottom: calc(var(--footer-height) + env(safe-area-inset-bottom));
+      --footer-offset: 0rem; 
+
+      /* 🎯 安卓 Chrome 环境下，额外增加偏移量以应对地址栏和导航栏遮挡 */
+      :global(html.is-chrome.is-android) & {
+        padding-bottom: calc(var(--footer-height) + env(safe-area-inset-bottom) + 35rem);
+      }
     }
 
     &.no-transition {

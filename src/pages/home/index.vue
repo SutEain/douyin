@@ -275,19 +275,22 @@ onDeactivated(() => {
   width: 100%;
   /* 🎯 预留顶部 Tab 空间 */
   padding-top: var(--home-header-height);
-  /* 🎯 方案升级：不再减去高度，而是 100% 铺满，确保无缝隙 */
+  /* 🎯 方案升级：核心修复视频遮挡字幕问题 */
+  /* 使用 padding-bottom 预留出 Footer 的空间，配合 box-sizing: border-box */
+  /* 这样 height: 100% 的子组件（视频）就正好止步于 Footer 上方 */
   height: 100%;
   box-sizing: border-box;
+  padding-bottom: calc(var(--footer-height) + env(safe-area-inset-bottom));
   overflow: hidden;
   z-index: 1;
 
-  /* 🎯 定义底部偏移量：Footer 高度 + 安全区高度 */
+  /* 🎯 定义底部偏移量：用于内部 UI 组件（如描述、作者）的定位基准 */
   &.has-footer-offset {
-    --footer-offset: calc(var(--footer-height) + env(safe-area-inset-bottom));
+    --footer-offset: 0rem; /* 💡 因为父容器已经有了 padding-bottom，内部组件相对于父容器底部即为 Footer 上方 */
     
-    /* 🎯 安卓 Chrome 环境下，UI 被 Footer 和地址栏严重遮挡，大幅上抬 35rem */
+    /* 🎯 安卓 Chrome 环境下，额外增加偏移量以应对地址栏和导航栏遮挡 */
     :global(html.is-chrome.is-android) & {
-      --footer-offset: calc(var(--footer-height) + env(safe-area-inset-bottom) + 35rem);
+      padding-bottom: calc(var(--footer-height) + env(safe-area-inset-bottom) + 35rem);
     }
   }
 
