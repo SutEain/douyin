@@ -42,8 +42,8 @@
   --tg-top-offset: env(safe-area-inset-top, 0px);
 }
 
-/* 🎯 iOS 端 Telegram 真全屏环境适配：避开灵动岛/刘海屏 */
-html.is-ios.is-tg-fullscreen {
+/* 🎯 Telegram 真全屏环境适配：避开灵动岛/刘海屏/打孔屏 */
+html.is-tg-fullscreen {
   // 仅在真全屏下，额外多降下一段距离（约一个文字高度 15rem）
   --tg-top-offset: calc(env(safe-area-inset-top, 44px) + 15rem);
   

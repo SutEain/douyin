@@ -2141,6 +2141,11 @@ onBeforeUnmount(() => {
       justify-content: space-between;
       pointer-events: auto;
 
+      // 🎯 真全屏下，顶部 UI 整体下移 4 个字体高度 (60rem)
+      :global(html.is-tg-fullscreen) & {
+        padding-top: 60rem;
+      }
+
       .liver {
         background: rgba(0, 0, 0, 0.4);
         padding: 3rem 4rem;

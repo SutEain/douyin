@@ -1322,6 +1322,12 @@ onBeforeUnmount(() => {
         .header-actions {
           position: absolute;
           top: 0;
+          
+          // 🎯 真全屏下，顶部操作栏下移 2 个字体高度 (30rem)
+          :global(html.is-tg-fullscreen) & {
+            top: 30rem;
+          }
+
           left: 0;
           right: 0;
           height: 44px;

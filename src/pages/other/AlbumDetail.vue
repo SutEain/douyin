@@ -1011,6 +1011,12 @@ function close() {
 
     .detail-header {
       padding: calc(15rem + var(--tg-top-offset)) 15rem 15rem;
+
+      // 🎯 真全屏下，返回按钮容器再额外下移 2 个字体高度 (30rem)
+      :global(html.is-tg-fullscreen) & {
+        padding-top: calc(15rem + var(--tg-top-offset) + 30rem);
+      }
+
       display: flex;
       justify-content: space-between;
 

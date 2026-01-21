@@ -973,6 +973,12 @@ function toggle() {
     padding: 0 var(--page-padding);
     padding-top: var(--tg-top-offset);
 
+    // 🎯 真全屏下再额外下调一个文字高度 (15rem)
+    :global(html.is-tg-fullscreen) & {
+      height: calc(60rem + var(--tg-top-offset) + 15rem);
+      padding-top: calc(var(--tg-top-offset) + 15rem);
+    }
+
     font-size: 14rem;
     display: flex;
     justify-content: space-between;
@@ -1025,8 +1031,12 @@ function toggle() {
     box-sizing: border-box;
 
     padding-top: 60rem;
-    padding-top: calc(60rem + constant(safe-area-inset-top));
-    padding-top: calc(60rem + env(safe-area-inset-top));
+    padding-top: calc(60rem + var(--tg-top-offset));
+
+    // 🎯 真全屏下，内容区域也需要同步下移，防止被 Header 挡住
+    :global(html.is-tg-fullscreen) & {
+      padding-top: calc(60rem + var(--tg-top-offset) + 15rem);
+    }
 
     .history {
       .row {
