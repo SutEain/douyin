@@ -369,9 +369,10 @@ function handleAvatarError(e: Event) {
     padding-top: var(--tg-top-offset);
 
     // 🎯 真全屏下，额外下调 1 个字体高度 (15rem)
+    // 补偿：增加到 30rem
     :global(html.is-tg-fullscreen) & {
-      height: calc(60rem + var(--tg-top-offset) + 15rem);
-      padding-top: calc(var(--tg-top-offset) + 15rem);
+      height: calc(60rem + var(--tg-top-offset) + 30rem);
+      padding-top: calc(var(--tg-top-offset) + 30rem);
     }
 
     font-size: 14rem;
@@ -425,7 +426,7 @@ function handleAvatarError(e: Event) {
     
     // 🎯 真全屏下，结果区域也同步下移
     :global(html.is-tg-fullscreen) & {
-      padding-top: calc(60rem + var(--tg-top-offset) + 15rem);
+      padding-top: calc(60rem + var(--tg-top-offset) + 30rem);
     }
     
     min-height: 100vh;
