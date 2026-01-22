@@ -510,7 +510,8 @@ const slideState = reactive({
 const slideContainerStyle = computed(() => {
   return {
     transform: `translateY(${slideState.offsetY}px)`,
-    transition: slideState.isTransitioning ? 'transform 350ms ease-out' : 'none'
+    // 🎯 优化：缩短动画时间，使用更快的缓动函数，提升流畅度
+    transition: slideState.isTransitioning ? 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)' : 'none'
   }
 })
 
@@ -1147,8 +1148,12 @@ function rotateToNext() {
   if (nextItem) {
     videoStore.setCurrentVideo(nextItem, currentIndex.value)
     videoStore.setCurrentPlaying(nextItem.aweme_id, props.page)
-    // ✅ 深拷贝确保每个视频的统计数据独立
-    currentItemLocal.value = JSON.parse(JSON.stringify(nextItem))
+    // 🎯 优化：使用浅拷贝 + 深拷贝关键字段，提升性能
+    // 只深拷贝可能被修改的字段，避免全量深拷贝带来的性能问题
+    currentItemLocal.value = {
+      ...nextItem,
+      statistics: nextItem.statistics ? { ...nextItem.statistics } : undefined
+    } as VideoItem
   } else {
     // 滑到了"没有更多"页面
     currentItemLocal.value = null
@@ -1228,8 +1233,12 @@ function rotateToPrev() {
   emit('update:index', currentIndex.value)
   videoStore.setCurrentVideo(props.items[currentIndex.value], currentIndex.value)
   videoStore.setCurrentPlaying(props.items[currentIndex.value].aweme_id, props.page)
-  // ✅ 深拷贝确保每个视频的统计数据独立
-  currentItemLocal.value = JSON.parse(JSON.stringify(props.items[currentIndex.value]))
+  // 🎯 优化：使用浅拷贝 + 深拷贝关键字段，提升性能
+  const item = props.items[currentIndex.value]
+  currentItemLocal.value = {
+    ...item,
+    statistics: item.statistics ? { ...item.statistics } : undefined
+  } as VideoItem
 
   next.videoIndex = currentIndex.value - 1 >= 0 ? currentIndex.value - 1 : null
   updateSlotSource(next, true)
@@ -1510,33 +1519,30 @@ function snapToNext() {
   const isNonVideoContent =
     nextContentType === 'image' || nextContentType === 'album' || nextContentType === 'collection'
 
-  // 🎯 如果是图文/相册/合辑，需要等待组件渲染完成后再执行动画
+  // 🎯 优化：减少等待时间，提升切换流畅度
   if (isNonVideoContent) {
-    // 等待 DOM 更新和组件渲染
+    // 等待 DOM 更新和组件渲染（减少到单次 requestAnimationFrame）
     nextTick(() => {
-      // 再等待一帧确保组件完全渲染
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          slideState.isTransitioning = true
-          slideState.offsetY = 0
+        slideState.isTransitioning = true
+        slideState.offsetY = 0
 
-          // 动画结束后关闭 transition
-          setTimeout(() => {
-            slideState.isTransitioning = false
-          }, 350)
-        })
+        // 动画结束后关闭 transition（优化到 300ms）
+        setTimeout(() => {
+          slideState.isTransitioning = false
+        }, 300)
       })
     })
   } else {
-    // 视频类型，只需要等待一帧确保 DOM 更新
+    // 视频类型，等待一帧确保 DOM 更新后再执行动画
     requestAnimationFrame(() => {
       slideState.isTransitioning = true
       slideState.offsetY = 0
 
-      // 动画结束后关闭 transition
+      // 动画结束后关闭 transition（优化到 300ms）
       setTimeout(() => {
         slideState.isTransitioning = false
-      }, 350)
+      }, 300)
     })
   }
 }
@@ -1556,33 +1562,30 @@ function snapToPrev() {
   const isNonVideoContent =
     prevContentType === 'image' || prevContentType === 'album' || prevContentType === 'collection'
 
-  // 🎯 如果是图文/相册/合辑，需要等待组件渲染完成后再执行动画
+  // 🎯 优化：减少等待时间，提升切换流畅度
   if (isNonVideoContent) {
-    // 等待 DOM 更新和组件渲染
+    // 等待 DOM 更新和组件渲染（减少到单次 requestAnimationFrame）
     nextTick(() => {
-      // 再等待一帧确保组件完全渲染
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          slideState.isTransitioning = true
-          slideState.offsetY = 0
+        slideState.isTransitioning = true
+        slideState.offsetY = 0
 
-          // 动画结束后关闭 transition
-          setTimeout(() => {
-            slideState.isTransitioning = false
-          }, 350)
-        })
+        // 动画结束后关闭 transition（优化到 300ms）
+        setTimeout(() => {
+          slideState.isTransitioning = false
+        }, 300)
       })
     })
   } else {
-    // 视频类型，只需要等待一帧确保 DOM 更新
+    // 视频类型，等待一帧确保 DOM 更新后再执行动画
     requestAnimationFrame(() => {
       slideState.isTransitioning = true
       slideState.offsetY = 0
 
-      // 动画结束后关闭 transition
+      // 动画结束后关闭 transition（优化到 300ms）
       setTimeout(() => {
         slideState.isTransitioning = false
-      }, 350)
+      }, 300)
     })
   }
 }
@@ -1592,9 +1595,10 @@ function snapBack() {
   slideState.isTransitioning = true
   slideState.offsetY = 0
 
+  // 🎯 优化：缩短动画时间，提升流畅度
   setTimeout(() => {
     slideState.isTransitioning = false
-  }, 350)
+  }, 300)
 }
 
 watch(
