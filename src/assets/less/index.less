@@ -90,3 +90,149 @@ html.is-tg-miniapp #app {
     height: 100%;
   }
 }
+
+/* 🎯 Telegram Mini App 全屏模式：首页 Tab 下移 */
+html.is-tg-fullscreen-ios .indicator-home {
+  top: 84px !important; /* 44px + 32px (2个字体高度) + 8px (半个字体高度) */
+}
+
+html.is-tg-fullscreen-android .indicator-home {
+  top: 57px !important; /* 25px + 32px (2个字体高度) */
+}
+
+/* 🎯 Telegram Mini App 全屏模式：搜索页顶部搜索栏下移 */
+html.is-tg-fullscreen-ios .Search .header {
+  top: 32px !important; /* 2个字体高度 */
+}
+
+html.is-tg-fullscreen-android .Search .header {
+  top: 56px !important; /* 2个字体高度 + 8px (半个字体高度) + 16px (1个字体高度) */
+}
+
+/* 🎯 确保搜索历史不被遮挡：增加 content 的 padding-top */
+html.is-tg-fullscreen-ios .Search .content {
+  padding-top: calc(60rem + 32px + env(safe-area-inset-top)) !important;
+}
+
+html.is-tg-fullscreen-android .Search .content {
+  padding-top: calc(60rem + 56px + env(safe-area-inset-top)) !important;
+}
+
+/* 🎯 Telegram Mini App 全屏模式：搜索结果页顶部搜索栏下移 */
+html.is-tg-fullscreen-ios .SearchResult .header {
+  top: 32px !important; /* 2个字体高度 */
+}
+
+html.is-tg-fullscreen-android .SearchResult .header {
+  top: 56px !important; /* 2个字体高度 + 8px (半个字体高度) + 16px (1个字体高度) */
+}
+
+/* 🎯 确保搜索结果不被遮挡：增加 search-results 的 padding-top */
+html.is-tg-fullscreen-ios .SearchResult .search-results {
+  padding-top: calc(60rem + 32px + env(safe-area-inset-top)) !important;
+}
+
+html.is-tg-fullscreen-android .SearchResult .search-results {
+  padding-top: calc(60rem + 56px + env(safe-area-inset-top)) !important;
+}
+
+/* 🎯 Telegram Mini App 全屏模式：安卓底部三大金刚按钮占位 */
+html.is-tg-fullscreen-android .footer {
+  height: calc(var(--footer-height) + env(safe-area-inset-bottom) + 32px) !important;
+}
+
+html.is-tg-fullscreen-android .footer .android-bottom-spacer {
+  display: block !important;
+  height: 32px;
+}
+
+/* 🎯 Telegram Mini App 全屏模式：安卓减少播放容器高度，避免描述和进度条被抬升的footer遮挡 */
+html.is-tg-fullscreen-android .video-content.has-footer-offset {
+  height: calc(
+    var(--vh, 1vh) * 100 - var(--footer-height) -
+      env(safe-area-inset-bottom) - 22px
+  ) !important;
+}
+
+/* 🎯 Telegram Mini App 全屏模式：安卓视频详情页减少播放容器高度，与feed流保持一致 */
+html.is-tg-fullscreen-android #video-detail .video-container.has-footer-offset {
+  height: calc(
+    var(--vh, 1vh) * 100 - var(--footer-height) -
+      env(safe-area-inset-bottom) - 22px
+  ) !important;
+}
+
+/* 🎯 安卓：视频详情页返回按钮下移 */
+html.is-android #video-detail .back-wrapper {
+  top: calc(80rem + env(safe-area-inset-top)) !important;
+}
+
+/* 🎯 图文详情页返回按钮下移（基础60rem，安卓80rem） */
+.goods-detail .float-overlay .detail-header {
+  padding-top: calc(15rem + 40rem + env(safe-area-inset-top)) !important;
+}
+
+html.is-android .goods-detail .float-overlay .detail-header {
+  padding-top: calc(15rem + 60rem + env(safe-area-inset-top)) !important;
+}
+
+/* 🎯 Telegram Mini App 全屏模式：安卓图文详情页底部工具栏占位 */
+html.is-tg-fullscreen-android .goods-detail .detail-footer {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 32px) !important;
+}
+
+html.is-tg-fullscreen-android .goods-detail .detail-footer .android-bottom-spacer {
+  display: block !important;
+  height: 32px;
+}
+
+/* 🎯 直播详情页顶部UI整体下移60rem */
+.LivePage .float {
+  padding-top: calc(65rem + env(safe-area-inset-top)) !important;
+}
+
+/* 🎯 iOS：顶部UI往上移动10rem */
+html.is-ios .LivePage .float {
+  padding-top: calc(50rem + env(safe-area-inset-top)) !important;
+}
+
+/* 🎯 Telegram Mini App 全屏模式：安卓直播详情页底部工具栏占位 */
+html.is-tg-fullscreen-android .LivePage .float {
+  padding-bottom: calc(15rem + env(safe-area-inset-bottom) + 22px) !important;
+}
+
+html.is-tg-fullscreen-android .LivePage .float .bottom {
+  position: relative; // 🎯 为占位元素提供定位上下文
+}
+
+html.is-tg-fullscreen-android .LivePage .float .bottom .android-bottom-spacer {
+  display: block !important;
+  height: 32px;
+}
+
+/* 🎯 Telegram Mini App 全屏模式：视频tab内容下移，避免被tab覆盖 */
+html.is-tg-fullscreen-ios .video-tab {
+  padding-top: calc(var(--home-header-height) + 84px) !important;
+}
+
+html.is-tg-fullscreen-android .video-tab {
+  padding-top: calc(var(--home-header-height) + 57px) !important;
+}
+
+/* 🎯 Telegram Mini App 全屏模式：图文tab内容下移，避免被tab覆盖 */
+html.is-tg-fullscreen-ios #Community {
+  padding-top: calc(var(--home-header-height) + 84px) !important;
+}
+
+html.is-tg-fullscreen-android #Community {
+  padding-top: calc(var(--home-header-height) + 57px) !important;
+}
+
+/* 🎯 Telegram Mini App 全屏模式：直播列表tab内容下移，避免被tab覆盖 */
+html.is-tg-fullscreen-ios .live-tab {
+  padding-top: calc(var(--home-header-height) + 84px) !important;
+}
+
+html.is-tg-fullscreen-android .live-tab {
+  padding-top: calc(var(--home-header-height) + 57px) !important;
+}

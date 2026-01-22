@@ -342,8 +342,13 @@ onDeactivated(() => {
   .back-wrapper {
     position: fixed;
     left: 15rem;
-    top: calc(10rem + env(safe-area-inset-top)); // 🎯 适配刘海屏
+    top: calc(60rem + env(safe-area-inset-top)); // 🎯 适配刘海屏，下移50rem
     z-index: 999;
+    
+    /* 🎯 安卓：再下移10rem */
+    :global(html.is-android) & {
+      top: calc(80rem + env(safe-area-inset-top));
+    }
 
     .back-icon {
       font-size: 28rem;

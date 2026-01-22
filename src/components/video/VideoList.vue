@@ -30,7 +30,6 @@
         <!-- 🎯 内容加载占位（取消“没有更多”判断，只显示加载背景） -->
         <template v-if="slot.videoIndex === null">
           <div class="no-more-page" style="background: #000">
-            <Loading style="width: 40rem" />
           </div>
         </template>
 

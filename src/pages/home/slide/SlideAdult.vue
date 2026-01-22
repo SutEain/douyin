@@ -20,8 +20,7 @@
 
       <!-- Loading 状态 (初始加载或请求中) -->
       <div v-else class="loading-state">
-        <div class="loading-spinner"></div>
-        <p>加载中...</p>
+        <Loading :is-full-screen="false" />
       </div>
     </div>
   </SlideItem>
@@ -31,6 +30,7 @@
 import { onMounted, reactive, watch } from 'vue'
 import SlideItem from '@/components/slide/SlideItem.vue'
 import VideoList from '@/components/video/VideoList.vue'
+import Loading from '@/components/Loading.vue'
 import { adultVideoFeed } from '@/api/videos'
 import { useBaseStore } from '@/store/pinia'
 import type { VideoItem } from '@/types'
@@ -186,20 +186,5 @@ onMounted(() => {
     }
   }
 
-  .loading-spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid rgba(255, 255, 255, 0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 15px;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
 }
 </style>

@@ -10,6 +10,9 @@
     <div class="l-button" @click="tab(5)">
       <span :class="{ active: currentTab === 5 }">{{ $t('home.me') }}</span>
     </div>
+    
+    <!-- 🎯 安卓全面屏：底部占位元素，避免被三大金刚按钮遮挡 -->
+    <div class="android-bottom-spacer"></div>
   </div>
 </template>
 
@@ -116,6 +119,17 @@ export default {
     height: 40%;
     background: rgba(128, 128, 128, 0.3); // 灰色半透明
     align-self: center;
+  }
+  
+  // 🎯 安卓全面屏：底部占位元素，避免被三大金刚按钮遮挡
+  .android-bottom-spacer {
+    display: none;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    z-index: -1; // 放在按钮后面
   }
 }
 </style>

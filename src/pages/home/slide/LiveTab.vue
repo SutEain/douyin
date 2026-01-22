@@ -2,7 +2,9 @@
   <div class="live-tab">
     <div class="content">
       <div class="rooms">
-        <div v-if="state.loading" class="rooms-state">加载中...</div>
+        <div v-if="state.loading" class="rooms-state">
+          <Loading :is-full-screen="false" />
+        </div>
         <div v-else-if="state.error" class="rooms-state error">{{ state.error }}</div>
         <div v-else-if="!state.rooms.length" class="rooms-state">暂无直播间</div>
 
@@ -32,6 +34,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
+import Loading from '@/components/Loading.vue'
 import { fetchLiveRooms, type LiveRoom } from '@/api/live'
 
 interface Props {
@@ -109,12 +112,19 @@ onMounted(() => {
   overflow: auto;
   padding: 12rem 12rem 20rem;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .rooms-state {
-  padding: 24rem 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
   text-align: center;
   color: rgba(255, 255, 255, 0.6);
+  min-height: 0;
 
   &.error {
     color: rgba(255, 120, 120, 0.95);

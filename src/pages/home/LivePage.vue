@@ -149,6 +149,8 @@
           </div>
           <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
         </div>
+        <!-- 🎯 安卓全面屏：底部占位元素，避免被三大金刚按钮遮挡 -->
+        <div class="android-bottom-spacer"></div>
         </div>
       </div>
     </div>
@@ -2370,6 +2372,17 @@ onBeforeUnmount(() => {
           height: 36rem;
           flex-shrink: 0;
         }
+      }
+      
+      // 🎯 安卓全面屏：底部占位元素，避免被三大金刚按钮遮挡
+      .android-bottom-spacer {
+        display: none;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        z-index: -1; // 放在工具栏后面
       }
     }
   }

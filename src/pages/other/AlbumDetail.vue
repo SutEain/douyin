@@ -290,6 +290,8 @@
             </div>
           </div>
         </div>
+        <!-- 🎯 安卓全面屏：底部占位元素，避免被三大金刚按钮遮挡 -->
+        <div class="android-bottom-spacer"></div>
       </div>
     </div>
 
@@ -1030,6 +1032,18 @@ function close() {
       backdrop-filter: blur(10px);
       border-top: 1px solid rgba(white, 0.1);
       padding-bottom: env(safe-area-inset-bottom);
+      position: relative; // 🎯 为占位元素提供定位上下文
+      
+      // 🎯 安卓全面屏：底部占位元素，避免被三大金刚按钮遮挡
+      .android-bottom-spacer {
+        display: none;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        z-index: -1; // 放在工具栏后面
+      }
     }
   }
 

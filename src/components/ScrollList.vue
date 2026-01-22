@@ -1,8 +1,8 @@
 <template>
   <Scroll
     ref="scroll"
-    :loading="state.loading"
-    :full-loading="!state.list.length"
+    :loading="props.showScrollLoading && state.loading"
+    :full-loading="props.showScrollLoading && state.loading && state.list.length === 0"
     @pulldown="loadData"
   >
     <slot :list="state.list" :loading="state.loading"></slot>
@@ -23,6 +23,10 @@ const props = defineProps({
     default() {
       return () => void 0
     }
+  },
+  showScrollLoading: {
+    type: Boolean,
+    default: true // 🎯 默认显示Scroll的loading（图文tab需要）
   }
 })
 const scroll = useScroll()

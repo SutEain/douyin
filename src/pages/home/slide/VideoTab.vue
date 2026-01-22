@@ -5,6 +5,7 @@ import { _checkImgUrl, _duration, _formatNumber, _stopPropagation, _truncate } f
 import { buildCdnUrl } from '@/utils/media'
 import { recommendedVideoTab } from '@/api/videos'
 import ScrollList from '@/components/ScrollList.vue'
+import Loading from '@/components/Loading.vue'
 import { useNav } from '@/utils/hooks/useNav'
 import { useVideoStore } from '@/stores/video'
 import bus, { EVENT_KEY } from '@/utils/bus'
@@ -205,7 +206,7 @@ function onAvatarError(e) {
 
 <template>
   <div class="video-tab" @dragstart="(e) => _stopPropagation(e)">
-    <ScrollList ref="scrollListRef" class="Scroll" v-if="state.show" :api="recommendedVideoTab">
+    <ScrollList ref="scrollListRef" class="Scroll" v-if="state.show" :api="recommendedVideoTab" :show-scroll-loading="false">
       <template v-slot="{ list, loading }">
         <template v-if="list?.length">
           <div class="list">
@@ -298,8 +299,7 @@ function onAvatarError(e) {
         </template>
         <div v-else-if="!loading" class="empty">暂无视频</div>
         <div v-else class="loading-container">
-          <div class="loading-spinner"></div>
-          <p>加载中...</p>
+          <Loading :is-full-screen="false" />
         </div>
       </template>
     </ScrollList>
@@ -317,31 +317,22 @@ function onAvatarError(e) {
     height: calc(
       var(--vh, 1vh) * 100 - var(--home-header-height) - var(--footer-height)
     ) !important;
+    position: relative;
   }
 
   .loading-container {
-    padding: 40rem 0;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     color: #999;
     gap: 12rem;
-
-    .loading-spinner {
-      width: 32rem;
-      height: 32rem;
-      border: 3rem solid rgba(255, 255, 255, 0.1);
-      border-top-color: #fe2c55;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 }
 
