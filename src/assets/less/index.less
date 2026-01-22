@@ -149,30 +149,32 @@ html.is-tg-fullscreen-android .footer .android-bottom-spacer {
 /* 🎯 Telegram Mini App 全屏模式：安卓减少播放容器高度，避免描述和进度条被抬升的footer遮挡 */
 html.is-tg-fullscreen-android .video-content.has-footer-offset {
   height: calc(
-    var(--vh, 1vh) * 100 - var(--footer-height) -
-      env(safe-area-inset-bottom) - 22px
+    var(--vh, 1vh) * 100 - var(--footer-height) - env(safe-area-inset-bottom) - 22px
   ) !important;
 }
 
 /* 🎯 Telegram Mini App 全屏模式：安卓视频详情页减少播放容器高度，与feed流保持一致 */
 html.is-tg-fullscreen-android #video-detail .video-container.has-footer-offset {
   height: calc(
-    var(--vh, 1vh) * 100 - var(--footer-height) -
-      env(safe-area-inset-bottom) - 22px
+    var(--vh, 1vh) * 100 - var(--footer-height) - env(safe-area-inset-bottom) - 22px
   ) !important;
 }
 
-/* 🎯 安卓：视频详情页返回按钮下移 */
-html.is-android #video-detail .back-wrapper {
+/* 🎯 Telegram Mini App 全屏模式：视频详情页返回按钮下移 */
+html.is-tg-fullscreen-ios #video-detail .back-wrapper {
+  top: calc(60rem + env(safe-area-inset-top)) !important;
+}
+
+html.is-tg-fullscreen-android #video-detail .back-wrapper {
   top: calc(80rem + env(safe-area-inset-top)) !important;
 }
 
-/* 🎯 图文详情页返回按钮下移（基础60rem，安卓80rem） */
-.goods-detail .float-overlay .detail-header {
+/* 🎯 Telegram Mini App 全屏模式：图文详情页返回按钮下移 */
+html.is-tg-fullscreen-ios .goods-detail .float-overlay .detail-header {
   padding-top: calc(15rem + 40rem + env(safe-area-inset-top)) !important;
 }
 
-html.is-android .goods-detail .float-overlay .detail-header {
+html.is-tg-fullscreen-android .goods-detail .float-overlay .detail-header {
   padding-top: calc(15rem + 60rem + env(safe-area-inset-top)) !important;
 }
 
@@ -186,14 +188,13 @@ html.is-tg-fullscreen-android .goods-detail .detail-footer .android-bottom-space
   height: 32px;
 }
 
-/* 🎯 直播详情页顶部UI整体下移60rem */
-.LivePage .float {
-  padding-top: calc(65rem + env(safe-area-inset-top)) !important;
+/* 🎯 Telegram Mini App 全屏模式：直播详情页顶部UI整体下移 */
+html.is-tg-fullscreen-ios .LivePage .float {
+  padding-top: calc(50rem + env(safe-area-inset-top)) !important;
 }
 
-/* 🎯 iOS：顶部UI往上移动10rem */
-html.is-ios .LivePage .float {
-  padding-top: calc(50rem + env(safe-area-inset-top)) !important;
+html.is-tg-fullscreen-android .LivePage .float {
+  padding-top: calc(65rem + env(safe-area-inset-top)) !important;
 }
 
 /* 🎯 Telegram Mini App 全屏模式：安卓直播详情页底部工具栏占位 */

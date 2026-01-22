@@ -31,17 +31,17 @@
           <p>请前往 Bot，点击「邀请好友解锁🔞」获取你的专属邀请链接。</p>
         </div>
       </div>
-    <!-- 正常详情播放 -->
-    <div class="video-container has-footer-offset" v-else>
-      <VideoList
-        :items="dynamicVideoItems"
-        page="detail"
-        :initial-index="initialIndex"
-        :autoplay="true"
-        :has-more="hasMore"
-        @load-more="handleLoadMore"
-      />
-    </div>
+      <!-- 正常详情播放 -->
+      <div class="video-container has-footer-offset" v-else>
+        <VideoList
+          :items="dynamicVideoItems"
+          page="detail"
+          :initial-index="initialIndex"
+          :autoplay="true"
+          :has-more="hasMore"
+          @load-more="handleLoadMore"
+        />
+      </div>
     </div>
 
     <!-- 🎯 加载中占位 -->
@@ -342,13 +342,8 @@ onDeactivated(() => {
   .back-wrapper {
     position: fixed;
     left: 15rem;
-    top: calc(60rem + env(safe-area-inset-top)); // 🎯 适配刘海屏，下移50rem
+    top: calc(10rem + env(safe-area-inset-top)); // 🎯 适配刘海屏
     z-index: 999;
-    
-    /* 🎯 安卓：再下移10rem */
-    :global(html.is-android) & {
-      top: calc(80rem + env(safe-area-inset-top));
-    }
 
     .back-icon {
       font-size: 28rem;
