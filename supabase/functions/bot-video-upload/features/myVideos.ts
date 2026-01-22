@@ -455,7 +455,9 @@ export async function handleMyPublished(chatId: number, messageId: number) {
     const last = videos[videos.length - 1] as any
     const nextCursor: PublishedCursor | null =
       last?.published_at && last?.id ? { published_at: last.published_at, id: last.id } : null
-    const hasNext = videos.length === 10 && !!nextCursor
+    // 🎯 修复：只要有 nextCursor 就显示下一页按钮，不要求必须返回10条
+    // 因为 nextCursor 的存在本身就意味着还有更多数据可以查询
+    const hasNext = !!nextCursor
 
     await setPublishedCtx(chatId, { q: pubCtx.q, cursorStack, nextCursor })
 

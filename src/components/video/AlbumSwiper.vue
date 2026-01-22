@@ -499,7 +499,8 @@ const touch = reactive({
   deltaX: 0,
   deltaY: 0,
   active: false,
-  isHorizontal: false // 🎯 是否判定为水平滑动（用于屏蔽父级的上下滑动）
+  isHorizontal: false, // 🎯 是否判定为水平滑动（用于屏蔽父级的上下滑动）
+  isVertical: false // 🎯 是否判定为垂直滑动（用于阻止左右滑动切换图片）
 })
 
 // 滑动容器样式
@@ -555,6 +556,7 @@ function onTouchStart(e: TouchEvent) {
   touch.deltaY = 0
   touch.active = true
   touch.isHorizontal = false
+  touch.isVertical = false
   isTransitioning.value = false
 }
 
@@ -564,26 +566,35 @@ function onTouchMove(e: TouchEvent) {
   touch.deltaX = t.clientX - touch.startX
   touch.deltaY = t.clientY - touch.startY
 
-  // 🎯 一旦判定为水平滑动，则阻止事件冒泡给父级（避免触发 feed 的上下滑动）
-  if (!touch.isHorizontal) {
-    const absX = Math.abs(touch.deltaX)
-    const absY = Math.abs(touch.deltaY)
-    // 💡 优化判定：水平位移需超过 15px，且明显大于垂直位移（2倍关系），才认定为切图操作
-    if (absX > 15 && absX > absY * 2) {
+  const absX = Math.abs(touch.deltaX)
+  const absY = Math.abs(touch.deltaY)
+
+  // 🎯 判定滑动方向：优先判断垂直滑动，如果垂直滑动明显，则阻止左右滑动
+  if (!touch.isHorizontal && !touch.isVertical) {
+    // 💡 如果垂直位移明显大于水平位移（2倍关系），且垂直位移超过 15px，认定为垂直滑动
+    if (absY > 15 && absY > absX * 2) {
+      touch.isVertical = true
+    }
+    // 💡 如果水平位移明显大于垂直位移（2倍关系），且水平位移超过 15px，认定为水平滑动
+    else if (absX > 15 && absX > absY * 2) {
       touch.isHorizontal = true
     }
   }
 
+  // 🎯 一旦判定为水平滑动，则阻止事件冒泡给父级（避免触发 feed 的上下滑动）
   if (touch.isHorizontal) {
     e.stopPropagation()
   }
 
-  // 边界处理：第一张向右滑、最后一张向左滑时增加阻尼
-  if (currentIndex.value === 0 && touch.deltaX > 0) {
-    touch.deltaX = touch.deltaX * 0.3
-  }
-  if (currentIndex.value === props.images.length - 1 && touch.deltaX < 0) {
-    touch.deltaX = touch.deltaX * 0.3
+  // 🎯 如果是垂直滑动，不处理水平滑动逻辑（边界处理）
+  if (!touch.isVertical) {
+    // 边界处理：第一张向右滑、最后一张向左滑时增加阻尼
+    if (currentIndex.value === 0 && touch.deltaX > 0) {
+      touch.deltaX = touch.deltaX * 0.3
+    }
+    if (currentIndex.value === props.images.length - 1 && touch.deltaX < 0) {
+      touch.deltaX = touch.deltaX * 0.3
+    }
   }
 }
 
@@ -627,6 +638,16 @@ function onMouseUp() {
 
 // 🎯 完成滑动（触摸和鼠标共用）
 function finishSwipe() {
+  // 🎯 如果是垂直滑动，不执行左右滑动切换，直接回弹
+  if (touch.isVertical) {
+    isTransitioning.value = true
+    setTimeout(() => {
+      isTransitioning.value = false
+    }, 300)
+    touch.deltaX = 0
+    return
+  }
+
   const threshold = window.innerWidth * 0.2 // 20% 阈值
 
   if (touch.deltaX < -threshold && currentIndex.value < props.images.length - 1) {

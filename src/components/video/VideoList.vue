@@ -29,8 +29,7 @@
       >
         <!-- 🎯 内容加载占位（取消“没有更多”判断，只显示加载背景） -->
         <template v-if="slot.videoIndex === null">
-          <div class="no-more-page" style="background: #000">
-          </div>
+          <div class="no-more-page" style="background: #000"></div>
         </template>
 
         <!-- 🎯 根据内容类型渲染不同组件 -->
@@ -97,9 +96,9 @@
 
       <!-- 🎯 UI 元素（描述、点赞、进度条等）：放在 slide-container 里，跟随整体移动 -->
       <div class="overlay" v-if="currentItem">
-        <ItemToolbar 
-          v-model:item="currentItemLocal" 
-          @update:item="handleItemUpdate" 
+        <ItemToolbar
+          v-model:item="currentItemLocal"
+          @update:item="handleItemUpdate"
           v-if="!isCleanScreen"
           @toggle-clean-screen="toggleCleanScreen"
         />
@@ -157,11 +156,7 @@
   <!-- 还原按钮（清屏时显示在右下角） -->
   <teleport to="body">
     <transition name="fade">
-      <div
-        v-if="isCleanScreen"
-        class="restore-btn"
-        @click.stop="isCleanScreen = false"
-      >
+      <div v-if="isCleanScreen" class="restore-btn" @click.stop="isCleanScreen = false">
         <Icon icon="solar:restart-bold" class="restore-icon" />
       </div>
     </transition>
@@ -1298,25 +1293,25 @@ function onTouchEnd() {
   // 获取屏幕高度
   const screenHeight = window.innerHeight
 
-  // 🎯 判断是否切换视频
-  // 条件1: 滑动距离 > 30% 屏幕高度
-  // 条件2: 快速滑动（速度 > 0.5 px/ms）且距离 > 20% 屏幕高度
-  const threshold30 = screenHeight * 0.3
-  const threshold20 = screenHeight * 0.2
-  const isFastSwipe = velocity > 0.5
+  // 🎯 判断是否切换视频（提高灵敏度）
+  // 条件1: 滑动距离 > 10% 屏幕高度（从 30% 降低到 10%）
+  // 条件2: 快速滑动（速度 > 0.2 px/ms，从 0.5 降低到 0.2）且距离 > 5% 屏幕高度（从 20% 降低到 5%）
+  const threshold10 = screenHeight * 0.1
+  const threshold5 = screenHeight * 0.05
+  const isFastSwipe = velocity > 0.2
 
   let shouldSwitch = false
   let direction: 'next' | 'prev' | null = null
 
   if (deltaY < 0) {
     // 向上滑（切换到下一个）
-    if (Math.abs(deltaY) > threshold30 || (isFastSwipe && Math.abs(deltaY) > threshold20)) {
+    if (Math.abs(deltaY) > threshold10 || (isFastSwipe && Math.abs(deltaY) > threshold5)) {
       shouldSwitch = true
       direction = 'next'
     }
   } else if (deltaY > 0) {
     // 向下滑（切换到上一个）
-    if (Math.abs(deltaY) > threshold30 || (isFastSwipe && Math.abs(deltaY) > threshold20)) {
+    if (Math.abs(deltaY) > threshold10 || (isFastSwipe && Math.abs(deltaY) > threshold5)) {
       shouldSwitch = true
       direction = 'prev'
     }
@@ -1381,23 +1376,23 @@ function onMouseUp() {
   // 获取屏幕高度
   const screenHeight = window.innerHeight
 
-  // 🎯 判断是否切换视频（与触摸逻辑相同）
-  const threshold30 = screenHeight * 0.3
-  const threshold20 = screenHeight * 0.2
-  const isFastSwipe = velocity > 0.5
+  // 🎯 判断是否切换视频（与触摸逻辑相同，提高灵敏度）
+  const threshold10 = screenHeight * 0.1
+  const threshold5 = screenHeight * 0.05
+  const isFastSwipe = velocity > 0.2
 
   let shouldSwitch = false
   let direction: 'next' | 'prev' | null = null
 
   if (deltaY < 0) {
     // 向上滑（切换到下一个）
-    if (Math.abs(deltaY) > threshold30 || (isFastSwipe && Math.abs(deltaY) > threshold20)) {
+    if (Math.abs(deltaY) > threshold10 || (isFastSwipe && Math.abs(deltaY) > threshold5)) {
       shouldSwitch = true
       direction = 'next'
     }
   } else if (deltaY > 0) {
     // 向下滑（切换到上一个）
-    if (Math.abs(deltaY) > threshold30 || (isFastSwipe && Math.abs(deltaY) > threshold20)) {
+    if (Math.abs(deltaY) > threshold10 || (isFastSwipe && Math.abs(deltaY) > threshold5)) {
       shouldSwitch = true
       direction = 'prev'
     }

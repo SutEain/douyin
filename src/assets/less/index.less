@@ -237,3 +237,23 @@ html.is-tg-fullscreen-ios .live-tab {
 html.is-tg-fullscreen-android .live-tab {
   padding-top: calc(var(--home-header-height) + 57px) !important;
 }
+
+/* 🎯 Telegram Mini App 全屏模式：feed流左上角相册/合辑/照片标识下移 */
+html.is-tg-fullscreen-ios .album-swiper .content-type-badge,
+html.is-tg-fullscreen-ios .image-viewer .content-type-badge {
+  top: 132px !important; /* 从 60px 下移到 132px (下调 72px，约4.5个字体高度) */
+}
+
+html.is-tg-fullscreen-android .album-swiper .content-type-badge,
+html.is-tg-fullscreen-android .image-viewer .content-type-badge {
+  top: 132px !important; /* 从 60px 下移到 132px (下调 72px，约4.5个字体高度) */
+}
+
+/* 🎯 Telegram Mini App 全屏模式：图片预览关闭按钮下移 */
+html.is-tg-fullscreen-ios .image-preview-overlay .close-btn {
+  top: calc(70px + env(safe-area-inset-top)) !important; /* 从 20px 下移到 80px + 安全区 */
+}
+
+html.is-tg-fullscreen-android .image-preview-overlay .close-btn {
+  top: calc(70px + env(safe-area-inset-top)) !important; /* 从 20px 下移到 80px + 安全区 */
+}
