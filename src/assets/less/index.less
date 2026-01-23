@@ -189,24 +189,25 @@ html.is-tg-fullscreen-android .goods-detail .detail-footer .android-bottom-space
 }
 
 /* 🎯 Telegram Mini App 全屏模式：直播详情页顶部UI整体下移 */
-html.is-tg-fullscreen-ios .LivePage .float {
+/* 🎯 横屏模式下不应用降低规则 */
+html.is-tg-fullscreen-ios .LivePage:not(.landscape-mode) .float {
   padding-top: calc(50rem + env(safe-area-inset-top)) !important;
 }
 
-html.is-tg-fullscreen-android .LivePage .float {
+html.is-tg-fullscreen-android .LivePage:not(.landscape-mode) .float {
   padding-top: calc(65rem + env(safe-area-inset-top)) !important;
 }
 
 /* 🎯 Telegram Mini App 全屏模式：安卓直播详情页底部工具栏占位 */
-html.is-tg-fullscreen-android .LivePage .float {
+html.is-tg-fullscreen-android .LivePage:not(.landscape-mode) .float {
   padding-bottom: calc(15rem + env(safe-area-inset-bottom) + 22px) !important;
 }
 
-html.is-tg-fullscreen-android .LivePage .float .bottom {
+html.is-tg-fullscreen-android .LivePage:not(.landscape-mode) .float .bottom {
   position: relative; // 🎯 为占位元素提供定位上下文
 }
 
-html.is-tg-fullscreen-android .LivePage .float .bottom .android-bottom-spacer {
+html.is-tg-fullscreen-android .LivePage:not(.landscape-mode) .float .bottom .android-bottom-spacer {
   display: block !important;
   height: 32px;
 }
