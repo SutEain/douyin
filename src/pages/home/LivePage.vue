@@ -384,7 +384,7 @@
 
     <!-- 🧧 倒计时红包组件 -->
     <RedPacketOverlay
-      v-if="roomId"
+      v-if="roomId && !isCleanScreen"
       :room-id="roomId"
       :is-followed="isFollowed"
       :last-message="lastUserMessage"
@@ -392,7 +392,7 @@
 
     <!-- 🎯 PC28游戏状态挂件（类似红包，所有用户可见，点击参与下注） -->
     <PC28GameOverlay
-      v-if="roomId && pc28Config?.is_enabled"
+      v-if="roomId && pc28Config?.is_enabled && !isCleanScreen"
       :room-id="roomId"
       :config="pc28Config"
       :current-round="pc28CurrentRound"
