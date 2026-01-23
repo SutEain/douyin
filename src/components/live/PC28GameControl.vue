@@ -57,7 +57,15 @@
             </div>
             <div class="input-group">
               <label>期号</label>
-              <input type="text" v-model="openForm.periodNumber" placeholder="请输入期号" />
+              <input
+                ref="periodNumberInput"
+                type="text"
+                v-model="openForm.periodNumber"
+                placeholder="请输入期号"
+                @click.stop
+                @mousedown.stop
+                @focus="handlePeriodNumberFocus"
+              />
             </div>
             <div class="input-group">
               <label>封盘倒计时（分钟，可选）</label>
@@ -161,7 +169,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { PC28GameRound } from '@/api/pc28'
 import {
@@ -226,6 +234,25 @@ const canSettle = computed(() => {
     settleForm.value.num3 <= 9
   )
 })
+
+const periodNumberInput = ref<HTMLInputElement | null>(null)
+
+// 处理期号输入框聚焦
+function handlePeriodNumberFocus() {
+  // Windows上需要延迟才能正确聚焦
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (periodNumberInput.value) {
+          periodNumberInput.value.focus()
+          // 确保光标在输入框内
+          const length = periodNumberInput.value.value.length
+          periodNumberInput.value.setSelectionRange(length, length)
+        }
+      }, 50)
+    })
+  })
+}
 
 function handleClose() {
   emit('close')

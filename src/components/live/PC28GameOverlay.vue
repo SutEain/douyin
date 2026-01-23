@@ -7,7 +7,6 @@
         class="game-badge"
         @click="handleBadgeClick(currentRound)"
       >
-        <Icon icon="mdi:dice-multiple" class="game-icon" />
         <div class="game-content">
           <div class="game-text">{{ currentRound.game_name || 'PC28' }}</div>
           <div class="round-info">
@@ -33,7 +32,6 @@
         class="game-badge settled-badge"
         @click="handleBadgeClick(settledRound)"
       >
-        <Icon icon="mdi:dice-multiple" class="game-icon" />
         <div class="game-content">
           <div class="game-text">{{ settledRound.game_name || 'PC28' }}</div>
           <div class="round-info">
@@ -54,7 +52,6 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
-import { Icon } from '@iconify/vue'
 import { PC28GameConfig, PC28GameRound, autoSealPC28Rounds } from '@/api/pc28'
 import { supabase } from '@/utils/supabase'
 
@@ -187,20 +184,12 @@ onBeforeUnmount(() => {
   max-height: calc(100vh - 200rem);
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  /* 完全隐藏滚动条 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
 
   &::-webkit-scrollbar {
-    width: 4rem;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 2rem;
+    display: none; /* Chrome, Safari, Opera */
   }
 
   .badges-container {
@@ -211,35 +200,31 @@ onBeforeUnmount(() => {
 }
 
 .game-badge {
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(8px);
-  padding: 10rem 15rem;
-  border-radius: 20rem;
+  background: rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(6px);
+  padding: 8rem 10rem;
+  border-radius: 16rem;
   display: flex;
   align-items: center;
-  gap: 8rem;
+  gap: 0;
   cursor: pointer;
-  box-shadow: 0 4rem 12rem rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4rem 12rem rgba(0, 0, 0, 0.1);
   animation: pulse 2s infinite ease-in-out;
-  min-width: 120rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-
-  .game-icon {
-    font-size: 24rem;
-    color: white;
-    flex-shrink: 0;
-  }
+  min-width: auto;
+  max-width: 140rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 
   .game-content {
     display: flex;
     flex-direction: column;
-    gap: 4rem;
+    gap: 3rem;
     flex: 1;
+    width: 100%;
   }
 
   .game-text {
     color: white;
-    font-size: 14rem;
+    font-size: 13rem;
     font-weight: bold;
   }
 
@@ -251,13 +236,13 @@ onBeforeUnmount(() => {
 
   .round-period {
     color: rgba(255, 255, 255, 0.9);
-    font-size: 12rem;
+    font-size: 11rem;
     font-weight: bold;
   }
 
   .round-status {
     color: #4caf50;
-    font-size: 11rem;
+    font-size: 10rem;
     font-weight: bold;
 
     &.sealed {
@@ -271,14 +256,14 @@ onBeforeUnmount(() => {
 
   .result-info {
     color: rgba(255, 255, 255, 0.9);
-    font-size: 11rem;
+    font-size: 10rem;
     font-weight: bold;
     margin-top: 2rem;
   }
 
   .countdown {
     color: #fe2c55;
-    font-size: 11rem;
+    font-size: 10rem;
     font-weight: bold;
   }
 }
