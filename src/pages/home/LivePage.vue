@@ -103,7 +103,7 @@
                   <span class="combo-num" v-if="msg.combo > 1">x{{ msg.combo }}</span>
                 </template>
                 <template v-else-if="msg.type === 'pc28'">
-                  <span class="pc28-text">{{ msg.content }}</span>
+                  <span class="pc28-text">{{ getPC28MessageText(msg.content) }}</span>
                 </template>
                 <template v-else>
                   <span class="name" @click.stop="goUser(msg.user_id)"
@@ -888,6 +888,17 @@ function handleSelectGame(game: string) {
       // 用户：打开下注面板
       showPC28Bet.value = true
     }
+  }
+}
+
+// 解析PC28消息内容，如果是JSON则提取text字段
+function getPC28MessageText(content: string): string {
+  try {
+    const parsed = JSON.parse(content)
+    return parsed.text || content
+  } catch {
+    // 如果不是JSON，直接返回原内容
+    return content
   }
 }
 

@@ -3,7 +3,7 @@
     <div v-if="show" class="pc28-config-overlay" @click.self="handleClose">
       <div class="pc28-config-modal">
         <div class="modal-header">
-          <h3>加拿大PC28游戏设置</h3>
+          <h3>快三类游戏设置</h3>
           <Icon icon="ion:close" class="close-btn" @click="handleClose" />
         </div>
 

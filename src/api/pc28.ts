@@ -30,6 +30,7 @@ export interface PC28GameRound {
   room_id: string
   anchor_id: string
   period_number: string
+  game_name: string
   status: 'betting' | 'sealed' | 'settled'
   seal_at: string | null
   result: { num1: number; num2: number; num3: number; sum: number } | null
@@ -118,11 +119,13 @@ export async function upsertPC28Config(
 export async function openPC28Round(
   roomId: string,
   periodNumber: string,
+  gameName: string,
   sealAt?: Date
 ): Promise<{ success: boolean; message: string; round_id?: string }> {
   const { data, error } = await supabase.rpc('open_pc28_round', {
     p_room_id: roomId,
     p_period_number: periodNumber,
+    p_game_name: gameName,
     p_seal_at: sealAt?.toISOString() || null
   })
 

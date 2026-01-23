@@ -4,7 +4,7 @@
     <div v-if="config?.is_enabled" class="game-badge" @click="handleBadgeClick">
       <Icon icon="mdi:dice-multiple" class="game-icon" />
       <div class="game-content">
-        <div class="game-text">PC28</div>
+        <div class="game-text">{{ currentRound?.game_name || 'PC28' }}</div>
         <!-- 如果有开盘，显示期数和状态 -->
         <div v-if="currentRound" class="round-info">
           <div class="round-period">{{ currentRound.period_number }}期</div>

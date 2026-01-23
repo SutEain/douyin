@@ -11,6 +11,10 @@
           <!-- 当前期数状态 -->
           <div v-if="currentRound" class="round-status">
             <div class="status-item">
+              <span class="label">游戏名称：</span>
+              <span class="value">{{ currentRound.game_name || 'PC28' }}</span>
+            </div>
+            <div class="status-item">
               <span class="label">期号：</span>
               <span class="value">{{ currentRound.period_number }}</span>
             </div>
@@ -43,6 +47,14 @@
           <!-- 开盘 -->
           <div v-if="!currentRound || currentRound.status === 'settled'" class="control-section">
             <h4>开盘</h4>
+            <div class="input-group">
+              <label>游戏名称</label>
+              <input
+                type="text"
+                v-model="openForm.gameName"
+                placeholder="如：PC28、北京快三、上海快三等"
+              />
+            </div>
             <div class="input-group">
               <label>期号</label>
               <input type="text" v-model="openForm.periodNumber" placeholder="请输入期号" />
@@ -175,6 +187,7 @@ const emit = defineEmits<{
 const isLoading = ref(false)
 const openForm = ref({
   periodNumber: '',
+  gameName: 'PC28',
   countdownMinutes: null as number | null
 })
 
@@ -209,6 +222,10 @@ function handleClose() {
 }
 
 async function handleOpen() {
+  if (!openForm.value.gameName.trim()) {
+    _notice('请输入游戏名称')
+    return
+  }
   if (!openForm.value.periodNumber.trim()) {
     _notice('请输入期号')
     return
@@ -220,10 +237,16 @@ async function handleOpen() {
       ? new Date(Date.now() + openForm.value.countdownMinutes * 60 * 1000)
       : undefined
 
-    const res = await openPC28Round(props.roomId, openForm.value.periodNumber.trim(), sealAt)
+    const res = await openPC28Round(
+      props.roomId,
+      openForm.value.periodNumber.trim(),
+      openForm.value.gameName.trim(),
+      sealAt
+    )
     if (res.success) {
       _notice('开盘成功')
       openForm.value.periodNumber = ''
+      openForm.value.gameName = 'PC28'
       openForm.value.countdownMinutes = null
       emit('refresh')
     } else {
