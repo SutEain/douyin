@@ -185,8 +185,18 @@ const emit = defineEmits<{
 }>()
 
 const isLoading = ref(false)
+
+// 从localStorage读取上次的期号
+const getLastPeriodNumber = (): string => {
+  try {
+    return localStorage.getItem('pc28_last_period_number') || ''
+  } catch {
+    return ''
+  }
+}
+
 const openForm = ref({
-  periodNumber: '',
+  periodNumber: getLastPeriodNumber(),
   gameName: 'PC28',
   countdownMinutes: null as number | null
 })
@@ -245,6 +255,12 @@ async function handleOpen() {
     )
     if (res.success) {
       _notice('开盘成功')
+      // 保存当前期号到localStorage，作为下次的默认值
+      try {
+        localStorage.setItem('pc28_last_period_number', openForm.value.periodNumber.trim())
+      } catch {
+        // localStorage可能不可用，忽略错误
+      }
       openForm.value.periodNumber = ''
       openForm.value.gameName = 'PC28'
       openForm.value.countdownMinutes = null

@@ -148,7 +148,8 @@ onBeforeUnmount(() => {
 }
 
 .game-badge {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
   padding: 10rem 15rem;
   border-radius: 20rem;
   display: flex;
@@ -158,6 +159,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 4rem 12rem rgba(0, 0, 0, 0.3);
   animation: pulse 2s infinite ease-in-out;
   min-width: 120rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 
   .game-icon {
     font-size: 24rem;

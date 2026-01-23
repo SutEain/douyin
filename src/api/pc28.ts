@@ -386,3 +386,36 @@ export async function closePC28Game(roomId: string): Promise<{
     total_refund?: number
   }
 }
+
+/**
+ * 获取PC28相关的资金流水记录
+ */
+export async function getPC28Transactions(limit = 50): Promise<
+  Array<{
+    id: string
+    amount: number
+    balance_after: number
+    type: string
+    description: string
+    created_at: string
+    related_id: string | null
+  }>
+> {
+  const { data, error } = await supabase
+    .from('coin_transactions')
+    .select('id, amount, balance_after, type, description, created_at, related_id')
+    .in('type', ['pc28_bet', 'pc28_win', 'pc28_refund'])
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return (data || []) as Array<{
+    id: string
+    amount: number
+    balance_after: number
+    type: string
+    description: string
+    created_at: string
+    related_id: string | null
+  }>
+}

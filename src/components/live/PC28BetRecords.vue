@@ -59,6 +59,17 @@
                   <div class="user-name">{{ getUserName(userId) }}</div>
                   <div class="user-stats">
                     {{ userBets.length }} 注 · {{ getUserTotalAmount(userBets) }} 抖币
+                    <span
+                      v-if="currentRound?.status === 'settled'"
+                      class="user-profit"
+                      :class="{
+                        positive: getUserProfit(userBets) > 0,
+                        negative: getUserProfit(userBets) < 0
+                      }"
+                    >
+                      {{ getUserProfit(userBets) > 0 ? '盈利' : '亏损' }}：
+                      {{ Math.abs(getUserProfit(userBets)).toFixed(2) }} 抖币
+                    </span>
                   </div>
                 </div>
               </div>
@@ -88,6 +99,20 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- 主播盈亏统计（仅已结算时显示） -->
+          <div v-if="currentRound?.status === 'settled'" class="anchor-profit">
+            <div class="profit-label">主播盈亏</div>
+            <div
+              class="profit-amount"
+              :class="{ positive: anchorProfit >= 0, negative: anchorProfit < 0 }"
+            >
+              {{ anchorProfit >= 0 ? '盈利' : '亏损' }}：{{
+                Math.abs(anchorProfit).toFixed(2)
+              }}
+              抖币
             </div>
           </div>
         </div>
@@ -191,8 +216,24 @@ const totalBetAmount = computed(() => {
   return bets.value.reduce((sum, bet) => sum + Number(bet.amount), 0)
 })
 
+// 计算主播盈亏：总下注 - 总赔付
+const anchorProfit = computed(() => {
+  if (!props.currentRound || props.currentRound.status !== 'settled') return 0
+  const totalPayout = props.currentRound.total_payout || 0
+  return totalBetAmount.value - totalPayout
+})
+
 function getUserTotalAmount(userBets: PC28Bet[]): number {
   return userBets.reduce((sum, bet) => sum + Number(bet.amount), 0)
+}
+
+// 计算用户盈亏：总中奖金额 - 总下注金额
+function getUserProfit(userBets: PC28Bet[]): number {
+  const totalBet = userBets.reduce((sum, bet) => sum + Number(bet.amount), 0)
+  const totalWin = userBets
+    .filter((bet) => bet.status === 'settled' && bet.is_win)
+    .reduce((sum, bet) => sum + Number(bet.user_gain || 0), 0)
+  return totalWin - totalBet
 }
 
 function getUserName(userId: string): string {
@@ -597,6 +638,47 @@ onBeforeUnmount(() => {
 
 .bet-time {
   color: rgba(255, 255, 255, 0.4);
+}
+
+.user-profit {
+  margin-left: 10rem;
+  font-weight: bold;
+
+  &.positive {
+    color: #4caf50;
+  }
+
+  &.negative {
+    color: #ff5252;
+  }
+}
+
+.anchor-profit {
+  margin-top: 20rem;
+  padding: 15rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10rem;
+  text-align: center;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+
+  .profit-label {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14rem;
+    margin-bottom: 8rem;
+  }
+
+  .profit-amount {
+    font-size: 20rem;
+    font-weight: bold;
+
+    &.positive {
+      color: #4caf50;
+    }
+
+    &.negative {
+      color: #ff5252;
+    }
+  }
 }
 
 .fade-enter-active,

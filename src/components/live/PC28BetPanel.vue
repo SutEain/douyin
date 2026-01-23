@@ -46,6 +46,13 @@
             >
               我的下注
             </div>
+            <div
+              class="tab-item"
+              :class="{ active: activeTab === 'transactions' }"
+              @click="activeTab = 'transactions'"
+            >
+              账变记录
+            </div>
           </div>
 
           <!-- 我的下注记录 -->
@@ -102,8 +109,55 @@
             </div>
           </div>
 
+          <!-- 账变记录 -->
+          <div v-if="activeTab === 'transactions'" class="transactions-list">
+            <div v-if="isLoadingTransactions" class="loading-transactions">
+              <Icon icon="mdi:loading" class="loading-icon" />
+              <span>加载中...</span>
+            </div>
+            <div v-else-if="transactions.length === 0" class="empty-bets">
+              <Icon
+                icon="mdi:information-outline"
+                style="font-size: 48rem; color: rgba(255, 255, 255, 0.3); margin-bottom: 10rem"
+              />
+              <div>暂无账变记录</div>
+            </div>
+            <div v-else>
+              <div v-for="tx in transactions" :key="tx.id" class="transaction-record">
+                <div class="transaction-header">
+                  <div class="transaction-type">
+                    <span v-if="tx.type === 'pc28_bet'" class="type-bet">下注</span>
+                    <span v-else-if="tx.type === 'pc28_win'" class="type-win">中奖</span>
+                    <span v-else-if="tx.type === 'pc28_refund'" class="type-refund">退款</span>
+                    <span v-else>{{ tx.type }}</span>
+                  </div>
+                  <div
+                    class="transaction-amount"
+                    :class="{ positive: tx.amount > 0, negative: tx.amount < 0 }"
+                  >
+                    {{ tx.amount > 0 ? '+' : '' }}{{ tx.amount.toFixed(2) }} 抖币
+                  </div>
+                </div>
+                <div class="transaction-details">
+                  <div class="detail-item">
+                    <span class="label">余额：</span>
+                    <span class="value">{{ tx.balance_after.toFixed(2) }} 抖币</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="label">时间：</span>
+                    <span class="value">{{ formatTime(tx.created_at) }}</span>
+                  </div>
+                  <div v-if="tx.description" class="detail-item">
+                    <span class="label">说明：</span>
+                    <span class="value">{{ tx.description }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- 下注区域 -->
-          <div v-else class="bet-area">
+          <div v-if="activeTab !== 'my_bets' && activeTab !== 'transactions'" class="bet-area">
             <!-- 大小单双 -->
             <div
               v-if="activeTab === 'big_small' && config?.game_settings?.big_small?.enabled"
@@ -210,7 +264,7 @@
           </div>
 
           <!-- 下注金额 -->
-          <div v-if="activeTab !== 'my_bets'" class="bet-amount">
+          <div v-if="activeTab !== 'my_bets' && activeTab !== 'transactions'" class="bet-amount">
             <div class="amount-label">下注金额</div>
             <div class="amount-buttons">
               <button
@@ -235,7 +289,10 @@
           </div>
 
           <!-- 已选下注 -->
-          <div v-if="activeTab !== 'my_bets' && selectedBets.size > 0" class="selected-bets">
+          <div
+            v-if="activeTab !== 'my_bets' && activeTab !== 'transactions' && selectedBets.size > 0"
+            class="selected-bets"
+          >
             <div class="selected-label">已选 {{ selectedBets.size }} 注</div>
             <div class="selected-list">
               <div
@@ -251,7 +308,7 @@
           </div>
         </div>
 
-        <div v-if="activeTab !== 'my_bets'" class="panel-footer">
+        <div v-if="activeTab !== 'my_bets' && activeTab !== 'transactions'" class="panel-footer">
           <div class="total-info">
             <span>共 {{ selectedBets.size }} 注</span>
             <span class="total-amount">总计：{{ totalAmount }} 抖币</span>
@@ -273,7 +330,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { PC28GameConfig, PC28GameRound, PC28Bet } from '@/api/pc28'
-import { placePC28Bet, getMyBets, cancelPC28Bet } from '@/api/pc28'
+import { placePC28Bet, getMyBets, cancelPC28Bet, getPC28Transactions } from '@/api/pc28'
 import { _notice } from '@/utils'
 import { supabase } from '@/utils/supabase'
 
@@ -297,6 +354,18 @@ const isLoadingBets = ref(false)
 const cancelingBetId = ref<string | null>(null)
 const userBalance = ref(0) // 用户余额
 const isRefreshingBalance = ref(false) // 是否正在刷新余额
+const transactions = ref<
+  Array<{
+    id: string
+    amount: number
+    balance_after: number
+    type: string
+    description: string
+    created_at: string
+    related_id: string | null
+  }>
+>([])
+const isLoadingTransactions = ref(false) // 是否正在加载账变记录
 
 // 刷新余额
 async function refreshBalance() {
@@ -469,6 +538,20 @@ async function fetchMyBets() {
   }
 }
 
+// 获取账变记录
+async function fetchTransactions() {
+  isLoadingTransactions.value = true
+  try {
+    const txList = await getPC28Transactions(50)
+    transactions.value = txList
+  } catch (e: any) {
+    console.error('[PC28] fetch transactions error:', e)
+    _notice('加载账变记录失败')
+  } finally {
+    isLoadingTransactions.value = false
+  }
+}
+
 // 监听当前期数变化，重新获取下注记录
 watch(
   () => props.currentRound?.id,
@@ -479,15 +562,23 @@ watch(
   }
 )
 
-// 监听activeTab变化，切换到"我的下注"时获取数据
+// 监听activeTab变化，切换到"我的下注"或"账变记录"时获取数据
 watch(
   () => activeTab.value,
   (newTab) => {
     if (newTab === 'my_bets') {
       fetchMyBets()
+    } else if (newTab === 'transactions') {
+      fetchTransactions()
     } else {
-      // 切换到其他tab时，重置为第一个可用的tab
-      if (tabs.value.length > 0 && !tabs.value.find((t) => t.key === newTab)) {
+      // 切换到其他tab时，如果不在tabs列表中，重置为第一个可用的tab
+      // 但my_bets和transactions是固定标签，不需要重置
+      if (
+        newTab !== 'my_bets' &&
+        newTab !== 'transactions' &&
+        tabs.value.length > 0 &&
+        !tabs.value.find((t) => t.key === newTab)
+      ) {
         activeTab.value = tabs.value[0].key
       }
     }
@@ -684,7 +775,8 @@ async function handleBet() {
 .pc28-bet-panel {
   width: 100%;
   max-height: 90vh;
-  background: #1a1a1a;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
   border-radius: 20rem 20rem 0 0;
   display: flex;
   flex-direction: column;
@@ -743,6 +835,7 @@ async function handleBet() {
   flex: 1;
   overflow-y: auto;
   padding: 20rem;
+  background: transparent;
 }
 
 .round-info {
@@ -1120,6 +1213,106 @@ async function handleBet() {
       &.win {
         color: #4caf50;
       }
+    }
+  }
+}
+
+.loading-transactions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40rem 20rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14rem;
+
+  .loading-icon {
+    font-size: 32rem;
+    margin-bottom: 10rem;
+    animation: rotate 1s linear infinite;
+  }
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.transactions-list {
+  max-height: 400rem;
+  overflow-y: auto;
+}
+
+.transaction-record {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10rem;
+  padding: 15rem;
+  margin-bottom: 10rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.transaction-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10rem;
+}
+
+.transaction-type {
+  font-size: 14rem;
+  color: rgba(255, 255, 255, 0.8);
+
+  .type-bet {
+    color: #ff9800;
+  }
+
+  .type-win {
+    color: #4caf50;
+  }
+
+  .type-refund {
+    color: #2196f3;
+  }
+}
+
+.transaction-amount {
+  font-size: 16rem;
+  font-weight: bold;
+
+  &.positive {
+    color: #4caf50;
+  }
+
+  &.negative {
+    color: #ff5252;
+  }
+}
+
+.transaction-details {
+  display: flex;
+  flex-direction: column;
+  gap: 5rem;
+  font-size: 12rem;
+  color: rgba(255, 255, 255, 0.6);
+
+  .detail-item {
+    display: flex;
+    justify-content: space-between;
+
+    .label {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .value {
+      color: white;
+      font-weight: bold;
     }
   }
 }
