@@ -2592,7 +2592,7 @@ onBeforeUnmount(() => {
         .input {
           width: 36rem;
           height: 36rem;
-          background: rgba(255, 255, 255, 0.2);
+          background: rgba(0, 0, 0, 0.6);
           border-radius: 50%;
           display: flex;
           flex-direction: column;
@@ -2607,7 +2607,7 @@ onBeforeUnmount(() => {
         .option-item {
           width: 36rem;
           height: 36rem;
-          background: rgba(255, 255, 255, 0.2);
+          background: rgba(0, 0, 0, 0.6);
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -2624,6 +2624,11 @@ onBeforeUnmount(() => {
         .gift {
           width: 36rem;
           height: 36rem;
+          background: rgba(0, 0, 0, 0.6);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           flex-shrink: 0;
         }
       }
