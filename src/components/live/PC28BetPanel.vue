@@ -383,6 +383,12 @@ function toggleBet(type: string, value: number | null) {
 }
 
 function getBetName(bet: string): string {
+  // 处理 single_point_0 这样的格式
+  if (bet.startsWith('single_point_')) {
+    const point = bet.replace('single_point_', '')
+    return `单点${point}`
+  }
+
   const names: Record<string, string> = {
     big: '大',
     small: '小',
@@ -396,8 +402,7 @@ function getBetName(bet: string): string {
     extreme_small: '极小',
     pair: '对子',
     straight: '顺子',
-    leopard: '豹子',
-    single_point: `单点${value}`
+    leopard: '豹子'
   }
   return names[bet] || bet
 }
