@@ -149,7 +149,7 @@ export async function placePC28Bet(
     p_round_id: roundId,
     p_bet_type: betType,
     p_amount: amount,
-    p_bet_value: betValue || null
+    p_bet_value: betValue !== undefined ? betValue : null
   })
 
   if (error) {
