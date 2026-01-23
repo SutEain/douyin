@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS public.pc28_game_configs (
         "combinations": {"enabled": true, "big_odd": 4.2, "big_even": 4.6, "small_odd": 4.6, "small_even": 4.2},
         "extreme": {"enabled": true, "extreme_big": 15, "extreme_small": 15},
         "patterns": {"enabled": true, "pair": 3.5, "straight": 15, "leopard": 88},
-        "single_point": {"enabled": true, "odds": {}}
+        "single_point": {"enabled": true, "odds": {"0": 488, "27": 488, "1": 128, "26": 128, "2": 88, "25": 88, "3": 58, "24": 58, "4": 48, "23": 48, "5": 38, "22": 38, "6": 28, "21": 28, "7": 18, "20": 18, "8": 15, "19": 15, "9": 15, "18": 15, "10": 14, "17": 14, "11": 13, "16": 13, "12": 12, "15": 12, "13": 11, "14": 11}}
     }',
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),

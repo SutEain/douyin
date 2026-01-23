@@ -2584,6 +2584,10 @@ onBeforeUnmount(() => {
         align-items: center;
         justify-content: space-between; /* 🎯 均匀分布所有按钮 */
         margin-top: 10rem;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 8rem 12rem;
+        border-radius: 20rem;
+        backdrop-filter: blur(10px);
 
         .input {
           width: 36rem;

@@ -62,23 +62,30 @@ BEGIN
     WHERE room_id = p_room_id AND roll_result = v_max_value;
     
     -- 🎯 计算赢家数量
-    v_winner_count := array_length(v_winners, 1);
+    v_winner_count := COALESCE(array_length(v_winners, 1), 0);
+    
+    -- 🎯 安全检查：确保有赢家
+    IF v_winner_count = 0 OR v_winners IS NULL THEN
+        RETURN json_build_object('success', false, 'message', '未找到赢家，结算失败');
+    END IF;
     
     -- 🎯 计算奖金
     v_total_prize := v_room.bet_amount * v_room.target_count;
     
     -- 🎯 🔥 2人平局时不抽水，其他情况抽水2%
     IF v_winner_count = 2 AND v_room.target_count = 2 THEN
-        -- 2人平局：不抽水，全额退回
+        -- 2人平局：不抽水，全额退回（每个玩家退回本金）
         v_commission := 0;
         v_net_prize := v_total_prize;
+        -- 每个赢家应该得到自己的本金（bet_amount），而不是平分总奖金池
+        -- 因为总奖金池 = bet_amount * 2，平分后每人得到 bet_amount，正好是本金
+        v_per_winner_prize := v_room.bet_amount;
     ELSE
         -- 其他情况：抽水2%
         v_commission := FLOOR(v_total_prize * 0.02 * 100) / 100;
         v_net_prize := v_total_prize - v_commission;
+        v_per_winner_prize := FLOOR((v_net_prize / v_winner_count) * 100) / 100;
     END IF;
-    
-    v_per_winner_prize := FLOOR((v_net_prize / v_winner_count) * 100) / 100;
     
     -- 🎯 发放奖励给赢家
     FOR v_player IN SELECT user_id FROM public.dice_room_players WHERE room_id = p_room_id AND user_id = ANY(v_winners)

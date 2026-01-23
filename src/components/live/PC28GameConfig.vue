@@ -283,11 +283,11 @@
               </label>
             </div>
             <div v-if="localConfig.game_settings.single_point.enabled" class="single-point-grid">
-              <div v-for="point in 28" :key="point - 1" class="point-item">
-                <label>{{ point - 1 }}</label>
+              <div v-for="pair in singlePointPairs" :key="pair.key" class="point-item">
+                <label>{{ pair.label }}</label>
                 <input
                   type="number"
-                  v-model.number="localConfig.game_settings.single_point.odds[point - 1]"
+                  v-model.number="localConfig.game_settings.single_point.odds[pair.point1]"
                   step="0.01"
                   min="1"
                   max="9999"
@@ -295,9 +295,14 @@
                   @blur="
                     validateOdds(
                       'single_point',
-                      point - 1,
-                      localConfig.game_settings.single_point.odds[point - 1]
+                      pair.point1,
+                      localConfig.game_settings.single_point.odds[pair.point1]
                     )
+                    // 同步更新配对数字
+                    if (localConfig.game_settings.single_point.odds[pair.point1] !== undefined) {
+                      localConfig.game_settings.single_point.odds[pair.point2] =
+                        localConfig.game_settings.single_point.odds[pair.point1]
+                    }
                   "
                 />
               </div>
@@ -331,6 +336,56 @@ const emit = defineEmits<{
   (e: 'save', config: Partial<PC28GameConfig>): void
 }>()
 
+// 单点默认赔率（成对配置）
+const defaultSinglePointOdds: Record<number, number> = {
+  0: 488, // 00/27
+  27: 488,
+  1: 128, // 01/26
+  26: 128,
+  2: 88, // 02/25
+  25: 88,
+  3: 58, // 03/24
+  24: 58,
+  4: 48, // 04/23
+  23: 48,
+  5: 38, // 05/22
+  22: 38,
+  6: 28, // 06/21
+  21: 28,
+  7: 18, // 07/20
+  20: 18,
+  8: 15, // 08/19
+  19: 15,
+  9: 15, // 09/18
+  18: 15,
+  10: 14, // 10/17
+  17: 14,
+  11: 13, // 11/16
+  16: 13,
+  12: 12, // 12/15
+  15: 12,
+  13: 11, // 13/14
+  14: 11
+}
+
+// 单点配对数组（用于显示）
+const singlePointPairs = [
+  { key: '0-27', label: '00/27', point1: 0, point2: 27 },
+  { key: '1-26', label: '01/26', point1: 1, point2: 26 },
+  { key: '2-25', label: '02/25', point1: 2, point2: 25 },
+  { key: '3-24', label: '03/24', point1: 3, point2: 24 },
+  { key: '4-23', label: '04/23', point1: 4, point2: 23 },
+  { key: '5-22', label: '05/22', point1: 5, point2: 22 },
+  { key: '6-21', label: '06/21', point1: 6, point2: 21 },
+  { key: '7-20', label: '07/20', point1: 7, point2: 20 },
+  { key: '8-19', label: '08/19', point1: 8, point2: 19 },
+  { key: '9-18', label: '09/18', point1: 9, point2: 18 },
+  { key: '10-17', label: '10/17', point1: 10, point2: 17 },
+  { key: '11-16', label: '11/16', point1: 11, point2: 16 },
+  { key: '12-15', label: '12/15', point1: 12, point2: 15 },
+  { key: '13-14', label: '13/14', point1: 13, point2: 14 }
+]
+
 // 默认配置
 const defaultConfig: Partial<PC28GameConfig> = {
   is_enabled: false,
@@ -346,7 +401,7 @@ const defaultConfig: Partial<PC28GameConfig> = {
     },
     extreme: { enabled: true, extreme_big: 15, extreme_small: 15 },
     patterns: { enabled: true, pair: 3.5, straight: 15, leopard: 88 },
-    single_point: { enabled: true, odds: {} }
+    single_point: { enabled: true, odds: { ...defaultSinglePointOdds } }
   }
 }
 
@@ -378,9 +433,19 @@ function validateOdds(section: string, key: string | number, value: number | und
   }
 }
 
-// 初始化单点赔率（如果没有配置）
+// 初始化单点赔率（如果没有配置，使用默认值）
 if (!localConfig.value.game_settings?.single_point?.odds) {
   localConfig.value.game_settings!.single_point!.odds = {}
+}
+// 如果配置存在但缺少某些值，补充默认值
+if (localConfig.value.game_settings?.single_point?.odds) {
+  const odds = localConfig.value.game_settings.single_point.odds
+  for (const [point, defaultOdds] of Object.entries(defaultSinglePointOdds)) {
+    const pointNum = parseInt(point)
+    if (odds[pointNum] === undefined || odds[pointNum] === null) {
+      odds[pointNum] = defaultOdds
+    }
+  }
 }
 
 // 监听配置变化
@@ -476,6 +541,19 @@ async function handleSave() {
           if (value !== undefined && (value < 1 || value > 9999)) {
             _notice(`单点${i}的赔率必须在1-9999范围内`)
             return
+          }
+        }
+        // 确保配对数字的赔率一致
+        for (const pair of singlePointPairs) {
+          const value1 = settings.single_point.odds[pair.point1]
+          const value2 = settings.single_point.odds[pair.point2]
+          if (value1 !== undefined && value2 !== undefined) {
+            // 如果两个值都存在，取第一个值（因为UI上修改时会自动同步）
+            settings.single_point.odds[pair.point2] = value1
+          } else if (value1 !== undefined) {
+            settings.single_point.odds[pair.point2] = value1
+          } else if (value2 !== undefined) {
+            settings.single_point.odds[pair.point1] = value2
           }
         }
       }
