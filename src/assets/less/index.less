@@ -259,9 +259,13 @@ html.is-tg-fullscreen-android .image-preview-overlay .close-btn {
 }
 
 /* 🎯 Telegram Mini App 全屏模式：直播间挂件下移并缩小，避免遮挡关闭按钮 */
-html.is-tg-fullscreen-ios .PC28GameOverlay,
-html.is-tg-fullscreen-ios .RedPacketOverlay {
+html.is-tg-fullscreen-ios .PC28GameOverlay {
   top: calc(120rem + env(safe-area-inset-top)) !important; /* 从 100rem 下移到 140rem + 安全区 */
+}
+
+html.is-tg-fullscreen-ios .RedPacketOverlay {
+  top: calc(120rem + env(safe-area-inset-top)) !important;
+  left: 15rem !important; /* 红包挂件在左上角 */
 
   .game-badge {
     padding: 8rem 12rem !important; /* 从 10rem 15rem 缩小 */
@@ -298,9 +302,13 @@ html.is-tg-fullscreen-ios .RedPacketOverlay {
   }
 }
 
-html.is-tg-fullscreen-android .PC28GameOverlay,
-html.is-tg-fullscreen-android .RedPacketOverlay {
+html.is-tg-fullscreen-android .PC28GameOverlay {
   top: calc(140rem + env(safe-area-inset-top)) !important; /* 从 100rem 下移到 160rem + 安全区 */
+}
+
+html.is-tg-fullscreen-android .RedPacketOverlay {
+  top: calc(140rem + env(safe-area-inset-top)) !important;
+  left: 15rem !important; /* 红包挂件在左上角 */
 
   .game-badge {
     padding: 8rem 12rem !important; /* 从 10rem 15rem 缩小 */

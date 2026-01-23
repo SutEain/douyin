@@ -14,6 +14,13 @@
             <div class="status" :class="currentRound.status">
               {{ statusText[currentRound.status] }}
             </div>
+            <!-- 已结算时显示开奖结果 -->
+            <div
+              v-if="currentRound.status === 'settled' && currentRound.result"
+              class="result-display"
+            >
+              {{ formatResult(currentRound.result) }}
+            </div>
             <div class="total-bet">总下注：{{ totalBetAmount }} 抖币</div>
           </div>
 
@@ -109,9 +116,7 @@
               class="profit-amount"
               :class="{ positive: anchorProfit >= 0, negative: anchorProfit < 0 }"
             >
-              {{ anchorProfit >= 0 ? '盈利' : '亏损' }}：{{
-                Math.abs(anchorProfit).toFixed(2)
-              }}
+              {{ anchorProfit >= 0 ? '盈利' : '亏损' }}：{{ Math.abs(anchorProfit).toFixed(2) }}
               抖币
             </div>
           </div>
@@ -288,6 +293,36 @@ function formatTime(timeStr: string): string {
   }
 }
 
+// 格式化开奖结果：4+2+9=15 大 单 杂六
+function formatResult(result: { num1: number; num2: number; num3: number; sum: number }): string {
+  const { num1, num2, num3, sum } = result
+
+  // 判断大小
+  const bigSmall = sum >= 14 ? '大' : '小'
+
+  // 判断单双
+  const oddEven = sum % 2 === 1 ? '单' : '双'
+
+  // 判断模式：豹子 > 对子 > 顺子 > 杂六
+  const sortedNums = [num1, num2, num3].sort((a, b) => a - b)
+  let pattern = ''
+
+  if (num1 === num2 && num2 === num3) {
+    pattern = '豹子'
+  } else if (
+    (num1 === num2 || num1 === num3 || num2 === num3) &&
+    !(num1 === num2 && num2 === num3)
+  ) {
+    pattern = '对子'
+  } else if (sortedNums[1] === sortedNums[0] + 1 && sortedNums[2] === sortedNums[1] + 1) {
+    pattern = '顺子'
+  } else {
+    pattern = '杂六'
+  }
+
+  return `${num1}+${num2}+${num3}=${sum} ${bigSmall} ${oddEven} ${pattern}`
+}
+
 async function fetchBets() {
   if (!props.currentRound?.id) {
     bets.value = []
@@ -451,8 +486,8 @@ onBeforeUnmount(() => {
 
 .round-info {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 8rem;
   padding: 15rem;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 10rem;
@@ -472,6 +507,16 @@ onBeforeUnmount(() => {
     &.sealed {
       color: #ff9800;
     }
+  }
+
+  .result-display {
+    color: #2196f3;
+    font-weight: bold;
+    font-size: 16rem;
+    padding: 10rem;
+    background: rgba(33, 150, 243, 0.1);
+    border-radius: 8rem;
+    text-align: center;
   }
 
   .total-bet {

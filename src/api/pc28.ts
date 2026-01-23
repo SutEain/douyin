@@ -216,6 +216,37 @@ export async function getCurrentRound(roomId: string): Promise<PC28GameRound | n
 }
 
 /**
+ * 获取最近一个已结算的期数（用于显示上局信息）
+ * @param excludeRoundId 排除的round ID（通常是当前round，避免重复显示）
+ */
+export async function getLastSettledRound(
+  roomId: string,
+  excludeRoundId?: string
+): Promise<PC28GameRound | null> {
+  let query = supabase
+    .from('pc28_game_rounds')
+    .select('*')
+    .eq('room_id', roomId)
+    .eq('status', 'settled')
+    .order('settled_at', { ascending: false })
+    .limit(1)
+
+  // 如果指定了排除的round ID，则排除它
+  if (excludeRoundId) {
+    query = query.neq('id', excludeRoundId)
+  }
+
+  const { data, error } = await query.maybeSingle()
+
+  if (error) {
+    console.error('[PC28] getLastSettledRound error:', error)
+    return null
+  }
+
+  return data as PC28GameRound | null
+}
+
+/**
  * 获取期数列表
  */
 export async function getRoundList(roomId: string, limit = 20): Promise<PC28GameRound[]> {

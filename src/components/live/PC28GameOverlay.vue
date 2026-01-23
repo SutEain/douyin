@@ -1,28 +1,50 @@
 <template>
   <div class="PC28GameOverlay">
-    <!-- 合并的游戏挂件：如果有开盘显示期数状态，否则只显示游戏标识 -->
-    <div v-if="config?.is_enabled" class="game-badge" @click="handleBadgeClick">
-      <Icon icon="mdi:dice-multiple" class="game-icon" />
-      <div class="game-content">
-        <div class="game-text">{{ currentRound?.game_name || 'PC28' }}</div>
-        <!-- 如果有开盘，显示期数和状态 -->
-        <div v-if="currentRound" class="round-info">
-          <div class="round-period">{{ currentRound.period_number }}期</div>
-          <div class="round-status" :class="currentRound.status">
-            {{ statusText[currentRound.status] }}
+    <div v-if="config?.is_enabled" class="badges-container">
+      <!-- 当前开盘的挂件 -->
+      <div
+        v-if="currentRound && currentRound.status !== 'settled'"
+        class="game-badge"
+        @click="handleBadgeClick(currentRound)"
+      >
+        <Icon icon="mdi:dice-multiple" class="game-icon" />
+        <div class="game-content">
+          <div class="game-text">{{ currentRound.game_name || 'PC28' }}</div>
+          <div class="round-info">
+            <div class="round-period">{{ currentRound.period_number }}期</div>
+            <div class="round-status" :class="currentRound.status">
+              {{ statusText[currentRound.status] }}
+            </div>
+            <!-- 只在状态为下注中时显示倒计时 -->
+            <div
+              v-if="currentRound.status === 'betting' && currentRound.seal_at && countdownText"
+              class="countdown"
+            >
+              {{ countdownText }}
+            </div>
           </div>
-          <!-- 只在状态为下注中时显示倒计时 -->
-          <div
-            v-if="currentRound.status === 'betting' && currentRound.seal_at && countdownText"
-            class="countdown"
-          >
-            {{ countdownText }}
-          </div>
-          <!-- 已结算时显示结果 -->
-          <div v-if="currentRound.status === 'settled' && currentRound.result" class="result-info">
-            {{ currentRound.result.num1 }}+{{ currentRound.result.num2 }}+{{
-              currentRound.result.num3
-            }}={{ currentRound.result.sum }}
+        </div>
+      </div>
+
+      <!-- 已结算的挂件（显示已结算的round列表） -->
+      <div
+        v-for="settledRound in displaySettledRounds"
+        :key="settledRound.id"
+        class="game-badge settled-badge"
+        @click="handleBadgeClick(settledRound)"
+      >
+        <Icon icon="mdi:dice-multiple" class="game-icon" />
+        <div class="game-content">
+          <div class="game-text">{{ settledRound.game_name || 'PC28' }}</div>
+          <div class="round-info">
+            <div class="round-period">{{ settledRound.period_number }}期</div>
+            <div class="round-status settled">已结算</div>
+            <!-- 已结算时显示结果 -->
+            <div v-if="settledRound.result" class="result-info">
+              {{ settledRound.result.num1 }}+{{ settledRound.result.num2 }}+{{
+                settledRound.result.num3
+              }}={{ settledRound.result.sum }}
+            </div>
           </div>
         </div>
       </div>
@@ -40,13 +62,33 @@ const props = defineProps<{
   roomId: string
   config: PC28GameConfig | null
   currentRound: PC28GameRound | null
+  lastSettledRound?: PC28GameRound | null
   isAnchor?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'open-bet'): void
-  (e: 'open-records'): void
+  (e: 'open-records', round: PC28GameRound): void
 }>()
+
+// 计算要显示的已结算round列表：
+// 1. 如果当前期是已结算，显示当前期和上一期（共2个）
+// 2. 如果当前期不是已结算，只显示上一期（1个）
+const displaySettledRounds = computed(() => {
+  const rounds: PC28GameRound[] = []
+
+  // 如果当前期是已结算，先添加当前期
+  if (props.currentRound?.status === 'settled') {
+    rounds.push(props.currentRound)
+  }
+
+  // 如果存在上一期的已结算round，且不是当前期，添加它
+  if (props.lastSettledRound && props.lastSettledRound.id !== props.currentRound?.id) {
+    rounds.push(props.lastSettledRound)
+  }
+
+  return rounds
+})
 
 const statusText = {
   betting: '下注中',
@@ -73,14 +115,14 @@ const countdownText = computed(() => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 })
 
-function handleBadgeClick() {
-  console.log('[PC28GameOverlay] Badge clicked, isAnchor:', props.isAnchor)
+function handleBadgeClick(round: PC28GameRound) {
+  console.log('[PC28GameOverlay] Badge clicked, isAnchor:', props.isAnchor, 'round:', round)
   // 如果已结算，所有用户都打开下注记录面板查看结算信息
   // 主播点击：打开下注记录面板
   // 用户点击：已结算时打开下注记录面板，未结算时打开下注面板
-  if (props.isAnchor || props.currentRound?.status === 'settled') {
+  if (props.isAnchor || round.status === 'settled') {
     console.log('[PC28GameOverlay] Emitting open-records')
-    emit('open-records')
+    emit('open-records', round)
   } else {
     console.log('[PC28GameOverlay] Emitting open-bet')
     emit('open-bet')
@@ -142,24 +184,45 @@ onBeforeUnmount(() => {
   right: 15rem;
   z-index: 900;
   pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10rem;
+  max-height: calc(100vh - 200rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+
+  &::-webkit-scrollbar {
+    width: 4rem;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2rem;
+  }
+
+  .badges-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10rem;
+  }
 }
 
 .game-badge {
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(10px);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
   padding: 10rem 15rem;
   border-radius: 20rem;
   display: flex;
   align-items: center;
   gap: 8rem;
   cursor: pointer;
-  box-shadow: 0 4rem 12rem rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4rem 12rem rgba(0, 0, 0, 0.2);
   animation: pulse 2s infinite ease-in-out;
   min-width: 120rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 
   .game-icon {
     font-size: 24rem;

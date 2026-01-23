@@ -115,7 +115,7 @@
             </div>
           </div>
           <div class="options">
-            <div class="input" @click="showInput = true">
+            <div class="input" @click="handleCommentClick">
               <span>评论</span>
             </div>
             <div class="option-item share" @click="showShareDrawer = true">
@@ -176,7 +176,7 @@
     </teleport>
 
     <!-- 弹出的输入框 -->
-    <Transition name="fade">
+    <Transition name="fade" @after-enter="handleInputAfterEnter">
       <div v-if="showInput" class="input-overlay" @click.self="showInput = false">
         <div class="input-container" @click.stop @mousedown.stop>
           <input
@@ -186,6 +186,7 @@
             @keyup.enter="handleSendComment"
             @click.stop
             @mousedown.stop
+            @focus="handleInputFocus"
           />
           <div
             class="send-btn"
@@ -395,6 +396,7 @@
       :room-id="roomId"
       :config="pc28Config"
       :current-round="pc28CurrentRound"
+      :last-settled-round="pc28LastSettledRound"
       :is-anchor="canControlPC28"
       @open-bet="showPC28Bet = true"
       @open-records="handleOpenBetRecords"
@@ -577,11 +579,11 @@
     <PC28BetRecords
       v-if="
         showPC28BetRecords &&
-        pc28CurrentRound &&
-        (canControlPC28 || pc28CurrentRound.status === 'settled')
+        pc28ViewingRound &&
+        (canControlPC28 || pc28ViewingRound.status === 'settled')
       "
       :show="showPC28BetRecords"
-      :current-round="pc28CurrentRound"
+      :current-round="pc28ViewingRound"
       @close="showPC28BetRecords = false"
     />
   </div>
@@ -607,7 +609,7 @@ import Dom from '@/utils/dom'
 import { DefaultUser } from '@/utils/const_var'
 
 import { useBaseStore } from '@/store/pinia'
-import { getPC28Config, upsertPC28Config, getCurrentRound } from '@/api/pc28'
+import { getPC28Config, upsertPC28Config, getCurrentRound, getLastSettledRound } from '@/api/pc28'
 import type { PC28GameConfig, PC28GameRound } from '@/api/pc28'
 
 const route = useRoute()
@@ -813,6 +815,7 @@ const showPC28Bet = ref(false)
 const showPC28BetRecords = ref(false)
 const pc28Config = ref<PC28GameConfig | null>(null)
 const pc28CurrentRound = ref<PC28GameRound | null>(null)
+const pc28LastSettledRound = ref<PC28GameRound | null>(null)
 const isAnchor = computed(() => {
   return (
     roomInfo.value.is_self_hosted &&
@@ -826,10 +829,14 @@ const canControlPC28 = computed(() => {
   return roomInfo.value.is_self_hosted && roomInfo.value.anchor_id === baseStore.userinfo.uid
 })
 
-function handleOpenBetRecords() {
-  console.log('[LivePage] handleOpenBetRecords called')
+// 用于记录要查看的round（可能是当前round或已结算的round）
+const pc28ViewingRound = ref<PC28GameRound | null>(null)
+
+function handleOpenBetRecords(round: PC28GameRound) {
+  console.log('[LivePage] handleOpenBetRecords called, round:', round)
   console.log('[LivePage] canControlPC28:', canControlPC28.value)
-  console.log('[LivePage] pc28CurrentRound:', pc28CurrentRound.value)
+  // 设置要查看的round（可能是当前round或已结算的round）
+  pc28ViewingRound.value = round
   console.log('[LivePage] Setting showPC28BetRecords to true')
   showPC28BetRecords.value = true
   console.log('[LivePage] showPC28BetRecords after set:', showPC28BetRecords.value)
@@ -846,9 +853,15 @@ async function fetchPC28Data() {
     const config = await getPC28Config(roomId.value)
     pc28Config.value = config
 
-    // 获取当前期数
+    // 获取当前期数（betting/sealed/settled）
     const round = await getCurrentRound(roomId.value)
     pc28CurrentRound.value = round
+
+    // 获取最近一个已结算的期数（排除当前round，确保是上一期的）
+    const lastSettled = await getLastSettledRound(roomId.value, round?.id)
+
+    // 始终显示上一期的已结算round（如果存在）
+    pc28LastSettledRound.value = lastSettled
   } catch (e: any) {
     console.error('[PC28] fetch data error:', e)
   }
@@ -1153,18 +1166,65 @@ watch(
   }
 )
 
-// 监听输入框显示，自动聚焦
-watch(showInput, (val) => {
-  if (val) {
-    // Windows上需要延迟更长时间才能正确聚焦
-    nextTick(() => {
+// 处理评论按钮点击
+function handleCommentClick() {
+  showInput.value = true
+  // Windows上需要在用户交互事件中立即聚焦
+  nextTick(() => {
+    // 使用requestAnimationFrame确保DOM已更新
+    requestAnimationFrame(() => {
       setTimeout(() => {
         commentInput.value?.focus()
         // 确保输入框获得焦点后，光标在输入框内
         if (commentInput.value) {
           commentInput.value.setSelectionRange(0, 0)
         }
+      }, 50)
+    })
+  })
+}
+
+// 处理输入框过渡动画完成后的聚焦
+function handleInputAfterEnter() {
+  // 动画完成后再次尝试聚焦，确保Windows上能正确显示光标
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (commentInput.value && document.activeElement !== commentInput.value) {
+          commentInput.value.focus()
+          if (commentInput.value) {
+            commentInput.value.setSelectionRange(0, 0)
+          }
+        }
       }, 100)
+    })
+  })
+}
+
+// 处理输入框获得焦点
+function handleInputFocus() {
+  // 确保光标在输入框内
+  if (commentInput.value) {
+    commentInput.value.setSelectionRange(0, 0)
+  }
+}
+
+// 监听输入框显示，自动聚焦（作为备用）
+watch(showInput, (val) => {
+  if (val) {
+    // Windows上需要延迟更长时间才能正确聚焦
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          // 如果还没有焦点，再次尝试聚焦
+          if (commentInput.value && document.activeElement !== commentInput.value) {
+            commentInput.value.focus()
+            if (commentInput.value) {
+              commentInput.value.setSelectionRange(0, 0)
+            }
+          }
+        }, 200)
+      })
     })
   }
 })
