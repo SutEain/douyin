@@ -299,12 +299,12 @@ async function handleSettle() {
       settleForm.value.num3!
     )
     if (res.success) {
-      const totalBetAmount = res.total_bet_amount || 0
-      const totalPayout = res.total_payout || 0
+      const totalBetAmount = Number(res.total_bet_amount) || 0
+      const totalPayout = Number(res.total_payout) || 0
       const profit = totalBetAmount - totalPayout
 
       // 显示详细的结算信息
-      const message = `结算成功！\n总下注：${totalBetAmount.toFixed(2)} 抖币\n总赔付：${totalPayout.toFixed(2)} 抖币\n${profit >= 0 ? '盈利' : '亏损'}：${Math.abs(profit).toFixed(2)} 抖币`
+      const message = `结算成功！总下注：${totalBetAmount.toFixed(2)} 抖币，总赔付：${totalPayout.toFixed(2)} 抖币，${profit >= 0 ? '盈利' : '亏损'}：${Math.abs(profit).toFixed(2)} 抖币`
       _notice(message)
 
       settleForm.value.num1 = null
