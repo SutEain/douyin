@@ -100,7 +100,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
 import { PC28GameRound, PC28Bet } from '@/api/pc28'
-import { getAllBets } from '@/api/pc28'
+import { getAllBets, getAllBetsForSettled } from '@/api/pc28'
 import { supabase } from '@/utils/supabase'
 import { _notice } from '@/utils'
 
@@ -256,7 +256,11 @@ async function fetchBets() {
   isLoading.value = true
   try {
     console.log('[PC28] Fetching bets for round:', props.currentRound.id)
-    const allBets = await getAllBets(props.currentRound.id)
+    // 如果已结算，使用所有用户可访问的API；否则使用主播专用API
+    const allBets =
+      props.currentRound.status === 'settled'
+        ? await getAllBetsForSettled(props.currentRound.id)
+        : await getAllBets(props.currentRound.id)
     console.log('[PC28] Fetched bets:', allBets.length, allBets)
     bets.value = allBets
 

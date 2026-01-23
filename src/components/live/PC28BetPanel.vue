@@ -624,8 +624,21 @@ async function handleBet() {
   try {
     let successCount = 0
     for (const bet of selectedBets.value) {
-      const [type, value] = bet.split('_')
-      const betValue = type === 'single_point' ? parseInt(value) : undefined
+      // 解析下注类型和值
+      let type: string
+      let betValue: number | undefined
+
+      if (bet.startsWith('single_point_')) {
+        // 单点类型：single_point_0 -> type='single_point', betValue=0
+        type = 'single_point'
+        betValue = parseInt(bet.replace('single_point_', ''))
+      } else {
+        // 其他类型：直接使用bet作为type
+        // big_even -> type='big_even'
+        // big -> type='big'
+        type = bet
+        betValue = undefined
+      }
 
       const res = await placePC28Bet(props.currentRound.id, type, betAmount.value, betValue)
 

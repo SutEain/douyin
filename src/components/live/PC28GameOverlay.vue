@@ -75,9 +75,10 @@ const countdownText = computed(() => {
 
 function handleBadgeClick() {
   console.log('[PC28GameOverlay] Badge clicked, isAnchor:', props.isAnchor)
+  // 如果已结算，所有用户都打开下注记录面板查看结算信息
   // 主播点击：打开下注记录面板
-  // 用户点击：打开下注面板
-  if (props.isAnchor) {
+  // 用户点击：已结算时打开下注记录面板，未结算时打开下注面板
+  if (props.isAnchor || props.currentRound?.status === 'settled') {
     console.log('[PC28GameOverlay] Emitting open-records')
     emit('open-records')
   } else {

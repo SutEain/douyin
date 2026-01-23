@@ -572,10 +572,14 @@
       @close="showPC28Bet = false"
     />
 
-    <!-- 🎯 PC28下注记录面板（主播视角） -->
+    <!-- 🎯 PC28下注记录面板（主播视角或已结算时所有用户可查看） -->
     <PC28BetRecords
-      v-if="showPC28BetRecords && canControlPC28 && pc28CurrentRound"
-      :show="showPC28BetRecords && canControlPC28"
+      v-if="
+        showPC28BetRecords &&
+        pc28CurrentRound &&
+        (canControlPC28 || pc28CurrentRound.status === 'settled')
+      "
+      :show="showPC28BetRecords"
       :current-round="pc28CurrentRound"
       @close="showPC28BetRecords = false"
     />
