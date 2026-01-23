@@ -395,6 +395,8 @@ export async function handleMyPublished(chatId: number, messageId: number) {
     const currentCursor = cursorStack[cursorStack.length - 1] || null
     const pageNo = cursorStack.length
 
+    // 🎯 修复：查询 limit 11 条，用于准确判断是否还有下一页
+    // 如果返回了11条，说明还有更多；如果只返回10条或更少，说明没有更多了
     let query = supabase
       .from('videos')
       .select(
@@ -404,7 +406,7 @@ export async function handleMyPublished(chatId: number, messageId: number) {
       .eq('status', 'published')
       .order('published_at', { ascending: false })
       .order('id', { ascending: false })
-      .limit(10)
+      .limit(11)
 
     console.log('[handleMyPublished] search.q:', pubCtx.q)
     console.log('[handleMyPublished] cursor:', currentCursor)
@@ -440,23 +442,30 @@ export async function handleMyPublished(chatId: number, messageId: number) {
       return
     }
 
+    // 🎯 判断是否还有下一页：如果返回了11条，说明还有更多
+    const hasMore = videos.length > 10
+    // 只显示前10条
+    const displayVideos = videos.slice(0, 10)
+
     const header: string[] = ['📺 <b>我发布的视频</b>', '']
     if (pubCtx.q) header.push(`🔎 关键字：<code>${pubCtx.q}</code>`)
-    header.push(`📄 第 ${pageNo} 页 · 本页 ${videos.length} 条`)
+    header.push(`📄 第 ${pageNo} 页 · 本页 ${displayVideos.length} 条`)
     header.push('')
 
-    const keyboard: any[] = videos.map((v) => {
+    const keyboard: any[] = displayVideos.map((v) => {
       const privacyIcon = v.is_private ? '🔒 ' : ''
       const desc = v.description ? safeTruncate(v.description, 20) : '无描述'
       const stats = `👀${v.view_count || 0} ❤️${v.like_count || 0}`
       return [{ text: `${privacyIcon}${desc}  ${stats}`, callback_data: `view_video_${v.id}` }]
     })
 
-    const last = videos[videos.length - 1] as any
+    // 🎯 修复：使用最后一条显示的视频来构建 nextCursor
+    // 如果还有更多数据（hasMore），则构建 nextCursor；否则为 null
+    const last = displayVideos[displayVideos.length - 1] as any
     const nextCursor: PublishedCursor | null =
-      last?.published_at && last?.id ? { published_at: last.published_at, id: last.id } : null
-    // 🎯 修复：只要有 nextCursor 就显示下一页按钮，不要求必须返回10条
-    // 因为 nextCursor 的存在本身就意味着还有更多数据可以查询
+      hasMore && last?.published_at && last?.id
+        ? { published_at: last.published_at, id: last.id }
+        : null
     const hasNext = !!nextCursor
 
     await setPublishedCtx(chatId, { q: pubCtx.q, cursorStack, nextCursor })

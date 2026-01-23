@@ -1,7 +1,7 @@
 <template>
-  <div 
-    class="LivePage" 
-    ref="page" 
+  <div
+    class="LivePage"
+    ref="page"
     :class="{ 'landscape-mode': isLandscape }"
     @touchstart="handleFirstTouch"
     @click="handleFirstTouch"
@@ -102,6 +102,9 @@
                   <span class="gift-text">送出了 {{ msg.content }}</span>
                   <span class="combo-num" v-if="msg.combo > 1">x{{ msg.combo }}</span>
                 </template>
+                <template v-else-if="msg.type === 'pc28'">
+                  <span class="pc28-text">{{ msg.content }}</span>
+                </template>
                 <template v-else>
                   <span class="name" @click.stop="goUser(msg.user_id)"
                     >{{ _truncate(msg.user_nickname, 15) }}:</span
@@ -144,13 +147,21 @@
               style="font-size: 22rem"
             >
               <Icon
-              :icon="isLandscape ? 'solar:quit-full-screen-bold' : 'solar:full-screen-bold'"
-            />
+                :icon="isLandscape ? 'solar:quit-full-screen-bold' : 'solar:full-screen-bold'"
+              />
+            </div>
+            <!-- 🎯 PC28游戏摇杆按钮（仅房间主播可见，排除特殊用户） -->
+            <div
+              v-if="canControlPC28"
+              class="option-item game-toggle"
+              @click="handleGameToggleClick"
+            >
+              <Icon icon="mdi:dice-multiple" style="font-size: 24rem" />
+            </div>
+            <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
           </div>
-          <img src="../../assets/img/icon/home/gift.webp" alt="" class="gift" @click="sendGift" />
-        </div>
-        <!-- 🎯 安卓全面屏：底部占位元素，避免被三大金刚按钮遮挡 -->
-        <div class="android-bottom-spacer"></div>
+          <!-- 🎯 安卓全面屏：底部占位元素，避免被三大金刚按钮遮挡 -->
+          <div class="android-bottom-spacer"></div>
         </div>
       </div>
     </div>
@@ -158,11 +169,7 @@
     <!-- 还原按钮（清屏时显示在右下角） -->
     <teleport to="body">
       <transition name="fade">
-        <div
-          v-if="isCleanScreen"
-          class="restore-btn"
-          @click.stop="isCleanScreen = false"
-        >
+        <div v-if="isCleanScreen" class="restore-btn" @click.stop="isCleanScreen = false">
           <Icon icon="solar:restart-bold" class="restore-icon" />
         </div>
       </transition>
@@ -199,6 +206,12 @@
             <div class="coin-info">
               <img src="../../assets/img/icon/home/redpack.png" alt="" />
               <span>{{ userCoins.toFixed(2) }} 抖币</span>
+              <Icon
+                icon="solar:refresh-bold"
+                class="refresh-btn"
+                @click="refreshUserBalance"
+                style="font-size: 16rem; margin-left: 5rem; cursor: pointer; opacity: 0.8"
+              />
               <div class="recharge" @click="handleRecharge">充值</div>
             </div>
           </div>
@@ -375,6 +388,17 @@
       :last-message="lastUserMessage"
     />
 
+    <!-- 🎯 PC28游戏状态挂件（类似红包，所有用户可见，点击参与下注） -->
+    <PC28GameOverlay
+      v-if="roomId && pc28Config?.is_enabled"
+      :room-id="roomId"
+      :config="pc28Config"
+      :current-round="pc28CurrentRound"
+      :is-anchor="canControlPC28"
+      @open-bet="showPC28Bet = true"
+      @open-records="handleOpenBetRecords"
+    />
+
     <!-- 🧧 发红包弹窗 -->
     <Transition name="slide-up">
       <div v-if="showSendPacket" class="gift-panel-overlay" @click.self="showSendPacket = false">
@@ -496,6 +520,65 @@
         @update:currentItem="handleUpdateUser"
       />
     </Transition>
+
+    <!-- 🎯 PC28游戏菜单弹窗（主播选择游戏） -->
+    <Transition name="slide-up">
+      <div v-if="showGameMenu" class="game-menu-overlay" @click.self="showGameMenu = false">
+        <div class="game-menu">
+          <div class="menu-header">
+            <h3>选择游戏</h3>
+            <Icon icon="solar:close-circle-bold" class="close-btn" @click="showGameMenu = false" />
+          </div>
+          <div class="menu-content">
+            <div class="game-item" @click="handleSelectGame('pc28')">
+              <Icon icon="mdi:dice-multiple" style="font-size: 32rem; color: #667eea" />
+              <div>
+                <div class="game-name">加拿大PC28</div>
+                <div class="game-desc">猜大小、单双、组合</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 🎯 PC28游戏设置弹窗（主播） -->
+    <!-- 🎯 PC28游戏设置弹窗 (仅房间主播可见，排除特殊用户) -->
+    <PC28GameConfigComponent
+      v-if="showPC28Config && canControlPC28"
+      :show="showPC28Config"
+      :config="pc28Config"
+      :room-id="roomId"
+      @close="showPC28Config = false"
+      @save="handleSavePC28Config"
+    />
+
+    <!-- 🎯 PC28游戏控制面板（仅房间主播可见，排除特殊用户） -->
+    <PC28GameControl
+      v-if="showPC28Control && canControlPC28"
+      :show="showPC28Control"
+      :current-round="pc28CurrentRound"
+      :room-id="roomId"
+      @close="showPC28Control = false"
+      @refresh="fetchPC28Data"
+    />
+
+    <!-- 🎯 PC28用户下注面板 -->
+    <PC28BetPanel
+      v-if="showPC28Bet"
+      :show="showPC28Bet"
+      :config="pc28Config"
+      :current-round="pc28CurrentRound"
+      @close="showPC28Bet = false"
+    />
+
+    <!-- 🎯 PC28下注记录面板（主播视角） -->
+    <PC28BetRecords
+      v-if="showPC28BetRecords && canControlPC28 && pc28CurrentRound"
+      :show="showPC28BetRecords && canControlPC28"
+      :current-round="pc28CurrentRound"
+      @close="showPC28BetRecords = false"
+    />
   </div>
 </template>
 
@@ -510,13 +593,19 @@ import DPPlayer from '@/components/live/DPPlayer.vue'
 import VapPlayer from '@/components/live/VapPlayer.vue'
 import UserPanel from '@/components/UserPanel.vue'
 import RedPacketOverlay from '@/components/live/RedPacketOverlay.vue'
+import PC28GameOverlay from '@/components/live/PC28GameOverlay.vue'
+import PC28GameConfigComponent from '@/components/live/PC28GameConfig.vue'
+import PC28GameControl from '@/components/live/PC28GameControl.vue'
+import PC28BetPanel from '@/components/live/PC28BetPanel.vue'
+import PC28BetRecords from '@/components/live/PC28BetRecords.vue'
 import Dom from '@/utils/dom'
 import { DefaultUser } from '@/utils/const_var'
 
 import { useBaseStore } from '@/store/pinia'
+import { getPC28Config, upsertPC28Config, getCurrentRound } from '@/api/pc28'
+import type { PC28GameConfig, PC28GameRound } from '@/api/pc28'
 
 const route = useRoute()
-const router = useRouter()
 const baseStore = useBaseStore()
 const roomId = computed(() => route.query.id as string)
 
@@ -711,6 +800,129 @@ const packetForm = reactive({
   }
 })
 
+// --- PC28游戏相关 ---
+const showGameMenu = ref(false)
+const showPC28Config = ref(false)
+const showPC28Control = ref(false)
+const showPC28Bet = ref(false)
+const showPC28BetRecords = ref(false)
+const pc28Config = ref<PC28GameConfig | null>(null)
+const pc28CurrentRound = ref<PC28GameRound | null>(null)
+const isAnchor = computed(() => {
+  return (
+    roomInfo.value.is_self_hosted &&
+    (roomInfo.value.anchor_id === baseStore.userinfo.uid ||
+      [10000, 10003].includes(baseStore.userinfo.numeric_id))
+  )
+})
+
+// PC28游戏控制权限：只有真正的房间主播可以控制（排除10003等特殊用户）
+const canControlPC28 = computed(() => {
+  return roomInfo.value.is_self_hosted && roomInfo.value.anchor_id === baseStore.userinfo.uid
+})
+
+function handleOpenBetRecords() {
+  console.log('[LivePage] handleOpenBetRecords called')
+  console.log('[LivePage] canControlPC28:', canControlPC28.value)
+  console.log('[LivePage] pc28CurrentRound:', pc28CurrentRound.value)
+  console.log('[LivePage] Setting showPC28BetRecords to true')
+  showPC28BetRecords.value = true
+  console.log('[LivePage] showPC28BetRecords after set:', showPC28BetRecords.value)
+}
+
+// PC28实时监听
+let pc28Channel: any = null
+
+async function fetchPC28Data() {
+  if (!roomId.value) return
+
+  try {
+    // 获取配置
+    const config = await getPC28Config(roomId.value)
+    pc28Config.value = config
+
+    // 获取当前期数
+    const round = await getCurrentRound(roomId.value)
+    pc28CurrentRound.value = round
+  } catch (e: any) {
+    console.error('[PC28] fetch data error:', e)
+  }
+}
+
+async function handleSavePC28Config(config: Partial<PC28GameConfig>) {
+  if (!roomId.value) return
+
+  try {
+    await upsertPC28Config(roomId.value, config)
+    await fetchPC28Data()
+  } catch (e: any) {
+    _notice(e.message || '保存失败')
+  }
+}
+
+function handleGameToggleClick() {
+  // 只有房间主播可以控制PC28游戏
+  if (canControlPC28.value) {
+    if (pc28Config.value?.is_enabled) {
+      showPC28Control.value = true
+    } else {
+      showPC28Config.value = true
+    }
+  } else {
+    // 非主播不应该看到这个按钮，但以防万一
+    showGameMenu.value = true
+  }
+}
+
+function handleSelectGame(game: string) {
+  showGameMenu.value = false
+  if (game === 'pc28') {
+    if (canControlPC28.value) {
+      // 房间主播：打开设置或控制面板
+      if (pc28Config.value?.is_enabled) {
+        showPC28Control.value = true
+      } else {
+        showPC28Config.value = true
+      }
+    } else {
+      // 用户：打开下注面板
+      showPC28Bet.value = true
+    }
+  }
+}
+
+function setupPC28Realtime() {
+  if (!roomId.value) return
+
+  pc28Channel = supabase
+    .channel(`pc28_${roomId.value}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'pc28_game_configs',
+        filter: `room_id=eq.${roomId.value}`
+      },
+      () => {
+        fetchPC28Data()
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'pc28_game_rounds',
+        filter: `room_id=eq.${roomId.value}`
+      },
+      () => {
+        fetchPC28Data()
+      }
+    )
+    .subscribe()
+}
+
 const canSendPacket = computed(() => {
   return (
     packetForm.total_coins >= 10 &&
@@ -854,6 +1066,9 @@ async function handleSendGift() {
     // 2. 更新本地余额显示
     if (res && typeof res.sender_balance === 'number') {
       userCoins.value = Math.floor(Number(res.sender_balance) * 100) / 100
+    } else {
+      // 如果返回中没有余额，刷新一次
+      await refreshUserBalance()
     }
 
     // 后端已经通过 supabaseAdmin 代发了消息，前端不需要再 insert
@@ -898,6 +1113,10 @@ async function initRoom() {
 
   // 4. 开启新的订阅
   setupSubscription()
+
+  // 5. 加载PC28数据
+  await fetchPC28Data()
+  setupPC28Realtime()
 }
 
 // 监听路由参数变化，实现直播间无缝切换
@@ -1240,32 +1459,44 @@ async function fetchRoomInfo() {
       viewerCount.value = displayCount
 
       // 获取个人抖币余额 (无论是否自建直播)
-      if (session?.user?.id) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('balance_coins')
-          .eq('id', session.user.id)
-          .maybeSingle()
-        if (profile) {
-          userCoins.value = Math.floor(Number(profile.balance_coins || 0) * 100) / 100
-        }
+      await refreshUserBalance()
 
-        // 检查关注状态 (不管是自建还是转播，只要有主播 ID)
-        if (room.anchor_info?.id) {
-          const { data: follow } = await supabase
-            .from('follows')
-            .select('id')
-            .eq('follower_id', session.user.id)
-            .eq('followee_id', room.anchor_info.id)
-            .maybeSingle()
-          isFollowed.value = !!follow
-        }
+      // 检查关注状态 (不管是自建还是转播，只要有主播 ID)
+      if (session?.user?.id && room.anchor_info?.id) {
+        const { data: follow } = await supabase
+          .from('follows')
+          .select('id')
+          .eq('follower_id', session.user.id)
+          .eq('followee_id', room.anchor_info.id)
+          .maybeSingle()
+        isFollowed.value = !!follow
       }
     } else {
       console.error('[LivePage] fetchRoomInfo failed:', payload.msg || resp.status)
     }
   } catch (e) {
     console.error('[LivePage] fetchRoomInfo error:', e)
+  }
+}
+
+// 刷新用户余额
+async function refreshUserBalance() {
+  try {
+    const {
+      data: { session }
+    } = await supabase.auth.getSession()
+    if (session?.user?.id) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('balance_coins')
+        .eq('id', session.user.id)
+        .maybeSingle()
+      if (profile) {
+        userCoins.value = Math.floor(Number(profile.balance_coins || 0) * 100) / 100
+      }
+    }
+  } catch (e) {
+    console.error('[LivePage] refreshUserBalance error:', e)
   }
 }
 
@@ -1343,7 +1574,8 @@ async function fetchHistoryMessages() {
       user_id: m.user_id,
       user_nickname: m.profiles?.nickname || '路人',
       type: m.msg_type || 'chat',
-      combo: m.payload?.combo || 1
+      combo: m.payload?.combo || 1,
+      payload: m.payload
     }))
     scrollToBottom()
   }
@@ -1534,7 +1766,8 @@ function setupSubscription() {
           user_id: payload.new.user_id,
           user_nickname: nickname,
           type: payload.new.msg_type || 'chat',
-          combo: giftPayload.combo || 1
+          combo: giftPayload.combo || 1,
+          payload: payload.new.payload
         }
 
         messages.value.push(newMessage)
@@ -1650,6 +1883,8 @@ function setupSubscription() {
 onMounted(async () => {
   await fetchGifts()
   await initRoom()
+  await fetchPC28Data()
+  setupPC28Realtime()
 
   // 🎯 观看时长上报：每10秒上报一次
   watchTimeTimer = setInterval(() => {
@@ -1666,6 +1901,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   isLandscape.value = false // 退出时重置状态
   if (channel) supabase.removeChannel(channel)
+  if (pc28Channel) supabase.removeChannel(pc28Channel)
   if (watchTimeTimer) {
     clearInterval(watchTimeTimer)
     watchTimeTimer = null
@@ -2326,6 +2562,20 @@ onBeforeUnmount(() => {
               animation: combo-pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             }
           }
+
+          &.pc28 {
+            background: linear-gradient(
+              90deg,
+              rgba(33, 150, 243, 0.3) 0%,
+              rgba(33, 150, 243, 0.1) 100%
+            );
+            border-left: 3px solid #2196f3;
+
+            .pc28-text {
+              color: #64b5f6;
+              font-weight: 500;
+            }
+          }
         }
       }
 
@@ -2373,7 +2623,7 @@ onBeforeUnmount(() => {
           flex-shrink: 0;
         }
       }
-      
+
       // 🎯 安卓全面屏：底部占位元素，避免被三大金刚按钮遮挡
       .android-bottom-spacer {
         display: none;
@@ -2489,6 +2739,16 @@ onBeforeUnmount(() => {
           img {
             width: 16rem;
             height: 16rem;
+          }
+
+          .refresh-btn {
+            transition: transform 0.3s;
+            &:hover {
+              transform: rotate(180deg);
+            }
+            &:active {
+              opacity: 0.6;
+            }
           }
 
           .recharge {
@@ -2982,5 +3242,83 @@ onBeforeUnmount(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+// 🎯 PC28游戏菜单弹窗样式
+.game-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20rem;
+}
+
+.game-menu {
+  width: 100%;
+  max-width: 300rem;
+  background: #1a1a1a;
+  border-radius: 20rem;
+  overflow: hidden;
+}
+
+.menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+  h3 {
+    color: white;
+    font-size: 18rem;
+    margin: 0;
+  }
+
+  .close-btn {
+    font-size: 24rem;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+  }
+}
+
+.menu-content {
+  padding: 20rem;
+}
+
+.game-item {
+  display: flex;
+  align-items: center;
+  gap: 15rem;
+  padding: 15rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 10rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  &:active {
+    background: rgba(254, 44, 85, 0.2);
+  }
+
+  .game-icon {
+    font-size: 24rem;
+    color: #fe2c55;
+  }
+
+  span {
+    color: white;
+    font-size: 16rem;
+    font-weight: bold;
+  }
 }
 </style>
