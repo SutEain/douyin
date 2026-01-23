@@ -292,18 +292,7 @@
                   min="1"
                   max="9999"
                   placeholder="赔率"
-                  @blur="
-                    validateOdds(
-                      'single_point',
-                      pair.point1,
-                      localConfig.game_settings.single_point.odds[pair.point1]
-                    )
-                    // 同步更新配对数字
-                    if (localConfig.game_settings.single_point.odds[pair.point1] !== undefined) {
-                      localConfig.game_settings.single_point.odds[pair.point2] =
-                        localConfig.game_settings.single_point.odds[pair.point1]
-                    }
-                  "
+                  @blur="handleSinglePointBlur(pair)"
                 />
               </div>
             </div>
@@ -409,6 +398,16 @@ const localConfig = ref<Partial<PC28GameConfig>>({
   ...defaultConfig,
   ...(props.config || {})
 })
+
+// 处理单点赔率blur事件
+function handleSinglePointBlur(pair: { point1: number; point2: number }) {
+  const value = localConfig.value.game_settings!.single_point.odds[pair.point1]
+  validateOdds('single_point', pair.point1, value)
+  // 同步更新配对数字
+  if (value !== undefined && value !== null) {
+    localConfig.value.game_settings!.single_point.odds[pair.point2] = value
+  }
+}
 
 // 验证赔率范围（1-9999）
 function validateOdds(section: string, key: string | number, value: number | undefined) {

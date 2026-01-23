@@ -134,15 +134,21 @@ CREATE POLICY "Anchors manage own pc28 configs" ON public.pc28_game_configs
     FOR ALL USING (auth.uid() = anchor_id);
 
 -- 游戏期数表：所有人可查看，只有主播可以创建/修改
+-- 注意：INSERT/UPDATE操作通过SECURITY DEFINER的RPC函数完成，这里只做防御性策略
 DROP POLICY IF EXISTS "Public view pc28 rounds" ON public.pc28_game_rounds;
 CREATE POLICY "Public view pc28 rounds" ON public.pc28_game_rounds 
     FOR SELECT USING (true);
 
-DROP POLICY IF EXISTS "Anchors manage own pc28 rounds" ON public.pc28_game_rounds;
-CREATE POLICY "Anchors manage own pc28 rounds" ON public.pc28_game_rounds 
-    FOR ALL USING (auth.uid() = anchor_id);
+DROP POLICY IF EXISTS "Anchors create own pc28 rounds" ON public.pc28_game_rounds;
+CREATE POLICY "Anchors create own pc28 rounds" ON public.pc28_game_rounds 
+    FOR INSERT WITH CHECK (auth.uid() = anchor_id);
+
+DROP POLICY IF EXISTS "Anchors update own pc28 rounds" ON public.pc28_game_rounds;
+CREATE POLICY "Anchors update own pc28 rounds" ON public.pc28_game_rounds 
+    FOR UPDATE USING (auth.uid() = anchor_id);
 
 -- 下注记录表：用户只能查看自己的下注，只能创建自己的下注
+-- 注意：UPDATE和DELETE操作通过SECURITY DEFINER的RPC函数完成，这里只做防御性策略
 DROP POLICY IF EXISTS "Users view own pc28 bets" ON public.pc28_bets;
 CREATE POLICY "Users view own pc28 bets" ON public.pc28_bets 
     FOR SELECT USING (auth.uid() = user_id);
@@ -150,6 +156,9 @@ CREATE POLICY "Users view own pc28 bets" ON public.pc28_bets
 DROP POLICY IF EXISTS "Users create own pc28 bets" ON public.pc28_bets;
 CREATE POLICY "Users create own pc28 bets" ON public.pc28_bets 
     FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 防御性策略：用户不能直接更新或删除下注（必须通过RPC函数）
+-- 实际更新操作由SECURITY DEFINER的RPC函数完成
 
 -- 6. 索引优化
 CREATE INDEX IF NOT EXISTS idx_pc28_configs_room_id ON public.pc28_game_configs(room_id);
