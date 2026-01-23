@@ -3,7 +3,7 @@
     <div v-if="show" class="pc28-control-overlay" @click.self="handleClose">
       <div class="pc28-control-modal">
         <div class="modal-header">
-          <h3>PC28游戏控制</h3>
+          <h3>快三类游戏控制</h3>
           <Icon icon="ion:close" class="close-btn" @click="handleClose" />
         </div>
 

@@ -22,7 +22,7 @@
           <!-- 大小单双 -->
           <div class="config-section">
             <div class="section-title">
-              <span>大小单双</span>
+              <span>大小</span>
               <label class="switch">
                 <input type="checkbox" v-model="localConfig.game_settings.big_small.enabled" />
                 <span class="slider"></span>

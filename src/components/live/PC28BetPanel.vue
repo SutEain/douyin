@@ -210,7 +210,7 @@
           </div>
 
           <!-- 下注金额 -->
-          <div class="bet-amount">
+          <div v-if="activeTab !== 'my_bets'" class="bet-amount">
             <div class="amount-label">下注金额</div>
             <div class="amount-buttons">
               <button
@@ -235,7 +235,7 @@
           </div>
 
           <!-- 已选下注 -->
-          <div v-if="selectedBets.size > 0" class="selected-bets">
+          <div v-if="activeTab !== 'my_bets' && selectedBets.size > 0" class="selected-bets">
             <div class="selected-label">已选 {{ selectedBets.size }} 注</div>
             <div class="selected-list">
               <div
@@ -251,7 +251,7 @@
           </div>
         </div>
 
-        <div class="panel-footer">
+        <div v-if="activeTab !== 'my_bets'" class="panel-footer">
           <div class="total-info">
             <span>共 {{ selectedBets.size }} 注</span>
             <span class="total-amount">总计：{{ totalAmount }} 抖币</span>
@@ -272,7 +272,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
-import { PC28GameConfig, PC28GameRound, PC28Bet } from '@/api/pc28'
+import type { PC28GameConfig, PC28GameRound, PC28Bet } from '@/api/pc28'
 import { placePC28Bet, getMyBets, cancelPC28Bet } from '@/api/pc28'
 import { _notice } from '@/utils'
 import { supabase } from '@/utils/supabase'
@@ -328,7 +328,7 @@ const tabs = computed(() => {
   const tabList = []
 
   if (props.config?.game_settings?.big_small?.enabled) {
-    tabList.push({ key: 'big_small', label: '大小单双' })
+    tabList.push({ key: 'big_small', label: '大小' })
   }
   if (props.config?.game_settings?.odd_even?.enabled) {
     tabList.push({ key: 'odd_even', label: '单双' })
