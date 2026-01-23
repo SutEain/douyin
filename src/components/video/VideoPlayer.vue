@@ -146,13 +146,9 @@ const isPlaying = computed(() => {
 })
 
 const videoFit = computed(() => {
-  const { width, height } = props.item.video || {}
-  // 如果是横屏视频 (宽 > 高)，使用 contain 以免剪掉太多内容，上下留黑边是正常的
-  // 如果是竖屏视频 (高 >= 宽)，使用 cover 以填充全屏，消除左右黑边
-  if (width && height && width > height) {
-    return 'contain'
-  }
-  return 'cover'
+  // 🎯 统一使用 contain，确保视频完整显示在窗口内，不会被裁剪
+  // 横屏视频和竖屏视频都使用 contain，保持视频完整显示
+  return 'contain'
 })
 
 const progressClass = computed(() => {

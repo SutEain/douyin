@@ -46,14 +46,12 @@ export async function handleChannelPost(post: any) {
     const ownerTgChatId = profile?.tg_user_id
     const autoApprove = profile?.auto_approve === true
 
-    // 🎯 根据用户免审核状态决定初始状态
-    // 如果免审核，直接设为 published；否则设为 ready（待后台审核）
-    const initialStatus = autoApprove ? ('published' as const) : ('ready' as const)
-
+    // 🎯 自动同步的视频：初始状态设为 processing，Worker 处理完成后自动转换为 published
+    // 🎯 不再根据免审核状态设置初始状态，统一设为 processing
     const extraData = {
       is_adult: channel.is_adult,
       is_sea: channel.is_sea,
-      status: initialStatus,
+      status: 'processing', // 🎯 统一设为 processing，Worker 处理完成后自动转换
       is_auto_sync: true // 🎯 明确标记为自动同步
     }
 
@@ -69,6 +67,12 @@ export async function handleChannelPost(post: any) {
       // 🎯 视频搬运逻辑
       console.log(`[ChannelSync] 发现视频，开始搬运...`)
 
+      // 🎯 发送自动同步成功提示
+      await sendMessage(
+        ownerTgChatId,
+        `✅ <b>自动同步成功</b>\n\n检测到您的频道发布了新视频，正在处理中...`
+      )
+
       await handleVideo(
         ownerTgChatId,
         post.video,
@@ -81,6 +85,23 @@ export async function handleChannelPost(post: any) {
       // 🎯 图片/相册搬运逻辑
       console.log(`[ChannelSync] 发现图片/相册，开始搬运...`)
 
+      // 🎯 发送自动同步成功提示（只在首次创建记录时发送，避免相册重复发送）
+      const { data: existingAlbum } = await supabase
+        .from('videos')
+        .select('id')
+        .eq('tg_user_id', ownerTgChatId)
+        .eq('media_group_id', post.media_group_id)
+        .eq('is_auto_sync', true)
+        .limit(1)
+        .single()
+
+      if (!existingAlbum) {
+        await sendMessage(
+          ownerTgChatId,
+          `✅ <b>自动同步成功</b>\n\n检测到您的频道发布了新内容，正在处理中...`
+        )
+      }
+
       await handlePhoto(
         ownerTgChatId,
         post.photo,
@@ -89,7 +110,6 @@ export async function handleChannelPost(post: any) {
         post.media_group_id,
         extraData
       )
-      // 🎯 通知逻辑已移至 handlePhoto 内部处理 (单图直接发，相册延时发)
     } else {
       console.log(`[ChannelSync] 非搬运类型消息，跳过。`)
     }

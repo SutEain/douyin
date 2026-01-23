@@ -47,6 +47,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const videoRef = ref<HTMLVideoElement>()
+// 🎯 统一使用 contain，确保视频完整显示在窗口内，不会被裁剪
 const videoFit = ref<'contain' | 'cover'>('contain')
 
 let hls: any = null
@@ -565,14 +566,8 @@ watch(
 watch(
   () => props.landscape,
   () => {
-    const video = videoRef.value
-    if (video && video.videoWidth && video.videoHeight) {
-      if (props.landscape && video.videoWidth < video.videoHeight) {
-        videoFit.value = 'contain'
-      } else {
-        videoFit.value = video.videoWidth > video.videoHeight ? 'contain' : 'cover'
-      }
-    }
+    // 🎯 统一使用 contain，确保视频完整显示在窗口内，不会被裁剪
+    videoFit.value = 'contain'
   }
 )
 
@@ -626,14 +621,8 @@ onMounted(() => {
     let extra: any = undefined
     if (type === 'loadedmetadata' || type === 'playing' || type === 'resize') {
       if (video.videoWidth && video.videoHeight) {
-        // 🎯 修复：横屏模式下，竖屏视频强制使用 contain 避免裁剪
-        if (props.landscape && video.videoWidth < video.videoHeight) {
-          videoFit.value = 'contain'
-        } else {
-          // 如果是横屏视频 (宽 > 高)，使用 contain 以免剪掉太多内容，上下留黑边是正常的
-          // 如果是竖屏视频 (高 >= 宽)，使用 cover 以填充全屏，消除左右黑边
-          videoFit.value = video.videoWidth > video.videoHeight ? 'contain' : 'cover'
-        }
+        // 🎯 统一使用 contain，确保视频完整显示在窗口内，不会被裁剪
+        videoFit.value = 'contain'
         pushDebug('video.fit', {
           event: type,
           width: video.videoWidth,

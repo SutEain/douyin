@@ -36,30 +36,21 @@
       @touchend="handleVideoClick"
       style="pointer-events: auto; z-index: 1"
     >
-          <template v-if="isLive">
-            <div class="living">点击进入直播间</div>
-            <ItemDesc :is-live="true" v-model:item="state.localItem" :position="position" />
+      <template v-if="isLive">
+        <div class="living">点击进入直播间</div>
+        <ItemDesc :is-live="true" v-model:item="state.localItem" :position="position" />
+      </template>
+      <template v-else>
+        <div :style="{ opacity: state.isMove ? 0 : 1 }" class="normal">
+          <template v-if="!state.commentVisible">
+            <ItemToolbar v-model:item="state.localItem" ref="toolbarRef" />
+            <ItemDesc v-model:item="state.localItem" />
           </template>
-          <template v-else>
-            <div :style="{ opacity: state.isMove ? 0 : 1 }" class="normal">
-              <template v-if="!state.commentVisible">
-                <ItemToolbar 
-                  v-model:item="state.localItem" 
-                  ref="toolbarRef" 
-                />
-                <ItemDesc 
-                  v-model:item="state.localItem" 
-                />
-              </template>
-          
+
           <!-- 还原按钮（清屏时显示在右下角） -->
           <teleport to="body">
             <transition name="fade">
-              <div
-                v-if="isCleanScreen"
-                class="restore-btn"
-                @click.stop="handleRestoreCleanScreen"
-              >
+              <div v-if="isCleanScreen" class="restore-btn" @click.stop="handleRestoreCleanScreen">
                 <Icon icon="solar:restart-bold" class="restore-icon" />
               </div>
             </transition>
@@ -303,13 +294,9 @@ const isPlaying = $computed(() => {
 })
 
 const videoFit = computed(() => {
-  const { width, height } = props.item.video || {}
-  // 如果是横屏视频 (宽 > 高)，使用 contain 以免剪掉太多内容，上下留黑边是正常的
-  // 如果是竖屏视频 (高 >= 宽)，使用 cover 以填充全屏，消除左右黑边
-  if (width && height && width > height) {
-    return 'contain'
-  }
-  return 'cover'
+  // 🎯 统一使用 contain，确保视频完整显示在窗口内，不会被裁剪
+  // 横屏视频和竖屏视频都使用 contain，保持视频完整显示
+  return 'contain'
 })
 
 const positionName = $computed(() => {
@@ -909,7 +896,10 @@ function handleVideoClick(e: Event) {
 
   video {
     max-width: 100%;
+    max-height: 100%;
+    width: 100%;
     height: 100%;
+    object-fit: contain;
     transition:
       height,
       margin-top 0.3s;
@@ -924,7 +914,7 @@ function handleVideoClick(e: Event) {
     height: 100%;
     width: 100%;
 
-      .normal {
+    .normal {
       position: absolute;
       bottom: 0;
       width: 100%;

@@ -217,7 +217,8 @@ export async function handleRequest(req: Request): Promise<Response> {
             if (video.status === 'processing') {
               const isApproved =
                 video.review_status === 'approved' || video.review_status === 'auto_approved'
-              // 🎯 频道同步 + 免审用户：始终转换为 published，不会变成 ready
+              // 🎯 自动同步的相册/合集：处理完成后自动转换为 published
+              // 🎯 非自动同步的相册/合集：根据审核状态转换
               const newStatus =
                 video.is_auto_sync && isApproved ? 'published' : isApproved ? 'published' : 'ready'
               console.log(`[WorkerCallback] 转换相册状态: processing -> ${newStatus}`)
@@ -230,13 +231,13 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
           }
 
-          // 🎯 对于所有视频（包括普通视频）：如果是频道同步 + 免审用户，且状态是 processing，自动转换为 published
+          // 🎯 自动同步的视频：处理完成后自动转换为 published，但不发送消息
           if (video.is_auto_sync && video.status === 'processing') {
             const isApproved =
               video.review_status === 'approved' || video.review_status === 'auto_approved'
             if (isApproved) {
               console.log(
-                `[WorkerCallback] 频道同步免审用户，自动转换状态: processing -> published`
+                `[WorkerCallback] 自动同步视频处理完成，自动转换状态: processing -> published`
               )
               await supabase
                 .from('videos')
@@ -253,18 +254,10 @@ export async function handleRequest(req: Request): Promise<Response> {
               `[WorkerCallback] 检测到频道同步作品 (videoId=${videoId})，执行专用通知逻辑`
             )
 
-            // 🎯 如果状态是 published（已发布成功），发送已发布通知
+            // 🎯 如果状态是 published（已发布成功），静默处理，不发送通知
             if (video.status === 'published') {
-              console.log(`[WorkerCallback] 频道同步作品已发布，发送已发布通知`)
+              console.log(`[WorkerCallback] 自动同步作品已发布，静默处理，不发送通知`)
               if (messageId && messageId > 0) await deleteTelegramMessage(chatId, messageId)
-
-              const videoCreatedAt = new Date(video.created_at).getTime()
-              const oneHourAgo = Date.now() - 60 * 60 * 1000
-              const isRescueScript = !messageId && videoCreatedAt < oneHourAgo
-
-              if (!isRescueScript) {
-                await sendMessage(chatId, `同步成功 📢：检测到您的频道发布了新视频，已自动发布。`)
-              }
               return new Response('OK', { status: 200 })
             }
 

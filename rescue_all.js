@@ -9,7 +9,7 @@ const { createClient } = require('@supabase/supabase-js')
  * 补救脚本 v3.0 - 持续运行模式
  *
  * 功能：
- * 1. 持续运行，每30分钟扫描一次
+ * 1. 持续运行，每10分钟扫描一次
  * 2. 扫描所有 status = 'processing' 的视频/图片/相册
  * 3. 识别出其中的 Telegram file_id
  * 4. 触发 Worker 进行下载、处理并上传到 R2
@@ -18,7 +18,7 @@ const { createClient } = require('@supabase/supabase-js')
  * node rescue_all.js "你的机器人TOKEN"
  *
  * 环境变量：
- * - SCAN_INTERVAL: 扫描间隔（分钟），默认 30
+ * - SCAN_INTERVAL: 扫描间隔（分钟），默认 10
  * - MAX_CONCURRENT: 并发提交数，默认 5
  * - BATCH_DELAY: 批次延迟（毫秒），默认 200
  */
@@ -44,7 +44,7 @@ const BOT_TOKEN = (
   ''
 ).trim()
 const WORKER_URL = process.env.BOT_WORKER_URL || 'http://localhost:3000/process'
-const SCAN_INTERVAL = parseInt(process.env.SCAN_INTERVAL || '30') // 默认30分钟
+const SCAN_INTERVAL = parseInt(process.env.SCAN_INTERVAL || '10') // 默认10分钟
 
 // 🎯 运行状态
 let isRunning = false
@@ -80,7 +80,7 @@ async function rescueAll() {
     const { data: videos, error } = await supabase
       .from('videos')
       .select(
-        'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type, play_url, cover_url'
+        'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type, play_url, cover_url, file_size'
       )
       .or('status.eq.processing,storage_type.eq.telegram,storage_type.eq.r2_pending')
       .order('created_at', { ascending: false })
@@ -93,7 +93,7 @@ async function rescueAll() {
     const { data: imageVideos, error: imageError } = await supabase
       .from('videos')
       .select(
-        'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type, play_url, cover_url'
+        'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type, play_url, cover_url, file_size'
       )
       .eq('content_type', 'image')
       .or('play_url.is.null,play_url.eq.,play_url.like.%undefined%,play_url.like.%.m3u8%')
@@ -111,7 +111,7 @@ async function rescueAll() {
     const { data: publishedCollections, error: collectionError } = await supabase
       .from('videos')
       .select(
-        'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type, play_url, cover_url'
+        'id, tg_file_id, tg_user_id, status, content_type, media_list, tg_thumbnail_file_id, storage_type, play_url, cover_url, file_size'
       )
       .eq('content_type', 'collection')
       .eq('status', 'published')
@@ -146,9 +146,13 @@ async function rescueAll() {
             let hasInvalidItems = false
             for (const item of list) {
               const itemPlayUrl = item.play_url ? String(item.play_url) : ''
-              const isNullOrEmpty = !itemPlayUrl || itemPlayUrl === 'null' || itemPlayUrl.includes('undefined')
+              const isNullOrEmpty =
+                !itemPlayUrl || itemPlayUrl === 'null' || itemPlayUrl.includes('undefined')
               const isMp4Format = itemPlayUrl && itemPlayUrl.endsWith('.mp4')
-              const isNotHls = itemPlayUrl && !itemPlayUrl.endsWith('.m3u8') && !itemPlayUrl.includes('/index.m3u8')
+              const isNotHls =
+                itemPlayUrl &&
+                !itemPlayUrl.endsWith('.m3u8') &&
+                !itemPlayUrl.includes('/index.m3u8')
               const missingIsHlsFlag = item.type === 'video' && !item.is_hls && isNotHls
               if (isNullOrEmpty || isMp4Format || missingIsHlsFlag) {
                 hasInvalidItems = true
@@ -184,15 +188,25 @@ async function rescueAll() {
         (v) => v.content_type === 'collection' && v.status === 'published'
       ).length
       if (collectionCount > 0) {
-        console.log(`   🎬 其中 ${collectionCount} 个是已发布合辑需要重新处理（media_list 中有无效 play_url）`)
+        console.log(
+          `   🎬 其中 ${collectionCount} 个是已发布合辑需要重新处理（media_list 中有无效 play_url）`
+        )
       }
     }
     console.log()
 
     // 🎯 收集所有任务
     const allTasks = []
+    const videosToUpdateStatus = [] // 🎯 记录需要更新状态为 processing 的视频
+
     for (const v of allVideos) {
       const tasks = []
+
+      // 🎯 如果视频状态是 published，需要先改为 processing
+      if (v.status === 'published') {
+        videosToUpdateStatus.push(v.id)
+        console.log(`📝 [${v.id}] 已发布作品需要重新处理，将状态改为 processing`)
+      }
 
       if (v.content_type === 'video' || v.content_type === 'image') {
         // 单文件模式
@@ -246,12 +260,30 @@ async function rescueAll() {
               ? v.tg_thumbnail_file_id
               : null
 
+          // 🎯 从数据库获取文件大小（如果可用）
+          let fileSize = v.file_size || 0
+          // 🎯 如果 media_list 中有文件大小信息，优先使用
+          if (!fileSize && v.media_list) {
+            try {
+              const list = Array.isArray(v.media_list)
+                ? v.media_list
+                : JSON.parse(v.media_list || '[]')
+              const item = list.find((i) => i.file_id === fileId)
+              if (item && item.file_size) {
+                fileSize = item.file_size
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+
           tasks.push({
             videoId: v.id,
             fileId: fileId, // 🎯 使用从 media_list 获取的 file_id（如果有）
             thumbnailFileId: thumbId,
             chatId: v.tg_user_id,
-            contentType: v.content_type
+            contentType: v.content_type,
+            fileSize: fileSize // 🎯 传递文件大小
           })
         }
       } else {
@@ -274,9 +306,11 @@ async function rescueAll() {
           // 2. play_url 是 .mp4 格式（不是 HLS，老合辑的问题）
           // 3. 缺少 is_hls 标记且 play_url 不是 .m3u8 格式
           // 4. storage_type 是 telegram（未上传）
-          const isNullOrEmpty = !itemPlayUrl || itemPlayUrl === 'null' || itemPlayUrl.includes('undefined')
+          const isNullOrEmpty =
+            !itemPlayUrl || itemPlayUrl === 'null' || itemPlayUrl.includes('undefined')
           const isMp4Format = itemPlayUrl && itemPlayUrl.endsWith('.mp4')
-          const isNotHls = itemPlayUrl && !itemPlayUrl.endsWith('.m3u8') && !itemPlayUrl.includes('/index.m3u8')
+          const isNotHls =
+            itemPlayUrl && !itemPlayUrl.endsWith('.m3u8') && !itemPlayUrl.includes('/index.m3u8')
           const missingIsHlsFlag = item.type === 'video' && !item.is_hls && isNotHls
           const needsUpload =
             isNullOrEmpty ||
@@ -288,13 +322,16 @@ async function rescueAll() {
           if (needsUpload && item.file_id) {
             // 🎯 只有当 cover_url 不是 HTTP 链接时，才视其为 thumbnail_file_id
             const thumbId = itemCoverUrl && !itemCoverUrl.startsWith('http') ? itemCoverUrl : null
+            // 🎯 从 media_list item 中获取文件大小（如果可用）
+            const itemFileSize = item.file_size || 0
 
             tasks.push({
               videoId: v.id,
               fileId: item.file_id,
               thumbnailFileId: thumbId,
               chatId: v.tg_user_id,
-              contentType: v.content_type
+              contentType: v.content_type,
+              fileSize: itemFileSize // 🎯 传递文件大小
             })
           }
         }
@@ -306,12 +343,68 @@ async function rescueAll() {
       }
     }
 
+    // 🎯 先将需要重新处理的已发布作品状态改为 processing
+    if (videosToUpdateStatus.length > 0) {
+      console.log(`\n🔄 正在将 ${videosToUpdateStatus.length} 个已发布作品状态改为 processing...`)
+      for (const videoId of videosToUpdateStatus) {
+        try {
+          const { error: updateError } = await supabase
+            .from('videos')
+            .update({ status: 'processing' })
+            .eq('id', videoId)
+
+          if (updateError) {
+            console.error(`   ❌ [${videoId}] 状态更新失败:`, updateError.message)
+          } else {
+            console.log(`   ✅ [${videoId}] 状态已更新: published -> processing`)
+          }
+        } catch (e) {
+          console.error(`   ❌ [${videoId}] 状态更新异常:`, e.message)
+        }
+      }
+      console.log(`✅ 状态更新完成\n`)
+    }
+
     if (allTasks.length === 0) {
       console.log('✨ 没有需要处理的任务。')
       return
     }
 
-    console.log(`\n🚀 总共收集到 ${allTasks.length} 个文件任务，开始并发提交...\n`)
+    // 🎯 按文件大小排序，小的优先处理（与 Worker 队列排序逻辑一致）
+    console.log(`\n📊 正在按文件大小排序任务（小的优先）...`)
+    allTasks.sort((a, b) => {
+      const sizeA = a.fileSize || 0
+      const sizeB = b.fileSize || 0
+      // 🎯 如果两个都是未知大小（0），保持原顺序
+      if (sizeA === 0 && sizeB === 0) return 0
+      // 🎯 如果 A 是未知大小，排到后面
+      if (sizeA === 0) return 1
+      // 🎯 如果 B 是未知大小，排到后面
+      if (sizeB === 0) return -1
+      // 🎯 两个都是已知大小，按大小排序（小的在前）
+      return sizeA - sizeB
+    })
+
+    // 🎯 统计文件大小分布
+    const knownSizeCount = allTasks.filter((t) => (t.fileSize || 0) > 0).length
+    const unknownSizeCount = allTasks.length - knownSizeCount
+    if (knownSizeCount > 0) {
+      const sizes = allTasks.filter((t) => (t.fileSize || 0) > 0).map((t) => t.fileSize)
+      const minSize = Math.min(...sizes) / 1024 / 1024
+      const maxSize = Math.max(...sizes) / 1024 / 1024
+      const avgSize = sizes.reduce((a, b) => a + b, 0) / sizes.length / 1024 / 1024
+      console.log(`   📈 文件大小统计:`)
+      console.log(
+        `      - 已知大小: ${knownSizeCount} 个 (最小: ${minSize.toFixed(2)}MB, 最大: ${maxSize.toFixed(2)}MB, 平均: ${avgSize.toFixed(2)}MB)`
+      )
+      if (unknownSizeCount > 0) {
+        console.log(`      - 未知大小: ${unknownSizeCount} 个（将排在后面处理）`)
+      }
+    }
+
+    console.log(
+      `\n🚀 总共收集到 ${allTasks.length} 个文件任务，开始按大小顺序提交（小的优先）...\n`
+    )
 
     // 🎯 并发控制：同时最多处理 N 个任务，避免冲击 Worker
     const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT || '5') // 默认并发 5 个
@@ -330,7 +423,8 @@ async function rescueAll() {
           chat_id: task.chatId,
           bot_token: BOT_TOKEN,
           message_id: 0,
-          thumbnail_file_id: task.thumbnailFileId
+          thumbnail_file_id: task.thumbnailFileId,
+          file_size: task.fileSize || undefined // 🎯 传递文件大小（如果有）
         }
 
         await axios.post(WORKER_URL, payload, { timeout: 10000 })

@@ -436,7 +436,8 @@ export async function saveSinglePhoto(
       status: extraData?.status || 'processing',
       is_auto_sync: extraData?.is_auto_sync || false, // 🎯 标记自动同步
       review_status: isAutoApprove ? 'auto_approved' : 'pending',
-      published_at: isAutoApprove ? new Date().toISOString() : null
+      // 🎯 自动同步的视频：即使免审也不立即设置 published_at，等待 Worker 处理完成后设置
+      published_at: extraData?.is_auto_sync ? null : isAutoApprove ? new Date().toISOString() : null
     })
     .select()
     .single()
@@ -684,7 +685,12 @@ export async function handleVideo(
         status: extraData?.status || 'processing',
         is_auto_sync: extraData?.is_auto_sync || false, // 🎯 标记自动同步
         review_status: isAutoApprove ? 'auto_approved' : 'pending',
-        published_at: isAutoApprove ? new Date().toISOString() : null,
+        // 🎯 自动同步的视频：即使免审也不立即设置 published_at，等待 Worker 处理完成后设置
+        published_at: extraData?.is_auto_sync
+          ? null
+          : isAutoApprove
+            ? new Date().toISOString()
+            : null,
         media_group_id: mediaGroupId,
         media_list: JSON.stringify([videoMediaItem]),
         images: JSON.stringify([videoMediaItem]),
