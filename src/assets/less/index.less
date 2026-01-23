@@ -257,3 +257,82 @@ html.is-tg-fullscreen-ios .image-preview-overlay .close-btn {
 html.is-tg-fullscreen-android .image-preview-overlay .close-btn {
   top: calc(70px + env(safe-area-inset-top)) !important; /* 从 20px 下移到 80px + 安全区 */
 }
+
+/* 🎯 Telegram Mini App 全屏模式：直播间挂件下移并缩小，避免遮挡关闭按钮 */
+html.is-tg-fullscreen-ios .PC28GameOverlay,
+html.is-tg-fullscreen-ios .RedPacketOverlay {
+  top: calc(120rem + env(safe-area-inset-top)) !important; /* 从 100rem 下移到 140rem + 安全区 */
+
+  .game-badge {
+    padding: 8rem 12rem !important; /* 从 10rem 15rem 缩小 */
+    min-width: 100rem !important; /* 从 120rem 缩小 */
+
+    .game-icon {
+      font-size: 20rem !important; /* 从 24rem 缩小 */
+    }
+
+    .game-text {
+      font-size: 12rem !important; /* 从 14rem 缩小 */
+    }
+
+    .round-period,
+    .round-status,
+    .countdown,
+    .result-info {
+      font-size: 10rem !important; /* 从 11-12rem 缩小 */
+    }
+  }
+
+  .packet-entry {
+    padding: 4rem !important; /* 从 5rem 缩小 */
+
+    .packet-icon {
+      width: 32rem !important; /* 从 40rem 缩小 */
+      height: 32rem !important;
+    }
+
+    .countdown,
+    .claim-tip {
+      font-size: 9rem !important; /* 从 10rem 缩小 */
+    }
+  }
+}
+
+html.is-tg-fullscreen-android .PC28GameOverlay,
+html.is-tg-fullscreen-android .RedPacketOverlay {
+  top: calc(140rem + env(safe-area-inset-top)) !important; /* 从 100rem 下移到 160rem + 安全区 */
+
+  .game-badge {
+    padding: 8rem 12rem !important; /* 从 10rem 15rem 缩小 */
+    min-width: 100rem !important; /* 从 120rem 缩小 */
+
+    .game-icon {
+      font-size: 20rem !important; /* 从 24rem 缩小 */
+    }
+
+    .game-text {
+      font-size: 12rem !important; /* 从 14rem 缩小 */
+    }
+
+    .round-period,
+    .round-status,
+    .countdown,
+    .result-info {
+      font-size: 10rem !important; /* 从 11-12rem 缩小 */
+    }
+  }
+
+  .packet-entry {
+    padding: 4rem !important; /* 从 5rem 缩小 */
+
+    .packet-icon {
+      width: 32rem !important; /* 从 40rem 缩小 */
+      height: 32rem !important;
+    }
+
+    .countdown,
+    .claim-tip {
+      font-size: 9rem !important; /* 从 10rem 缩小 */
+    }
+  }
+}
