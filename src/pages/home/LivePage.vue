@@ -178,17 +178,18 @@
     <!-- 弹出的输入框 -->
     <Transition name="fade">
       <div v-if="showInput" class="input-overlay" @click.self="showInput = false">
-        <div class="input-container">
+        <div class="input-container" @click.stop @mousedown.stop>
           <input
             v-model="inputText"
             ref="commentInput"
             placeholder="评论"
             @keyup.enter="handleSendComment"
-            @blur="showInput = false"
+            @click.stop
+            @mousedown.stop
           />
           <div
             class="send-btn"
-            @click="handleSendComment"
+            @click.stop="handleSendComment"
             :class="{ active: inputText.trim() && !isSendingComment, disabled: isSendingComment }"
           >
             {{ isSendingComment ? '...' : '发送' }}
@@ -560,7 +561,7 @@
       :current-round="pc28CurrentRound"
       :room-id="roomId"
       @close="showPC28Control = false"
-      @refresh="fetchPC28Data"
+      @refresh="handlePC28Refresh"
     />
 
     <!-- 🎯 PC28用户下注面板 -->
@@ -851,6 +852,13 @@ async function fetchPC28Data() {
   } catch (e: any) {
     console.error('[PC28] fetch data error:', e)
   }
+}
+
+// PC28刷新处理（包括刷新用户余额）
+async function handlePC28Refresh() {
+  await fetchPC28Data()
+  // 结算后刷新用户余额
+  await refreshUserBalance()
 }
 
 async function handleSavePC28Config(config: Partial<PC28GameConfig>) {
@@ -1148,8 +1156,15 @@ watch(
 // 监听输入框显示，自动聚焦
 watch(showInput, (val) => {
   if (val) {
+    // Windows上需要延迟更长时间才能正确聚焦
     nextTick(() => {
-      commentInput.value?.focus()
+      setTimeout(() => {
+        commentInput.value?.focus()
+        // 确保输入框获得焦点后，光标在输入框内
+        if (commentInput.value) {
+          commentInput.value.setSelectionRange(0, 0)
+        }
+      }, 100)
     })
   }
 })
@@ -2684,6 +2699,10 @@ onBeforeUnmount(() => {
       /* 关键：使用 transform 辅助定位，减少对视口高度的依赖 */
       transform: translateY(0);
       padding-bottom: calc(10rem + env(safe-area-inset-bottom));
+      /* Windows上确保可以点击 */
+      pointer-events: auto;
+      position: relative;
+      z-index: 1001;
 
       input {
         flex: 1;
@@ -2695,6 +2714,8 @@ onBeforeUnmount(() => {
         color: white;
         font-size: 14rem;
         outline: none;
+        /* Windows上确保可以聚焦 */
+        pointer-events: auto;
 
         &::placeholder {
           color: #999;
