@@ -1,17 +1,5 @@
 import { List, useTable, DateField } from '@refinedev/antd'
-import {
-  Table,
-  Space,
-  Avatar,
-  Button,
-  Tag,
-  message,
-  Modal,
-  Form,
-  Input,
-  Select,
-  InputNumber
-} from 'antd'
+import { Table, Space, Avatar, Button, Tag, message, Modal, Form, Input, Select } from 'antd'
 import {
   EyeOutlined,
   EditOutlined,
@@ -21,11 +9,7 @@ import {
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useUpdate } from '@refinedev/core'
-import { useState, useEffect } from 'react'
-import { supabaseClient } from '../../supabaseClient'
-
-// 🎯 审核员邮箱列表（仅针对 shenhe1@review.local：隐藏调整余额按钮）
-const REVIEWER_EMAILS = ['shenhe1@review.local']
+import { useState } from 'react'
 
 export const UserList = () => {
   const navigate = useNavigate()
@@ -38,20 +22,6 @@ export const UserList = () => {
   const [banModalVisible, setBanModalVisible] = useState(false)
   const [banningUser, setBanningUser] = useState<any>(null)
   const [banForm] = Form.useForm()
-  const [isReviewer, setIsReviewer] = useState(false)
-
-  // 🎯 检查当前用户是否为审核员
-  useEffect(() => {
-    ;(async () => {
-      try {
-        const { data } = await supabaseClient.auth.getSession()
-        const email = data?.session?.user?.email
-        setIsReviewer(email ? REVIEWER_EMAILS.includes(email) : false)
-      } catch (e) {
-        console.error('[UserList] Failed to get user email:', e)
-      }
-    })()
-  }, [])
 
   const table = useTable({
     // ✅ 用视图直接 join 邀请人，避免 PostgREST 自关联 embed（PGRST200）
@@ -120,8 +90,6 @@ export const UserList = () => {
   })
 
   const { tableProps, searchFormProps } = table
-  // 🎯 兼容性处理：Refine 的 query 结果对象名在不同次版本中极其不稳定
-  const queryResult = (table as any).tableQueryResult || (table as any).queryResult
 
   // 切换自动审核状态
   const handleToggleAutoApprove = (record: any) => {
