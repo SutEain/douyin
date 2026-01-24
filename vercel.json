@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/pc28-polling",
+      "schedule": "*/3 * * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!assets/|js/|.*\\.[\\w]+$).*)",
