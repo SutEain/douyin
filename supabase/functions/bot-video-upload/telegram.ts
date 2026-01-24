@@ -188,21 +188,51 @@ export async function sendDice(chatId: number, options: any = {}) {
 }
 
 /**
- * 🎲 带重试机制的发送骰子函数
+ * 🎲 带重试机制的发送骰子函数（增强版）
+ * 🔥 增加重试次数和改进错误处理，解决投骰子卡住的问题
  * @param chatId 聊天ID
  * @param options 选项
- * @param maxRetries 最大重试次数（默认5次）
+ * @param maxRetries 最大重试次数（默认7次）
  * @param initialDelay 初始延迟（毫秒，默认1000）
  * @returns 发送结果
  */
 export async function sendDiceWithRetry(
   chatId: number,
   options: any = {},
-  maxRetries: number = 5,
+  maxRetries: number = 7, // 🔥 从5次增加到7次
   initialDelay: number = 1000
 ): Promise<any> {
   let lastError: any = null
   let lastResponse: any = null
+
+  // 🔥 扩展可重试的错误类型
+  const retryableErrors = [
+    'TIMEOUT',
+    'TIMED_OUT',
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'ENOTFOUND',
+    'ECONNREFUSED',
+    'Bad Gateway',
+    'Service Unavailable',
+    'Internal Server Error',
+    'Network error',
+    'NetworkError',
+    'fetch failed',
+    'Failed to fetch',
+    'socket hang up',
+    'timeout',
+    'ETIMEDOUT',
+    'ECONNRESET',
+    'ENOTFOUND',
+    'ECONNREFUSED',
+    '503',
+    '502',
+    '504',
+    '500',
+    '429', // Rate limit，也可以重试
+    'Too Many Requests'
+  ]
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -220,31 +250,69 @@ export async function sendDiceWithRetry(
 
       // 如果返回了错误，记录但不立即失败
       const errorMsg = response.description || response.error_code || 'Unknown error'
-      console.warn(`[sendDiceWithRetry] ⚠️ 骰子发送失败 (尝试 ${attempt}/${maxRetries}):`, errorMsg)
-      lastError = new Error(`Telegram API error: ${errorMsg}`)
+      const errorCode = response.error_code || ''
+
+      // 🔥 检查是否是可重试的错误
+      const isRetryable =
+        retryableErrors.some((e) => errorMsg.includes(e)) ||
+        retryableErrors.some((e) => String(errorCode).includes(e))
+
+      console.warn(
+        `[sendDiceWithRetry] ⚠️ 骰子发送失败 (尝试 ${attempt}/${maxRetries}): ${errorMsg}${errorCode ? ` (code: ${errorCode})` : ''}，可重试: ${isRetryable}`
+      )
+      lastError = new Error(`Telegram API error: ${errorMsg} (code: ${errorCode})`)
+
+      // 🔥 如果不是可重试的错误且有错误码，立即抛出（但429等限流错误可以重试）
+      if (!isRetryable && response.error_code && !String(errorCode).includes('429')) {
+        console.error(
+          `[sendDiceWithRetry] ❌ 不可重试的错误，立即失败: ${errorMsg} (code: ${errorCode})`
+        )
+        throw lastError
+      }
 
       // 如果不是最后一次尝试，等待后重试
       if (attempt < maxRetries) {
-        // 🎯 指数退避：每次重试延迟递增（1s, 2s, 3s, 4s, 5s）
-        const delay = initialDelay * attempt
+        // 🔥 指数退避 + 抖动：1s, 2s, 3s, 4s, 5s, 6s, 7s（带±20%抖动）
+        const baseDelay = initialDelay * attempt
+        const jitter = baseDelay * 0.2 * (Math.random() * 2 - 1)
+        const delay = Math.max(500, Math.floor(baseDelay + jitter))
         console.log(`[sendDiceWithRetry] ⏳ 等待 ${delay}ms 后重试...`)
         await new Promise((resolve) => setTimeout(resolve, delay))
       }
-    } catch (error) {
-      console.error(`[sendDiceWithRetry] ❌ 发送骰子异常 (尝试 ${attempt}/${maxRetries}):`, error)
+    } catch (error: any) {
+      const errorMsg = error.message || String(error)
+      const isRetryable =
+        retryableErrors.some((e) => errorMsg.includes(e)) ||
+        errorMsg.includes('TIMEOUT') ||
+        errorMsg.includes('TIMED_OUT') ||
+        errorMsg.includes('超时')
+
+      console.error(
+        `[sendDiceWithRetry] ❌ 发送骰子异常 (尝试 ${attempt}/${maxRetries}): ${errorMsg}，可重试: ${isRetryable}`
+      )
       lastError = error
+
+      // 🔥 如果不是可重试的错误，立即抛出
+      if (!isRetryable && !errorMsg.includes('TIMEOUT') && !errorMsg.includes('TIMED_OUT')) {
+        console.error(`[sendDiceWithRetry] ❌ 不可重试的异常，立即失败: ${errorMsg}`)
+        throw error
+      }
 
       // 如果不是最后一次尝试，等待后重试
       if (attempt < maxRetries) {
-        const delay = initialDelay * attempt
+        const baseDelay = initialDelay * attempt
+        const jitter = baseDelay * 0.2 * (Math.random() * 2 - 1)
+        const delay = Math.max(500, Math.floor(baseDelay + jitter))
         console.log(`[sendDiceWithRetry] ⏳ 等待 ${delay}ms 后重试...`)
         await new Promise((resolve) => setTimeout(resolve, delay))
       }
     }
   }
 
-  // 所有重试都失败了
-  console.error(`[sendDiceWithRetry] ❌ 骰子发送失败，已重试 ${maxRetries} 次`)
+  // 🔥 所有重试都失败了，记录详细信息
+  console.error(
+    `[sendDiceWithRetry] ❌ 骰子发送失败，已重试 ${maxRetries} 次。最后错误: ${lastError?.message || 'Unknown'}，最后响应: ${JSON.stringify(lastResponse || {})}`
+  )
   throw lastError || new Error(`Failed to send dice after ${maxRetries} attempts`)
 }
 

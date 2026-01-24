@@ -358,9 +358,9 @@ async function startRolling(chatId: number, roomId: string) {
     const results: any[] = []
 
     for (const player of players) {
-      // 🎲 使用带重试机制的发送骰子函数（最多重试3次，减少超时风险）
+      // 🔥 使用带重试机制的发送骰子函数（最多重试7次，增加成功率）
       console.log(`[DiceGame] 🎲 开始为玩家 ${player.user?.nickname || '未知'} 发送骰子...`)
-      const res = await sendDiceWithRetry(chatId, { emoji: '🎲' }, 3, 800)
+      const res = await sendDiceWithRetry(chatId, { emoji: '🎲' }, 7, 1000)
 
       if (!res.ok || !res.result?.dice) {
         const errorMsg = res.description || res.error_code || 'Unknown error'

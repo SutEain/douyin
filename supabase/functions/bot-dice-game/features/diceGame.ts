@@ -228,7 +228,7 @@ async function startDiceGame(chatId: number, messageId: number, roomId: string) 
   runningGames.add(roomId)
 
   try {
-    console.log(`[DICE-BOT] Starting game for room: ${roomId}`)
+    console.log(`[DICE-BOT] 🎮 开始游戏流程，房间ID: ${roomId}`)
 
     // 1. 🔥 先快速检查房间状态，如果已结算则直接返回（防止并发）
     const { data: quickCheck } = await supabase
@@ -271,25 +271,26 @@ async function startDiceGame(chatId: number, messageId: number, roomId: string) 
 
     console.log(`[DICE-BOT] Room found: status=${room.status}, target_count=${room.target_count}`)
 
-    // 🎯 如果房间状态不是 waiting，检查是否是超时
-    if (room.status !== 'waiting') {
-      console.warn(`[DICE-BOT] Room status is ${room.status}, not waiting. Room ID: ${roomId}`)
-
+    // 🎯 🔥 修复：允许 waiting 或 rolling 状态（因为 join_dice_room 会将状态改为 rolling）
+    if (room.status === 'cancelled') {
       // 如果是已取消状态，说明已经退款了
-      if (room.status === 'cancelled') {
-        const timeoutMessage =
-          `🎲 <b>游戏已取消</b>\n\n` + `⏰ 房间已取消\n` + `💰 本金已自动退回所有玩家`
-        await editMessage(chatId, messageId, timeoutMessage)
-        return
-      }
+      const timeoutMessage =
+        `🎲 <b>游戏已取消</b>\n\n` + `⏰ 房间已取消\n` + `💰 本金已自动退回所有玩家`
+      await editMessage(chatId, messageId, timeoutMessage)
+      return
+    }
 
+    if (room.status === 'finished') {
       // 如果是已完成状态，不应该进入这里，但以防万一
-      if (room.status === 'finished') {
-        console.warn(`[DICE-BOT] Room already finished. Room ID: ${roomId}`)
-        return
-      }
+      console.warn(`[DICE-BOT] Room already finished. Room ID: ${roomId}`)
+      return
+    }
 
-      // 其他状态，显示通用错误
+    // 🔥 修复：允许 waiting 或 rolling 状态继续执行
+    if (room.status !== 'waiting' && room.status !== 'rolling') {
+      console.warn(
+        `[DICE-BOT] Room status is ${room.status}, not waiting or rolling. Room ID: ${roomId}`
+      )
       const timeoutMessage =
         `🎲 <b>游戏已取消</b>\n\n` +
         `❌ 房间状态异常 (${room.status})\n` +
@@ -370,18 +371,24 @@ async function startDiceGame(chatId: number, messageId: number, roomId: string) 
       const playerName = player.user?.nickname || '未知'
 
       try {
-        // 发送骰子（最多重试3次）
-        const res = await sendDiceWithRetry(chatId, { emoji: '🎲' }, 3, 1000)
+        console.log(
+          `[DICE-BOT] 🎲 开始为玩家 ${playerName} (${i + 1}/${playersWithNicknames.length}) 发送骰子...`
+        )
+
+        // 🔥 发送骰子（最多重试7次，增加成功率）
+        const res = await sendDiceWithRetry(chatId, { emoji: '🎲' }, 7, 1000)
 
         if (!res.ok || !res.result?.dice) {
           // 🎯 如果失败，使用随机值（简化处理）
           const fallbackValue = Math.floor(Math.random() * 6) + 1
+          const errorMsg = res.description || res.error_code || 'Unknown error'
           console.warn(
-            `[DICE-BOT-V2] 玩家 ${playerName} 发送骰子失败，使用随机值: ${fallbackValue}`
+            `[DICE-BOT] ⚠️ 玩家 ${playerName} 发送骰子失败 (${errorMsg})，使用随机值: ${fallbackValue}`
           )
           rollResults.push({ user_id: player.user_id, value: fallbackValue })
         } else {
           const value = res.result.dice.value
+          console.log(`[DICE-BOT] ✅ 玩家 ${playerName} 掷出: ${value} 点`)
           rollResults.push({ user_id: player.user_id, value })
         }
 
@@ -405,9 +412,12 @@ async function startDiceGame(chatId: number, messageId: number, roomId: string) 
           await new Promise((r) => setTimeout(r, 1000))
         }
       } catch (err: any) {
-        console.error(`[DICE-BOT-V2] 处理玩家 ${playerName} 时发生错误:`, err)
-        // 🎯 使用随机值继续
+        console.error(`[DICE-BOT] ❌ 处理玩家 ${playerName} 时发生错误:`, err)
+        // 🎯 使用随机值继续，避免游戏卡住
         const fallbackValue = Math.floor(Math.random() * 6) + 1
+        console.warn(
+          `[DICE-BOT] ⚠️ 玩家 ${playerName} 投骰子异常，使用随机值: ${fallbackValue}，继续游戏`
+        )
         rollResults.push({ user_id: player.user_id, value: fallbackValue })
       }
     }
@@ -423,15 +433,27 @@ async function startDiceGame(chatId: number, messageId: number, roomId: string) 
       throw new Error('房间不存在')
     }
 
-    // 如果房间状态不是 waiting，说明已经被超时处理或其他原因取消了
-    if (finalRoomCheck.status !== 'waiting') {
+    // 🔥 修复：允许 waiting 或 rolling 状态（因为状态可能已经是 rolling）
+    if (finalRoomCheck.status === 'cancelled') {
+      const roomAge = Date.now() - new Date(finalRoomCheck.created_at).getTime()
+      console.warn(
+        `[DICE-BOT] Room was cancelled before settlement. Room ID: ${roomId}, Age: ${roomAge}ms`
+      )
+      throw new Error('房间已取消')
+    }
+
+    if (finalRoomCheck.status === 'finished') {
+      console.warn(`[DICE-BOT] Room already finished before settlement. Room ID: ${roomId}`)
+      throw new Error('房间已结算')
+    }
+
+    // 🔥 修复：允许 waiting 或 rolling 状态继续结算
+    if (finalRoomCheck.status !== 'waiting' && finalRoomCheck.status !== 'rolling') {
       console.warn(
         `[DICE-BOT] Room status changed to ${finalRoomCheck.status} before settlement. Room ID: ${roomId}`
       )
-
-      // 检查是否超时
       const roomAge = Date.now() - new Date(finalRoomCheck.created_at).getTime()
-      if (roomAge > 30000 || finalRoomCheck.status === 'cancelled') {
+      if (roomAge > 30000) {
         throw new Error('房间已超时')
       } else {
         throw new Error(`房间状态不正确: ${finalRoomCheck.status}`)
@@ -445,6 +467,8 @@ async function startDiceGame(chatId: number, messageId: number, roomId: string) 
     })
 
     if (settleError || !settleRes?.success) {
+      console.error(`[DICE-BOT] ❌ 结算失败:`, settleError || settleRes?.message)
+
       // 🔥 如果错误是"房间状态不正确"，再次检查房间状态
       if (settleRes?.message?.includes('房间状态不正确')) {
         const { data: errorRoomCheck } = await supabase
@@ -455,13 +479,18 @@ async function startDiceGame(chatId: number, messageId: number, roomId: string) 
 
         if (errorRoomCheck) {
           const roomAge = Date.now() - new Date(errorRoomCheck.created_at).getTime()
+          console.warn(
+            `[DICE-BOT] ⚠️ 结算时房间状态检查: status=${errorRoomCheck.status}, age=${roomAge}ms`
+          )
           if (roomAge > 30000 || errorRoomCheck.status === 'cancelled') {
             throw new Error('房间已超时')
           }
         }
       }
-      throw new Error(settleRes?.message || '结算失败')
+      throw new Error(settleRes?.message || settleError?.message || '结算失败')
     }
+
+    console.log(`[DICE-BOT] ✅ 结算成功，赢家: ${settleRes.winners?.length || 0} 人`)
 
     // 9. 显示最终结果
     const winnerNames = settleRes.winners
