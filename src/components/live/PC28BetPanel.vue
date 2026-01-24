@@ -127,8 +127,8 @@
                   <span class="rule-value">2.0倍</span>
                 </div>
                 <div class="rule-item">
-                  <span class="rule-label">组合（大单/大双/小单/小双）：</span>
-                  <span class="rule-value">4.6倍</span>
+                  <span class="rule-label">组合：</span>
+                  <span class="rule-value">大单/小双 4.2倍，大双/小单 4.6倍</span>
                 </div>
                 <div class="rule-item">
                   <span class="rule-label">极值（极大/极小）：</span>
@@ -414,7 +414,7 @@
                 @click="toggleBet('big_odd', null)"
               >
                 <div class="bet-name">大单</div>
-                <div class="bet-odds">4.6</div>
+                <div class="bet-odds">4.2</div>
               </div>
               <div
                 class="bet-option"
@@ -438,7 +438,7 @@
                 @click="toggleBet('small_even', null)"
               >
                 <div class="bet-name">小双</div>
-                <div class="bet-odds">4.6</div>
+                <div class="bet-odds">4.2</div>
               </div>
             </div>
 
