@@ -68,14 +68,27 @@ async function handleDeepLink() {
 
     await router.isReady()
     console.log('[App.handleDeepLink] 路由已就绪')
+    console.log('[App.handleDeepLink] 当前路由:', { path: route.path, query: route.query })
 
     // 延迟一小会儿确保稳定
     setTimeout(() => {
-      // 🎯 如果当前已经在直播页且 ID 相同，可能不会触发更新，所以这里强制处理
-      if (route.path === '/home/live' && route.query.id === roomId) {
-        console.log('[App.handleDeepLink] 📍 已在目标直播间，无需跳转')
+      // 🎯 如果当前已经在直播页
+      if (route.path === '/home/live') {
+        // 如果ID相同，无需跳转
+        if (route.query.id === roomId) {
+          console.log('[App.handleDeepLink] 📍 已在目标直播间，无需跳转')
+          return
+        }
+        // 🎯 如果ID不同，强制更新（使用 replace 避免历史记录堆积）
+        console.log('[App.handleDeepLink] 🔄 已在直播页但ID不同，更新路由:', {
+          currentId: route.query.id,
+          targetId: roomId
+        })
+        router.replace({ path: '/home/live', query: { id: roomId } })
+        console.log('[App.handleDeepLink] ✅ router.replace 已调用')
         return
       }
+      // 🎯 如果不在直播页，正常跳转
       console.log('[App.handleDeepLink] 🚀 准备跳转到直播间:', `/home/live?id=${roomId}`)
       router.push({ path: '/home/live', query: { id: roomId } })
       console.log('[App.handleDeepLink] ✅ router.push 已调用')
@@ -146,14 +159,15 @@ function resetVhAndPx() {
 
 onMounted(() => {
   console.log('[App.onMounted] ========== App 组件已挂载 ==========')
-  
+
   // 🎯 平台识别
   const ua = navigator.userAgent
   const isAndroid = /Android/i.test(ua)
   const isIOS = /iPhone|iPad|iPod/i.test(ua)
-  const isTG = !!(window as any).Telegram?.WebApp?.initData || window.location.href.includes('tgWebAppData')
+  const isTG =
+    !!(window as any).Telegram?.WebApp?.initData || window.location.href.includes('tgWebAppData')
   const isChrome = /Chrome/i.test(ua) && !/Edge/i.test(ua) && !isTG
-  
+
   // 🎯 添加平台类名
   if (isAndroid) document.documentElement.classList.add('is-android')
   if (isIOS) document.documentElement.classList.add('is-ios')
@@ -168,15 +182,15 @@ onMounted(() => {
         const screenH = window.screen.height
         const windowH = window.innerHeight
         const url = window.location.href
-        
+
         // 判定是否全屏
         const isHeightFull = windowH >= screenH - 20
         const isUrlFull = url.includes('tgWebAppFullscreen=1')
         const isOfficialFull = !!tgWebApp?.isFullscreen
         const isKeyboardUp = windowH < screenH * 0.6
-        
+
         const isActuallyFull = (isOfficialFull || isHeightFull || isUrlFull) && !isKeyboardUp
-        
+
         console.log('[Fullscreen] 检测结果:', {
           isActuallyFull,
           platform: isIOS ? 'iOS' : isAndroid ? 'Android' : 'Other',
@@ -186,7 +200,7 @@ onMounted(() => {
           isHeightFull,
           isUrlFull
         })
-        
+
         // 🎯 区分 iOS 和 Android，添加不同的类名
         if (isActuallyFull) {
           if (isIOS) {
@@ -197,23 +211,26 @@ onMounted(() => {
             document.documentElement.classList.remove('is-tg-fullscreen-ios')
           }
         } else {
-          document.documentElement.classList.remove('is-tg-fullscreen-ios', 'is-tg-fullscreen-android')
+          document.documentElement.classList.remove(
+            'is-tg-fullscreen-ios',
+            'is-tg-fullscreen-android'
+          )
         }
       } catch (e) {
         console.error('[Fullscreen] 检测错误:', e)
       }
     }
-    
+
     // 立即检测
     checkFullscreen()
-    
+
     // 监听全屏变化
     const tgWebApp = (window as any).Telegram?.WebApp
     if (tgWebApp?.onEvent) {
       tgWebApp.onEvent('fullscreenChanged', checkFullscreen)
       tgWebApp.onEvent('viewportChanged', checkFullscreen)
     }
-    
+
     // 延迟检测（确保 SDK 加载完成）
     setTimeout(checkFullscreen, 100)
     setTimeout(checkFullscreen, 500)

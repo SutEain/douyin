@@ -1383,42 +1383,97 @@ async function handleSendGift() {
 // --- 房间切换核心逻辑 ---
 async function initRoom() {
   const currentId = route.query.id as string
-  if (!currentId) return
+  console.log('[LivePage.initRoom] ========== 开始初始化房间 ==========')
+  console.log('[LivePage.initRoom] currentId:', currentId)
+  console.log('[LivePage.initRoom] route.query:', route.query)
+  console.log('[LivePage.initRoom] route.path:', route.path)
 
-  // 1. 先清理旧的订阅
-  if (channel) {
-    await supabase.removeChannel(channel)
-    channel = null
+  if (!currentId) {
+    console.warn('[LivePage.initRoom] ⚠️ 没有房间ID，等待路由参数...')
+    // 🎯 深链场景：如果路由参数还没设置，等待一小段时间后重试
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    const retryId = route.query.id as string
+    if (!retryId) {
+      console.error('[LivePage.initRoom] ❌ 重试后仍无房间ID，退出')
+      return
+    }
+    console.log('[LivePage.initRoom] ✅ 重试后获取到房间ID:', retryId)
   }
 
-  // 2. 重置基础状态，强制销毁旧播放器
-  roomInfo.value = { stream_url: null }
-  messages.value = []
-  viewerCount.value = 0
-  viewers.value = []
-  isFollowed.value = false
+  try {
+    // 1. 先清理旧的订阅
+    if (channel) {
+      console.log('[LivePage.initRoom] 清理旧订阅...')
+      await supabase.removeChannel(channel)
+      channel = null
+    }
 
-  // 3. 加载新数据
-  await fetchRoomInfo()
-  await fetchHistoryMessages()
+    // 2. 重置基础状态，强制销毁旧播放器
+    console.log('[LivePage.initRoom] 重置状态...')
+    roomInfo.value = { stream_url: null }
+    messages.value = []
+    viewerCount.value = 0
+    viewers.value = []
+    isFollowed.value = false
 
-  // 4. 开启新的订阅
-  setupSubscription()
+    // 3. 加载新数据（添加超时保护）
+    console.log('[LivePage.initRoom] 开始加载房间信息...')
+    await Promise.race([
+      fetchRoomInfo(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('fetchRoomInfo timeout')), 10000)
+      )
+    ])
+    console.log('[LivePage.initRoom] ✅ 房间信息加载完成')
 
-  // 5. 加载PC28数据
-  await fetchPC28Data()
-  setupPC28Realtime()
+    console.log('[LivePage.initRoom] 开始加载历史消息...')
+    await Promise.race([
+      fetchHistoryMessages(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('fetchHistoryMessages timeout')), 5000)
+      )
+    ])
+    console.log('[LivePage.initRoom] ✅ 历史消息加载完成')
+
+    // 4. 开启新的订阅
+    console.log('[LivePage.initRoom] 设置订阅...')
+    setupSubscription()
+
+    // 5. 加载PC28数据
+    console.log('[LivePage.initRoom] 开始加载PC28数据...')
+    await Promise.race([
+      fetchPC28Data(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('fetchPC28Data timeout')), 5000))
+    ])
+    console.log('[LivePage.initRoom] ✅ PC28数据加载完成')
+
+    setupPC28Realtime()
+    console.log('[LivePage.initRoom] ✅ 房间初始化完成')
+  } catch (error: any) {
+    console.error('[LivePage.initRoom] ❌ 初始化失败:', error)
+    // 🎯 即使出错也显示错误提示，而不是一直卡住
+    _notice('加载直播间失败: ' + (error.message || '网络错误'))
+  }
 }
 
 // 监听路由参数变化，实现直播间无缝切换
 watch(
   () => route.query.id,
-  (newId) => {
+  (newId, oldId) => {
+    console.log('[LivePage.watch] 路由参数变化:', { oldId, newId })
     if (newId) {
-      // 也可以不刷新页面，手动执行 init
-      initRoom()
+      // 🎯 深链场景：如果ID变化，重新初始化房间
+      if (newId !== oldId) {
+        console.log('[LivePage.watch] 房间ID变化，重新初始化...')
+        initRoom()
+      } else {
+        console.log('[LivePage.watch] 房间ID未变化，跳过初始化')
+      }
+    } else {
+      console.warn('[LivePage.watch] ⚠️ 路由参数中没有房间ID')
     }
-  }
+  },
+  { immediate: false } // 🎯 不立即执行，避免与 onMounted 重复
 )
 
 // 处理评论按钮点击
