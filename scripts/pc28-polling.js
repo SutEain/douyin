@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { existsSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
+import axios from 'axios'
 
 // 加载环境变量（从脚本同目录）
 const __filename = fileURLToPath(import.meta.url)
@@ -53,7 +54,9 @@ if (!loadedPath) {
 }
 
 const API_TOKEN = process.env.PC28_API_TOKEN || '393a91a4f94211f0ba890d673692a033'
-const API_URL = `https://www.apigx.cn/token/${API_TOKEN}/code/jnd28/rows/3.json`
+const API_URL = 'http://pc28.help/kj.json?limit=3' // 主API（免费接口）
+const BACKUP_API_URL = `https://www.apigx.cn/token/${API_TOKEN}/code/jnd28/rows/3.json` // 备用API1（付费接口）
+const BACKUP_API_URL_2 = 'https://28.run/api/lottery/recent/6' // 备用API2（28.run接口）
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://zhlkanxfucnsatafeqdp.supabase.co'
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
@@ -91,31 +94,247 @@ const MAX_CONSECUTIVE_ERRORS = 10
 let totalPolls = 0
 
 /**
- * 调用 API 获取最新开奖数据
+ * 调用备用API2获取最新开奖数据（28.run接口）
+ * 格式：{ recent_results: [{ expect, number1, number2, number3, final_result, opentime }] }
+ * 需要转换为统一格式：{ expect, opencode, opentime }
  */
-async function fetchAPIData(retryCount = 0) {
+async function fetchBackupAPIData2() {
+  const startTime = Date.now()
+
   try {
-    const response = await fetch(API_URL, {
-      signal: AbortSignal.timeout(10000) // 10秒超时
+    console.log(`[PC28-Poll] 🔄 Trying backup API2: ${BACKUP_API_URL_2}`)
+
+    const response = await axios.get(BACKUP_API_URL_2, {
+      timeout: 30000, // 30秒超时
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'application/json'
+      }
     })
 
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status}`)
+    const totalDuration = Date.now() - startTime
+    console.log(
+      `[PC28-Poll] ✅ Backup API2 response received in ${totalDuration}ms, status: ${response.status}`
+    )
+
+    const data = response.data
+
+    if (
+      !data.recent_results ||
+      !Array.isArray(data.recent_results) ||
+      data.recent_results.length === 0
+    ) {
+      console.warn(`[PC28-Poll] Backup API2 returned empty data`)
+      return null
     }
 
-    const data = await response.json()
+    // 获取最新一期（数组第一个）
+    const latestItem = data.recent_results[0]
 
-    if (!data.data || data.data.length === 0) {
+    // 转换格式：number1,number2,number3 -> opencode
+    const opencode = `${latestItem.number1},${latestItem.number2},${latestItem.number3}`
+
+    // 返回统一格式的数据
+    return {
+      expect: latestItem.expect,
+      opencode: opencode,
+      opentime: latestItem.opentime
+    }
+  } catch (error) {
+    const totalDuration = Date.now() - startTime
+
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      console.error(`[PC28-Poll] ❌ Backup API2 timeout after ${totalDuration}ms`)
+    } else if (error.response) {
+      console.error(
+        `[PC28-Poll] ❌ Backup API2 error: ${error.response.status} - ${error.response.statusText}`
+      )
+    } else if (error.request) {
+      console.error(`[PC28-Poll] ❌ Backup API2 no response: ${error.message}`)
+    } else {
+      console.error(`[PC28-Poll] ❌ Backup API2 request error: ${error.message}`)
+    }
+
+    return null
+  }
+}
+
+/**
+ * 调用备用API1获取最新开奖数据（原主API，需要token）
+ * 备用API格式：{ data: [{ expect, opencode, opentime }] }
+ */
+async function fetchBackupAPIData() {
+  const startTime = Date.now()
+
+  try {
+    console.log(`[PC28-Poll] 🔄 Trying backup API1: ${BACKUP_API_URL}`)
+
+    const response = await axios.get(BACKUP_API_URL, {
+      timeout: 30000, // 30秒超时
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'application/json'
+      },
+      validateStatus: (status) => status < 500
+    })
+
+    const totalDuration = Date.now() - startTime
+    console.log(
+      `[PC28-Poll] ✅ Backup API1 response received in ${totalDuration}ms, status: ${response.status}`
+    )
+
+    const data = response.data
+
+    if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
+      console.warn(`[PC28-Poll] Backup API1 returned empty data`)
       return null
     }
 
     return data.data[0] // 返回最新一期
   } catch (error) {
-    if (retryCount < MAX_RETRIES && (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT')) {
-      console.warn(`[PC28-Poll] Retry ${retryCount + 1}/${MAX_RETRIES} after error:`, error.message)
+    const totalDuration = Date.now() - startTime
+
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      console.error(`[PC28-Poll] ❌ Backup API1 timeout after ${totalDuration}ms`)
+    } else if (error.response) {
+      console.error(
+        `[PC28-Poll] ❌ Backup API1 error: ${error.response.status} - ${error.response.statusText}`
+      )
+    } else if (error.request) {
+      console.error(`[PC28-Poll] ❌ Backup API1 no response: ${error.message}`)
+    } else {
+      console.error(`[PC28-Poll] ❌ Backup API1 request error: ${error.message}`)
+    }
+
+    return null
+  }
+}
+
+/**
+ * 调用 API 获取最新开奖数据
+ * 主API：免费接口 http://pc28.help/kj.json
+ * 格式：{ data: [{ qihao, opentime, opennum, sum }] }
+ * 需要转换为统一格式：{ expect, opencode, opentime }
+ * 主API失败时自动尝试备用API
+ */
+async function fetchAPIData(retryCount = 0) {
+  const startTime = Date.now()
+
+  try {
+    console.log(`[PC28-Poll] Fetching main API (attempt ${retryCount + 1}/${MAX_RETRIES + 1})...`)
+
+    const response = await axios.get(API_URL, {
+      timeout: 30000, // 30秒超时
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'application/json'
+      }
+    })
+
+    const totalDuration = Date.now() - startTime
+    console.log(
+      `[PC28-Poll] ✅ Main API response received in ${totalDuration}ms, status: ${response.status}`
+    )
+
+    const data = response.data
+
+    if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
+      console.warn(`[PC28-Poll] Main API returned empty data, trying backup APIs...`)
+      // 先尝试备用API2（28.run）
+      const backup2Result = await fetchBackupAPIData2()
+      if (backup2Result) {
+        return backup2Result
+      }
+      // 再尝试备用API1（付费接口）
+      return await fetchBackupAPIData()
+    }
+
+    // 转换主API格式为统一格式
+    const latestItem = data.data[0]
+
+    // 解析 opennum: "2+9+7" -> "2,9,7"
+    const opencode = latestItem.opennum.replace(/\+/g, ',')
+
+    // 解析 opentime: "01-25 06:03:30" -> "2026-01-25 06:03:30" (假设当前年份)
+    const currentYear = new Date().getFullYear()
+    const opentime = `${currentYear}-${latestItem.opentime}`
+
+    // 返回统一格式的数据
+    return {
+      expect: latestItem.qihao,
+      opencode: opencode,
+      opentime: opentime
+    }
+  } catch (error) {
+    const totalDuration = Date.now() - startTime
+
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      console.error(`[PC28-Poll] ❌ Main API timeout after ${totalDuration}ms`)
+      console.error(`[PC28-Poll] 🔄 Trying backup APIs...`)
+      // 先尝试备用API2（28.run）
+      const backup2Result = await fetchBackupAPIData2()
+      if (backup2Result) {
+        return backup2Result
+      }
+      // 再尝试备用API1（付费接口）
+      const backupResult = await fetchBackupAPIData()
+      if (backupResult) {
+        return backupResult
+      }
+    } else if (error.response) {
+      console.error(
+        `[PC28-Poll] ❌ Main API error: ${error.response.status} - ${error.response.statusText}`
+      )
+      console.error(`[PC28-Poll] 🔄 Trying backup APIs...`)
+      // 先尝试备用API2（28.run）
+      const backup2Result = await fetchBackupAPIData2()
+      if (backup2Result) {
+        return backup2Result
+      }
+      // 再尝试备用API1（付费接口）
+      const backupResult = await fetchBackupAPIData()
+      if (backupResult) {
+        return backupResult
+      }
+    } else if (error.request) {
+      console.error(`[PC28-Poll] ❌ Main API no response: ${error.message}`)
+      console.error(`[PC28-Poll] 🔄 Trying backup APIs...`)
+      // 先尝试备用API2（28.run）
+      const backup2Result = await fetchBackupAPIData2()
+      if (backup2Result) {
+        return backup2Result
+      }
+      // 再尝试备用API1（付费接口）
+      const backupResult = await fetchBackupAPIData()
+      if (backupResult) {
+        return backupResult
+      }
+    } else {
+      console.error(`[PC28-Poll] ❌ Main API request error: ${error.message}`)
+      console.error(`[PC28-Poll] 🔄 Trying backup APIs...`)
+      // 先尝试备用API2（28.run）
+      const backup2Result = await fetchBackupAPIData2()
+      if (backup2Result) {
+        return backup2Result
+      }
+      // 再尝试备用API1（付费接口）
+      const backupResult = await fetchBackupAPIData()
+      if (backupResult) {
+        return backupResult
+      }
+    }
+
+    // 如果重试次数未用完，继续重试主API
+    if (
+      retryCount < MAX_RETRIES &&
+      (error.code === 'ECONNABORTED' || error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT')
+    ) {
+      console.warn(`[PC28-Poll] Retry main API ${retryCount + 1}/${MAX_RETRIES} after error`)
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)))
       return fetchAPIData(retryCount + 1)
     }
+
+    // 所有API都失败，抛出错误
     throw error
   }
 }
@@ -124,97 +343,16 @@ async function fetchAPIData(retryCount = 0) {
  * 处理 PC28 数据并更新数据库
  */
 async function processPC28Data() {
-  // 1. 智能判断是否需要请求API
-  // 先检查数据库中最新已结算期数的开奖时间，如果开奖时间在3分钟内，说明刚开奖，不需要请求API
-  // （因为API返回的也是这个结果，不会有新数据）
-  const { data: latestSettledRound } = await supabase
-    .from('pc28_global_rounds')
-    .select('period_number, settled_at')
-    .eq('status', 'settled')
-    .order('settled_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  let shouldFetchAPI = true
-  let skipReason = ''
-
-  if (latestSettledRound?.settled_at) {
-    // 数据库中的 settled_at 应该是 UTC 时间（ISO 8601 格式）
-    // 但如果之前存储时有问题（比如存储了北京时间），需要处理
-    let settledTimeStr = latestSettledRound.settled_at
-    let settledTime = new Date(settledTimeStr)
-
-    // 确保 settled_at 是有效的日期
-    if (isNaN(settledTime.getTime())) {
-      console.warn(
-        `⚠️ Invalid settled_at format: ${latestSettledRound.settled_at}, forcing API call`
-      )
-      shouldFetchAPI = true
-      skipReason = ''
-    } else {
-      const nowUTC = Date.now() // UTC 时间戳（毫秒）
-      let settledUTC = settledTime.getTime() // UTC 时间戳（毫秒）
-      let timeSinceSettled = nowUTC - settledUTC
-      const THREE_MINUTES = 3 * 60 * 1000 // 3分钟
-      const ONE_HOUR = 60 * 60 * 1000 // 1小时（用于检测异常情况）
-      const BEIJING_OFFSET = 8 * 60 * 60 * 1000 // 北京时间偏移（8小时）
-
-      // 如果时间差是负数且接近8小时（±30分钟），说明可能是时区问题
-      // settled_at 可能是北京时间但被当作UTC解析了
-      if (timeSinceSettled < 0 && Math.abs(timeSinceSettled + BEIJING_OFFSET) < 30 * 60 * 1000) {
-        // 可能是时区问题，尝试减去8小时（假设存储的是北京时间）
-        console.warn(`⚠️ Possible timezone issue detected, adjusting settled time by -8 hours`)
-        settledUTC = settledUTC - BEIJING_OFFSET
-        timeSinceSettled = nowUTC - settledUTC
-      }
-
-      // 调试信息：显示UTC时间用于排查
-      const settledUTCStr = new Date(settledUTC).toISOString()
-      const nowUTCStr = new Date(nowUTC).toISOString()
-
-      // 检查时间差是否合理：
-      // 1. 如果时间差是负数，说明时间异常（可能是服务器时间不同步或时区问题），应该请求API
-      // 2. 如果时间差超过1小时，说明可能停机重启了，应该请求API
-      // 3. 只有在时间差正常且在3分钟内时，才跳过API请求
-      if (timeSinceSettled < 0) {
-        // 时间异常，强制请求API
-        shouldFetchAPI = true
-        skipReason = ''
-        console.warn(
-          `⚠️ Time anomaly detected: settled UTC (${settledUTCStr}) is after current UTC (${nowUTCStr}), diff=${Math.floor(timeSinceSettled / 1000)}s, forcing API call`
-        )
-      } else if (timeSinceSettled > ONE_HOUR) {
-        // 时间差过大，可能是停机重启，强制请求API
-        shouldFetchAPI = true
-        skipReason = ''
-        console.log(
-          `⚠️ Large time gap detected (${Math.floor(timeSinceSettled / 1000)}s, ${Math.floor(timeSinceSettled / 60000)}min), possible service restart, forcing API call`
-        )
-      } else if (timeSinceSettled < THREE_MINUTES) {
-        // 正常情况：3分钟内刚开奖，跳过API请求
-        shouldFetchAPI = false
-        skipReason = `Latest settled round ${latestSettledRound.period_number} was settled ${Math.floor(timeSinceSettled / 1000)}s ago (less than 3min)`
-      }
-    }
+  // 始终请求 API 获取最新开奖数据
+  const latestItem = await fetchAPIData()
+  if (!latestItem) {
+    return { success: true, message: 'No data from API' }
   }
 
-  // 2. 只有在需要时才调用 API 获取最新开奖数据
-  let latestItem = null
-  if (shouldFetchAPI) {
-    latestItem = await fetchAPIData()
-    if (!latestItem) {
-      return { success: true, message: 'No data from API' }
-    }
+  // 输出API返回的完整数据，用于调试
+  console.log('📥 API Response:', JSON.stringify(latestItem, null, 2))
 
-    // 输出API返回的完整数据，用于调试
-    console.log('📥 API Response:', JSON.stringify(latestItem, null, 2))
-  } else {
-    console.log(`⏭️ Skipping API call: ${skipReason}`)
-    // 即使不请求API，也需要处理封盘逻辑
-    // 继续执行后续的封盘检查
-  }
-
-  // 3. 如果有API数据，处理结算逻辑
+  // 处理结算逻辑
   let latestPeriod = null
   let currentBettingPeriod = null
 
@@ -608,10 +746,9 @@ async function processPC28Data() {
 
   return {
     success: true,
-    message: latestItem ? 'PC28 data processed' : skipReason || 'Skipped API call',
+    message: 'PC28 data processed',
     latestPeriod: latestPeriod || 'N/A',
-    currentBettingPeriod: currentBettingPeriod || 'N/A',
-    apiCalled: !!latestItem
+    currentBettingPeriod: currentBettingPeriod || 'N/A'
   }
 }
 
@@ -643,6 +780,7 @@ async function pollOnce() {
 
     if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
       console.error(`Too many consecutive errors (${consecutiveErrors}), stopping...`)
+      console.error(`💡 Tip: Check API availability and network connection`)
       process.exit(1)
     }
   } finally {

@@ -591,3 +591,102 @@ export async function cancelGlobalRound(globalRoundId: string): Promise<{
     total_refund?: number
   }
 }
+
+/**
+ * 获取开奖历史（最新20期已结算的期数）
+ * 优先从数据库查询，失败时使用备用API
+ */
+export async function getPC28History(limit = 20): Promise<PC28GlobalRound[]> {
+  // 1. 优先从数据库查询
+  try {
+    const { data, error } = await supabase
+      .from('pc28_global_rounds')
+      .select('*')
+      .eq('status', 'settled')
+      .not('result', 'is', null)
+      .order('settled_at', { ascending: false })
+      .limit(limit)
+
+    if (!error && data && data.length > 0) {
+      // 按period_number数字排序（因为period_number是字符串，需要转换为数字）
+      const sorted = data.sort((a, b) => {
+        const numA = parseInt(a.period_number || '0', 10)
+        const numB = parseInt(b.period_number || '0', 10)
+        return numB - numA
+      })
+      return sorted as PC28GlobalRound[]
+    }
+  } catch (dbError) {
+    console.warn('[PC28 API] Database query failed, trying backup API:', dbError)
+  }
+
+  // 2. 数据库查询失败或数据不足，使用备用API
+  try {
+    const backupUrl = `http://pc28.help/kj.json?limit=${limit}`
+    const response = await fetch(backupUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`Backup API returned ${response.status}`)
+    }
+
+    const result = await response.json()
+
+    if (!result.data || !Array.isArray(result.data) || result.data.length === 0) {
+      console.warn('[PC28 API] Backup API returned empty data')
+      return []
+    }
+
+    // 转换备用API数据格式为 PC28GlobalRound 格式
+    const history: PC28GlobalRound[] = result.data.map((item: any) => {
+      // 解析开奖号码：opennum 格式为 "2+9+7"
+      const nums = item.opennum.split('+').map((n: string) => parseInt(n.trim(), 10))
+      if (nums.length !== 3) {
+        throw new Error(`Invalid opennum format: ${item.opennum}`)
+      }
+
+      // 解析时间：opentime 格式为 "01-25 06:03:30"，需要转换为完整日期时间
+      // 假设是当前年份
+      const currentYear = new Date().getFullYear()
+      const timeStr = `${currentYear}-${item.opentime}`
+      const settledAt = new Date(
+        timeStr.replace(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/, '$1-$2-$3T$4:$5:$6')
+      )
+
+      return {
+        id: `backup_${item.qihao}`, // 临时ID
+        period_number: item.qihao,
+        status: 'settled' as const,
+        seal_at: null,
+        result: {
+          num1: nums[0],
+          num2: nums[1],
+          num3: nums[2],
+          sum: parseInt(item.sum, 10)
+        },
+        settled_at: settledAt.toISOString(),
+        cancelled_at: null,
+        total_bet_amount: 0,
+        total_payout: 0,
+        total_platform_fee: 0,
+        created_at: settledAt.toISOString(),
+        updated_at: settledAt.toISOString()
+      }
+    })
+
+    // 按period_number数字排序
+    return history.sort((a, b) => {
+      const numA = parseInt(a.period_number || '0', 10)
+      const numB = parseInt(b.period_number || '0', 10)
+      return numB - numA
+    })
+  } catch (backupError) {
+    console.error('[PC28 API] Backup API also failed:', backupError)
+    // 如果备用API也失败，返回空数组而不是抛出错误
+    return []
+  }
+}

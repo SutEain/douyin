@@ -185,7 +185,8 @@ import AlbumSwiper from './AlbumSwiper.vue'
 import type { VideoItem } from '../../types'
 import { useVideoStore } from '@/stores/video'
 import { parseImages, getContentType, buildCdnUrl } from '@/utils/media'
-import { recordVideoView, incrementWatchTime } from '@/api/videos'
+import { recordVideoView } from '@/api/videos'
+// 🎯 incrementWatchTime 已移除，改用 Presence 自动追踪
 // import { _copy, _notice } from '@/utils'
 // ✅ 避免循环依赖导致的 "Cannot access 'Y' before initialization"
 // 只在需要打开图文详情时再异步加载
@@ -203,8 +204,7 @@ const debugLog = (...args: any[]) => {
 // 🎯 观看历史记录追踪（避免重复记录）
 const recordedViews = new Set<string>() // 已记录开始观看
 
-// 🎯 观看时长心跳记录（简化版：只要在播放就累计）
-let watchTimeHeartbeatTimer: ReturnType<typeof setInterval> | null = null // 心跳定时器
+// 🎯 观看时长追踪已改为使用 Presence 自动追踪（在 main.ts 中启动）
 
 // 🎯 记录进入 current（只记录已播放，不记录完播）
 function recordEnterCurrent(item: VideoItem | null, contentType: string) {
@@ -1737,106 +1737,12 @@ onMounted(() => {
   })
 
   // 🎯 启动观看时长心跳（每10秒检查一次，只在视频播放时上报）
-  // 🎯 优化：放宽状态检查，增加容错机制，避免因状态不同步导致上报丢失
-  let lastReportTime = 0 // 记录上次上报时间，用于重试机制
-  let pendingReport: { videoId: string; seconds: number; timestamp: number } | null = null // 待重试的上报
-
-  watchTimeHeartbeatTimer = setInterval(() => {
-    try {
-      // 获取当前视频
-      const currentItem = props.items[currentIndex.value]
-      if (!currentItem?.aweme_id) {
-        return // 没有当前视频
-      }
-
-      // 检查内容类型，只对视频进行时长累计
-      const contentType = getContentType(currentItem)
-      if (contentType !== 'video') {
-        return // 非视频内容，不累计时长
-      }
-
-      // 🎯 优化：放宽状态检查，只要视频元素存在且未暂停就上报
-      // 不再依赖 isPlaying.value，因为状态可能不同步
-      const currentSlot = slots.find((s) => s.role === 'current')
-      if (!currentSlot) {
-        return
-      }
-      const video = slotRefs.get(currentSlot.key)
-      if (!video) {
-        return // 视频元素不存在
-      }
-
-      const now = Date.now()
-
-      // 🎯 如果有待重试的上报，且距离上次上报已超过10秒，先尝试重试
-      if (pendingReport && now - pendingReport.timestamp >= 10000) {
-        console.log(
-          `[WatchTime] 🔄 重试上报: ${pendingReport.seconds}秒, videoId=${pendingReport.videoId.substring(0, 8)}`
-        )
-        incrementWatchTime(pendingReport.seconds, pendingReport.videoId)
-          .then((result) => {
-            if (result.success) {
-              pendingReport = null
-              lastReportTime = now
-            } else {
-              // 重试失败，更新重试时间戳
-              pendingReport.timestamp = now
-            }
-          })
-          .catch(() => {
-            // 重试失败，更新重试时间戳
-            if (pendingReport) {
-              pendingReport.timestamp = now
-            }
-          })
-        return // 重试时不再进行新的上报
-      }
-
-      // 🎯 优化：如果视频暂停，跳过本次上报，但不阻止重试
-      if (video.paused) {
-        return
-      }
-
-      // 🎯 确保至少间隔10秒才上报（避免频繁上报）
-      if (now - lastReportTime < 10000) {
-        return
-      }
-
-      // ✅ 发送心跳：累计10秒观看时长
-      console.log(`[WatchTime] 💓 心跳上报: 10秒, videoId=${currentItem.aweme_id.substring(0, 8)}`)
-      lastReportTime = now
-      const reportInfo = { videoId: currentItem.aweme_id, seconds: 10, timestamp: now }
-
-      incrementWatchTime(10, currentItem.aweme_id)
-        .then((result) => {
-          if (result.success) {
-            pendingReport = null // 上报成功，清除待重试记录
-          } else {
-            // 上报失败，保留待重试记录，下次重试
-            pendingReport = reportInfo
-            console.warn('[WatchTime] 上报失败，将在下次心跳时重试')
-          }
-        })
-        .catch((e) => {
-          console.warn('[WatchTime] 心跳上报异常:', e)
-          // 保留待重试记录
-          pendingReport = reportInfo
-        })
-    } catch (error) {
-      console.error('[WatchTime] 心跳处理异常:', error)
-    }
-  }, 10000) // 每10秒触发一次
-
-  console.log('[WatchTime] ✅ 心跳定时器已启动')
+  // 🎯 观看时长追踪已改为使用 Presence 自动追踪（在 main.ts 中启动）
+  // 不再需要定时上报视频观看时长
 })
 
 onUnmounted(() => {
-  // 🎯 清除观看时长心跳定时器
-  if (watchTimeHeartbeatTimer) {
-    clearInterval(watchTimeHeartbeatTimer)
-    watchTimeHeartbeatTimer = null
-    console.log('[WatchTime] ✅ 心跳定时器已清除')
-  }
+  // 🎯 watchTimeHeartbeatTimer 已移除，改用 Presence 自动追踪
 
   // 清理进度条事件绑定
   if (currentBoundVideo) {

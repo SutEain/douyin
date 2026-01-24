@@ -3,44 +3,70 @@ import { supabaseClient } from './supabaseClient'
 
 export const authProvider: AuthProvider = {
   login: async ({ email, password }: { email: string; password: string }) => {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email,
-      password
-    })
+    // 🔥 使用 Edge Function 登录（带频率限制和攻击防护）
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+    const appServerUrl =
+      supabaseUrl?.replace(/\.supabase\.co$/, '') + '.supabase.co/functions/v1/app-server'
 
-    if (error) {
-      return {
-        success: false,
-        error
-      }
-    }
+    try {
+      const response = await fetch(`${appServerUrl}/auth/admin-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, password })
+      })
 
-    if (data?.user) {
-      // 🎯 检查是否是管理员
-      const role = data.user.app_metadata?.role
-      if (role !== 'admin') {
-        // 不是管理员，登出
-        await supabaseClient.auth.signOut()
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
         return {
           success: false,
           error: {
-            name: 'PermissionError',
-            message: '您没有管理员权限'
+            name: 'LoginError',
+            message: result.message || '登录失败'
           }
         }
       }
 
-      return {
-        success: true,
-        redirectTo: '/'
-      }
-    }
+      // 🔥 使用返回的 session 设置 Supabase 客户端
+      if (result.data?.session) {
+        const { data: sessionData, error: sessionError } = await supabaseClient.auth.setSession({
+          access_token: result.data.session.access_token,
+          refresh_token: result.data.session.refresh_token
+        })
 
-    return {
-      success: false,
-      error: {
-        name: 'LoginError',
-        message: '登录失败'
+        if (sessionError || !sessionData.session) {
+          return {
+            success: false,
+            error: {
+              name: 'SessionError',
+              message: '设置会话失败'
+            }
+          }
+        }
+
+        return {
+          success: true,
+          redirectTo: '/'
+        }
+      }
+
+      return {
+        success: false,
+        error: {
+          name: 'LoginError',
+          message: '登录失败：未返回会话信息'
+        }
+      }
+    } catch (error: any) {
+      console.error('[AdminLogin] Error:', error)
+      return {
+        success: false,
+        error: {
+          name: 'NetworkError',
+          message: error.message || '网络错误，请稍后重试'
+        }
       }
     }
   },

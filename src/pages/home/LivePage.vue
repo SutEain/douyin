@@ -622,7 +622,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { supabase } from '@/utils/supabase'
 import { _checkImgUrl, _notice, _copy, _truncate } from '@/utils'
-import { toggleFollowUser, sendReward, sendRedPacket, incrementWatchTime } from '@/api/videos'
+import { toggleFollowUser, sendReward, sendRedPacket } from '@/api/videos'
+// 🎯 incrementWatchTime 已移除，改用 Presence 自动追踪
 import DPPlayer from '@/components/live/DPPlayer.vue'
 import VapPlayer from '@/components/live/VapPlayer.vue'
 import UserPanel from '@/components/UserPanel.vue'
@@ -722,7 +723,7 @@ const giftEffectQueue = ref<GiftEffectItem[]>([])
 const isPlayingEffect = ref(false) // 当前是否有特效正在播放
 const viewerCount = ref(0)
 const viewers = ref<any[]>([]) // 存储前几名观众
-let watchTimeTimer: any = null // 观看时长定时器
+// 🎯 观看时长追踪已改为使用 Presence 自动追踪（在 main.ts 中启动）
 let pc28CheckTimer: any = null // PC28检查定时器
 const fallbackAvatar = new URL('../../assets/img/icon/avatar/0.png', import.meta.url).href
 
@@ -2235,16 +2236,8 @@ onMounted(async () => {
   await fetchGifts()
   await initRoom()
 
-  // 🎯 观看时长上报：每10秒上报一次
-  watchTimeTimer = setInterval(() => {
-    // 只有在直播状态才上报
-    if (roomInfo.value?.status === 'live') {
-      console.log(`[WatchTime] 直播间心跳上报: 10秒, roomId=${roomId.value}`)
-      incrementWatchTime(10, roomId.value).catch((e) => {
-        console.warn('[WatchTime] 直播间上报失败:', e)
-      })
-    }
-  }, 10000)
+  // 🎯 观看时长追踪已改为使用 Presence 自动追踪（在 main.ts 中启动）
+  // 不再需要定时上报，Presence 会自动处理上线/下线事件
 })
 
 onBeforeUnmount(() => {
@@ -2254,10 +2247,7 @@ onBeforeUnmount(() => {
     console.log('[PC28-Realtime] Unsubscribing pc28Channel on unmount')
     supabase.removeChannel(pc28Channel)
   }
-  if (watchTimeTimer) {
-    clearInterval(watchTimeTimer)
-    watchTimeTimer = null
-  }
+  // 🎯 watchTimeTimer 已移除，改用 Presence 自动追踪
   if (pc28CheckTimer) {
     clearInterval(pc28CheckTimer)
     pc28CheckTimer = null

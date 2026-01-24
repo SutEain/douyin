@@ -1186,20 +1186,31 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
 }
 
 export async function handleRecordView(req: Request): Promise<Response> {
-  const { user } = await requireAuth(req)
-  const body = await parseJsonBody(req)
-  const { video_id, progress, completed } = body
-  if (!video_id) return errorResponse('video_id required', 1, 400)
+  try {
+    const { user } = await requireAuth(req)
+    const body = await parseJsonBody(req)
+    const { video_id, progress, completed } = body
+    if (!video_id) return errorResponse('video_id required', 1, 400)
 
-  const { data, error } = await supabaseAdmin.rpc('record_video_view_v2', {
-    p_user_id: user.id,
-    p_video_id: video_id,
-    p_progress: progress ?? 0,
-    p_completed: completed === true
-  })
+    const { data, error } = await supabaseAdmin.rpc('record_video_view_v2', {
+      p_user_id: user.id,
+      p_video_id: video_id,
+      p_progress: progress ?? 0,
+      p_completed: completed === true
+    })
 
-  if (error) return errorResponse('Failed', 1, 500)
-  return successResponse(data)
+    if (error) {
+      console.error('[handleRecordView] RPC error:', error)
+      return errorResponse('Failed to record view', 1, 500)
+    }
+    return successResponse(data)
+  } catch (error: any) {
+    console.error('[handleRecordView] Unexpected error:', error)
+    if (error instanceof HttpError) {
+      throw error // 重新抛出 HttpError，让外层处理
+    }
+    return errorResponse('Internal server error', 1, 500)
+  }
 }
 
 export async function handleVideoHistory(req: Request): Promise<Response> {
@@ -1238,40 +1249,26 @@ export async function handleClearVideoHistory(req: Request): Promise<Response> {
   return successResponse({ success: true })
 }
 
-export async function handleIncrementWatchTime(req: Request): Promise<Response> {
-  const { user } = await requireAuth(req)
-  const body = await parseJsonBody(req)
-  const { seconds, video_id } = body
-
-  // 🚨 安全验证 1: 每次只能接受小于等于20秒的数值
-  const secondsInt = Math.floor(seconds)
-  if (!seconds || secondsInt <= 0 || secondsInt > 20) {
-    return successResponse({ success: false })
-  }
-
-  // 🎯 优化：移除 Edge Function 层的间隔检查，只保留数据库函数层的检查
-  // 数据库函数使用 SELECT FOR UPDATE 保证并发安全，避免双重检查导致的边界问题
-  const { data, error } = await supabaseAdmin.rpc('increment_daily_watch_time', {
-    p_user_id: user.id,
-    p_seconds: secondsInt,
-    p_video_id: video_id || null
-  })
-
-  if (error) {
-    console.error('[handleIncrementWatchTime] RPC error:', error)
-    return successResponse({ success: false })
-  }
-
-  return successResponse(data)
-}
+// 🎯 handleIncrementWatchTime 已删除，改用 Presence 自动追踪（在 main.ts 中启动）
 
 export async function handleGetWatchTimeStatus(req: Request): Promise<Response> {
-  const { user } = await requireAuth(req)
-  const { data, error } = await supabaseAdmin.rpc('get_watch_time_reward_status', {
-    p_user_id: user.id
-  })
-  if (error) return errorResponse('Failed', 1, 500)
-  return successResponse(data)
+  try {
+    const { user } = await requireAuth(req)
+    const { data, error } = await supabaseAdmin.rpc('get_watch_time_reward_status', {
+      p_user_id: user.id
+    })
+    if (error) {
+      console.error('[handleGetWatchTimeStatus] RPC error:', error)
+      return errorResponse('Failed to get watch time status', 1, 500)
+    }
+    return successResponse(data)
+  } catch (error: any) {
+    console.error('[handleGetWatchTimeStatus] Unexpected error:', error)
+    if (error instanceof HttpError) {
+      throw error // 重新抛出 HttpError，让外层处理
+    }
+    return errorResponse('Internal server error', 1, 500)
+  }
 }
 
 export async function handleClaimWatchTimeReward(req: Request): Promise<Response> {
@@ -1289,7 +1286,9 @@ export async function handleClaimWatchTimeReward(req: Request): Promise<Response
     const lockedMsg = rateLimitResult.lockedUntil
       ? `，已锁定至 ${new Date(rateLimitResult.lockedUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`
       : ''
-    throw new HttpError(`请求过于频繁，请稍后再试${lockedMsg}`, 429)
+    // 🔥 不泄露锁定时间给客户端
+    console.warn(`[CLAIM_WATCH_TIME] Rate limit exceeded for user ${user.id}${lockedMsg}`)
+    throw new HttpError('Too many requests', 429)
   }
 
   // 🚨 额外检查：检查最近一次领取时间，防止并发攻击
@@ -1309,7 +1308,8 @@ export async function handleClaimWatchTimeReward(req: Request): Promise<Response
 
     // 同一档位领取后，至少需要等待2秒才能再次检查（防止并发竞态）
     if (timeSinceLastClaim < 2000) {
-      throw new HttpError('请求过于频繁，请稍后再试', 429)
+      console.warn(`[CLAIM_WATCH_TIME] Too frequent claim attempt for user ${user.id}`)
+      throw new HttpError('Too many requests', 429)
     }
   }
 
@@ -1318,14 +1318,18 @@ export async function handleClaimWatchTimeReward(req: Request): Promise<Response
   })
 
   if (error) {
+    // 🔥 不泄露具体错误信息给客户端
     console.error('[handleClaimWatchTimeReward] RPC error:', error)
-    return errorResponse(error.message || 'Failed', 1, 500)
+    return errorResponse('Internal server error', 1, 500)
   }
 
   // 🚨 验证返回结果，确保没有异常奖励
   if (data && typeof data === 'object' && 'success' in data) {
     if (!data.success) {
-      return errorResponse(data.message || '领取失败', 1, 400)
+      // 🔥 不泄露具体失败原因给客户端
+      const reason = data.message || 'Claim failed'
+      console.warn(`[CLAIM_WATCH_TIME] Claim failed for user ${user.id}: ${reason}`)
+      return errorResponse('Bad request', 1, 400)
     }
   }
 

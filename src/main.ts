@@ -43,6 +43,7 @@ import { createPinia } from 'pinia'
 import { useClick } from '@/utils/hooks/useClick'
 import bus, { EVENT_KEY } from '@/utils/bus'
 import i18n from '@/locales'
+import { startPresenceTracking, stopPresenceTracking } from '@/utils/presence'
 
 declare global {
   interface Window {
@@ -188,3 +189,15 @@ bus.on(EVENT_KEY.REMOVE_MUTED, () => {
 
 // ✅ Telegram WebApp 初始化已经在 index.html 中提前处理
 // 避免重复调用导致问题
+
+// 🎯 启动 Presence 追踪（用于自动追踪用户在线时长）
+startPresenceTracking().catch((error) => {
+  console.warn('[Main] Failed to start presence tracking:', error)
+})
+
+// 页面卸载时停止追踪
+window.addEventListener('beforeunload', () => {
+  stopPresenceTracking().catch((error) => {
+    console.warn('[Main] Failed to stop presence tracking:', error)
+  })
+})

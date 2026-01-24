@@ -1,4 +1,31 @@
 import { supabaseAdmin } from './env.ts'
+import { checkRateLimit } from './rateLimit.ts'
+
+/**
+ * 🔥 检查 IP 是否被封禁
+ */
+export async function checkIpBlacklist(req: Request): Promise<void> {
+  const clientIp = getClientIp(req)
+  if (!clientIp) {
+    return // 无法获取 IP 时不拦截
+  }
+
+  // 检查 IP 是否在黑名单中
+  const { data: banned, error } = await supabaseAdmin.rpc('is_ip_banned', {
+    p_ip_address: clientIp
+  })
+
+  if (error) {
+    console.error('[IP_BLACKLIST] 检查失败:', error)
+    // 出错时不拦截，避免误伤
+    return
+  }
+
+  if (banned === true) {
+    console.warn(`[IP_BLACKLIST] 封禁的 IP 尝试访问: ${clientIp}`)
+    throw new HttpError('Forbidden', 403)
+  }
+}
 
 export class HttpError extends Error {
   status: number
@@ -49,10 +76,7 @@ export async function checkAdminIpWhitelist(req: Request) {
   // 🚨 安全加固：如果未配置白名单，默认拒绝（必须显式配置）
   if (!whitelistStr || whitelistStr.trim() === '') {
     console.warn(`[IP_BLOCK] 管理员访问被拒绝：IP=${ip}，原因：未配置 IP 白名单`)
-    throw new HttpError(
-      `管理员访问被拒绝：未配置 IP 白名单。请联系系统管理员配置 ADMIN_IP_WHITELIST。`,
-      403
-    )
+    throw new HttpError('Forbidden', 403)
   }
 
   // 如果配置为 '*'，则放行所有 IP（不推荐，仅用于开发环境）
@@ -67,7 +91,7 @@ export async function checkAdminIpWhitelist(req: Request) {
     .filter(Boolean)
   if (!whitelist.includes(ip)) {
     console.warn(`[IP_BLOCK] 非法访问尝试: IP=${ip}`)
-    throw new HttpError(`您的 IP (${ip}) 不在白名单中，拒绝访问。`, 403)
+    throw new HttpError('Forbidden', 403)
   }
   */
 }
@@ -118,22 +142,72 @@ export async function requireAdminAuth(req: Request) {
 }
 
 export async function requireAuth(req: Request, options: AuthOptions = {}) {
+  // 🔥 先检查 IP 黑名单
+  await checkIpBlacklist(req)
+
   const authHeader = req.headers.get('authorization') || req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    throw new HttpError('Missing authorization header', 401)
+    throw new HttpError('Unauthorized', 401)
   }
   const accessToken = authHeader.replace(/Bearer\s+/i, '').trim()
   if (!accessToken) {
-    throw new HttpError('Missing authorization header', 401)
+    throw new HttpError('Unauthorized', 401)
   }
 
+  // 🔥 先检查 IP 黑名单
+  const clientIp = getClientIp(req)
+  if (clientIp) {
+    const { data: isBanned } = await supabaseAdmin.rpc('is_ip_banned', {
+      p_ip_address: clientIp
+    })
+    if (isBanned === true) {
+      throw new HttpError('Forbidden', 403)
+    }
+  }
+
+  // 🔥 先尝试认证
   const {
     data: { user },
     error
   } = await supabaseAdmin.auth.getUser(accessToken)
 
+  // 🔥 如果认证失败，记录失败次数并检查频率限制
   if (error || !user || !user.id || user.id === 'undefined') {
-    throw new HttpError('Invalid session', 401)
+    // 🔥 记录认证失败日志（用于分析攻击）
+    if (clientIp) {
+      console.warn(
+        `[AUTH_FAILED] Invalid session from IP: ${clientIp}, Error: ${error?.message || 'No user'}`
+      )
+
+      // 🔥 记录失败次数并检查频率限制
+      const { checkRateLimit } = await import('./rateLimit.ts')
+      const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'auth_failed', {
+        maxAttempts: 3, // 10秒内最多3次失败
+        windowMs: 10000, // 10秒窗口
+        lockDurationMs: undefined // 不锁定，直接永久封禁
+      })
+
+      if (!rateLimitResult.allowed) {
+        // 🔥 直接永久封禁 IP（不临时锁定）
+        try {
+          const { autoBanIp } = await import('../routes/ipBlacklist.ts')
+          await autoBanIp(clientIp, '认证失败次数过多（10秒内超过3次），已永久封禁', null) // null 表示永久封禁
+          console.warn(`[AUTH_ATTACK] IP ${clientIp} 认证失败次数过多，已永久封禁`)
+        } catch (banError) {
+          console.error('[AUTH_ATTACK] 自动封禁失败:', banError)
+        }
+
+        throw new HttpError('Forbidden', 403)
+      }
+    }
+
+    throw new HttpError('Unauthorized', 401)
+  }
+
+  // 🔥 认证成功，重置该 IP 的失败计数（如果存在）
+  if (clientIp) {
+    // 注意：这里不重置，因为 rateLimit 是基于 action 的，auth_failed 和 auth_success 是不同的 action
+    // 如果需要，可以添加 auth_success action 来跟踪成功次数
   }
 
   let profile = null
@@ -145,13 +219,15 @@ export async function requireAuth(req: Request, options: AuthOptions = {}) {
       .maybeSingle()
 
     if (profileError || !profileData) {
-      throw new HttpError('Profile not found', 404)
+      throw new HttpError('Not found', 404)
     }
 
     // 🎯 拦截封禁用户：禁止其进行任何需要 Profile 的写操作或核心操作
     if (profileData.is_banned) {
-      const reason = profileData.ban_reason || '账号由于违反社区规范已被封禁'
-      throw new HttpError(`Forbidden: ${reason}`, 403)
+      // 🔥 不泄露具体封禁原因给客户端，只在服务器日志中记录
+      const reason = profileData.ban_reason || '账号已被封禁'
+      console.warn(`[BANNED_USER] User ${user.id} attempted access, reason: ${reason}`)
+      throw new HttpError('Forbidden', 403)
     }
 
     profile = profileData

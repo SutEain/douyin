@@ -28,7 +28,6 @@ import {
   handleRecordView,
   handleVideoAdultFeed,
   handleGetAdultQuota,
-  handleIncrementWatchTime,
   handleGetWatchTimeStatus,
   handleClaimWatchTimeReward
 } from './routes/video.ts'
@@ -77,10 +76,63 @@ import {
 } from './routes/recharge.ts'
 import { handleAdminProcessWithdraw } from './routes/withdraw.ts'
 import { handleAdminAutoWithdraw } from './routes/adminWithdraw.ts'
+import { handleAdminLogin } from './routes/admin.ts'
+import {
+  handleAddIpToBlacklist,
+  handleRemoveIpFromBlacklist,
+  handleGetIpBlacklist,
+  autoBanIp
+} from './routes/ipBlacklist.ts'
+import { handlePresenceOnline, handlePresenceOffline } from './routes/presence.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
+  }
+
+  // 🔥 全局 IP 黑名单和频率限制检查（除了认证相关的公开接口）
+  try {
+    const route = extractRoute(req.url)
+    const isPublicAuthRoute =
+      route === '/auth/tg-login' ||
+      route === '/auth/tg-widget-login' ||
+      route === '/auth/verify-code' ||
+      route === '/auth/admin-login'
+
+    // 非公开认证接口才检查 IP 黑名单和频率限制
+    if (!isPublicAuthRoute) {
+      const { checkIpBlacklist, getClientIp } = await import('./lib/auth.ts')
+      await checkIpBlacklist(req)
+
+      // 🔥 全项目接口频率限制：1分钟最多10次请求
+      const clientIp = getClientIp(req)
+      if (clientIp) {
+        const { checkRateLimit } = await import('./lib/rateLimit.ts')
+        const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'api_request', {
+          maxAttempts: 10, // 1分钟最多10次请求
+          windowMs: 60000, // 60秒窗口（1分钟）
+          lockDurationMs: undefined
+        })
+
+        if (!rateLimitResult.allowed) {
+          // 请求过于频繁，直接永久封禁
+          const { autoBanIp } = await import('./routes/ipBlacklist.ts')
+          await autoBanIp(clientIp, 'API 请求过于频繁（1分钟内超过10次），已永久封禁', null)
+          console.warn(`[API_ATTACK] IP ${clientIp} 请求过于频繁（1分钟内超过10次），已永久封禁`)
+          return errorResponse('Forbidden', 1, 403)
+        }
+      }
+    }
+  } catch (error: any) {
+    // IP 被封禁，直接返回
+    if (error instanceof HttpError && error.status === 403) {
+      return errorResponse('Forbidden', 1, 403)
+    }
+    // 🔥 记录其他错误（频率限制检查时的异常）
+    if (error) {
+      console.error('[app-server] IP 黑名单/频率限制检查异常:', error)
+    }
+    // 其他错误继续处理（不中断请求流程）
   }
 
   try {
@@ -97,6 +149,11 @@ serve(async (req) => {
 
     if (route === '/auth/verify-code' && method === 'POST') {
       return handleVerifyCodeLogin(req)
+    }
+
+    // 🔥 后台管理员登录（带频率限制）
+    if (route === '/auth/admin-login' && method === 'POST') {
+      return handleAdminLogin(req)
     }
 
     if (route === '/video/my' && method === 'GET') {
@@ -158,10 +215,14 @@ serve(async (req) => {
     if (route === '/video/adult-quota' && method === 'GET') {
       return handleGetAdultQuota(req)
     }
-    // 🎯 观看时长奖励系统
-    if (route === '/video/watch-time' && method === 'POST') {
-      return handleIncrementWatchTime(req)
+    // 🎯 观看时长奖励系统（使用 Presence 自动追踪）
+    if (route === '/presence/online' && method === 'POST') {
+      return handlePresenceOnline(req)
     }
+    if (route === '/presence/offline' && method === 'POST') {
+      return handlePresenceOffline(req)
+    }
+    // 🎯 观看时长奖励查询和领取接口
     if (route === '/video/watch-time/status' && method === 'GET') {
       return handleGetWatchTimeStatus(req)
     }
@@ -290,10 +351,38 @@ serve(async (req) => {
       return handleAdminDouyinRefresh(req)
     }
 
+    // 🔥 IP 黑名单管理（仅 admin）
+    if (route === '/admin/ip-blacklist' && method === 'GET') {
+      return handleGetIpBlacklist(req)
+    }
+    if (route === '/admin/ip-blacklist/add' && method === 'POST') {
+      return handleAddIpToBlacklist(req)
+    }
+    if (route === '/admin/ip-blacklist/remove' && method === 'POST') {
+      return handleRemoveIpFromBlacklist(req)
+    }
+
     return errorResponse('Not found', 1, 404)
   } catch (error) {
     if (error instanceof HttpError) {
-      return errorResponse(error.message, 1, error.status)
+      // 🔥 记录认证失败的错误（用于分析攻击）
+      if (error.status === 401 || error.status === 429) {
+        const clientIp = getClientIp(req)
+        const route = extractRoute(req.url)
+        console.warn(
+          `[AUTH_ERROR] ${error.status} from IP: ${clientIp || 'unknown'}, Route: ${route}, Message: ${error.message}`
+        )
+      }
+      // 🔥 不泄露具体错误信息给客户端
+      const genericMessage =
+        error.status === 401
+          ? 'Unauthorized'
+          : error.status === 403
+            ? 'Forbidden'
+            : error.status === 429
+              ? 'Too many requests'
+              : 'Bad request'
+      return errorResponse(genericMessage, 1, error.status)
     }
     console.error('[app-server] Unexpected error:', error)
     return errorResponse('Internal server error', 1, 500)
@@ -472,7 +561,7 @@ async function handleVerifyCodeLogin(req: Request): Promise<Response> {
     }
 
     if (!body?.code || !/^\d{6}$/.test(body.code)) {
-      return errorResponse('Invalid verification code', 1, 400)
+      return errorResponse('Bad request', 1, 400)
     }
 
     // 🎯 速率限制：每个 IP 每分钟最多验证 10 次，失败 5 次锁定 15 分钟
@@ -489,7 +578,7 @@ async function handleVerifyCodeLogin(req: Request): Promise<Response> {
         ? `，已锁定至 ${new Date(rateLimitResult.lockedUntil).toLocaleTimeString()}`
         : ''
       console.warn(`[app-server] 速率限制：IP ${clientIp} 验证过于频繁${lockedMsg}`)
-      return errorResponse('验证过于频繁，请稍后再试', 1, 429)
+      return errorResponse('Too many requests', 1, 429)
     }
 
     // 🎯 验证验证码（使用原子更新防止竞态条件）
@@ -500,19 +589,23 @@ async function handleVerifyCodeLogin(req: Request): Promise<Response> {
       .eq('code', body.code)
       .maybeSingle()
 
+    // 🔥 不泄露验证码的具体状态（无效/已使用/已过期），统一返回认证失败
     if (codeError || !codeRecord) {
-      return errorResponse('验证码无效', 1, 401)
+      console.warn(`[VERIFY_CODE] Invalid code attempt from IP: ${clientIp}`)
+      return errorResponse('Unauthorized', 1, 401)
     }
 
     // 检查是否已使用
     if (codeRecord.is_used) {
-      return errorResponse('验证码已使用', 1, 401)
+      console.warn(`[VERIFY_CODE] Used code attempt from IP: ${clientIp}`)
+      return errorResponse('Unauthorized', 1, 401)
     }
 
     // 检查是否过期
     const expiresAt = new Date(codeRecord.expires_at)
     if (expiresAt < new Date()) {
-      return errorResponse('验证码已过期', 1, 401)
+      console.warn(`[VERIFY_CODE] Expired code attempt from IP: ${clientIp}`)
+      return errorResponse('Unauthorized', 1, 401)
     }
 
     // 🎯 原子更新：使用 WHERE 条件确保只更新未使用的验证码
@@ -921,93 +1014,93 @@ async function handleTelegramLogin(req: Request): Promise<Response> {
               console.log('[Invite] 用户已被其他请求处理，跳过奖励')
             } else {
               // 发放奖励逻辑
-            const now = new Date()
-            const currentCount = inviterProfile.invite_success_count ?? 0
-            const newCount = currentCount + 1
+              const now = new Date()
+              const currentCount = inviterProfile.invite_success_count ?? 0
+              const newCount = currentCount + 1
 
-            const { data: setting } = await supabaseAdmin
-              .from('system_settings')
-              .select('value_int')
-              .eq('id', 'invitation_reward_coins')
-              .maybeSingle()
-            const rewardCoins = setting?.value_int ?? 20
+              const { data: setting } = await supabaseAdmin
+                .from('system_settings')
+                .select('value_int')
+                .eq('id', 'invitation_reward_coins')
+                .maybeSingle()
+              const rewardCoins = setting?.value_int ?? 20
 
-            let adultPermanentUnlock = inviterProfile.adult_permanent_unlock === true
-            let adultUnlockUntil = inviterProfile.adult_unlock_until
+              let adultPermanentUnlock = inviterProfile.adult_permanent_unlock === true
+              let adultUnlockUntil = inviterProfile.adult_unlock_until
 
-            if (!adultPermanentUnlock) {
-              if (newCount >= 3) {
-                adultPermanentUnlock = true
-                adultUnlockUntil = null
-              } else {
-                const currentUnlock = adultUnlockUntil
-                  ? new Date(adultUnlockUntil).getTime()
-                  : now.getTime()
-                const baseTime = Math.max(currentUnlock, now.getTime())
-                let addHours = 0
-                if (newCount === 1) addHours = 24
-                if (newCount === 2) addHours = 72
-                if (addHours > 0) {
-                  adultUnlockUntil = new Date(baseTime + addHours * 3600 * 1000).toISOString()
+              if (!adultPermanentUnlock) {
+                if (newCount >= 3) {
+                  adultPermanentUnlock = true
+                  adultUnlockUntil = null
+                } else {
+                  const currentUnlock = adultUnlockUntil
+                    ? new Date(adultUnlockUntil).getTime()
+                    : now.getTime()
+                  const baseTime = Math.max(currentUnlock, now.getTime())
+                  let addHours = 0
+                  if (newCount === 1) addHours = 24
+                  if (newCount === 2) addHours = 72
+                  if (addHours > 0) {
+                    adultUnlockUntil = new Date(baseTime + addHours * 3600 * 1000).toISOString()
+                  }
                 }
               }
-            }
 
-            // 更新邀请人
-            const { data: updatedInviter } = await supabaseAdmin
-              .from('profiles')
-              .update({
-                invite_success_count: newCount,
-                adult_permanent_unlock: adultPermanentUnlock,
-                adult_unlock_until: adultUnlockUntil,
-                balance_coins: (inviterProfile.balance_coins || 0) + rewardCoins
-              })
-              .eq('id', inviterId)
-              .select('balance_coins')
-              .single()
-
-            // 交易流水
-            await supabaseAdmin.from('coin_transactions').insert({
-              user_id: inviterId,
-              amount: rewardCoins,
-              balance_after: updatedInviter?.balance_coins || 0,
-              type: 'reward',
-              description: `成功邀请新用户(进入App)奖励`,
-              related_id: userId
-            })
-
-            // 发送通知（只发送一次）
-            if (TG_BOT_TOKEN) {
-              const { data: inviterUser } = await supabaseAdmin
+              // 更新邀请人
+              const { data: updatedInviter } = await supabaseAdmin
                 .from('profiles')
-                .select('tg_user_id')
+                .update({
+                  invite_success_count: newCount,
+                  adult_permanent_unlock: adultPermanentUnlock,
+                  adult_unlock_until: adultUnlockUntil,
+                  balance_coins: (inviterProfile.balance_coins || 0) + rewardCoins
+                })
                 .eq('id', inviterId)
+                .select('balance_coins')
                 .single()
 
-              if (inviterUser?.tg_user_id) {
-                let rewardText = ''
-                if (newCount === 1) rewardText = '获得 24小时 🔞专区无限刷'
-                else if (newCount === 2) rewardText = '获得 3天 🔞专区无限刷'
-                else if (newCount >= 3) rewardText = '获得 永久 🔞专区无限刷'
+              // 交易流水
+              await supabaseAdmin.from('coin_transactions').insert({
+                user_id: inviterId,
+                amount: rewardCoins,
+                balance_after: updatedInviter?.balance_coins || 0,
+                type: 'reward',
+                description: `成功邀请新用户(进入App)奖励`,
+                related_id: userId
+              })
 
-                const msg =
-                  `🎉 <b>邀请成功！</b>\n\n` +
-                  `您当前已累计邀请 ${newCount} 人\n` +
-                  `🎁 ${rewardText}\n` +
-                  `💰 获得 ${rewardCoins} 抖币奖励！\n\n` +
-                  `继续邀请可获得更多奖励！`
+              // 发送通知（只发送一次）
+              if (TG_BOT_TOKEN) {
+                const { data: inviterUser } = await supabaseAdmin
+                  .from('profiles')
+                  .select('tg_user_id')
+                  .eq('id', inviterId)
+                  .single()
 
-                fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    chat_id: inviterUser.tg_user_id,
-                    text: msg,
-                    parse_mode: 'HTML'
-                  })
-                }).catch((e) => console.error('[Invite] 发送通知失败:', e))
+                if (inviterUser?.tg_user_id) {
+                  let rewardText = ''
+                  if (newCount === 1) rewardText = '获得 24小时 🔞专区无限刷'
+                  else if (newCount === 2) rewardText = '获得 3天 🔞专区无限刷'
+                  else if (newCount >= 3) rewardText = '获得 永久 🔞专区无限刷'
+
+                  const msg =
+                    `🎉 <b>邀请成功！</b>\n\n` +
+                    `您当前已累计邀请 ${newCount} 人\n` +
+                    `🎁 ${rewardText}\n` +
+                    `💰 获得 ${rewardCoins} 抖币奖励！\n\n` +
+                    `继续邀请可获得更多奖励！`
+
+                  fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      chat_id: inviterUser.tg_user_id,
+                      text: msg,
+                      parse_mode: 'HTML'
+                    })
+                  }).catch((e) => console.error('[Invite] 发送通知失败:', e))
+                }
               }
-            }
             }
           }
         }

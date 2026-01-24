@@ -29,10 +29,10 @@
             </div>
           </div>
 
-          <!-- 玩法选择 -->
-          <div class="bet-tabs">
+          <!-- 玩法选择 - 第一排：玩法分类 -->
+          <div class="bet-tabs bet-tabs-row1">
             <div
-              v-for="tab in tabs"
+              v-for="tab in gameTabs"
               :key="tab.key"
               class="tab-item"
               :class="{ active: activeTab === tab.key }"
@@ -40,6 +40,10 @@
             >
               {{ tab.label }}
             </div>
+          </div>
+
+          <!-- 功能选择 - 第二排：功能tab -->
+          <div class="bet-tabs bet-tabs-row2">
             <div
               class="tab-item"
               :class="{ active: activeTab === 'my_bets' }"
@@ -52,7 +56,7 @@
               :class="{ active: activeTab === 'transactions' }"
               @click="activeTab = 'transactions'"
             >
-              账变记录
+              账单
             </div>
             <div
               class="tab-item"
@@ -60,6 +64,56 @@
               @click="activeTab = 'rules'"
             >
               规则
+            </div>
+            <div
+              class="tab-item"
+              :class="{ active: activeTab === 'history' }"
+              @click="activeTab = 'history'"
+            >
+              开奖历史
+            </div>
+          </div>
+
+          <!-- 开奖历史 -->
+          <div v-if="activeTab === 'history'" class="history-content">
+            <div v-if="isLoadingHistory" class="loading-history">
+              <Icon icon="mdi:loading" class="loading-icon" />
+              <span>加载中...</span>
+            </div>
+            <div v-else-if="historyList.length === 0" class="empty-bets">
+              <Icon
+                icon="mdi:information-outline"
+                style="font-size: 48rem; color: rgba(255, 255, 255, 0.3); margin-bottom: 10rem"
+              />
+              <div>暂无开奖历史</div>
+            </div>
+            <div v-else class="history-list">
+              <div v-for="round in historyList" :key="round.id" class="history-item">
+                <div class="history-header">
+                  <div class="period-number">第{{ round.period_number }}期</div>
+                  <div class="settled-time">{{ formatHistoryTime(round.settled_at) }}</div>
+                </div>
+                <div v-if="round.result" class="history-result">
+                  <div class="result-numbers">
+                    <span class="num">{{ round.result.num1 }}</span>
+                    <span class="plus">+</span>
+                    <span class="num">{{ round.result.num2 }}</span>
+                    <span class="plus">+</span>
+                    <span class="num">{{ round.result.num3 }}</span>
+                    <span class="equals">=</span>
+                    <span class="sum">{{ round.result.sum }}</span>
+                  </div>
+                  <div class="result-tags">
+                    <span class="tag" :class="getBigSmallClass(round.result.sum)">
+                      {{ getBigSmall(round.result.sum) }}
+                    </span>
+                    <span class="tag" :class="getOddEvenClass(round.result.sum)">
+                      {{ getOddEven(round.result.sum) }}
+                    </span>
+                    <span class="tag pattern">{{ getPattern(round.result) }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -298,11 +352,16 @@
 
           <!-- 下注区域 -->
           <div
-            v-if="activeTab !== 'my_bets' && activeTab !== 'transactions' && activeTab !== 'rules'"
+            v-if="
+              activeTab !== 'my_bets' &&
+              activeTab !== 'transactions' &&
+              activeTab !== 'rules' &&
+              activeTab !== 'history'
+            "
             class="bet-area"
           >
-            <!-- 大小单双 -->
-            <div v-if="activeTab === 'big_small'" class="bet-options">
+            <!-- 基础玩法：大小、单双 -->
+            <div v-if="activeTab === 'basic'" class="bet-options">
               <div
                 class="bet-option"
                 :class="{ selected: selectedBets.has('big') }"
@@ -319,10 +378,6 @@
                 <div class="bet-name">小</div>
                 <div class="bet-odds">2.0</div>
               </div>
-            </div>
-
-            <!-- 单双 -->
-            <div v-if="activeTab === 'odd_even'" class="bet-options">
               <div
                 class="bet-option"
                 :class="{ selected: selectedBets.has('odd') }"
@@ -377,6 +432,50 @@
               </div>
             </div>
 
+            <!-- 特殊玩法 -->
+            <div v-if="activeTab === 'special'" class="bet-options bet-options-special">
+              <div
+                class="bet-option"
+                :class="{ selected: selectedBets.has('extreme_big') }"
+                @click="toggleBet('extreme_big', null)"
+              >
+                <div class="bet-name">极大</div>
+                <div class="bet-odds">15</div>
+              </div>
+              <div
+                class="bet-option"
+                :class="{ selected: selectedBets.has('extreme_small') }"
+                @click="toggleBet('extreme_small', null)"
+              >
+                <div class="bet-name">极小</div>
+                <div class="bet-odds">15</div>
+              </div>
+              <div
+                class="bet-option"
+                :class="{ selected: selectedBets.has('leopard') }"
+                @click="toggleBet('leopard', null)"
+              >
+                <div class="bet-name">豹子</div>
+                <div class="bet-odds">80</div>
+              </div>
+              <div
+                class="bet-option"
+                :class="{ selected: selectedBets.has('straight') }"
+                @click="toggleBet('straight', null)"
+              >
+                <div class="bet-name">顺子</div>
+                <div class="bet-odds">15</div>
+              </div>
+              <div
+                class="bet-option"
+                :class="{ selected: selectedBets.has('pair') }"
+                @click="toggleBet('pair', null)"
+              >
+                <div class="bet-name">对子</div>
+                <div class="bet-odds">3.4</div>
+              </div>
+            </div>
+
             <!-- 单点 -->
             <div v-if="activeTab === 'single_point'" class="bet-points">
               <div
@@ -394,7 +493,12 @@
 
           <!-- 下注金额 -->
           <div
-            v-if="activeTab !== 'my_bets' && activeTab !== 'transactions' && activeTab !== 'rules'"
+            v-if="
+              activeTab !== 'my_bets' &&
+              activeTab !== 'transactions' &&
+              activeTab !== 'rules' &&
+              activeTab !== 'history'
+            "
             class="bet-amount"
           >
             <div class="amount-label">下注金额</div>
@@ -426,6 +530,7 @@
               activeTab !== 'my_bets' &&
               activeTab !== 'transactions' &&
               activeTab !== 'rules' &&
+              activeTab !== 'history' &&
               selectedBets.size > 0
             "
             class="selected-bets"
@@ -446,7 +551,12 @@
         </div>
 
         <div
-          v-if="activeTab !== 'my_bets' && activeTab !== 'transactions' && activeTab !== 'rules'"
+          v-if="
+            activeTab !== 'my_bets' &&
+            activeTab !== 'transactions' &&
+            activeTab !== 'rules' &&
+            activeTab !== 'history'
+          "
           class="panel-footer"
         >
           <div class="total-info">
@@ -570,7 +680,13 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { PC28GlobalRound, PC28Bet } from '@/api/pc28'
-import { placePC28BetGlobal, getMyBets, cancelPC28Bet, getPC28Transactions } from '@/api/pc28'
+import {
+  placePC28BetGlobal,
+  getMyBets,
+  cancelPC28Bet,
+  getPC28Transactions,
+  getPC28History
+} from '@/api/pc28'
 import { _notice, _copy } from '@/utils'
 import { supabase } from '@/utils/supabase'
 
@@ -586,7 +702,7 @@ const emit = defineEmits<{
 }>()
 
 const isLoading = ref(false)
-const activeTab = ref('big_small')
+const activeTab = ref('basic') // 默认显示基础玩法
 const selectedBets = ref<Set<string>>(new Set())
 const betAmount = ref(10)
 const myBets = ref<PC28Bet[]>([])
@@ -609,6 +725,8 @@ const transactions = ref<
   }>
 >([])
 const isLoadingTransactions = ref(false) // 是否正在加载账变记录
+const historyList = ref<PC28GlobalRound[]>([]) // 开奖历史列表
+const isLoadingHistory = ref(false) // 是否正在加载开奖历史
 
 // 刷新余额
 async function refreshBalance() {
@@ -635,13 +753,13 @@ async function refreshBalance() {
   }
 }
 
-// 平台统一规则，所有玩法都开启
-const tabs = computed(() => {
+// 玩法分类 - 第一排
+const gameTabs = computed(() => {
   return [
-    { key: 'big_small', label: '大小' },
-    { key: 'odd_even', label: '单双' },
-    { key: 'combinations', label: '组合' },
-    { key: 'single_point', label: '单点' }
+    { key: 'basic', label: '基础' }, // 大小、单双
+    { key: 'combinations', label: '组合' }, // 大单、大双、小单、小双
+    { key: 'special', label: '特殊' }, // 极大、极小、豹子、顺子、对子
+    { key: 'single_point', label: '单点' } // 0-27
   ]
 })
 
@@ -933,7 +1051,93 @@ watch(
   }
 )
 
-// 监听activeTab变化，切换到"我的下注"或"账变记录"时获取数据
+// 获取开奖历史
+async function fetchHistory() {
+  isLoadingHistory.value = true
+  try {
+    const history = await getPC28History(20)
+    historyList.value = history
+  } catch (e: any) {
+    console.error('[PC28] fetch history error:', e)
+    _notice('加载开奖历史失败')
+  } finally {
+    isLoadingHistory.value = false
+  }
+}
+
+// 计算大小
+function getBigSmall(sum: number): string {
+  return sum >= 14 ? '大' : '小'
+}
+
+// 计算单双
+function getOddEven(sum: number): string {
+  return sum % 2 === 1 ? '单' : '双'
+}
+
+// 计算模式（豹子、对子、顺子、杂六）
+function getPattern(result: { num1: number; num2: number; num3: number }): string {
+  const { num1, num2, num3 } = result
+  const sortedNums = [num1, num2, num3].sort((a, b) => a - b)
+
+  // 豹子：三个数字相同
+  if (num1 === num2 && num2 === num3) {
+    return '豹子'
+  }
+
+  // 对子：有两个数字相同（但不是豹子）
+  if (num1 === num2 || num1 === num3 || num2 === num3) {
+    return '对子'
+  }
+
+  // 顺子：三个数字连续
+  if (sortedNums[1] === sortedNums[0] + 1 && sortedNums[2] === sortedNums[1] + 1) {
+    return '顺子'
+  }
+
+  // 杂六
+  return '杂六'
+}
+
+// 获取大小样式类
+function getBigSmallClass(sum: number): string {
+  return sum >= 14 ? 'big' : 'small'
+}
+
+// 获取单双样式类
+function getOddEvenClass(sum: number): string {
+  return sum % 2 === 1 ? 'odd' : 'even'
+}
+
+// 格式化历史时间
+function formatHistoryTime(timeStr: string | null): string {
+  if (!timeStr) return ''
+  const date = new Date(timeStr)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (minutes < 1) {
+    return '刚刚'
+  } else if (minutes < 60) {
+    return `${minutes}分钟前`
+  } else if (hours < 24) {
+    return `${hours}小时前`
+  } else if (days < 7) {
+    return `${days}天前`
+  } else {
+    return date.toLocaleDateString('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+}
+
+// 监听activeTab变化，切换到"我的下注"或"账变记录"或"开奖历史"时获取数据
 watch(
   () => activeTab.value,
   (newTab) => {
@@ -941,6 +1145,8 @@ watch(
       fetchMyBets()
     } else if (newTab === 'transactions') {
       fetchTransactions()
+    } else if (newTab === 'history') {
+      fetchHistory()
     }
     // 平台统一规则，所有玩法都开启，不需要检查tab有效性
   }
@@ -1006,6 +1212,8 @@ onMounted(() => {
   // 平台统一规则，所有玩法都开启，不需要检查tab可用性
   if (activeTab.value === 'my_bets') {
     fetchMyBets()
+  } else if (activeTab.value === 'history') {
+    fetchHistory()
   }
   setupBetsRealtime()
 })
@@ -1229,6 +1437,16 @@ async function handleBet() {
   overflow-x: auto;
 }
 
+.bet-tabs-row1 {
+  margin-bottom: 10rem;
+}
+
+.bet-tabs-row2 {
+  margin-bottom: 15rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 10rem;
+}
+
 .tab-item {
   padding: 8rem 16rem;
   background: rgba(255, 255, 255, 0.1);
@@ -1249,6 +1467,17 @@ async function handleBet() {
   grid-template-columns: repeat(2, 1fr);
   gap: 10rem;
   margin-bottom: 15rem;
+}
+
+.bet-options-special {
+  // 特殊玩法有5个选项，使用3列布局（前3个2列，后2个3列）
+  grid-template-columns: repeat(3, 1fr);
+
+  // 第4和第5个选项占据中间列
+  .bet-option:nth-child(4),
+  .bet-option:nth-child(5) {
+    grid-column: span 1;
+  }
 }
 
 .bet-option {
@@ -1604,6 +1833,132 @@ async function handleBet() {
 .transactions-list {
   max-height: 400rem;
   overflow-y: auto;
+}
+
+.history-content {
+  max-height: 500rem;
+  overflow-y: auto;
+}
+
+.loading-history {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40rem 20rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14rem;
+
+  .loading-icon {
+    font-size: 32rem;
+    margin-bottom: 10rem;
+    animation: rotate 1s linear infinite;
+  }
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10rem;
+}
+
+.history-item {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10rem;
+  padding: 15rem;
+  border-left: 3px solid rgba(254, 44, 85, 0.5);
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rem;
+
+  .period-number {
+    color: white;
+    font-size: 16rem;
+    font-weight: bold;
+  }
+
+  .settled-time {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 12rem;
+  }
+}
+
+.history-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10rem;
+}
+
+.result-numbers {
+  display: flex;
+  align-items: center;
+  gap: 8rem;
+  font-size: 18rem;
+  font-weight: bold;
+
+  .num {
+    color: #4caf50;
+    min-width: 24rem;
+    text-align: center;
+  }
+
+  .plus {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .equals {
+    color: rgba(255, 255, 255, 0.6);
+    margin-left: 4rem;
+  }
+
+  .sum {
+    color: #fe2c55;
+    min-width: 32rem;
+    text-align: center;
+  }
+}
+
+.result-tags {
+  display: flex;
+  gap: 8rem;
+  flex-wrap: wrap;
+}
+
+.tag {
+  padding: 4rem 10rem;
+  border-radius: 6rem;
+  font-size: 12rem;
+  font-weight: bold;
+  color: white;
+
+  &.big {
+    background: rgba(255, 152, 0, 0.3);
+    color: #ff9800;
+  }
+
+  &.small {
+    background: rgba(33, 150, 243, 0.3);
+    color: #2196f3;
+  }
+
+  &.odd {
+    background: rgba(76, 175, 80, 0.3);
+    color: #4caf50;
+  }
+
+  &.even {
+    background: rgba(156, 39, 176, 0.3);
+    color: #9c27b0;
+  }
+
+  &.pattern {
+    background: rgba(254, 44, 85, 0.3);
+    color: #fe2c55;
+  }
 }
 
 .rules-content {
