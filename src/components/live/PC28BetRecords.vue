@@ -109,9 +109,9 @@
             </div>
           </div>
 
-          <!-- 主播盈亏统计（仅已结算时显示） -->
+          <!-- 玩家总盈亏统计（仅已结算时显示） -->
           <div v-if="currentRound?.status === 'settled'" class="anchor-profit">
-            <div class="profit-label">主播盈亏</div>
+            <div class="profit-label">玩家总盈亏</div>
             <div
               class="profit-amount"
               :class="{ positive: anchorProfit >= 0, negative: anchorProfit < 0 }"
@@ -221,7 +221,7 @@ const totalBetAmount = computed(() => {
   return bets.value.reduce((sum, bet) => sum + Number(bet.amount), 0)
 })
 
-// 计算主播盈亏：总下注 - 总赔付
+// 计算玩家总盈亏：总下注 - 总赔付
 const anchorProfit = computed(() => {
   if (!props.currentRound || props.currentRound.status !== 'settled') return 0
   const totalPayout = props.currentRound.total_payout || 0
