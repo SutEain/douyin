@@ -9,11 +9,7 @@
     <div class="live-wrapper" id="live-wrapper" v-love="'live-wrapper'">
       <!-- 🎯 已下播状态展示 -->
       <div
-        v-if="
-          roomInfo.status === 'offline' ||
-          roomInfo.status === 'ended' ||
-          roomInfo.status === 'error'
-        "
+        v-if="roomInfo.status === 'offline' || roomInfo.status === 'ended'"
         class="offline-placeholder"
       >
         <div class="offline-content">
@@ -615,6 +611,7 @@
       "
       :show="showPC28BetRecords"
       :current-round="pc28ViewingRound"
+      :room-id="roomId"
       @close="showPC28BetRecords = false"
     />
   </div>
@@ -1422,25 +1419,13 @@ async function initRoom() {
 
     // 3. 加载新数据（添加超时保护）
     console.log('[LivePage.initRoom] 开始加载房间信息...')
-    try {
-      await Promise.race([
-        fetchRoomInfo(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('fetchRoomInfo timeout after 10s')), 10000)
-        )
-      ])
-      console.log('[LivePage.initRoom] ✅ 房间信息加载完成')
-    } catch (error: any) {
-      console.error('[LivePage.initRoom] ❌ 加载房间信息失败:', error.message)
-      // 🎯 如果加载失败，设置一个错误状态，避免一直显示"正在进入直播间..."
-      roomInfo.value = {
-        stream_url: null,
-        status: 'error',
-        error_message: error.message || '加载失败'
-      }
-      // 🎯 不再抛出错误，避免阻止后续操作（历史消息、订阅等）
-      // throw error
-    }
+    await Promise.race([
+      fetchRoomInfo(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('fetchRoomInfo timeout')), 10000)
+      )
+    ])
+    console.log('[LivePage.initRoom] ✅ 房间信息加载完成')
 
     console.log('[LivePage.initRoom] 开始加载历史消息...')
     await Promise.race([
@@ -1469,12 +1454,6 @@ async function initRoom() {
     console.error('[LivePage.initRoom] ❌ 初始化失败:', error)
     // 🎯 即使出错也显示错误提示，而不是一直卡住
     _notice('加载直播间失败: ' + (error.message || '网络错误'))
-    // 🎯 设置错误状态，避免一直显示"正在进入直播间..."
-    roomInfo.value = {
-      stream_url: null,
-      status: 'error',
-      error_message: error.message || '网络错误'
-    }
   }
 }
 
@@ -1855,13 +1834,6 @@ function getDisplayViewerCount(room: any): number {
 // 获取直播间信息
 async function fetchRoomInfo() {
   const currentRoomId = roomId.value
-  console.log('[LivePage.fetchRoomInfo] 开始获取房间信息，房间ID:', currentRoomId)
-
-  if (!currentRoomId) {
-    const error = new Error('房间ID为空')
-    console.error('[LivePage.fetchRoomInfo] ❌', error.message)
-    throw error
-  }
 
   try {
     const {
@@ -1874,49 +1846,18 @@ async function fetchRoomInfo() {
       headers['Authorization'] = `Bearer ${session.access_token}`
     }
 
-    const apiUrl = `${getAppServerBase()}/live/detail?id=${currentRoomId}`
-    console.log('[LivePage.fetchRoomInfo] 请求URL:', apiUrl)
-    const resp = await fetch(apiUrl, { headers })
+    const resp = await fetch(`${getAppServerBase()}/live/detail?id=${currentRoomId}`, { headers })
     const payload = await resp.json()
-    console.log('[LivePage.fetchRoomInfo] API响应:', {
-      status: resp.status,
-      code: payload.code,
-      hasData: !!payload.data
-    })
 
     if (resp.ok && payload.code === 0) {
       const room = payload.data.room
-      if (!room) {
-        const error = new Error('房间数据为空')
-        console.error('[LivePage.fetchRoomInfo] ❌', error.message)
-        throw error
+      roomInfo.value = {
+        ...room,
+        stream_url: buildPlayUrl(room.stream_url)
       }
-
-      const streamUrl = buildPlayUrl(room.stream_url)
-      console.log('[LivePage.fetchRoomInfo] 流地址:', {
-        original: room.stream_url,
-        built: streamUrl
-      })
-
-      if (!streamUrl) {
-        console.warn('[LivePage.fetchRoomInfo] ⚠️ 流地址为空，房间可能已下播')
-        // 🎯 即使没有流地址，也设置房间信息，让页面显示"直播已结束"
-        roomInfo.value = {
-          ...room,
-          stream_url: null,
-          status: room.status || 'offline'
-        }
-      } else {
-        roomInfo.value = {
-          ...room,
-          stream_url: streamUrl
-        }
-      }
-
       // 🎯 计算显示人数：优先使用自定义人数（如果存在且不为0），否则使用实际人数
       const displayCount = getDisplayViewerCount(room)
       viewerCount.value = displayCount
-      console.log('[LivePage.fetchRoomInfo] ✅ 房间信息加载成功，显示人数:', displayCount)
 
       // 获取个人抖币余额 (无论是否自建直播)
       await refreshUserBalance()
@@ -1932,15 +1873,10 @@ async function fetchRoomInfo() {
         isFollowed.value = !!follow
       }
     } else {
-      const errorMsg = payload.msg || `HTTP ${resp.status}`
-      const error = new Error(`获取房间信息失败: ${errorMsg}`)
-      console.error('[LivePage.fetchRoomInfo] ❌', error.message, payload)
-      throw error
+      console.error('[LivePage] fetchRoomInfo failed:', payload.msg || resp.status)
     }
-  } catch (e: any) {
-    console.error('[LivePage.fetchRoomInfo] ❌ 异常:', e)
-    // 🎯 重新抛出错误，让调用者知道失败了
-    throw e
+  } catch (e) {
+    console.error('[LivePage] fetchRoomInfo error:', e)
   }
 }
 

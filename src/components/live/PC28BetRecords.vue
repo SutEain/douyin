@@ -137,6 +137,7 @@ import { _notice } from '@/utils'
 const props = defineProps<{
   show: boolean
   currentRound: PC28GlobalRound | null
+  roomId?: string // 房间ID，用于过滤下注记录
 }>()
 
 const emit = defineEmits<{
@@ -331,14 +332,20 @@ async function fetchBets() {
 
   isLoading.value = true
   try {
-    console.log('[PC28] Fetching bets for round:', props.currentRound.id)
+    console.log('[PC28] Fetching bets for round:', props.currentRound.id, 'roomId:', props.roomId)
     // 如果已结算，使用所有用户可访问的API；否则使用主播专用API
     const allBets =
       props.currentRound.status === 'settled'
         ? await getAllBetsForSettled(props.currentRound.id)
         : await getAllBets(props.currentRound.id) // 使用全局期数
     console.log('[PC28] Fetched bets:', allBets.length, allBets)
-    bets.value = allBets
+
+    // 🎯 过滤出当前房间的下注记录
+    const filteredBets = props.roomId
+      ? allBets.filter((bet) => bet.room_id === props.roomId)
+      : allBets
+    console.log('[PC28] Filtered bets for room:', filteredBets.length, 'roomId:', props.roomId)
+    bets.value = filteredBets
 
     // 获取用户信息
     const userIds = [...new Set(allBets.map((bet) => bet.user_id))]
@@ -376,15 +383,22 @@ function setupRealtime() {
     supabase.removeChannel(betsChannel)
   }
 
+  // 🎯 构建过滤器：只监听当前房间的下注记录
+  // Supabase Realtime 过滤器语法：多个条件需要用 & 连接
+  let filter = `global_round_id=eq.${props.currentRound.id}`
+  if (props.roomId) {
+    filter = `global_round_id=eq.${props.currentRound.id}&room_id=eq.${props.roomId}`
+  }
+
   betsChannel = supabase
-    .channel(`pc28_all_bets_${props.currentRound.id}`)
+    .channel(`pc28_all_bets_${props.currentRound.id}_${props.roomId || 'all'}`)
     .on(
       'postgres_changes',
       {
         event: '*',
         schema: 'public',
         table: 'pc28_bets',
-        filter: `global_round_id=eq.${props.currentRound.id}`
+        filter: filter
       },
       () => {
         fetchBets()
