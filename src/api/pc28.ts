@@ -60,6 +60,7 @@ export interface PC28Bet {
   user_gain: number
   anchor_payout: number
   refund_amount?: number // 退款金额字段
+  period_number?: string | null // 期号
   created_at: string
   settled_at: string | null
 }
@@ -244,7 +245,10 @@ export async function getMyBets(roundId: string, useGlobalRound = false): Promis
   } = await supabase.auth.getUser()
   if (!user) throw new Error('用户未登录')
 
-  let query = supabase.from('pc28_bets').select('*').eq('user_id', user.id)
+  let query = supabase
+    .from('pc28_bets')
+    .select('*, pc28_global_rounds(period_number)')
+    .eq('user_id', user.id)
 
   if (useGlobalRound) {
     query = query.eq('global_round_id', roundId)
@@ -255,7 +259,12 @@ export async function getMyBets(roundId: string, useGlobalRound = false): Promis
   const { data, error } = await query.order('created_at', { ascending: false })
 
   if (error) throw error
-  return (data || []) as PC28Bet[]
+
+  // 将期号信息添加到返回的数据中
+  return (data || []).map((bet: any) => ({
+    ...bet,
+    period_number: bet.pc28_global_rounds?.period_number || null
+  })) as PC28Bet[]
 }
 
 /**

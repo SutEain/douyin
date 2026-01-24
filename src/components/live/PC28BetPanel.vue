@@ -273,6 +273,10 @@
                 </div>
               </div>
               <div class="bet-record-details">
+                <div v-if="bet.period_number" class="detail-item">
+                  <span class="label">期号：</span>
+                  <span class="value">{{ bet.period_number }}期</span>
+                </div>
                 <div class="detail-item">
                   <span class="label">下注金额：</span>
                   <span class="value">{{ bet.amount }} 抖币</span>
