@@ -34,6 +34,15 @@
           <span class="label">总下注：</span>
           <span class="value">{{ roomBetAmount }} 抖币</span>
         </div>
+        <div
+          v-if="currentRound.status === 'settled' && currentRound.total_platform_fee !== undefined"
+          class="status-item"
+        >
+          <span class="label">本期抽水：</span>
+          <span class="value platform-fee"
+            >{{ currentRound.total_platform_fee.toFixed(2) }} 抖币</span
+          >
+        </div>
         <div v-if="currentRound.result" class="status-item">
           <span class="label">开奖结果：</span>
           <span class="value result">
@@ -285,6 +294,10 @@ async function handleCancel() {
 
         &.result {
           color: #ffd700;
+        }
+
+        &.platform-fee {
+          color: #ff9800;
         }
       }
     }
