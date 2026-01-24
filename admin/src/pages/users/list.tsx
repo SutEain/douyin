@@ -16,8 +16,8 @@ import {
   EyeOutlined,
   EditOutlined,
   CheckCircleOutlined,
-  StopOutlined,
-  DollarOutlined
+  StopOutlined
+  // DollarOutlined // 🚨 已禁用：调整余额功能已移除
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useUpdate } from '@refinedev/core'
@@ -30,10 +30,11 @@ const REVIEWER_EMAILS = ['shenhe1@review.local']
 export const UserList = () => {
   const navigate = useNavigate()
   const { mutate: updateProfile } = useUpdate()
-  const [adjustModalVisible, setAdjustModalVisible] = useState(false)
-  const [adjustingUser, setAdjustingUser] = useState<any>(null)
-  const [adjustForm] = Form.useForm()
-  const [isAdjusting, setIsAdjusting] = useState(false)
+  // 🚨 已禁用：调整余额功能已移除
+  // const [adjustModalVisible, setAdjustModalVisible] = useState(false)
+  // const [adjustingUser, setAdjustingUser] = useState<any>(null)
+  // const [adjustForm] = Form.useForm()
+  // const [isAdjusting, setIsAdjusting] = useState(false)
   const [banModalVisible, setBanModalVisible] = useState(false)
   const [banningUser, setBanningUser] = useState<any>(null)
   const [banForm] = Form.useForm()
@@ -234,30 +235,10 @@ export const UserList = () => {
     }
   }
 
-  const handleAdjustBalance = async () => {
-    try {
-      const values = await adjustForm.validateFields()
-      setIsAdjusting(true)
-
-      const { error } = await supabaseClient.rpc('admin_adjust_balance', {
-        target_user_id: adjustingUser.id,
-        amount_change: values.amount,
-        description_text: values.description
-      })
-
-      if (error) throw error
-
-      message.success('调整成功')
-      setAdjustModalVisible(false)
-      adjustForm.resetFields()
-      queryResult?.refetch()
-    } catch (err: any) {
-      console.error('Adjust error:', err)
-      message.error(err.message || '操作失败')
-    } finally {
-      setIsAdjusting(false)
-    }
-  }
+  // 🚨 已禁用：调整余额功能已移除
+  // const handleAdjustBalance = async () => {
+  //   ...
+  // }
 
   return (
     <List>
@@ -421,8 +402,8 @@ export const UserList = () => {
                 icon={<EditOutlined />}
                 onClick={() => navigate(`/users/edit/${record.id}`)}
               />
-              {/* 审核员隐藏调整余额按钮 */}
-              {!isReviewer && (
+              {/* 🚨 已禁用：调整余额功能已移除 */}
+              {/* {!isReviewer && (
                 <Button
                   type="text"
                   size="small"
@@ -433,7 +414,7 @@ export const UserList = () => {
                     setAdjustModalVisible(true)
                   }}
                 />
-              )}
+              )} */}
               {record.live_status === 1 && (
                 <>
                   <Button
@@ -500,7 +481,8 @@ export const UserList = () => {
         </Form>
       </Modal>
 
-      <Modal
+      {/* 🚨 已禁用：调整余额功能已移除 */}
+      {/* <Modal
         title={`调整余额 - ${adjustingUser?.nickname || adjustingUser?.username || ''}`}
         open={adjustModalVisible}
         onOk={handleAdjustBalance}
@@ -532,7 +514,7 @@ export const UserList = () => {
             <Input.TextArea placeholder="请输入调整原因，将展示在用户流水中" rows={3} />
           </Form.Item>
         </Form>
-      </Modal>
+      </Modal> */}
     </List>
   )
 }

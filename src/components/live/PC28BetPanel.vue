@@ -1,6 +1,6 @@
 <template>
   <Transition name="slide-up">
-    <div v-if="show" class="pc28-bet-overlay" @click.self="handleClose">
+    <div v-show="show" class="pc28-bet-overlay" @click.self="handleClose">
       <div class="pc28-bet-panel">
         <div class="panel-header">
           <span>PC28下注</span>
@@ -328,109 +328,106 @@
         </div>
       </div>
     </div>
+  </Transition>
 
-    <!-- 充值面板 -->
-    <Transition name="slide-up">
-      <div
-        v-if="showRechargeModal"
-        class="gift-panel-overlay recharge-overlay"
-        @click.self="showRechargeModal = false"
-      >
-        <div class="gift-panel recharge-panel">
-          <div class="panel-header">
-            <span>抖币充值</span>
-            <Icon icon="ion:close" class="close-btn" @click="showRechargeModal = false" />
-          </div>
+  <!-- 充值面板 -->
+  <Transition name="slide-up">
+    <div
+      v-show="showRechargeModal"
+      class="gift-panel-overlay recharge-overlay"
+      @click.self="showRechargeModal = false"
+    >
+      <div class="gift-panel recharge-panel">
+        <div class="panel-header">
+          <span>抖币充值</span>
+          <Icon icon="ion:close" class="close-btn" @click="showRechargeModal = false" />
+        </div>
 
-          <div class="recharge-content" v-if="rechargeInfo">
-            <!-- 如果有待支付订单 -->
-            <template v-if="rechargeInfo.pending_order">
-              <div class="pending-order">
-                <div class="status-tip">⏳ 待支付订单</div>
-                <div class="order-item">
-                  <span class="label">订单编号</span>
-                  <span class="value"
-                    ><code>{{ rechargeInfo.pending_order.order_no }}</code></span
-                  >
-                </div>
-                <div class="order-item highlight">
-                  <span class="label">应付金额</span>
-                  <span class="value"
-                    >{{ Number(rechargeInfo.pending_order.total_amount).toFixed(2) }} USDT</span
-                  >
-                </div>
-                <div class="order-item">
-                  <span class="label">预计到账</span>
-                  <span class="value"
-                    >{{
-                      (rechargeInfo.pending_order.base_amount * 100).toLocaleString()
-                    }}
-                    抖币</span
-                  >
-                </div>
-
-                <div class="payment-address">
-                  <div class="addr-label">📍 收款地址 (TRC20)</div>
-                  <div
-                    class="addr-value"
-                    @click="
-                      () => {
-                        copyToClipboard(rechargeInfo.pending_order.trc20_address)
-                        _notice('地址已复制')
-                      }
-                    "
-                  >
-                    <code>{{ rechargeInfo.pending_order.trc20_address }}</code>
-                    <Icon icon="solar:copy-bold" class="copy-icon" />
-                  </div>
-                </div>
-
-                <div class="qr-code">
-                  <img
-                    :src="`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${rechargeInfo.pending_order.trc20_address}`"
-                  />
-                  <p>请扫码或转账至上方地址</p>
-                </div>
-
-                <div class="notice-box">
-                  ⚠️ 请务必支付<b>精确金额 (含尾数)</b
-                  >，否则无法自动到账！支付完成后请等待管理员确认。
-                </div>
-
-                <div class="recharge-footer">
-                  <div
-                    class="cancel-btn"
-                    @click="handleCancelRecharge(rechargeInfo.pending_order.id)"
-                  >
-                    取消订单
-                  </div>
-                  <div class="done-btn" @click="showRechargeModal = false">我已支付</div>
-                </div>
-              </div>
-            </template>
-
-            <!-- 如果没有待支付订单 -->
-            <template v-else>
-              <div class="recharge-intro">
-                <p>💡 汇率：1 USDT = 100 抖币</p>
-                <p>请选择充值金额 (USDT-TRC20)：</p>
-              </div>
-              <div class="amount-grid">
-                <div
-                  v-for="amt in rechargeInfo.amounts"
-                  :key="amt"
-                  class="amount-item"
-                  @click="handleCreateRecharge(amt)"
+        <div class="recharge-content" v-if="rechargeInfo">
+          <!-- 如果有待支付订单 -->
+          <template v-if="rechargeInfo.pending_order">
+            <div class="pending-order">
+              <div class="status-tip">⏳ 待支付订单</div>
+              <div class="order-item">
+                <span class="label">订单编号</span>
+                <span class="value"
+                  ><code>{{ rechargeInfo.pending_order.order_no }}</code></span
                 >
-                  <div class="usdt">{{ amt }} USDT</div>
-                  <div class="coins">{{ amt * 100 }} 抖币</div>
+              </div>
+              <div class="order-item highlight">
+                <span class="label">应付金额</span>
+                <span class="value"
+                  >{{ Number(rechargeInfo.pending_order.total_amount).toFixed(2) }} USDT</span
+                >
+              </div>
+              <div class="order-item">
+                <span class="label">预计到账</span>
+                <span class="value"
+                  >{{ (rechargeInfo.pending_order.base_amount * 100).toLocaleString() }} 抖币</span
+                >
+              </div>
+
+              <div class="payment-address">
+                <div class="addr-label">📍 收款地址 (TRC20)</div>
+                <div
+                  class="addr-value"
+                  @click="
+                    () => {
+                      copyToClipboard(rechargeInfo.pending_order.trc20_address)
+                      _notice('地址已复制')
+                    }
+                  "
+                >
+                  <code>{{ rechargeInfo.pending_order.trc20_address }}</code>
+                  <Icon icon="solar:copy-bold" class="copy-icon" />
                 </div>
               </div>
-            </template>
-          </div>
+
+              <div class="qr-code">
+                <img
+                  :src="`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${rechargeInfo.pending_order.trc20_address}`"
+                />
+                <p>请扫码或转账至上方地址</p>
+              </div>
+
+              <div class="notice-box">
+                ⚠️ 请务必支付<b>精确金额 (含尾数)</b
+                >，否则无法自动到账！支付完成后请等待管理员确认。
+              </div>
+
+              <div class="recharge-footer">
+                <div
+                  class="cancel-btn"
+                  @click="handleCancelRecharge(rechargeInfo.pending_order.id)"
+                >
+                  取消订单
+                </div>
+                <div class="done-btn" @click="showRechargeModal = false">我已支付</div>
+              </div>
+            </div>
+          </template>
+
+          <!-- 如果没有待支付订单 -->
+          <template v-else>
+            <div class="recharge-intro">
+              <p>💡 汇率：1 USDT = 100 抖币</p>
+              <p>请选择充值金额 (USDT-TRC20)：</p>
+            </div>
+            <div class="amount-grid">
+              <div
+                v-for="amt in rechargeInfo.amounts"
+                :key="amt"
+                class="amount-item"
+                @click="handleCreateRecharge(amt)"
+              >
+                <div class="usdt">{{ amt }} USDT</div>
+                <div class="coins">{{ amt * 100 }} 抖币</div>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
-    </Transition>
+    </div>
   </Transition>
 </template>
 
