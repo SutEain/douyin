@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/pc28-polling",
-      "schedule": "* * * * *"
+      "schedule": "0 5 * * *"
     }
   ],
   "functions": {
