@@ -19,12 +19,13 @@ export const authProvider: AuthProvider = {
 
       const result = await response.json()
 
-      if (!response.ok || !result.success) {
+      // 🔥 Edge Function 返回格式：{ code: 0, msg: "ok", data: {...} }
+      if (!response.ok || result.code !== 0) {
         return {
           success: false,
           error: {
             name: 'LoginError',
-            message: result.message || '登录失败'
+            message: result.msg || '登录失败'
           }
         }
       }
