@@ -8,6 +8,32 @@ const SUPABASE_EDGE_FUNCTION_URL =
   'https://zhlkanxfucnsatafeqdp.supabase.co/functions/v1/pc28-auto-processor'
 
 export default async function handler(req: Request): Promise<Response> {
+  // 🔒 安全验证：只允许 Vercel Cron 调用
+  const authHeader = req.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+
+  // 如果设置了 CRON_SECRET，验证请求
+  if (cronSecret) {
+    const expectedAuth = `Bearer ${cronSecret}`
+    if (authHeader !== expectedAuth) {
+      console.warn('[PC28-Poll] Unauthorized request:', {
+        hasAuth: !!authHeader,
+        userAgent: req.headers.get('user-agent'),
+        ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip')
+      })
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Unauthorized'
+        }),
+        {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    }
+  }
+
   try {
     console.log('[PC28-Poll] Starting polling at', new Date().toISOString())
 
