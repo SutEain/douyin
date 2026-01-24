@@ -28,30 +28,9 @@
                 <span class="slider"></span>
               </label>
             </div>
-            <div v-if="localConfig.game_settings.big_small.enabled" class="odds-inputs">
-              <div class="odds-item">
-                <label>大</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.big_small.big"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="validateOdds('big_small', 'big', localConfig.game_settings.big_small.big)"
-                />
-              </div>
-              <div class="odds-item">
-                <label>小</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.big_small.small"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="
-                    validateOdds('big_small', 'small', localConfig.game_settings.big_small.small)
-                  "
-                />
+            <div v-if="localConfig.game_settings.big_small.enabled" class="odds-display">
+              <div class="odds-info">
+                <span>平台统一赔率：大/小 2.0倍</span>
               </div>
             </div>
           </div>
@@ -65,28 +44,9 @@
                 <span class="slider"></span>
               </label>
             </div>
-            <div v-if="localConfig.game_settings.odd_even.enabled" class="odds-inputs">
-              <div class="odds-item">
-                <label>单</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.odd_even.odd"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="validateOdds('odd_even', 'odd', localConfig.game_settings.odd_even.odd)"
-                />
-              </div>
-              <div class="odds-item">
-                <label>双</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.odd_even.even"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="validateOdds('odd_even', 'even', localConfig.game_settings.odd_even.even)"
-                />
+            <div v-if="localConfig.game_settings.odd_even.enabled" class="odds-display">
+              <div class="odds-info">
+                <span>平台统一赔率：单/双 2.0倍</span>
               </div>
             </div>
           </div>
@@ -100,74 +60,9 @@
                 <span class="slider"></span>
               </label>
             </div>
-            <div v-if="localConfig.game_settings.combinations.enabled" class="odds-inputs">
-              <div class="odds-item">
-                <label>大单</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.combinations.big_odd"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="
-                    validateOdds(
-                      'combinations',
-                      'big_odd',
-                      localConfig.game_settings.combinations.big_odd
-                    )
-                  "
-                />
-              </div>
-              <div class="odds-item">
-                <label>大双</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.combinations.big_even"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="
-                    validateOdds(
-                      'combinations',
-                      'big_even',
-                      localConfig.game_settings.combinations.big_even
-                    )
-                  "
-                />
-              </div>
-              <div class="odds-item">
-                <label>小单</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.combinations.small_odd"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="
-                    validateOdds(
-                      'combinations',
-                      'small_odd',
-                      localConfig.game_settings.combinations.small_odd
-                    )
-                  "
-                />
-              </div>
-              <div class="odds-item">
-                <label>小双</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.combinations.small_even"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="
-                    validateOdds(
-                      'combinations',
-                      'small_even',
-                      localConfig.game_settings.combinations.small_even
-                    )
-                  "
-                />
+            <div v-if="localConfig.game_settings.combinations.enabled" class="odds-display">
+              <div class="odds-info">
+                <span>平台统一赔率：大单/大双/小单/小双 4.6倍</span>
               </div>
             </div>
           </div>
@@ -181,40 +76,9 @@
                 <span class="slider"></span>
               </label>
             </div>
-            <div v-if="localConfig.game_settings.extreme.enabled" class="odds-inputs">
-              <div class="odds-item">
-                <label>极大</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.extreme.extreme_big"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="
-                    validateOdds(
-                      'extreme',
-                      'extreme_big',
-                      localConfig.game_settings.extreme.extreme_big
-                    )
-                  "
-                />
-              </div>
-              <div class="odds-item">
-                <label>极小</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.extreme.extreme_small"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="
-                    validateOdds(
-                      'extreme',
-                      'extreme_small',
-                      localConfig.game_settings.extreme.extreme_small
-                    )
-                  "
-                />
+            <div v-if="localConfig.game_settings.extreme.enabled" class="odds-display">
+              <div class="odds-info">
+                <span>平台统一赔率：极大/极小 15倍</span>
               </div>
             </div>
           </div>
@@ -228,47 +92,9 @@
                 <span class="slider"></span>
               </label>
             </div>
-            <div v-if="localConfig.game_settings.patterns.enabled" class="odds-inputs">
-              <div class="odds-item">
-                <label>对子</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.patterns.pair"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="validateOdds('patterns', 'pair', localConfig.game_settings.patterns.pair)"
-                />
-              </div>
-              <div class="odds-item">
-                <label>顺子</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.patterns.straight"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="
-                    validateOdds(
-                      'patterns',
-                      'straight',
-                      localConfig.game_settings.patterns.straight
-                    )
-                  "
-                />
-              </div>
-              <div class="odds-item">
-                <label>豹子</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.patterns.leopard"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  @blur="
-                    validateOdds('patterns', 'leopard', localConfig.game_settings.patterns.leopard)
-                  "
-                />
+            <div v-if="localConfig.game_settings.patterns.enabled" class="odds-display">
+              <div class="odds-info">
+                <span>平台统一赔率：对子 3.4倍，顺子 15倍，豹子 80倍</span>
               </div>
             </div>
           </div>
@@ -282,18 +108,11 @@
                 <span class="slider"></span>
               </label>
             </div>
-            <div v-if="localConfig.game_settings.single_point.enabled" class="single-point-grid">
-              <div v-for="pair in singlePointPairs" :key="pair.key" class="point-item">
-                <label>{{ pair.label }}</label>
-                <input
-                  type="number"
-                  v-model.number="localConfig.game_settings.single_point.odds[pair.point1]"
-                  step="0.01"
-                  min="1"
-                  max="9999"
-                  placeholder="赔率"
-                  @blur="handleSinglePointBlur(pair)"
-                />
+            <div v-if="localConfig.game_settings.single_point.enabled" class="odds-display">
+              <div class="odds-info">
+                <span
+                  >平台统一赔率：0/27=888倍，1/26=222倍，2/25=123倍，3/24=80倍，4/23=48倍，5/22=38倍，6/21=28倍，7/20=22倍，8/19=18倍，9/18=15倍，10/17=14倍，11/16=13倍，12/15=12倍，13/14=11倍</span
+                >
               </div>
             </div>
           </div>
@@ -325,72 +144,18 @@ const emit = defineEmits<{
   (e: 'save', config: Partial<PC28GameConfig>): void
 }>()
 
-// 单点默认赔率（成对配置）
-const defaultSinglePointOdds: Record<number, number> = {
-  0: 488, // 00/27
-  27: 488,
-  1: 128, // 01/26
-  26: 128,
-  2: 88, // 02/25
-  25: 88,
-  3: 58, // 03/24
-  24: 58,
-  4: 48, // 04/23
-  23: 48,
-  5: 38, // 05/22
-  22: 38,
-  6: 28, // 06/21
-  21: 28,
-  7: 18, // 07/20
-  20: 18,
-  8: 15, // 08/19
-  19: 15,
-  9: 15, // 09/18
-  18: 15,
-  10: 14, // 10/17
-  17: 14,
-  11: 13, // 11/16
-  16: 13,
-  12: 12, // 12/15
-  15: 12,
-  13: 11, // 13/14
-  14: 11
-}
+// 赔率由平台统一管理，不再需要默认赔率配置
 
-// 单点配对数组（用于显示）
-const singlePointPairs = [
-  { key: '0-27', label: '00/27', point1: 0, point2: 27 },
-  { key: '1-26', label: '01/26', point1: 1, point2: 26 },
-  { key: '2-25', label: '02/25', point1: 2, point2: 25 },
-  { key: '3-24', label: '03/24', point1: 3, point2: 24 },
-  { key: '4-23', label: '04/23', point1: 4, point2: 23 },
-  { key: '5-22', label: '05/22', point1: 5, point2: 22 },
-  { key: '6-21', label: '06/21', point1: 6, point2: 21 },
-  { key: '7-20', label: '07/20', point1: 7, point2: 20 },
-  { key: '8-19', label: '08/19', point1: 8, point2: 19 },
-  { key: '9-18', label: '09/18', point1: 9, point2: 18 },
-  { key: '10-17', label: '10/17', point1: 10, point2: 17 },
-  { key: '11-16', label: '11/16', point1: 11, point2: 16 },
-  { key: '12-15', label: '12/15', point1: 12, point2: 15 },
-  { key: '13-14', label: '13/14', point1: 13, point2: 14 }
-]
-
-// 默认配置
+// 默认配置（只包含开关状态，赔率由平台统一管理）
 const defaultConfig: Partial<PC28GameConfig> = {
   is_enabled: false,
   game_settings: {
-    big_small: { enabled: true, big: 1.99, small: 1.99 },
-    odd_even: { enabled: true, odd: 1.99, even: 1.99 },
-    combinations: {
-      enabled: true,
-      big_odd: 3.8,
-      big_even: 3.8,
-      small_odd: 3.8,
-      small_even: 3.8
-    },
-    extreme: { enabled: true, extreme_big: 15, extreme_small: 15 },
-    patterns: { enabled: true, pair: 3.5, straight: 15, leopard: 88 },
-    single_point: { enabled: true, odds: { ...defaultSinglePointOdds } }
+    big_small: { enabled: true },
+    odd_even: { enabled: true },
+    combinations: { enabled: true },
+    extreme: { enabled: true },
+    patterns: { enabled: true },
+    single_point: { enabled: true }
   }
 }
 
@@ -399,53 +164,7 @@ const localConfig = ref<Partial<PC28GameConfig>>({
   ...(props.config || {})
 })
 
-// 处理单点赔率blur事件
-function handleSinglePointBlur(pair: { point1: number; point2: number }) {
-  const value = localConfig.value.game_settings!.single_point.odds[pair.point1]
-  validateOdds('single_point', pair.point1, value)
-  // 同步更新配对数字
-  if (value !== undefined && value !== null) {
-    localConfig.value.game_settings!.single_point.odds[pair.point2] = value
-  }
-}
-
-// 验证赔率范围（1-9999）
-function validateOdds(section: string, key: string | number, value: number | undefined) {
-  if (value === undefined || value === null) return
-
-  if (value < 1 || value > 9999) {
-    _notice(`赔率必须在1-9999范围内，当前值：${value}`)
-    // 自动修正到有效范围
-    if (value < 1) {
-      if (section === 'single_point') {
-        localConfig.value.game_settings!.single_point.odds[key as number] = 1
-      } else {
-        ;(localConfig.value.game_settings as any)[section][key] = 1
-      }
-    } else if (value > 9999) {
-      if (section === 'single_point') {
-        localConfig.value.game_settings!.single_point.odds[key as number] = 9999
-      } else {
-        ;(localConfig.value.game_settings as any)[section][key] = 9999
-      }
-    }
-  }
-}
-
-// 初始化单点赔率（如果没有配置，使用默认值）
-if (!localConfig.value.game_settings?.single_point?.odds) {
-  localConfig.value.game_settings!.single_point!.odds = {}
-}
-// 如果配置存在但缺少某些值，补充默认值
-if (localConfig.value.game_settings?.single_point?.odds) {
-  const odds = localConfig.value.game_settings.single_point.odds
-  for (const [point, defaultOdds] of Object.entries(defaultSinglePointOdds)) {
-    const pointNum = parseInt(point)
-    if (odds[pointNum] === undefined || odds[pointNum] === null) {
-      odds[pointNum] = defaultOdds
-    }
-  }
-}
+// 赔率由平台统一管理，不再需要验证和初始化赔率
 
 // 监听配置变化
 watch(
@@ -466,99 +185,22 @@ function handleClose() {
 
 async function handleSave() {
   try {
-    // 验证所有赔率
+    // 只保存开关状态，不保存赔率（赔率由平台统一管理）
+    // 构建只包含开关状态的配置
     const settings = localConfig.value.game_settings
-    if (settings) {
-      // 验证大小单双
-      if (settings.big_small?.enabled) {
-        if (settings.big_small.big < 1 || settings.big_small.big > 9999) {
-          _notice('大小单双-大的赔率必须在1-9999范围内')
-          return
-        }
-        if (settings.big_small.small < 1 || settings.big_small.small > 9999) {
-          _notice('大小单双-小的赔率必须在1-9999范围内')
-          return
-        }
-      }
-
-      // 验证单双
-      if (settings.odd_even?.enabled) {
-        if (settings.odd_even.odd < 1 || settings.odd_even.odd > 9999) {
-          _notice('单双-单的赔率必须在1-9999范围内')
-          return
-        }
-        if (settings.odd_even.even < 1 || settings.odd_even.even > 9999) {
-          _notice('单双-双的赔率必须在1-9999范围内')
-          return
-        }
-      }
-
-      // 验证组合
-      if (settings.combinations?.enabled) {
-        const comboKeys = ['big_odd', 'big_even', 'small_odd', 'small_even']
-        for (const key of comboKeys) {
-          const value = (settings.combinations as any)[key]
-          if (value !== undefined && (value < 1 || value > 9999)) {
-            _notice(`组合-${key}的赔率必须在1-9999范围内`)
-            return
-          }
-        }
-      }
-
-      // 验证极值
-      if (settings.extreme?.enabled) {
-        if (settings.extreme.extreme_big < 1 || settings.extreme.extreme_big > 9999) {
-          _notice('极值-极大的赔率必须在1-9999范围内')
-          return
-        }
-        if (settings.extreme.extreme_small < 1 || settings.extreme.extreme_small > 9999) {
-          _notice('极值-极小的赔率必须在1-9999范围内')
-          return
-        }
-      }
-
-      // 验证形态
-      if (settings.patterns?.enabled) {
-        if (settings.patterns.pair < 1 || settings.patterns.pair > 9999) {
-          _notice('形态-对子的赔率必须在1-9999范围内')
-          return
-        }
-        if (settings.patterns.straight < 1 || settings.patterns.straight > 9999) {
-          _notice('形态-顺子的赔率必须在1-9999范围内')
-          return
-        }
-        if (settings.patterns.leopard < 1 || settings.patterns.leopard > 9999) {
-          _notice('形态-豹子的赔率必须在1-9999范围内')
-          return
-        }
-      }
-
-      // 验证单点
-      if (settings.single_point?.enabled && settings.single_point.odds) {
-        for (let i = 0; i <= 27; i++) {
-          const value = settings.single_point.odds[i]
-          if (value !== undefined && (value < 1 || value > 9999)) {
-            _notice(`单点${i}的赔率必须在1-9999范围内`)
-            return
-          }
-        }
-        // 确保配对数字的赔率一致
-        for (const pair of singlePointPairs) {
-          const value1 = settings.single_point.odds[pair.point1]
-          const value2 = settings.single_point.odds[pair.point2]
-          if (value1 !== undefined && value2 !== undefined) {
-            // 如果两个值都存在，取第一个值（因为UI上修改时会自动同步）
-            settings.single_point.odds[pair.point2] = value1
-          } else if (value1 !== undefined) {
-            settings.single_point.odds[pair.point2] = value1
-          } else if (value2 !== undefined) {
-            settings.single_point.odds[pair.point1] = value2
-          }
-        }
+    const saveConfig: Partial<PC28GameConfig> = {
+      is_enabled: localConfig.value.is_enabled,
+      game_settings: {
+        big_small: { enabled: settings?.big_small?.enabled ?? true },
+        odd_even: { enabled: settings?.odd_even?.enabled ?? true },
+        combinations: { enabled: settings?.combinations?.enabled ?? true },
+        extreme: { enabled: settings?.extreme?.enabled ?? true },
+        patterns: { enabled: settings?.patterns?.enabled ?? true },
+        single_point: { enabled: settings?.single_point?.enabled ?? true }
       }
     }
 
-    emit('save', localConfig.value)
+    emit('save', saveConfig)
     _notice('设置已保存')
     handleClose()
   } catch (e: any) {
@@ -681,83 +323,17 @@ async function handleSave() {
   }
 }
 
-.odds-inputs {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10rem;
+.odds-display {
   margin-top: 10rem;
+  padding: 10rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6rem;
 }
 
-.odds-item {
-  display: flex;
-  flex-direction: column;
-  gap: 5rem;
-  min-width: 0; // 防止flex子元素溢出
-
-  label {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 14rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  input {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    padding: 8rem;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 6rem;
-    color: white;
-    font-size: 14rem;
-
-    &:focus {
-      outline: none;
-      border-color: #fe2c55;
-    }
-  }
-}
-
-.single-point-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10rem;
-  margin-top: 10rem;
-  max-height: 300rem;
-  overflow-y: auto;
-}
-
-.point-item {
-  display: flex;
-  flex-direction: column;
-  gap: 5rem;
-  min-width: 0; // 防止flex子元素溢出
-
-  label {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 12rem;
-    text-align: center;
-  }
-
-  input {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    padding: 6rem;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4rem;
-    color: white;
-    font-size: 12rem;
-    text-align: center;
-
-    &:focus {
-      outline: none;
-      border-color: #fe2c55;
-    }
-  }
+.odds-info {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14rem;
+  line-height: 1.6;
 }
 
 .modal-footer {

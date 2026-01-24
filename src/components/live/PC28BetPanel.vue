@@ -54,6 +54,141 @@
             >
               账变记录
             </div>
+            <div
+              class="tab-item"
+              :class="{ active: activeTab === 'rules' }"
+              @click="activeTab = 'rules'"
+            >
+              规则
+            </div>
+          </div>
+
+          <!-- 规则说明 -->
+          <div v-if="activeTab === 'rules'" class="rules-content">
+            <div class="rules-section">
+              <div class="rules-title">基础赔率</div>
+              <div class="rules-list">
+                <div class="rule-item">
+                  <span class="rule-label">大小单双：</span>
+                  <span class="rule-value">2.0倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">组合（大单/大双/小单/小双）：</span>
+                  <span class="rule-value">4.6倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">极值（极大/极小）：</span>
+                  <span class="rule-value">15倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">对子：</span>
+                  <span class="rule-value">3.4倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">顺子：</span>
+                  <span class="rule-value">15倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">豹子：</span>
+                  <span class="rule-value">80倍</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="rules-section">
+              <div class="rules-title">点杀倍数</div>
+              <div class="rules-list">
+                <div class="rule-item">
+                  <span class="rule-label">0/27：</span>
+                  <span class="rule-value">888倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">1/26：</span>
+                  <span class="rule-value">222倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">2/25：</span>
+                  <span class="rule-value">123倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">3/24：</span>
+                  <span class="rule-value">80倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">4/23：</span>
+                  <span class="rule-value">48倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">5/22：</span>
+                  <span class="rule-value">38倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">6/21：</span>
+                  <span class="rule-value">28倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">7/20：</span>
+                  <span class="rule-value">22倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">8/19：</span>
+                  <span class="rule-value">18倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">9/18：</span>
+                  <span class="rule-value">15倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">10/17：</span>
+                  <span class="rule-value">14倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">11/16：</span>
+                  <span class="rule-value">13倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">12/15：</span>
+                  <span class="rule-value">12倍</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">13/14：</span>
+                  <span class="rule-value">11倍</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="rules-section">
+              <div class="rules-title">特殊规则</div>
+              <div class="rules-list">
+                <div class="rule-item special">
+                  <div class="rule-label">规则1：</div>
+                  <div class="rule-desc">遇13/14，大、小、单、双中奖赔1.6倍</div>
+                </div>
+                <div class="rule-item special">
+                  <div class="rule-label">规则2：</div>
+                  <div class="rule-desc">
+                    组合小单大双遇13/14回本：<br />
+                    • 遇到13，只返回"小单"那一注本金<br />
+                    • 遇到14，只返回"大双"那一注本金<br />
+                    • 其他组合下注被吃掉
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rules-section">
+              <div class="rules-title">抽水规则</div>
+              <div class="rules-list">
+                <div class="rule-item">
+                  <span class="rule-label">平台抽成：</span>
+                  <span class="rule-value">用户盈利的1%</span>
+                </div>
+                <div class="rule-item">
+                  <span class="rule-label">主播抽水：</span>
+                  <span class="rule-value">下注额的1%（平台支付）</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 我的下注记录 -->
@@ -162,19 +297,19 @@
           </div>
 
           <!-- 下注区域 -->
-          <div v-if="activeTab !== 'my_bets' && activeTab !== 'transactions'" class="bet-area">
+          <div
+            v-if="activeTab !== 'my_bets' && activeTab !== 'transactions' && activeTab !== 'rules'"
+            class="bet-area"
+          >
             <!-- 大小单双 -->
-            <div
-              v-if="activeTab === 'big_small' && config?.game_settings?.big_small?.enabled"
-              class="bet-options"
-            >
+            <div v-if="activeTab === 'big_small'" class="bet-options">
               <div
                 class="bet-option"
                 :class="{ selected: selectedBets.has('big') }"
                 @click="toggleBet('big', null)"
               >
                 <div class="bet-name">大</div>
-                <div class="bet-odds">{{ config.game_settings.big_small.big }}</div>
+                <div class="bet-odds">2.0</div>
               </div>
               <div
                 class="bet-option"
@@ -182,22 +317,19 @@
                 @click="toggleBet('small', null)"
               >
                 <div class="bet-name">小</div>
-                <div class="bet-odds">{{ config.game_settings.big_small.small }}</div>
+                <div class="bet-odds">2.0</div>
               </div>
             </div>
 
             <!-- 单双 -->
-            <div
-              v-if="activeTab === 'odd_even' && config?.game_settings?.odd_even?.enabled"
-              class="bet-options"
-            >
+            <div v-if="activeTab === 'odd_even'" class="bet-options">
               <div
                 class="bet-option"
                 :class="{ selected: selectedBets.has('odd') }"
                 @click="toggleBet('odd', null)"
               >
                 <div class="bet-name">单</div>
-                <div class="bet-odds">{{ config.game_settings.odd_even.odd }}</div>
+                <div class="bet-odds">2.0</div>
               </div>
               <div
                 class="bet-option"
@@ -205,22 +337,19 @@
                 @click="toggleBet('even', null)"
               >
                 <div class="bet-name">双</div>
-                <div class="bet-odds">{{ config.game_settings.odd_even.even }}</div>
+                <div class="bet-odds">2.0</div>
               </div>
             </div>
 
             <!-- 组合 -->
-            <div
-              v-if="activeTab === 'combinations' && config?.game_settings?.combinations?.enabled"
-              class="bet-options"
-            >
+            <div v-if="activeTab === 'combinations'" class="bet-options">
               <div
                 class="bet-option"
                 :class="{ selected: selectedBets.has('big_odd') }"
                 @click="toggleBet('big_odd', null)"
               >
                 <div class="bet-name">大单</div>
-                <div class="bet-odds">{{ config.game_settings.combinations.big_odd }}</div>
+                <div class="bet-odds">4.6</div>
               </div>
               <div
                 class="bet-option"
@@ -228,7 +357,7 @@
                 @click="toggleBet('big_even', null)"
               >
                 <div class="bet-name">大双</div>
-                <div class="bet-odds">{{ config.game_settings.combinations.big_even }}</div>
+                <div class="bet-odds">4.6</div>
               </div>
               <div
                 class="bet-option"
@@ -236,7 +365,7 @@
                 @click="toggleBet('small_odd', null)"
               >
                 <div class="bet-name">小单</div>
-                <div class="bet-odds">{{ config.game_settings.combinations.small_odd }}</div>
+                <div class="bet-odds">4.6</div>
               </div>
               <div
                 class="bet-option"
@@ -244,15 +373,12 @@
                 @click="toggleBet('small_even', null)"
               >
                 <div class="bet-name">小双</div>
-                <div class="bet-odds">{{ config.game_settings.combinations.small_even }}</div>
+                <div class="bet-odds">4.6</div>
               </div>
             </div>
 
             <!-- 单点 -->
-            <div
-              v-if="activeTab === 'single_point' && config?.game_settings?.single_point?.enabled"
-              class="bet-points"
-            >
+            <div v-if="activeTab === 'single_point'" class="bet-points">
               <div
                 v-for="point in 28"
                 :key="point - 1"
@@ -261,15 +387,16 @@
                 @click="toggleBet('single_point', point - 1)"
               >
                 <div class="point-num">{{ point - 1 }}</div>
-                <div class="point-odds">
-                  {{ config.game_settings.single_point.odds?.[point - 1] || '-' }}
-                </div>
+                <div class="point-odds">{{ getSinglePointOdds(point - 1) }}</div>
               </div>
             </div>
           </div>
 
           <!-- 下注金额 -->
-          <div v-if="activeTab !== 'my_bets' && activeTab !== 'transactions'" class="bet-amount">
+          <div
+            v-if="activeTab !== 'my_bets' && activeTab !== 'transactions' && activeTab !== 'rules'"
+            class="bet-amount"
+          >
             <div class="amount-label">下注金额</div>
             <div class="amount-buttons">
               <button
@@ -295,7 +422,12 @@
 
           <!-- 已选下注 -->
           <div
-            v-if="activeTab !== 'my_bets' && activeTab !== 'transactions' && selectedBets.size > 0"
+            v-if="
+              activeTab !== 'my_bets' &&
+              activeTab !== 'transactions' &&
+              activeTab !== 'rules' &&
+              selectedBets.size > 0
+            "
             class="selected-bets"
           >
             <div class="selected-label">已选 {{ selectedBets.size }} 注</div>
@@ -313,7 +445,10 @@
           </div>
         </div>
 
-        <div v-if="activeTab !== 'my_bets' && activeTab !== 'transactions'" class="panel-footer">
+        <div
+          v-if="activeTab !== 'my_bets' && activeTab !== 'transactions' && activeTab !== 'rules'"
+          class="panel-footer"
+        >
           <div class="total-info">
             <span>共 {{ selectedBets.size }} 注</span>
             <span class="total-amount">总计：{{ totalAmount }} 抖币</span>
@@ -434,15 +569,15 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
-import type { PC28GameConfig, PC28GameRound, PC28Bet } from '@/api/pc28'
-import { placePC28Bet, getMyBets, cancelPC28Bet, getPC28Transactions } from '@/api/pc28'
+import type { PC28GlobalRound, PC28Bet } from '@/api/pc28'
+import { placePC28BetGlobal, getMyBets, cancelPC28Bet, getPC28Transactions } from '@/api/pc28'
 import { _notice, _copy } from '@/utils'
 import { supabase } from '@/utils/supabase'
 
 const props = defineProps<{
   show: boolean
-  config: PC28GameConfig | null
-  currentRound: PC28GameRound | null
+  currentRound: PC28GlobalRound | null
+  roomId: string
 }>()
 
 const emit = defineEmits<{
@@ -500,30 +635,50 @@ async function refreshBalance() {
   }
 }
 
-// 根据配置动态生成tabs
+// 平台统一规则，所有玩法都开启
 const tabs = computed(() => {
-  const tabList = []
-
-  if (props.config?.game_settings?.big_small?.enabled) {
-    tabList.push({ key: 'big_small', label: '大小' })
-  }
-  if (props.config?.game_settings?.odd_even?.enabled) {
-    tabList.push({ key: 'odd_even', label: '单双' })
-  }
-  if (props.config?.game_settings?.combinations?.enabled) {
-    tabList.push({ key: 'combinations', label: '组合' })
-  }
-  if (props.config?.game_settings?.single_point?.enabled) {
-    tabList.push({ key: 'single_point', label: '单点' })
-  }
-
-  // 如果没有开启任何玩法，至少显示一个tab
-  if (tabList.length === 0) {
-    tabList.push({ key: 'big_small', label: '大小单双' })
-  }
-
-  return tabList
+  return [
+    { key: 'big_small', label: '大小' },
+    { key: 'odd_even', label: '单双' },
+    { key: 'combinations', label: '组合' },
+    { key: 'single_point', label: '单点' }
+  ]
 })
+
+// 平台统一单点赔率
+function getSinglePointOdds(point: number): string {
+  const oddsMap: Record<number, number> = {
+    0: 888,
+    27: 888,
+    1: 222,
+    26: 222,
+    2: 123,
+    25: 123,
+    3: 80,
+    24: 80,
+    4: 48,
+    23: 48,
+    5: 38,
+    22: 38,
+    6: 28,
+    21: 28,
+    7: 22,
+    20: 22,
+    8: 18,
+    19: 18,
+    9: 15,
+    18: 15,
+    10: 14,
+    17: 14,
+    11: 13,
+    16: 13,
+    12: 12,
+    15: 12,
+    13: 11,
+    14: 11
+  }
+  return oddsMap[point]?.toString() || '-'
+}
 
 const statusText = {
   betting: '下注中',
@@ -637,7 +792,7 @@ async function fetchMyBets() {
 
   isLoadingBets.value = true
   try {
-    const bets = await getMyBets(props.currentRound.id)
+    const bets = await getMyBets(props.currentRound.id, true) // 使用全局期数
     myBets.value = bets
   } catch (e: any) {
     console.error('[PC28] fetch my bets error:', e)
@@ -786,32 +941,12 @@ watch(
       fetchMyBets()
     } else if (newTab === 'transactions') {
       fetchTransactions()
-    } else {
-      // 切换到其他tab时，如果不在tabs列表中，重置为第一个可用的tab
-      // 但my_bets和transactions是固定标签，不需要重置
-      if (
-        newTab !== 'my_bets' &&
-        newTab !== 'transactions' &&
-        tabs.value.length > 0 &&
-        !tabs.value.find((t) => t.key === newTab)
-      ) {
-        activeTab.value = tabs.value[0].key
-      }
     }
+    // 平台统一规则，所有玩法都开启，不需要检查tab有效性
   }
 )
 
-// 监听配置变化，更新activeTab
-watch(
-  () => props.config?.game_settings,
-  () => {
-    // 如果当前tab不可用，切换到第一个可用的tab
-    if (tabs.value.length > 0 && !tabs.value.find((t) => t.key === activeTab.value)) {
-      activeTab.value = tabs.value[0].key
-    }
-  },
-  { deep: true }
-)
+// 平台统一规则，所有玩法都开启，不需要监听配置变化
 
 async function handleCancelBet(betId: string) {
   if (cancelingBetId.value === betId) return
@@ -855,7 +990,7 @@ function setupBetsRealtime() {
         event: '*',
         schema: 'public',
         table: 'pc28_bets',
-        filter: `round_id=eq.${props.currentRound.id}`
+        filter: `global_round_id=eq.${props.currentRound.id}`
       },
       () => {
         // 如果当前在"我的下注"标签页，刷新数据
@@ -868,15 +1003,7 @@ function setupBetsRealtime() {
 }
 
 onMounted(() => {
-  // 初始化activeTab为第一个可用的tab（如果当前tab不可用）
-  if (
-    tabs.value.length > 0 &&
-    !tabs.value.find((t) => t.key === activeTab.value) &&
-    activeTab.value !== 'my_bets'
-  ) {
-    activeTab.value = tabs.value[0].key
-  }
-
+  // 平台统一规则，所有玩法都开启，不需要检查tab可用性
   if (activeTab.value === 'my_bets') {
     fetchMyBets()
   }
@@ -947,7 +1074,13 @@ async function handleBet() {
         betValue = undefined
       }
 
-      const res = await placePC28Bet(props.currentRound.id, type, betAmount.value, betValue)
+      const res = await placePC28BetGlobal(
+        props.currentRound.id,
+        props.roomId,
+        type,
+        betAmount.value,
+        betValue
+      )
 
       if (res.success) {
         successCount++
@@ -1471,6 +1604,66 @@ async function handleBet() {
 .transactions-list {
   max-height: 400rem;
   overflow-y: auto;
+}
+
+.rules-content {
+  max-height: 500rem;
+  overflow-y: auto;
+  padding: 20rem;
+}
+
+.rules-section {
+  margin-bottom: 30rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.rules-title {
+  font-size: 18rem;
+  font-weight: bold;
+  color: #ff9800;
+  margin-bottom: 15rem;
+  padding-bottom: 10rem;
+  border-bottom: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rem;
+}
+
+.rule-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8rem;
+  font-size: 14rem;
+
+  &.special {
+    flex-direction: column;
+    gap: 8rem;
+  }
+
+  .rule-label {
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 500;
+  }
+
+  .rule-value {
+    color: #4caf50;
+    font-weight: bold;
+  }
+
+  .rule-desc {
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.6;
+    margin-left: 0;
+  }
 }
 
 .transaction-record {

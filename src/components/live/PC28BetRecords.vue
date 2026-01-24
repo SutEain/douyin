@@ -129,14 +129,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
-import { PC28GameRound, PC28Bet } from '@/api/pc28'
+import type { PC28GlobalRound, PC28Bet } from '@/api/pc28'
 import { getAllBets, getAllBetsForSettled } from '@/api/pc28'
 import { supabase } from '@/utils/supabase'
 import { _notice } from '@/utils'
 
 const props = defineProps<{
   show: boolean
-  currentRound: PC28GameRound | null
+  currentRound: PC28GlobalRound | null
 }>()
 
 const emit = defineEmits<{
@@ -336,7 +336,7 @@ async function fetchBets() {
     const allBets =
       props.currentRound.status === 'settled'
         ? await getAllBetsForSettled(props.currentRound.id)
-        : await getAllBets(props.currentRound.id)
+        : await getAllBets(props.currentRound.id) // 使用全局期数
     console.log('[PC28] Fetched bets:', allBets.length, allBets)
     bets.value = allBets
 
@@ -384,7 +384,7 @@ function setupRealtime() {
         event: '*',
         schema: 'public',
         table: 'pc28_bets',
-        filter: `round_id=eq.${props.currentRound.id}`
+        filter: `global_round_id=eq.${props.currentRound.id}`
       },
       () => {
         fetchBets()

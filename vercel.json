@@ -1,15 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/pc28-polling",
-      "schedule": "*/5 * * * * *"
-    }
-  ],
-  "functions": {
-    "api/pc28-polling.ts": {
-      "maxDuration": 30
-    }
-  },
   "rewrites": [
     {
       "source": "/((?!assets/|js/|api/|.*\\.[\\w]+$).*)",

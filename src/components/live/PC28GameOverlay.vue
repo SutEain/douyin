@@ -1,18 +1,25 @@
 <template>
   <div class="PC28GameOverlay">
-    <div v-if="config?.is_enabled" class="badges-container">
-      <!-- 当前开盘的挂件 -->
+    <div class="badges-container">
+      <!-- 当前开盘的挂件（只显示betting或sealed状态，不显示cancelled） -->
       <div
-        v-if="currentRound && currentRound.status !== 'settled'"
+        v-if="
+          currentRound && currentRound.status !== 'settled' && currentRound.status !== 'cancelled'
+        "
         class="game-badge"
         @click="handleBadgeClick(currentRound)"
       >
         <div class="game-content">
-          <div class="game-text">{{ currentRound.game_name || 'PC28' }}</div>
+          <div class="game-text">PC28</div>
           <div class="round-info">
             <div class="round-period">{{ currentRound.period_number }}期</div>
-            <div class="round-status" :class="currentRound.status">
-              {{ statusText[currentRound.status] }}
+            <!-- 根据状态显示对应的文本：betting显示"下注中"，sealed显示"已封盘" -->
+            <div
+              v-if="currentRound.status === 'betting' || currentRound.status === 'sealed'"
+              class="round-status"
+              :class="currentRound.status"
+            >
+              {{ currentRound.status === 'betting' ? '下注中' : '已封盘' }}
             </div>
             <!-- 只在状态为下注中时显示倒计时 -->
             <div
@@ -33,7 +40,7 @@
         @click="handleBadgeClick(settledRound)"
       >
         <div class="game-content">
-          <div class="game-text">{{ settledRound.game_name || 'PC28' }}</div>
+          <div class="game-text">PC28</div>
           <div class="round-info">
             <div class="round-period">{{ settledRound.period_number }}期</div>
             <div class="round-status settled">已结算</div>
@@ -52,27 +59,26 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
-import { PC28GameConfig, PC28GameRound, autoSealPC28Rounds } from '@/api/pc28'
+import type { PC28GlobalRound } from '@/api/pc28'
 import { supabase } from '@/utils/supabase'
 
 const props = defineProps<{
   roomId: string
-  config: PC28GameConfig | null
-  currentRound: PC28GameRound | null
-  lastSettledRound?: PC28GameRound | null
+  currentRound: PC28GlobalRound | null
+  lastSettledRound?: PC28GlobalRound | null
   isAnchor?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'open-bet'): void
-  (e: 'open-records', round: PC28GameRound): void
+  (e: 'open-records', round: PC28GlobalRound): void
 }>()
 
 // 计算要显示的已结算round列表：
 // 1. 如果当前期是已结算，显示当前期和上一期（共2个）
 // 2. 如果当前期不是已结算，只显示上一期（1个）
 const displaySettledRounds = computed(() => {
-  const rounds: PC28GameRound[] = []
+  const rounds: PC28GlobalRound[] = []
 
   // 如果当前期是已结算，先添加当前期
   if (props.currentRound?.status === 'settled') {
@@ -90,7 +96,8 @@ const displaySettledRounds = computed(() => {
 const statusText = {
   betting: '下注中',
   sealed: '已封盘',
-  settled: '已结算'
+  settled: '已结算',
+  cancelled: '已取消'
 }
 
 const countdownTimer = ref<any>(null)
@@ -100,19 +107,49 @@ const currentTime = ref(Date.now())
 const countdownText = computed(() => {
   if (!props.currentRound?.seal_at) return ''
 
-  const sealTime = new Date(props.currentRound.seal_at).getTime()
-  const diff = Math.max(0, Math.floor((sealTime - currentTime.value) / 1000))
+  try {
+    // 🎯 统一使用北京时间（UTC+8）
+    // seal_at 是数据库存储的 UTC 时间（ISO 8601 格式）
+    // 需要正确解析为 UTC 时间戳，然后与当前 UTC 时间比较
+    let sealAtStr = props.currentRound.seal_at
 
-  if (diff <= 0) {
-    return '已封盘'
+    // 标准化时间格式：确保是 ISO 8601 格式
+    if (sealAtStr.includes(' ') && sealAtStr.includes('+')) {
+      // "2026-01-25 03:39:45+00" -> "2026-01-25T03:39:45Z"
+      sealAtStr = sealAtStr.replace(' ', 'T').replace('+00', 'Z').replace('+08:00', 'Z')
+    } else if (sealAtStr.includes(' ') && !sealAtStr.includes('T')) {
+      // "2026-01-25 03:39:45" -> "2026-01-25T03:39:45Z" (假设是 UTC)
+      sealAtStr = sealAtStr.replace(' ', 'T') + 'Z'
+    }
+
+    // 解析为 UTC 时间戳（毫秒）
+    const sealTime = new Date(sealAtStr).getTime()
+
+    // 检查解析是否成功
+    if (isNaN(sealTime)) {
+      console.error('[PC28GameOverlay] Invalid seal_at format:', props.currentRound.seal_at)
+      return ''
+    }
+
+    // currentTime.value 是 Date.now()，返回的是 UTC 时间戳（毫秒）
+    // sealTime 也是 UTC 时间戳，两者可以直接相减
+    const diff = Math.max(0, Math.floor((sealTime - currentTime.value) / 1000))
+
+    // 如果倒计时结束，返回空字符串（不显示任何文本）
+    if (diff <= 0) {
+      return ''
+    }
+
+    const minutes = Math.floor(diff / 60)
+    const seconds = diff % 60
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  } catch (e) {
+    console.error('[PC28GameOverlay] Error calculating countdown:', e)
+    return ''
   }
-
-  const minutes = Math.floor(diff / 60)
-  const seconds = diff % 60
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
 })
 
-function handleBadgeClick(round: PC28GameRound) {
+function handleBadgeClick(round: PC28GlobalRound) {
   console.log('[PC28GameOverlay] Badge clicked, isAnchor:', props.isAnchor, 'round:', round)
   // 如果已结算，所有用户都打开下注记录面板查看结算信息
   // 主播点击：打开下注记录面板
@@ -133,10 +170,11 @@ function startCountdown() {
     countdownTimer.value = null
   }
 
-  // 如果有封盘时间且状态是下注中或已封盘，启动倒计时
+  // 如果有封盘时间且状态不是已结算或已取消，启动倒计时
   if (
     props.currentRound?.seal_at &&
-    (props.currentRound.status === 'betting' || props.currentRound.status === 'sealed')
+    props.currentRound.status !== 'settled' &&
+    props.currentRound.status !== 'cancelled'
   ) {
     // 立即更新一次
     currentTime.value = Date.now()

@@ -1,6 +1,7 @@
 import { supabase } from '@/utils/supabase'
 
-// 游戏配置接口
+// 注意：PC28GameConfig接口已废弃，平台统一规则，不再需要配置
+// 保留接口定义仅用于类型兼容性
 export interface PC28GameConfig {
   id: string
   room_id: string
@@ -45,87 +46,57 @@ export interface PC28GameRound {
 // 下注记录接口
 export interface PC28Bet {
   id: string
-  round_id: string
-  room_id: string
+  global_round_id: string // 关联到全局期数ID（新系统）
+  room_id: string // 记录在哪个房间下的注
   user_id: string
   bet_type: string
   bet_value: number | null
   amount: number
   odds: number
-  status: 'pending' | 'settled'
+  status: 'pending' | 'settled' | 'cancelled'
   is_win: boolean | null
   payout: number
   platform_fee: number
   user_gain: number
   anchor_payout: number
+  refund_amount?: number // 退款金额字段
   created_at: string
   settled_at: string | null
 }
 
 /**
- * 获取游戏配置
+ * @deprecated 已废弃：平台统一规则，不再需要配置
+ * 获取游戏配置（保留用于向后兼容，始终返回null）
  */
 export async function getPC28Config(roomId: string): Promise<PC28GameConfig | null> {
-  const { data, error } = await supabase
-    .from('pc28_game_configs')
-    .select('*')
-    .eq('room_id', roomId)
-    .maybeSingle()
-
-  if (error) {
-    console.error('[PC28] getPC28Config error:', error)
-    return null
-  }
-
-  return data as PC28GameConfig | null
+  console.warn('[PC28] getPC28Config is deprecated, platform uses unified rules')
+  return null
 }
 
 /**
- * 创建或更新游戏配置
+ * @deprecated 已废弃：平台统一规则，不再需要配置
+ * 创建或更新游戏配置（保留用于向后兼容，不执行任何操作）
  */
 export async function upsertPC28Config(
   roomId: string,
   config: Partial<PC28GameConfig>
 ): Promise<PC28GameConfig> {
-  // 使用RPC函数来确保anchor_id正确设置
-  const { data: rpcResult, error: rpcError } = await supabase.rpc('upsert_pc28_game_config', {
-    p_room_id: roomId,
-    p_game_settings: config.game_settings || null,
-    p_is_enabled: config.is_enabled !== undefined ? config.is_enabled : null
-  })
-
-  if (rpcError) {
-    throw rpcError
-  }
-
-  if (!rpcResult.success) {
-    throw new Error(rpcResult.message || '保存配置失败')
-  }
-
-  // 重新获取配置
-  const { data, error } = await supabase
-    .from('pc28_game_configs')
-    .select('*')
-    .eq('room_id', roomId)
-    .single()
-
-  if (error) throw error
-  return data as PC28GameConfig
+  console.warn('[PC28] upsertPC28Config is deprecated, platform uses unified rules')
+  throw new Error('配置功能已废弃，平台统一规则')
 }
 
 /**
- * 开盘
+ * @deprecated 已废弃：使用全局期数系统，不再需要手动开盘
+ * 开盘（游戏名称固定为PC28）
  */
 export async function openPC28Round(
   roomId: string,
   periodNumber: string,
-  gameName: string,
   sealAt?: Date
 ): Promise<{ success: boolean; message: string; round_id?: string }> {
   const { data, error } = await supabase.rpc('open_pc28_round', {
     p_room_id: roomId,
     p_period_number: periodNumber,
-    p_game_name: gameName,
     p_seal_at: sealAt?.toISOString() || null
   })
 
@@ -160,6 +131,7 @@ export async function placePC28Bet(
 }
 
 /**
+ * @deprecated 已废弃：使用全局期数系统，自动结算
  * 结算
  */
 export async function settlePC28Round(
@@ -195,6 +167,7 @@ export async function settlePC28Round(
 }
 
 /**
+ * @deprecated 已废弃：使用getCurrentGlobalRound获取全局期数
  * 获取当前期数（包括已结算的，用于显示结果）
  */
 export async function getCurrentRound(roomId: string): Promise<PC28GameRound | null> {
@@ -216,6 +189,7 @@ export async function getCurrentRound(roomId: string): Promise<PC28GameRound | n
 }
 
 /**
+ * @deprecated 已废弃：使用全局期数系统
  * 获取最近一个已结算的期数（用于显示上局信息）
  * @param excludeRoundId 排除的round ID（通常是当前round，避免重复显示）
  */
@@ -262,14 +236,23 @@ export async function getRoundList(roomId: string, limit = 20): Promise<PC28Game
 }
 
 /**
- * 获取我的下注记录（当前期）
+ * 获取我的下注记录（当前期）- 支持全局期数
  */
-export async function getMyBets(roundId: string): Promise<PC28Bet[]> {
-  const { data, error } = await supabase
-    .from('pc28_bets')
-    .select('*')
-    .eq('round_id', roundId)
-    .order('created_at', { ascending: false })
+export async function getMyBets(roundId: string, useGlobalRound = false): Promise<PC28Bet[]> {
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('用户未登录')
+
+  let query = supabase.from('pc28_bets').select('*').eq('user_id', user.id)
+
+  if (useGlobalRound) {
+    query = query.eq('global_round_id', roundId)
+  } else {
+    query = query.eq('round_id', roundId)
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false })
 
   if (error) throw error
   return (data || []) as PC28Bet[]
@@ -303,7 +286,7 @@ export async function getAllBets(roundId: string): Promise<PC28Bet[]> {
   console.log('[PC28 API] Calling get_all_pc28_bets_for_anchor with roundId:', roundId)
 
   const { data, error } = await supabase.rpc('get_all_pc28_bets_for_anchor', {
-    p_round_id: roundId
+    p_global_round_id: roundId
   })
 
   if (error) {
@@ -328,7 +311,7 @@ export async function getAllBetsForSettled(roundId: string): Promise<PC28Bet[]> 
   console.log('[PC28 API] Calling get_all_pc28_bets_for_settled with roundId:', roundId)
 
   const { data, error } = await supabase.rpc('get_all_pc28_bets_for_settled', {
-    p_round_id: roundId
+    p_global_round_id: roundId
   })
 
   if (error) {
@@ -362,6 +345,7 @@ export async function cancelPC28Bet(betId: string): Promise<{ success: boolean; 
 }
 
 /**
+ * @deprecated 已废弃：使用全局期数系统，自动封盘
  * 封盘
  */
 export async function sealRound(roundId: string): Promise<{ success: boolean; message: string }> {
@@ -455,4 +439,155 @@ export async function getPC28Transactions(limit = 50): Promise<
     created_at: string
     related_id: string | null
   }>
+}
+
+// ============================================================================
+// 全局期数相关API（新系统）
+// ============================================================================
+
+/**
+ * 全局期数接口
+ */
+export interface PC28GlobalRound {
+  id: string
+  period_number: string
+  status: 'betting' | 'sealed' | 'settled' | 'cancelled'
+  seal_at: string | null
+  result: { num1: number; num2: number; num3: number; sum: number } | null
+  settled_at: string | null
+  cancelled_at: string | null
+  total_bet_amount: number
+  total_payout: number
+  total_platform_fee: number
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * 开启PC28游戏（主播操作）
+ */
+export async function enablePC28ForRoom(
+  roomId: string
+): Promise<{ success: boolean; message: string }> {
+  const { data, error } = await supabase.rpc('enable_pc28_for_room', {
+    p_room_id: roomId
+  })
+
+  if (error) {
+    return { success: false, message: error.message }
+  }
+
+  return data as { success: boolean; message: string }
+}
+
+/**
+ * 关闭PC28游戏（主播操作）
+ */
+export async function disablePC28ForRoom(
+  roomId: string
+): Promise<{ success: boolean; message: string }> {
+  const { data, error } = await supabase.rpc('disable_pc28_for_room', {
+    p_room_id: roomId
+  })
+
+  if (error) {
+    return { success: false, message: error.message }
+  }
+
+  return data as { success: boolean; message: string }
+}
+
+/**
+ * 获取当前全局期数
+ */
+export async function getCurrentGlobalRound(): Promise<PC28GlobalRound | null> {
+  const { data, error } = await supabase.rpc('get_current_global_round')
+
+  if (error) {
+    console.error('[PC28 API] getCurrentGlobalRound error:', error)
+    return null
+  }
+
+  if (!data || data.length === 0) {
+    return null
+  }
+
+  return data[0] as PC28GlobalRound
+}
+
+/**
+ * 获取房间PC28状态
+ */
+export async function getRoomPC28Status(roomId: string): Promise<{
+  success: boolean
+  data: {
+    enabled: boolean
+    current_round: PC28GlobalRound | null
+  }
+}> {
+  const { data, error } = await supabase.rpc('get_room_pc28_status', {
+    p_room_id: roomId
+  })
+
+  if (error) {
+    throw error
+  }
+
+  return data as {
+    success: boolean
+    data: {
+      enabled: boolean
+      current_round: PC28GlobalRound | null
+    }
+  }
+}
+
+/**
+ * 全局期数下注
+ */
+export async function placePC28BetGlobal(
+  globalRoundId: string,
+  roomId: string,
+  betType: string,
+  amount: number,
+  betValue?: number
+): Promise<{ success: boolean; message: string; bet_id?: string }> {
+  const { data, error } = await supabase.rpc('place_pc28_bet_global', {
+    p_global_round_id: globalRoundId,
+    p_room_id: roomId,
+    p_bet_type: betType,
+    p_amount: amount,
+    p_bet_value: betValue !== undefined ? betValue : null
+  })
+
+  if (error) {
+    return { success: false, message: error.message }
+  }
+
+  return data as { success: boolean; message: string; bet_id?: string }
+}
+
+/**
+ * 取消全局期数（退回下注）
+ */
+export async function cancelGlobalRound(globalRoundId: string): Promise<{
+  success: boolean
+  message: string
+  refund_count?: number
+  total_refund?: number
+}> {
+  const { data, error } = await supabase.rpc('cancel_global_round', {
+    p_global_round_id: globalRoundId
+  })
+
+  if (error) {
+    return { success: false, message: error.message }
+  }
+
+  return data as {
+    success: boolean
+    message: string
+    refund_count?: number
+    total_refund?: number
+  }
 }

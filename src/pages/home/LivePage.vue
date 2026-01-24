@@ -293,24 +293,22 @@
                 <div class="status-tip">⏳ 待支付订单</div>
                 <div class="order-item">
                   <span class="label">订单编号</span>
-                  <span class="value"
-                    ><code>{{ rechargeInfo.pending_order.order_no }}</code></span
-                  >
+                  <span class="value">
+                    <code>{{ rechargeInfo.pending_order?.order_no || '' }}</code>
+                  </span>
                 </div>
                 <div class="order-item highlight">
                   <span class="label">应付金额</span>
-                  <span class="value"
-                    >{{ Number(rechargeInfo.pending_order.total_amount).toFixed(2) }} USDT</span
-                  >
+                  <span class="value">
+                    {{ Number(rechargeInfo.pending_order?.total_amount || 0).toFixed(2) }} USDT
+                  </span>
                 </div>
                 <div class="order-item">
                   <span class="label">预计到账</span>
-                  <span class="value"
-                    >{{
-                      (rechargeInfo.pending_order.base_amount * 100).toLocaleString()
-                    }}
-                    抖币</span
-                  >
+                  <span class="value">
+                    {{ ((rechargeInfo.pending_order?.base_amount || 0) * 100).toLocaleString() }}
+                    抖币
+                  </span>
                 </div>
 
                 <div class="payment-address">
@@ -391,10 +389,16 @@
     />
 
     <!-- 🎯 PC28游戏状态挂件（类似红包，所有用户可见，点击参与下注） -->
+    <!-- 只在房间开启PC28且当前有进行中的期数时显示 -->
     <PC28GameOverlay
-      v-if="roomId && pc28Config?.is_enabled && !isCleanScreen"
+      v-if="
+        roomId &&
+        !isCleanScreen &&
+        pc28RoomEnabled &&
+        pc28CurrentRound &&
+        pc28CurrentRound.status !== 'cancelled'
+      "
       :room-id="roomId"
-      :config="pc28Config"
       :current-round="pc28CurrentRound"
       :last-settled-round="pc28LastSettledRound"
       :is-anchor="canControlPC28"
@@ -545,34 +549,57 @@
       </div>
     </Transition>
 
-    <!-- 🎯 PC28游戏设置弹窗（主播） -->
-    <!-- 🎯 PC28游戏设置弹窗 (仅房间主播可见，排除特殊用户) -->
-    <PC28GameConfigComponent
-      v-if="showPC28Config && canControlPC28"
-      :show="showPC28Config"
-      :config="pc28Config"
-      :room-id="roomId"
-      @close="showPC28Config = false"
-      @save="handleSavePC28Config"
-    />
+    <!-- 🎯 PC28首次开启弹窗（仅房间主播可见） -->
+    <Transition name="fade">
+      <div
+        v-if="showPC28StartModal"
+        class="pc28-start-modal-overlay"
+        @click.self="showPC28StartModal = false"
+      >
+        <div class="pc28-start-modal">
+          <div class="modal-header">
+            <h3>PC28游戏</h3>
+            <Icon icon="ion:close" class="close-btn" @click="showPC28StartModal = false" />
+          </div>
+          <div class="modal-content">
+            <p>开启后，系统将自动：</p>
+            <ul>
+              <li>同步官方开奖数据</li>
+              <li>自动开盘、封盘、结算</li>
+              <li>您只需控制开始/停止</li>
+            </ul>
+            <div class="reward-notice">
+              <p class="reward-text">
+                <Icon icon="solar:gift-bold" class="reward-icon" />
+                <span>玩家下注无论输赢，你将获得1%的注单额奖励</span>
+              </p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-cancel" @click="showPC28StartModal = false">取消</button>
+            <button class="btn-confirm" @click="handleStartPC28">开始游戏</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
-    <!-- 🎯 PC28游戏控制面板（仅房间主播可见，排除特殊用户） -->
-    <PC28GameControl
-      v-if="showPC28Control && canControlPC28"
-      :show="showPC28Control"
-      :current-round="pc28CurrentRound"
+    <!-- 🎯 PC28主播控制挂件（仅房间主播可见） -->
+    <PC28AnchorControl
+      v-if="showPC28AnchorControl && canControlPC28 && pc28RoomEnabled"
       :room-id="roomId"
-      @close="showPC28Control = false"
-      @refresh="handlePC28Refresh"
+      :current-round="pc28CurrentRound"
+      :room-bet-amount="pc28RoomBetAmount"
+      @close="showPC28AnchorControl = false"
+      @refresh="fetchPC28Data"
     />
 
     <!-- 🎯 PC28用户下注面板 -->
     <PC28BetPanel
       v-if="showPC28Bet"
       :show="showPC28Bet"
-      :config="pc28Config"
       :current-round="pc28CurrentRound"
       @close="showPC28Bet = false"
+      :room-id="roomId"
     />
 
     <!-- 🎯 PC28下注记录面板（主播视角或已结算时所有用户可查看） -->
@@ -601,16 +628,19 @@ import VapPlayer from '@/components/live/VapPlayer.vue'
 import UserPanel from '@/components/UserPanel.vue'
 import RedPacketOverlay from '@/components/live/RedPacketOverlay.vue'
 import PC28GameOverlay from '@/components/live/PC28GameOverlay.vue'
-import PC28GameConfigComponent from '@/components/live/PC28GameConfig.vue'
-import PC28GameControl from '@/components/live/PC28GameControl.vue'
+import PC28AnchorControl from '@/components/live/PC28AnchorControl.vue'
 import PC28BetPanel from '@/components/live/PC28BetPanel.vue'
 import PC28BetRecords from '@/components/live/PC28BetRecords.vue'
 import Dom from '@/utils/dom'
 import { DefaultUser } from '@/utils/const_var'
 
 import { useBaseStore } from '@/store/pinia'
-import { getPC28Config, upsertPC28Config, getCurrentRound, getLastSettledRound } from '@/api/pc28'
-import type { PC28GameConfig, PC28GameRound } from '@/api/pc28'
+import {
+  getCurrentGlobalRound,
+  getRoomPC28Status,
+  enablePC28ForRoom,
+  type PC28GlobalRound
+} from '@/api/pc28'
 
 const route = useRoute()
 const baseStore = useBaseStore()
@@ -693,6 +723,7 @@ const isPlayingEffect = ref(false) // 当前是否有特效正在播放
 const viewerCount = ref(0)
 const viewers = ref<any[]>([]) // 存储前几名观众
 let watchTimeTimer: any = null // 观看时长定时器
+let pc28CheckTimer: any = null // PC28检查定时器
 const fallbackAvatar = new URL('../../assets/img/icon/avatar/0.png', import.meta.url).href
 
 // --- 礼物相关 ---
@@ -809,13 +840,14 @@ const packetForm = reactive({
 
 // --- PC28游戏相关 ---
 const showGameMenu = ref(false)
-const showPC28Config = ref(false)
-const showPC28Control = ref(false)
+const showPC28AnchorControl = ref(false)
 const showPC28Bet = ref(false)
 const showPC28BetRecords = ref(false)
-const pc28Config = ref<PC28GameConfig | null>(null)
-const pc28CurrentRound = ref<PC28GameRound | null>(null)
-const pc28LastSettledRound = ref<PC28GameRound | null>(null)
+const showPC28StartModal = ref(false) // 首次开启弹窗
+const pc28CurrentRound = ref<PC28GlobalRound | null>(null)
+const pc28LastSettledRound = ref<PC28GlobalRound | null>(null)
+const pc28RoomEnabled = ref(false) // 房间是否开启PC28
+const pc28RoomBetAmount = ref(0) // 该房间的下注总额
 const isAnchor = computed(() => {
   return (
     roomInfo.value.is_self_hosted &&
@@ -830,9 +862,9 @@ const canControlPC28 = computed(() => {
 })
 
 // 用于记录要查看的round（可能是当前round或已结算的round）
-const pc28ViewingRound = ref<PC28GameRound | null>(null)
+const pc28ViewingRound = ref<PC28GlobalRound | null>(null)
 
-function handleOpenBetRecords(round: PC28GameRound) {
+function handleOpenBetRecords(round: PC28GlobalRound) {
   console.log('[LivePage] handleOpenBetRecords called, round:', round)
   console.log('[LivePage] canControlPC28:', canControlPC28.value)
   // 设置要查看的round（可能是当前round或已结算的round）
@@ -849,19 +881,50 @@ async function fetchPC28Data() {
   if (!roomId.value) return
 
   try {
-    // 获取配置
-    const config = await getPC28Config(roomId.value)
-    pc28Config.value = config
+    // 获取房间PC28状态和当前全局期数
+    const statusRes = await getRoomPC28Status(roomId.value)
+    console.log('[PC28] fetchPC28Data result:', statusRes)
+    if (statusRes.success && statusRes.data) {
+      pc28RoomEnabled.value = statusRes.data.enabled
+      const newRound = statusRes.data.current_round
+      const oldPeriod = pc28CurrentRound.value?.period_number
+      const newPeriod = newRound?.period_number
 
-    // 获取当前期数（betting/sealed/settled）
-    const round = await getCurrentRound(roomId.value)
-    pc28CurrentRound.value = round
+      // 如果期数发生变化，记录日志
+      if (oldPeriod !== newPeriod) {
+        console.log(`[PC28] Period changed: ${oldPeriod} -> ${newPeriod}`)
+      }
 
-    // 获取最近一个已结算的期数（排除当前round，确保是上一期的）
-    const lastSettled = await getLastSettledRound(roomId.value, round?.id)
+      pc28CurrentRound.value = newRound
 
-    // 始终显示上一期的已结算round（如果存在）
-    pc28LastSettledRound.value = lastSettled
+      // 如果有当前期数，获取该房间的下注总额
+      if (pc28CurrentRound.value) {
+        const { data: bets } = await supabase
+          .from('pc28_bets')
+          .select('amount')
+          .eq('global_round_id', pc28CurrentRound.value.id)
+          .eq('room_id', roomId.value)
+          .eq('status', 'pending')
+
+        pc28RoomBetAmount.value = bets?.reduce((sum, bet) => sum + Number(bet.amount || 0), 0) || 0
+      }
+
+      // 获取最近一个已结算的期数
+      if (pc28CurrentRound.value?.status === 'settled') {
+        pc28LastSettledRound.value = pc28CurrentRound.value
+      } else {
+        // 查询上一个已结算的期数（按期号降序排列，确保获取最新的）
+        const { data: lastSettled } = await supabase
+          .from('pc28_global_rounds')
+          .select('*')
+          .eq('status', 'settled')
+          .order('period_number', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        pc28LastSettledRound.value = lastSettled as PC28GlobalRound | null
+      }
+    }
   } catch (e: any) {
     console.error('[PC28] fetch data error:', e)
   }
@@ -874,28 +937,17 @@ async function handlePC28Refresh() {
   await refreshUserBalance()
 }
 
-async function handleSavePC28Config(config: Partial<PC28GameConfig>) {
-  if (!roomId.value) return
-
-  try {
-    await upsertPC28Config(roomId.value, config)
-    await fetchPC28Data()
-  } catch (e: any) {
-    _notice(e.message || '保存失败')
-  }
-}
-
 function handleGameToggleClick() {
-  // 只有房间主播可以控制PC28游戏
   if (canControlPC28.value) {
-    if (pc28Config.value?.is_enabled) {
-      showPC28Control.value = true
+    // 主播：如果未开启，显示开启弹窗；如果已开启，显示控制挂件
+    if (!pc28RoomEnabled.value) {
+      showPC28StartModal.value = true
     } else {
-      showPC28Config.value = true
+      showPC28AnchorControl.value = true
     }
   } else {
-    // 非主播不应该看到这个按钮，但以防万一
-    showGameMenu.value = true
+    // 用户：打开下注面板
+    showPC28Bet.value = true
   }
 }
 
@@ -903,11 +955,11 @@ function handleSelectGame(game: string) {
   showGameMenu.value = false
   if (game === 'pc28') {
     if (canControlPC28.value) {
-      // 房间主播：打开设置或控制面板
-      if (pc28Config.value?.is_enabled) {
-        showPC28Control.value = true
+      // 主播：如果未开启，显示开启弹窗；如果已开启，显示控制挂件
+      if (!pc28RoomEnabled.value) {
+        showPC28StartModal.value = true
       } else {
-        showPC28Config.value = true
+        showPC28AnchorControl.value = true
       }
     } else {
       // 用户：打开下注面板
@@ -917,10 +969,108 @@ function handleSelectGame(game: string) {
 }
 
 // 解析PC28消息内容，如果是JSON则提取text字段
+// 开启PC28游戏
+async function handleStartPC28() {
+  if (!roomId.value) return
+
+  try {
+    const res = await enablePC28ForRoom(roomId.value)
+    if (res.success) {
+      _notice('PC28游戏已开启')
+      showPC28StartModal.value = false
+
+      // 刷新数据
+      await fetchPC28Data()
+
+      // 如果开启后没有当前期数，等待脚本自动开盘（脚本每5秒运行一次）
+      if (!pc28CurrentRound.value) {
+        console.log('[PC28] No current round after enabling, waiting for polling script to open...')
+        // 轮询检查（最多等待10秒）
+        let retryCount = 0
+        const maxRetries = 10
+        pc28CheckTimer = setInterval(async () => {
+          retryCount++
+          await fetchPC28Data()
+          if (pc28CurrentRound.value || retryCount >= maxRetries) {
+            if (pc28CheckTimer) {
+              clearInterval(pc28CheckTimer)
+              pc28CheckTimer = null
+            }
+            if (pc28CurrentRound.value) {
+              _notice('游戏已开始')
+            }
+          }
+        }, 1000)
+      }
+
+      showPC28AnchorControl.value = true
+    } else {
+      _notice(res.message || '开启失败')
+    }
+  } catch (e: any) {
+    _notice(e.message || '开启失败')
+  }
+}
+
 function getPC28MessageText(content: string): string {
   try {
     const parsed = JSON.parse(content)
-    return parsed.text || content
+
+    // 如果已经有text字段，直接返回
+    if (parsed.text) {
+      return parsed.text
+    }
+
+    // 根据type生成对应的文本
+    switch (parsed.type) {
+      case 'round_opened':
+        return `PC28 ${parsed.period_number}期 已开盘，开始下注！`
+      case 'round_sealed':
+        return `PC28 ${parsed.period_number}期 已封盘，停止下注！`
+      case 'round_cancelled':
+        return `PC28 ${parsed.period_number}期 已取消${parsed.reason ? `：${parsed.reason}` : ''}`
+      case 'round_settled':
+        if (parsed.result) {
+          return `PC28 ${parsed.period_number}期 开奖：${parsed.result.num1}+${parsed.result.num2}+${parsed.result.num3}=${parsed.result.sum}`
+        }
+        return `PC28 ${parsed.period_number}期 已结算`
+      case 'bet': {
+        // 下注消息：显示用户名、下注类型和金额
+        const betTypeNames: Record<string, string> = {
+          big: '大',
+          small: '小',
+          odd: '单',
+          even: '双',
+          big_odd: '大单',
+          big_even: '大双',
+          small_odd: '小单',
+          small_even: '小双',
+          extreme_big: '极大',
+          extreme_small: '极小',
+          pair: '对子',
+          straight: '顺子',
+          leopard: '豹子'
+        }
+
+        let betTypeName = betTypeNames[parsed.bet_type] || parsed.bet_type
+        if (
+          parsed.bet_type === 'single_point' &&
+          parsed.bet_value !== null &&
+          parsed.bet_value !== undefined
+        ) {
+          betTypeName = `单点${parsed.bet_value}`
+        }
+
+        const userName = parsed.user_nickname || '用户'
+        const amount = parsed.amount || 0
+        return `${userName} 下注了 ${betTypeName} ${amount}抖币`
+      }
+      default:
+        // 如果没有匹配的类型，尝试返回reason或其他字段
+        return parsed.reason || parsed.period_number
+          ? `PC28 ${parsed.period_number || ''}期 ${parsed.reason || ''}`
+          : content
+    }
   } catch {
     // 如果不是JSON，直接返回原内容
     return content
@@ -930,33 +1080,137 @@ function getPC28MessageText(content: string): string {
 function setupPC28Realtime() {
   if (!roomId.value) return
 
+  // 先移除旧的 channel（如果存在）
+  if (pc28Channel) {
+    supabase.removeChannel(pc28Channel)
+  }
+
+  console.log('[PC28-Realtime] Setting up Realtime listener for room:', roomId.value)
+
   pc28Channel = supabase
-    .channel(`pc28_${roomId.value}`)
+    .channel(`pc28_global_${roomId.value}`)
+    // 监听全局期数表的 INSERT 事件：直接更新状态
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'pc28_global_rounds'
+      },
+      (payload) => {
+        const newRound = payload.new as PC28GlobalRound
+        console.log('[PC28-Realtime] New round inserted:', newRound)
+
+        // 如果新插入的是进行中的期数（betting/sealed），检查期数是否更新
+        if (newRound.status === 'betting' || newRound.status === 'sealed') {
+          const oldPeriod = pc28CurrentRound.value?.period_number
+          const newPeriod = newRound.period_number
+
+          // 只有当新期数比当前期数更大时才更新挂件，避免状态回退
+          if (!oldPeriod || Number(newPeriod) > Number(oldPeriod)) {
+            console.log(`[PC28-Realtime] Period updated via INSERT: ${oldPeriod} -> ${newPeriod}`)
+            pc28CurrentRound.value = newRound
+            // 异步更新下注总额（不影响UI更新）
+            updateRoomBetAmount(newRound.id)
+          } else {
+            console.log(
+              `[PC28-Realtime] Ignoring older period INSERT: ${newPeriod} <= ${oldPeriod}`
+            )
+          }
+        }
+      }
+    )
+    // 监听全局期数表的 UPDATE 事件：直接更新状态
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'pc28_global_rounds'
+      },
+      (payload) => {
+        const updatedRound = payload.new as PC28GlobalRound
+        console.log('[PC28-Realtime] Round updated:', updatedRound)
+
+        // 如果更新的是当前显示的期数，直接更新状态
+        if (pc28CurrentRound.value?.id === updatedRound.id) {
+          const oldStatus = pc28CurrentRound.value.status
+          pc28CurrentRound.value = updatedRound
+
+          if (oldStatus !== updatedRound.status) {
+            console.log(
+              `[PC28-Realtime] Round status changed: ${oldStatus} -> ${updatedRound.status}`
+            )
+          }
+
+          // 如果状态变为已结算，更新已结算期数
+          if (updatedRound.status === 'settled') {
+            pc28LastSettledRound.value = updatedRound
+          }
+
+          // 异步更新下注总额
+          updateRoomBetAmount(updatedRound.id)
+        } else if (updatedRound.status === 'betting' || updatedRound.status === 'sealed') {
+          // 只有当新期数比当前期数更大时才更新挂件，避免状态回退
+          const currentPeriod = pc28CurrentRound.value?.period_number
+          const updatedPeriod = updatedRound.period_number
+          if (!currentPeriod || Number(updatedPeriod) > Number(currentPeriod)) {
+            console.log(
+              `[PC28-Realtime] Updating to newer period: ${currentPeriod} -> ${updatedPeriod}`
+            )
+            pc28CurrentRound.value = updatedRound
+            updateRoomBetAmount(updatedRound.id)
+          } else {
+            console.log(
+              `[PC28-Realtime] Ignoring older period update: ${updatedPeriod} <= ${currentPeriod}`
+            )
+          }
+        }
+      }
+    )
+    // 监听房间开关状态变化：需要重新查询
     .on(
       'postgres_changes',
       {
         event: '*',
         schema: 'public',
-        table: 'pc28_game_configs',
+        table: 'pc28_room_enabled',
         filter: `room_id=eq.${roomId.value}`
       },
-      () => {
+      (payload) => {
+        console.log('[PC28-Realtime] Room enabled status changed:', payload.new)
+        // 房间开关状态变化需要重新查询完整状态
         fetchPC28Data()
       }
     )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'pc28_game_rounds',
-        filter: `room_id=eq.${roomId.value}`
-      },
-      () => {
-        fetchPC28Data()
+    .subscribe((status) => {
+      console.log('[PC28-Realtime] Subscription status:', status)
+      if (status === 'SUBSCRIBED') {
+        console.log('[PC28-Realtime] Successfully subscribed to PC28 updates')
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('[PC28-Realtime] Channel subscription error')
+      } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn('[PC28-Realtime] Channel subscription timeout or closed')
       }
-    )
-    .subscribe()
+    })
+}
+
+// 更新房间下注总额（异步，不阻塞UI）
+async function updateRoomBetAmount(globalRoundId: string) {
+  if (!roomId.value) return
+
+  try {
+    const { data: bets } = await supabase
+      .from('pc28_bets')
+      .select('amount')
+      .eq('global_round_id', globalRoundId)
+      .eq('room_id', roomId.value)
+      .eq('status', 'pending')
+
+    pc28RoomBetAmount.value = bets?.reduce((sum, bet) => sum + Number(bet.amount || 0), 0) || 0
+  } catch (e) {
+    console.error('[PC28] Error updating bet amount:', e)
+  }
 }
 
 const canSendPacket = computed(() => {
@@ -1850,6 +2104,13 @@ function setupSubscription() {
         }
 
         // 普通消息或新礼物消息添加
+        // 检查是否已存在相同ID的消息，避免重复推送
+        const existingIndex = messages.value.findIndex((m) => m.id === payload.new.id)
+        if (existingIndex >= 0) {
+          console.warn('[LivePage] Duplicate message detected, skipping:', payload.new.id)
+          return
+        }
+
         const newMessage = {
           id: payload.new.id,
           content: payload.new.content,
@@ -1973,8 +2234,6 @@ function setupSubscription() {
 onMounted(async () => {
   await fetchGifts()
   await initRoom()
-  await fetchPC28Data()
-  setupPC28Realtime()
 
   // 🎯 观看时长上报：每10秒上报一次
   watchTimeTimer = setInterval(() => {
@@ -1991,10 +2250,17 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   isLandscape.value = false // 退出时重置状态
   if (channel) supabase.removeChannel(channel)
-  if (pc28Channel) supabase.removeChannel(pc28Channel)
+  if (pc28Channel) {
+    console.log('[PC28-Realtime] Unsubscribing pc28Channel on unmount')
+    supabase.removeChannel(pc28Channel)
+  }
   if (watchTimeTimer) {
     clearInterval(watchTimeTimer)
     watchTimeTimer = null
+  }
+  if (pc28CheckTimer) {
+    clearInterval(pc28CheckTimer)
+    pc28CheckTimer = null
   }
 })
 </script>
@@ -3350,6 +3616,143 @@ onBeforeUnmount(() => {
 }
 
 // 🎯 PC28游戏菜单弹窗样式
+// 🎯 PC28首次开启弹窗样式
+.pc28-start-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.pc28-start-modal {
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16rem;
+  padding: 24rem;
+  min-width: 320rem;
+  max-width: 400rem;
+  box-shadow: 0 8rem 32rem rgba(0, 0, 0, 0.5);
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20rem;
+
+    h3 {
+      color: white;
+      font-size: 18rem;
+      font-weight: bold;
+      margin: 0;
+    }
+
+    .close-btn {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 20rem;
+      cursor: pointer;
+      transition: color 0.2s;
+
+      &:hover {
+        color: white;
+      }
+    }
+  }
+
+  .modal-content {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14rem;
+    margin-bottom: 24rem;
+
+    p {
+      margin-bottom: 12rem;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+
+      li {
+        padding: 8rem 0;
+        padding-left: 24rem;
+        position: relative;
+
+        &::before {
+          content: '•';
+          position: absolute;
+          left: 0;
+          color: #4caf50;
+          font-size: 18rem;
+        }
+      }
+    }
+
+    .reward-notice {
+      margin-top: 20rem;
+      padding: 16rem;
+      background: rgba(76, 175, 80, 0.1);
+      border-radius: 8rem;
+      border: 1px solid rgba(76, 175, 80, 0.3);
+
+      .reward-text {
+        display: flex;
+        align-items: center;
+        gap: 8rem;
+        margin: 0;
+        color: #4caf50;
+        font-size: 14rem;
+        font-weight: bold;
+
+        .reward-icon {
+          font-size: 18rem;
+          flex-shrink: 0;
+        }
+      }
+    }
+  }
+
+  .modal-footer {
+    display: flex;
+    gap: 12rem;
+    justify-content: flex-end;
+
+    button {
+      padding: 10rem 24rem;
+      border-radius: 8rem;
+      border: none;
+      font-size: 14rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &.btn-cancel {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.7);
+
+        &:hover {
+          background: rgba(255, 255, 255, 0.2);
+          color: white;
+        }
+      }
+
+      &.btn-confirm {
+        background: #4caf50;
+        color: white;
+
+        &:hover {
+          background: #45a049;
+        }
+      }
+    }
+  }
+}
+
 .game-menu-overlay {
   position: fixed;
   top: 0;
