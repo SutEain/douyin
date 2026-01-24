@@ -21,7 +21,7 @@
             >
               {{ formatResult(currentRound.result) }}
             </div>
-            <div class="total-bet">总下注：{{ totalBetAmount }} 抖币</div>
+            <div class="total-bet">总下注：{{ totalBetAmount.toFixed(2) }} 抖币</div>
           </div>
 
           <!-- 统计信息 -->
@@ -36,7 +36,7 @@
             </div>
             <div class="stat-item">
               <div class="stat-label">总金额</div>
-              <div class="stat-value">{{ totalBetAmount }} 抖币</div>
+              <div class="stat-value">{{ totalBetAmount.toFixed(2) }} 抖币</div>
             </div>
           </div>
 
@@ -65,7 +65,7 @@
                 <div class="user-info">
                   <div class="user-name">{{ getUserName(userId) }}</div>
                   <div class="user-stats">
-                    {{ userBets.length }} 注 · {{ getUserTotalAmount(userBets) }} 抖币
+                    {{ userBets.length }} 注 · {{ getUserTotalAmount(userBets).toFixed(2) }} 抖币
                     <span
                       v-if="currentRound?.status === 'settled'"
                       class="user-profit"

@@ -383,10 +383,10 @@ const defaultConfig: Partial<PC28GameConfig> = {
     odd_even: { enabled: true, odd: 1.99, even: 1.99 },
     combinations: {
       enabled: true,
-      big_odd: 4.2,
-      big_even: 4.6,
-      small_odd: 4.6,
-      small_even: 4.2
+      big_odd: 3.8,
+      big_even: 3.8,
+      small_odd: 3.8,
+      small_even: 3.8
     },
     extreme: { enabled: true, extreme_big: 15, extreme_small: 15 },
     patterns: { enabled: true, pair: 3.5, straight: 15, leopard: 88 },

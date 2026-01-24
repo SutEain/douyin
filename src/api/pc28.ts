@@ -420,6 +420,7 @@ export async function closePC28Game(roomId: string): Promise<{
 
 /**
  * 获取PC28相关的资金流水记录
+ * 使用数据库函数确保排序正确（created_at DESC, id DESC）
  */
 export async function getPC28Transactions(limit = 50): Promise<
   Array<{
@@ -432,12 +433,17 @@ export async function getPC28Transactions(limit = 50): Promise<
     related_id: string | null
   }>
 > {
-  const { data, error } = await supabase
-    .from('coin_transactions')
-    .select('id, amount, balance_after, type, description, created_at, related_id')
-    .in('type', ['pc28_bet', 'pc28_win', 'pc28_refund'])
-    .order('created_at', { ascending: false })
-    .limit(limit)
+  // 获取当前用户ID
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('用户未登录')
+
+  // 使用数据库函数获取正确排序的交易记录
+  const { data, error } = await supabase.rpc('get_pc28_transactions', {
+    p_user_id: user.id,
+    p_limit: limit
+  })
 
   if (error) throw error
   return (data || []) as Array<{

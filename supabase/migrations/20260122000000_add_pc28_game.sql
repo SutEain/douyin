@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS public.pc28_game_configs (
     game_settings JSONB DEFAULT '{
         "big_small": {"enabled": true, "big": 1.99, "small": 1.99},
         "odd_even": {"enabled": true, "odd": 1.99, "even": 1.99},
-        "combinations": {"enabled": true, "big_odd": 4.2, "big_even": 4.6, "small_odd": 4.6, "small_even": 4.2},
+        "combinations": {"enabled": true, "big_odd": 3.8, "big_even": 3.8, "small_odd": 3.8, "small_even": 3.8},
         "extreme": {"enabled": true, "extreme_big": 15, "extreme_small": 15},
         "patterns": {"enabled": true, "pair": 3.5, "straight": 15, "leopard": 88},
         "single_point": {"enabled": true, "odds": {"0": 488, "27": 488, "1": 128, "26": 128, "2": 88, "25": 88, "3": 58, "24": 58, "4": 48, "23": 48, "5": 38, "22": 38, "6": 28, "21": 28, "7": 18, "20": 18, "8": 15, "19": 15, "9": 15, "18": 15, "10": 14, "17": 14, "11": 13, "16": 13, "12": 12, "15": 12, "13": 11, "14": 11}}
