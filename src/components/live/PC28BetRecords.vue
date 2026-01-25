@@ -96,6 +96,9 @@
                       <span>赔率：{{ bet.odds }}x</span>
                       <span class="bet-status" :class="bet.status">
                         <span v-if="bet.status === 'pending'">待结算</span>
+                        <span v-else-if="bet.status === 'cancelled'" class="cancelled-text"
+                          >已取消</span
+                        >
                         <span v-else-if="bet.is_win" class="win-text"
                           >中奖 +{{ bet.user_gain }} 抖币</span
                         >
@@ -710,6 +713,11 @@ onBeforeUnmount(() => {
 
     .lose-text {
       color: rgba(255, 255, 255, 0.5);
+    }
+
+    .cancelled-text {
+      color: #ff9800;
+      font-weight: bold;
     }
   }
 }

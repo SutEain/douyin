@@ -268,6 +268,7 @@
                 <div class="bet-type-name">{{ getBetDisplayName(bet) }}</div>
                 <div class="bet-status" :class="bet.status">
                   <span v-if="bet.status === 'pending'">待结算</span>
+                  <span v-else-if="bet.status === 'cancelled'" class="cancelled">已取消</span>
                   <span v-else-if="bet.is_win" class="win">中奖</span>
                   <span
                     v-else-if="
@@ -1819,6 +1820,11 @@ async function handleBet() {
 
     &.lose {
       color: rgba(255, 255, 255, 0.5);
+    }
+
+    &.cancelled {
+      color: #ff9800;
+      background: rgba(255, 152, 0, 0.2);
     }
   }
 }

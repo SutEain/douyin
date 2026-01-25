@@ -1,6 +1,6 @@
--- 🎯 修复全局模式结算函数：优化按房间分组查询主播奖励的逻辑
--- 问题：查询时依赖 status = 'settled'，虽然在同一事务中应该能查询到，但更安全的做法是直接使用累计值
--- 修复：在循环中按房间分组累计下注额，循环结束后直接使用累计值给主播奖励
+-- 🎯 修复未中奖时错误记录交易流水的问题
+-- 问题：未中奖时，代码错误地给用户记录了 pc28_bet_income 类型的交易记录
+-- 修复：未中奖时，不应该给用户记录任何交易流水（用户没有获得任何收入）
 
 CREATE OR REPLACE FUNCTION public.settle_global_round(
     p_global_round_id UUID,
@@ -37,6 +37,7 @@ DECLARE
     v_user_profit NUMERIC; -- 用户盈利（用于计算平台抽成）
     -- 🎯 修复：使用临时表存储每个房间的下注总额
     v_room_bet_totals JSONB := '{}'::JSONB; -- 格式：{"room_id": bet_amount}
+    v_room_reward RECORD;
 BEGIN
     -- 🎯 设置会话变量，允许修改用户余额
     PERFORM set_config('app.pc28_settlement', 'true', false);
@@ -205,7 +206,7 @@ BEGIN
                 settled_at = now()
             WHERE id = v_bet.id;
         ELSE
-            -- 未中奖：不记录任何交易流水（用户没有获得任何收入）
+            -- 🎯 未中奖：不记录任何交易流水（用户没有获得任何收入）
             -- 更新下注记录
             UPDATE public.pc28_bets SET
                 status = 'settled',
@@ -314,4 +315,4 @@ EXCEPTION
 END;
 $$;
 
-COMMENT ON FUNCTION public.settle_global_round IS '结算全局期数：按房间分组，每个房间主播获得该房间下注额的1%。规则：13/14时组合玩法仅回本；对子/顺子/豹子时组合玩法正常结算。在谁的直播间下注，才给谁奖励。修复：使用循环中累计的下注额，不依赖status查询。';
+COMMENT ON FUNCTION public.settle_global_round IS '结算全局期数：按房间分组，每个房间主播获得该房间下注额的1%。规则：13/14时组合玩法仅回本；对子/顺子/豹子时组合玩法正常结算。在谁的直播间下注，才给谁奖励。修复：未中奖时不记录交易流水。';
