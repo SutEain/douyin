@@ -142,9 +142,6 @@ serve(async (req) => {
     const route = extractRoute(req.url)
     const method = req.method.toUpperCase()
 
-    // 🔥 调试日志：记录所有请求的路由和方法
-    console.log('[app-server] Route extracted:', route, 'Method:', method, 'URL:', req.url)
-
     if (route === '/auth/tg-login' && method === 'POST') {
       return handleTelegramLogin(req)
     }
@@ -403,15 +400,7 @@ function extractRoute(urlString: string) {
     const funcIndex = segments.indexOf('app-server')
     const subSegments = funcIndex >= 0 ? segments.slice(funcIndex + 1) : []
     const route = '/' + subSegments.join('/')
-    // 🔥 调试日志：记录路由提取结果
-    if (urlString.includes('/live/detail')) {
-      console.log('[extractRoute] URL:', urlString)
-      console.log('[extractRoute] pathname:', url.pathname)
-      console.log('[extractRoute] segments:', segments)
-      console.log('[extractRoute] funcIndex:', funcIndex)
-      console.log('[extractRoute] subSegments:', subSegments)
-      console.log('[extractRoute] route:', route)
-    }
+
     return route
   } catch (error) {
     console.error('[extractRoute] Error extracting route from URL:', urlString, error)
