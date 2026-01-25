@@ -36,12 +36,23 @@ const errorMessage = ref('')
 const isBrowserEnv = computed(() => isBrowserEnvironment())
 
 onMounted(async () => {
+  // 🎯 清理可能残留的 Telegram Widget 全局回调（防止旧代码干扰）
+  try {
+    if ((window as any).onTelegramAuth) {
+      delete (window as any).onTelegramAuth
+    }
+  } catch (e) {
+    // ignore
+  }
+
   // 🎯 如果已经有 session 了，说明是回退回来的，直接进入首页
   const { data } = await supabase.auth.getSession()
   if (data.session) {
     // 只有在当前确实还在登录页时才 replace，避免干扰正在进行的深链接跳转
     if (router.currentRoute.value.path === '/login/telegram') {
-      router.replace('/')
+      if (typeof router.replace === 'function') {
+        router.replace('/')
+      }
     }
     return
   }
@@ -75,13 +86,17 @@ const getInitDataFromUrl = (): string | null => {
 
     return null
   } catch (e) {
-    console.warn('[TelegramLogin] 解析 tgWebAppData 失败:', e)
+    // ignore
     return null
   }
 }
 
 const initTelegramLogin = async () => {
   try {
+    // 🎯 重置状态
+    isLoading.value = true
+    errorMessage.value = ''
+
     // ✅ 0) 优先从 URL 取 initData（避免 Telegram.WebApp 注入慢导致误判）
     const urlInitData = getInitDataFromUrl()
     if (urlInitData) {
@@ -103,7 +118,13 @@ const initTelegramLogin = async () => {
         return
       }
 
-      router.replace('/')
+      // 🎯 确保 router.replace 方法存在
+      if (typeof router.replace === 'function') {
+        router.replace('/')
+      } else {
+        errorMessage.value = '路由错误，请刷新页面重试'
+        isLoading.value = false
+      }
       return
     }
 
@@ -153,14 +174,25 @@ const initTelegramLogin = async () => {
     }
 
     // 登录成功，跳转到首页
-    router.replace('/')
-  } catch (error: any) {
-    console.error('[TelegramLogin] ❌ 登录失败:', error)
-    let msg = error?.message || '登录失败，请重试'
-    if (msg === 'Failed to fetch') {
-      msg = '网络连接失败，请检查网络或 VPN 设置'
+    // 🎯 确保 router.replace 方法存在
+    if (typeof router.replace === 'function') {
+      router.replace('/')
+    } else {
+      errorMessage.value = '路由错误，请刷新页面重试'
+      isLoading.value = false
     }
-    errorMessage.value = msg
+  } catch (error: any) {
+    // 🎯 检查是否是 "re is not a function" 错误（可能是 router.replace 被误写）
+    const errorMsg = error?.message || String(error) || ''
+    if (errorMsg.includes('re is not a function')) {
+      errorMessage.value = '页面错误，请刷新页面重试'
+    } else {
+      let msg = errorMsg || '登录失败，请重试'
+      if (msg === 'Failed to fetch') {
+        msg = '网络连接失败，请检查网络或 VPN 设置'
+      }
+      errorMessage.value = msg
+    }
     isLoading.value = false
   }
 }
@@ -187,7 +219,6 @@ const waitForTelegram = (): Promise<any> => {
         resolve(window.Telegram.WebApp)
       } else if (attempts >= maxAttempts) {
         clearInterval(checkInterval)
-        console.warn('[TelegramLogin] 等待 WebApp SDK 超时，尝试使用 URL 参数')
         // ✅ 即使超时也返回降级对象，避免后续代码报错
         // @ts-ignore
         resolve(window.Telegram?.WebApp || null)
