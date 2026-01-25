@@ -58,7 +58,40 @@ async function resolveAccessToken(required: boolean) {
   return token
 }
 
-async function requestAppServer(path: string, method: string = 'GET', body?: any) {
+// 🎯 可重试的错误类型
+const RETRYABLE_ERRORS = [
+  'Failed to fetch',
+  'fetch failed',
+  'NetworkError',
+  'Network error',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'ECONNREFUSED',
+  'timeout',
+  'AbortError'
+]
+
+// 🎯 判断错误是否可重试
+function isRetryableError(error: any): boolean {
+  if (!error) return false
+  const errorMsg = error.message || error.toString() || ''
+  const errorName = error.name || ''
+  return (
+    RETRYABLE_ERRORS.some((e) => errorMsg.includes(e)) ||
+    RETRYABLE_ERRORS.some((e) => errorName.includes(e)) ||
+    (error.status >= 500 && error.status < 600) || // 5xx 服务器错误
+    error.status === 429 // 限流错误
+  )
+}
+
+async function requestAppServer(
+  path: string,
+  method: string = 'GET',
+  body?: any,
+  retryCount = 0
+): Promise<{ success: boolean; data?: any; message?: string }> {
+  const maxRetries = 2 // 默认重试2次（总共3次尝试）
   const url = `${getAppServerBase()}${path}`
   const accessToken = await resolveAccessToken(true)
 
@@ -79,17 +112,99 @@ async function requestAppServer(path: string, method: string = 'GET', body?: any
     // ignore
   }
 
-  const resp = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined
-  })
+  // 🎯 添加超时控制
+  const controller = new AbortController()
+  const timeoutMs = 20000 + retryCount * 5000 // 递增超时时间：20s, 25s, 30s
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-  const payload = await resp.json()
-  if (resp.ok && payload?.code === 0) {
-    return { success: true, data: payload.data }
+  let resp: Response
+  try {
+    resp = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+  } catch (error: any) {
+    clearTimeout(timeoutId)
+
+    // 🎯 如果是可重试的错误且还有重试次数，进行重试
+    if (isRetryableError(error) && retryCount < maxRetries) {
+      const delay = (retryCount + 1) * 1000 // 递增延迟：1s, 2s
+      console.warn(
+        `[requestAppServer] 请求失败，${delay}ms 后重试 (${retryCount + 1}/${maxRetries}):`,
+        error.message || error
+      )
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      return requestAppServer(path, method, body, retryCount + 1)
+    }
+
+    // 不可重试或重试次数用完，返回错误
+    if (error.name === 'AbortError') {
+      return { success: false, message: '请求超时，请检查网络连接' }
+    }
+    // 🎯 处理网络错误（Failed to fetch 等）
+    if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch failed')) {
+      return { success: false, message: '网络连接失败，请检查网络或 VPN 设置' }
+    }
+    // 其他网络错误
+    return { success: false, message: error.message || '网络错误，请稍后重试' }
   }
-  return { success: false, message: payload?.msg || '操作失败' }
+
+  // 🎯 处理响应解析错误
+  let payload: any
+  try {
+    const text = await resp.text()
+    if (!text) {
+      if (resp.status >= 500 && retryCount < maxRetries) {
+        const delay = (retryCount + 1) * 1000
+        console.warn(
+          `[requestAppServer] 服务器错误 ${resp.status}，${delay}ms 后重试 (${retryCount + 1}/${maxRetries})`
+        )
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        return requestAppServer(path, method, body, retryCount + 1)
+      }
+      return { success: false, message: '服务器返回空响应' }
+    }
+    payload = JSON.parse(text)
+  } catch (parseError: any) {
+    // JSON 解析失败
+    if (resp.status >= 500 && retryCount < maxRetries) {
+      const delay = (retryCount + 1) * 1000
+      console.warn(
+        `[requestAppServer] 服务器错误 ${resp.status}，${delay}ms 后重试 (${retryCount + 1}/${maxRetries})`
+      )
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      return requestAppServer(path, method, body, retryCount + 1)
+    }
+    if (resp.status >= 500) {
+      return { success: false, message: '服务器错误，请稍后重试' }
+    }
+    if (resp.status === 404) {
+      return { success: false, message: '接口不存在' }
+    }
+    if (resp.status === 401 || resp.status === 403) {
+      return { success: false, message: '登录已过期，请重新登录' }
+    }
+    return { success: false, message: '服务器响应格式错误' }
+  }
+
+  // 🎯 处理业务错误（code !== 0）
+  if (!resp.ok || payload.code !== 0) {
+    // 5xx 或限流错误可以重试
+    if ((resp.status >= 500 || resp.status === 429) && retryCount < maxRetries) {
+      const delay = (retryCount + 1) * 1000
+      console.warn(
+        `[requestAppServer] 服务器错误 ${resp.status}，${delay}ms 后重试 (${retryCount + 1}/${maxRetries})`
+      )
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      return requestAppServer(path, method, body, retryCount + 1)
+    }
+    return { success: false, message: payload?.msg || '操作失败' }
+  }
+
+  return { success: true, data: payload.data }
 }
 
 async function requestAppServerList(path: string, params?: any) {

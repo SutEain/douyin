@@ -41,8 +41,7 @@ BEGIN
         )
         ON CONFLICT (user_id, watch_date)
         DO UPDATE SET
-            last_updated_at = NOW(),
-            updated_at = NOW();
+            last_updated_at = NOW();
         
         RETURN jsonb_build_object(
             'success', true,
@@ -84,8 +83,7 @@ BEGIN
         ON CONFLICT (user_id, watch_date)
         DO UPDATE SET
             total_seconds = COALESCE(user_daily_watch_time.total_seconds, 0) + v_duration_seconds,
-            last_updated_at = NOW(),
-            updated_at = NOW()
+            last_updated_at = NOW()
         RETURNING total_seconds INTO v_new_total_seconds;
         
         RETURN jsonb_build_object(
@@ -140,8 +138,7 @@ BEGIN
         UPDATE public.user_daily_watch_time
         SET 
             total_seconds = COALESCE(total_seconds, 0) + v_duration_seconds,
-            last_updated_at = NOW(),
-            updated_at = NOW()
+            last_updated_at = NOW()
         WHERE user_id = v_record.user_id
           AND watch_date = v_today;
         

@@ -85,21 +85,30 @@ export async function startPresenceTracking() {
         if (myPresence && myPresence.length > 0) {
           // 用户在线（首次同步或重连）
           console.log('[Presence] User synced (online)')
-          await notifyPresenceOnline(user.id)
+          // 🎯 异步通知，不阻塞
+          notifyPresenceOnline(user.id).catch((error) => {
+            console.warn('[Presence] Failed to notify online:', error)
+          })
         }
       })
       .on('presence', { event: 'join' }, async ({ key }: any) => {
         // join 事件：用户上线
         if (key === user.id) {
           console.log('[Presence] User joined (online)')
-          await notifyPresenceOnline(user.id)
+          // 🎯 异步通知，不阻塞
+          notifyPresenceOnline(user.id).catch((error) => {
+            console.warn('[Presence] Failed to notify online:', error)
+          })
         }
       })
       .on('presence', { event: 'leave' }, async ({ key }: any) => {
         // leave 事件：用户下线
         if (key === user.id) {
           console.log('[Presence] User left (offline)')
-          await notifyPresenceOffline(user.id)
+          // 🎯 异步通知，不阻塞
+          notifyPresenceOffline(user.id).catch((error) => {
+            console.warn('[Presence] Failed to notify offline:', error)
+          })
         }
       })
       .subscribe(async (status: string) => {
@@ -111,6 +120,12 @@ export async function startPresenceTracking() {
             online_at: new Date().toISOString()
           })
           isTracking = true
+          // 🎯 订阅成功后，延迟通知上线（避免影响应用启动）
+          setTimeout(() => {
+            notifyPresenceOnline(user.id).catch((error) => {
+              console.warn('[Presence] Failed to notify online:', error)
+            })
+          }, 1000)
         }
       })
   } catch (error) {

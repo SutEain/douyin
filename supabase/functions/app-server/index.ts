@@ -99,26 +99,29 @@ serve(async (req) => {
       route === '/auth/verify-code' ||
       route === '/auth/admin-login'
 
-    // 非公开认证接口才检查 IP 黑名单和频率限制
-    if (!isPublicAuthRoute) {
+    // 🎯 Presence 接口不需要频率限制（静默失败，不影响用户体验）
+    const isPresenceRoute = route === '/presence/online' || route === '/presence/offline'
+
+    // 非公开认证接口和 Presence 接口才检查 IP 黑名单和频率限制
+    if (!isPublicAuthRoute && !isPresenceRoute) {
       const { checkIpBlacklist, getClientIp } = await import('./lib/auth.ts')
       await checkIpBlacklist(req)
 
-      // 🔥 全项目接口频率限制：1分钟最多10次请求
+      // 🔥 全项目接口频率限制：10秒内最多60次请求（正常用户不会超过）
       const clientIp = getClientIp(req)
       if (clientIp) {
         const { checkRateLimit } = await import('./lib/rateLimit.ts')
         const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'api_request', {
-          maxAttempts: 10, // 1分钟最多10次请求
-          windowMs: 60000, // 60秒窗口（1分钟）
+          maxAttempts: 60, // 10秒内最多60次请求（正常用户不会超过）
+          windowMs: 10000, // 10秒窗口
           lockDurationMs: undefined
         })
 
         if (!rateLimitResult.allowed) {
           // 请求过于频繁，直接永久封禁
           const { autoBanIp } = await import('./routes/ipBlacklist.ts')
-          await autoBanIp(clientIp, 'API 请求过于频繁（1分钟内超过10次），已永久封禁', null)
-          console.warn(`[API_ATTACK] IP ${clientIp} 请求过于频繁（1分钟内超过10次），已永久封禁`)
+          await autoBanIp(clientIp, 'API 请求过于频繁（10秒内超过60次），已永久封禁', null)
+          console.warn(`[API_ATTACK] IP ${clientIp} 请求过于频繁（10秒内超过60次），已永久封禁`)
           return errorResponse('Forbidden', 1, 403)
         }
       }
@@ -138,6 +141,9 @@ serve(async (req) => {
   try {
     const route = extractRoute(req.url)
     const method = req.method.toUpperCase()
+
+    // 🔥 调试日志：记录所有请求的路由和方法
+    console.log('[app-server] Route extracted:', route, 'Method:', method, 'URL:', req.url)
 
     if (route === '/auth/tg-login' && method === 'POST') {
       return handleTelegramLogin(req)
@@ -323,6 +329,7 @@ serve(async (req) => {
       return handleLiveRooms(req)
     }
     if (route === '/live/detail' && method === 'GET') {
+      console.log('[app-server] /live/detail route matched, calling handleLiveRoomDetail')
       return handleLiveRoomDetail(req)
     }
     // 🧧 红包相关路由
@@ -390,11 +397,26 @@ serve(async (req) => {
 })
 
 function extractRoute(urlString: string) {
-  const url = new URL(urlString)
-  const segments = url.pathname.split('/').filter(Boolean)
-  const funcIndex = segments.indexOf('app-server')
-  const subSegments = funcIndex >= 0 ? segments.slice(funcIndex + 1) : []
-  return '/' + subSegments.join('/')
+  try {
+    const url = new URL(urlString)
+    const segments = url.pathname.split('/').filter(Boolean)
+    const funcIndex = segments.indexOf('app-server')
+    const subSegments = funcIndex >= 0 ? segments.slice(funcIndex + 1) : []
+    const route = '/' + subSegments.join('/')
+    // 🔥 调试日志：记录路由提取结果
+    if (urlString.includes('/live/detail')) {
+      console.log('[extractRoute] URL:', urlString)
+      console.log('[extractRoute] pathname:', url.pathname)
+      console.log('[extractRoute] segments:', segments)
+      console.log('[extractRoute] funcIndex:', funcIndex)
+      console.log('[extractRoute] subSegments:', subSegments)
+      console.log('[extractRoute] route:', route)
+    }
+    return route
+  } catch (error) {
+    console.error('[extractRoute] Error extracting route from URL:', urlString, error)
+    return '/'
+  }
 }
 
 // 🎯 处理浏览器端 Telegram Login Widget 登录

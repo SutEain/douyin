@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>深链测试工具</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 50px auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+        margin-bottom: 30px;
+      }
+      .form-group {
+        margin-bottom: 20px;
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: #666;
+        font-weight: bold;
+      }
+      input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        box-sizing: border-box;
+      }
+      button {
+        background: #007bff;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-right: 10px;
+        margin-top: 10px;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      .result {
+        margin-top: 20px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        border-left: 4px solid #007bff;
+      }
+      .error {
+        background: #fff5f5;
+        border-left-color: #dc3545;
+        color: #dc3545;
+      }
+      .success {
+        background: #f0fff4;
+        border-left-color: #28a745;
+        color: #28a745;
+      }
+      .preset-rooms {
+        margin-top: 20px;
+      }
+      .preset-room {
+        display: inline-block;
+        margin: 5px;
+        padding: 8px 16px;
+        background: #e9ecef;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .preset-room:hover {
+        background: #dee2e6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎯 深链测试工具</h1>
+
+      <div class="form-group">
+        <label for="roomId">直播间 ID:</label>
+        <input type="text" id="roomId" placeholder="例如: 43efcb5e-23fa-43fa-a379-c3a8c406ec98" />
+      </div>
+
+      <div class="form-group">
+        <label for="baseUrl">应用基础 URL:</label>
+        <input
+          type="text"
+          id="baseUrl"
+          placeholder="例如: http://localhost:5173 或生产环境 URL"
+          value="http://localhost:5173"
+        />
+      </div>
+
+      <button onclick="testDeeplink()">🚀 测试深链</button>
+      <button onclick="testApi()">🔍 测试 API</button>
+      <button onclick="openInNewTab()">📱 新标签页打开</button>
+
+      <div id="result"></div>
+
+      <div class="preset-rooms">
+        <h3>预设房间（点击快速测试）:</h3>
+        <div class="preset-room" onclick="setRoomId('43efcb5e-23fa-43fa-a379-c3a8c406ec98')">
+          房间 1: 43efcb5e...
+        </div>
+        <!-- 可以添加更多预设房间 -->
+      </div>
+    </div>
+
+    <script>
+      function setRoomId(roomId) {
+        document.getElementById('roomId').value = roomId
+      }
+
+      function getRoomId() {
+        return document.getElementById('roomId').value.trim()
+      }
+
+      function getBaseUrl() {
+        return document.getElementById('baseUrl').value.trim() || window.location.origin
+      }
+
+      function showResult(message, isError = false) {
+        const resultDiv = document.getElementById('result')
+        resultDiv.className = 'result ' + (isError ? 'error' : 'success')
+        resultDiv.innerHTML =
+          '<strong>' + (isError ? '❌ 错误:' : '✅ 成功:') + '</strong> ' + message
+      }
+
+      async function testApi() {
+        const roomId = getRoomId()
+        if (!roomId) {
+          showResult('请输入直播间 ID', true)
+          return
+        }
+
+        const baseUrl = getBaseUrl()
+        const apiUrl = baseUrl.includes('localhost')
+          ? 'http://localhost:54321/functions/v1/app-server/live/detail'
+          : 'https://zhlkanxfucnsatafeqdp.supabase.co/functions/v1/app-server/live/detail'
+
+        showResult('正在测试 API: ' + apiUrl + '?id=' + roomId)
+
+        try {
+          const response = await fetch(`${apiUrl}?id=${roomId}`, {
+            method: 'GET',
+            headers: {
+              apikey:
+                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpobGthbnhmdWNuc2F0YWZlZ2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzUxMjYwMDAsImV4cCI6MjA1MDcwMjAwMH0.placeholder'
+            }
+          })
+
+          const data = await response.json()
+
+          if (response.ok) {
+            showResult(
+              `API 调用成功！状态: ${response.status}<br><pre>${JSON.stringify(data, null, 2)}</pre>`
+            )
+          } else {
+            showResult(
+              `API 调用失败！状态: ${response.status}<br><pre>${JSON.stringify(data, null, 2)}</pre>`,
+              true
+            )
+          }
+        } catch (error) {
+          showResult('API 调用异常: ' + error.message, true)
+        }
+      }
+
+      function testDeeplink() {
+        const roomId = getRoomId()
+        if (!roomId) {
+          showResult('请输入直播间 ID', true)
+          return
+        }
+
+        const baseUrl = getBaseUrl()
+        const deeplinkUrl = `${baseUrl}/home/live?id=${roomId}`
+
+        showResult(
+          '深链 URL: <a href="' + deeplinkUrl + '" target="_blank">' + deeplinkUrl + '</a>'
+        )
+
+        // 延迟一下再跳转，让用户看到结果
+        setTimeout(() => {
+          window.location.href = deeplinkUrl
+        }, 500)
+      }
+
+      function openInNewTab() {
+        const roomId = getRoomId()
+        if (!roomId) {
+          showResult('请输入直播间 ID', true)
+          return
+        }
+
+        const baseUrl = getBaseUrl()
+        const deeplinkUrl = `${baseUrl}/home/live?id=${roomId}`
+
+        window.open(deeplinkUrl, '_blank')
+        showResult('已在新标签页打开: ' + deeplinkUrl)
+      }
+
+      // 从 URL 参数中读取房间 ID（如果存在）
+      const urlParams = new URLSearchParams(window.location.search)
+      const roomIdParam = urlParams.get('roomId')
+      if (roomIdParam) {
+        document.getElementById('roomId').value = roomIdParam
+      }
+    </script>
+  </body>
+</html>
