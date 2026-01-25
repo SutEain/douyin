@@ -36,6 +36,12 @@ export default defineConfig((): Promise<UserConfig> => {
         },
         build: {
           sourcemap: false,
+          // 🎯 禁用模块预加载，避免 Telegram WebApp 环境下的资源加载警告
+          // Telegram WebApp 环境对资源加载有特殊限制，预加载可能导致资源无法及时使用
+          modulePreload: {
+            polyfill: false,
+            resolveDependencies: () => []
+          },
           rollupOptions: {
             output: {
               manualChunks(id: string) {
