@@ -393,7 +393,7 @@ export async function getAdultQuota() {
   }
 }
 
-// 🎯 累计观看时长接口已移除，改用 Presence 自动追踪（在 main.ts 中启动）
+// 🎯 观看时长已改为心跳机制（在 main.ts 中启动，1分钟发送1次心跳）
 
 // 🎯 获取观看时长奖励状态
 export async function getWatchTimeStatus() {

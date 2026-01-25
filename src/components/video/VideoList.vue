@@ -186,7 +186,7 @@ import type { VideoItem } from '../../types'
 import { useVideoStore } from '@/stores/video'
 import { parseImages, getContentType, buildCdnUrl } from '@/utils/media'
 import { recordVideoView } from '@/api/videos'
-// 🎯 incrementWatchTime 已移除，改用 Presence 自动追踪
+// 🎯 incrementWatchTime 已移除，改用心跳机制（在 main.ts 中启动）
 // import { _copy, _notice } from '@/utils'
 // ✅ 避免循环依赖导致的 "Cannot access 'Y' before initialization"
 // 只在需要打开图文详情时再异步加载
@@ -204,7 +204,7 @@ const debugLog = (...args: any[]) => {
 // 🎯 观看历史记录追踪（避免重复记录）
 const recordedViews = new Set<string>() // 已记录开始观看
 
-// 🎯 观看时长追踪已改为使用 Presence 自动追踪（在 main.ts 中启动）
+// 🎯 观看时长追踪已改为使用心跳机制（在 main.ts 中启动）
 
 // 🎯 记录进入 current（只记录已播放，不记录完播）
 function recordEnterCurrent(item: VideoItem | null, contentType: string) {
@@ -1737,12 +1737,12 @@ onMounted(() => {
   })
 
   // 🎯 启动观看时长心跳（每10秒检查一次，只在视频播放时上报）
-  // 🎯 观看时长追踪已改为使用 Presence 自动追踪（在 main.ts 中启动）
+  // 🎯 观看时长追踪已改为使用心跳机制（在 main.ts 中启动）
   // 不再需要定时上报视频观看时长
 })
 
 onUnmounted(() => {
-  // 🎯 watchTimeHeartbeatTimer 已移除，改用 Presence 自动追踪
+  // 🎯 watchTimeHeartbeatTimer 已移除，改用心跳机制（在 main.ts 中启动）
 
   // 清理进度条事件绑定
   if (currentBoundVideo) {

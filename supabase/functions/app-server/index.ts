@@ -29,7 +29,8 @@ import {
   handleVideoAdultFeed,
   handleGetAdultQuota,
   handleGetWatchTimeStatus,
-  handleClaimWatchTimeReward
+  handleClaimWatchTimeReward,
+  handleWatchTimeHeartbeat
 } from './routes/video.ts'
 import {
   handleVideoComments,
@@ -83,7 +84,6 @@ import {
   handleGetIpBlacklist,
   autoBanIp
 } from './routes/ipBlacklist.ts'
-import { handlePresenceOnline, handlePresenceOffline } from './routes/presence.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -99,30 +99,45 @@ serve(async (req) => {
       route === '/auth/verify-code' ||
       route === '/auth/admin-login'
 
-    // 🎯 Presence 接口不需要频率限制（静默失败，不影响用户体验）
-    const isPresenceRoute = route === '/presence/online' || route === '/presence/offline'
+    // 🎯 心跳接口需要特殊的频率限制（防止黑客攻击）
+    const isHeartbeatRoute = route === '/video/watch-time/heartbeat'
 
-    // 非公开认证接口和 Presence 接口才检查 IP 黑名单和频率限制
-    if (!isPublicAuthRoute && !isPresenceRoute) {
+    // 非公开认证接口才检查 IP 黑名单和频率限制
+    if (!isPublicAuthRoute) {
       const { checkIpBlacklist, getClientIp } = await import('./lib/auth.ts')
       await checkIpBlacklist(req)
 
-      // 🔥 全项目接口频率限制：10秒内最多60次请求（正常用户不会超过）
       const clientIp = getClientIp(req)
       if (clientIp) {
         const { checkRateLimit } = await import('./lib/rateLimit.ts')
-        const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'api_request', {
-          maxAttempts: 60, // 10秒内最多60次请求（正常用户不会超过）
-          windowMs: 10000, // 10秒窗口
-          lockDurationMs: undefined
-        })
 
-        if (!rateLimitResult.allowed) {
-          // 请求过于频繁，直接永久封禁
-          const { autoBanIp } = await import('./routes/ipBlacklist.ts')
-          await autoBanIp(clientIp, 'API 请求过于频繁（10秒内超过60次），已永久封禁', null)
-          console.warn(`[API_ATTACK] IP ${clientIp} 请求过于频繁（10秒内超过60次），已永久封禁`)
-          return errorResponse('Forbidden', 1, 403)
+        if (isHeartbeatRoute) {
+          // 🚨 心跳接口频率限制：1分钟内最多3次（允许一些误差和重试）
+          const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'watch_time_heartbeat', {
+            maxAttempts: 3, // 1分钟内最多3次
+            windowMs: 60000, // 1分钟窗口
+            lockDurationMs: undefined // 不锁定，直接拒绝
+          })
+
+          if (!rateLimitResult.allowed) {
+            console.warn(`[HEARTBEAT_ATTACK] IP ${clientIp} 心跳请求过于频繁（1分钟内超过3次）`)
+            return errorResponse('请求过于频繁', 1, 429)
+          }
+        } else {
+          // 🔥 全项目接口频率限制：10秒内最多60次请求（正常用户不会超过）
+          const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'api_request', {
+            maxAttempts: 60, // 10秒内最多60次请求（正常用户不会超过）
+            windowMs: 10000, // 10秒窗口
+            lockDurationMs: undefined
+          })
+
+          if (!rateLimitResult.allowed) {
+            // 请求过于频繁，直接永久封禁
+            const { autoBanIp } = await import('./routes/ipBlacklist.ts')
+            await autoBanIp(clientIp, 'API 请求过于频繁（10秒内超过60次），已永久封禁', null)
+            console.warn(`[API_ATTACK] IP ${clientIp} 请求过于频繁（10秒内超过60次），已永久封禁`)
+            return errorResponse('Forbidden', 1, 403)
+          }
         }
       }
     }
@@ -218,14 +233,12 @@ serve(async (req) => {
     if (route === '/video/adult-quota' && method === 'GET') {
       return handleGetAdultQuota(req)
     }
-    // 🎯 观看时长奖励系统（使用 Presence 自动追踪）
-    if (route === '/presence/online' && method === 'POST') {
-      return handlePresenceOnline(req)
+    // 🎯 观看时长系统（改为心跳机制）
+    // 心跳接口：1分钟发送1次，每次累加60秒
+    if (route === '/video/watch-time/heartbeat' && method === 'POST') {
+      return handleWatchTimeHeartbeat(req)
     }
-    if (route === '/presence/offline' && method === 'POST') {
-      return handlePresenceOffline(req)
-    }
-    // 🎯 观看时长奖励查询和领取接口
+    // 观看时长奖励查询和领取接口
     if (route === '/video/watch-time/status' && method === 'GET') {
       return handleGetWatchTimeStatus(req)
     }

@@ -1249,7 +1249,33 @@ export async function handleClearVideoHistory(req: Request): Promise<Response> {
   return successResponse({ success: true })
 }
 
-// 🎯 handleIncrementWatchTime 已删除，改用 Presence 自动追踪（在 main.ts 中启动）
+// 🎯 观看时长心跳接口：1分钟发送1次，每次累加60秒
+export async function handleWatchTimeHeartbeat(req: Request): Promise<Response> {
+  try {
+    const { user } = await requireAuth(req)
+    const { data, error } = await supabaseAdmin.rpc('increment_watch_time_heartbeat', {
+      p_user_id: user.id
+    })
+
+    if (error) {
+      console.error('[handleWatchTimeHeartbeat] RPC error:', error)
+      return errorResponse('Failed to update watch time', 1, 500)
+    }
+
+    if (data && typeof data === 'object' && 'success' in data && !data.success) {
+      // 心跳过于频繁，返回429
+      return errorResponse(data.message || '心跳过于频繁', 1, 429)
+    }
+
+    return successResponse(data)
+  } catch (error: any) {
+    console.error('[handleWatchTimeHeartbeat] Unexpected error:', error)
+    if (error instanceof HttpError) {
+      throw error
+    }
+    return errorResponse('Internal server error', 1, 500)
+  }
+}
 
 export async function handleGetWatchTimeStatus(req: Request): Promise<Response> {
   try {
@@ -1273,6 +1299,9 @@ export async function handleGetWatchTimeStatus(req: Request): Promise<Response> 
 
 export async function handleClaimWatchTimeReward(req: Request): Promise<Response> {
   const { user } = await requireAuth(req)
+  // 🚨 后端自己获取IP地址，不信任前端传递的值
+  const { getClientIp } = await import('../lib/auth.ts')
+  const clientIp = getClientIp(req) || null
 
   // 🚨 紧急安全修复：添加频率限制，防止无限刷抖币
   // 1分钟内最多调用3次，超过后锁定5分钟
@@ -1314,7 +1343,8 @@ export async function handleClaimWatchTimeReward(req: Request): Promise<Response
   }
 
   const { data, error } = await supabaseAdmin.rpc('claim_watch_time_reward', {
-    p_user_id: user.id
+    p_user_id: user.id,
+    p_ip_address: clientIp
   })
 
   if (error) {

@@ -625,7 +625,7 @@ import { Icon } from '@iconify/vue'
 import { supabase } from '@/utils/supabase'
 import { _checkImgUrl, _notice, _copy, _truncate } from '@/utils'
 import { toggleFollowUser, sendReward, sendRedPacket } from '@/api/videos'
-// 🎯 incrementWatchTime 已移除，改用 Presence 自动追踪
+// 🎯 incrementWatchTime 已移除，改用心跳机制（在 main.ts 中启动）
 import DPPlayer from '@/components/live/DPPlayer.vue'
 import VapPlayer from '@/components/live/VapPlayer.vue'
 import UserPanel from '@/components/UserPanel.vue'
@@ -2343,7 +2343,7 @@ onMounted(async () => {
   await fetchGifts()
   await initRoom()
 
-  // 🎯 观看时长追踪已改为使用 Presence 自动追踪（在 main.ts 中启动）
+  // 🎯 观看时长追踪已改为使用心跳机制（在 main.ts 中启动）
   // 不再需要定时上报，Presence 会自动处理上线/下线事件
 })
 
@@ -2358,7 +2358,7 @@ onBeforeUnmount(() => {
     supabase.removeChannel(pc28Channel)
     pc28Channel = null
   }
-  // 🎯 watchTimeTimer 已移除，改用 Presence 自动追踪
+  // 🎯 watchTimeTimer 已移除，改用心跳机制（在 main.ts 中启动）
   if (pc28CheckTimer) {
     clearInterval(pc28CheckTimer)
     pc28CheckTimer = null
