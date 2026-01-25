@@ -222,11 +222,20 @@ const totalBetAmount = computed(() => {
   return bets.value.reduce((sum, bet) => sum + Number(bet.amount), 0)
 })
 
-// 计算玩家总盈亏：总下注 - 总赔付
+// 🎯 计算玩家总盈亏（当前房间）：玩家总获得 - 玩家总下注
 const anchorProfit = computed(() => {
   if (!props.currentRound || props.currentRound.status !== 'settled') return 0
-  const totalPayout = props.currentRound.total_payout || 0
-  return totalBetAmount.value - totalPayout
+
+  // 当前房间的总下注（已通过过滤计算）
+  const roomTotalBet = totalBetAmount.value
+
+  // 🎯 计算当前房间玩家总获得：从当前房间的下注记录中汇总 user_gain（用户实际获得的金额）
+  const roomTotalGain = bets.value
+    .filter((bet) => bet.status === 'settled' && bet.is_win)
+    .reduce((sum, bet) => sum + Number(bet.user_gain || 0), 0)
+
+  // 玩家总盈亏 = 总获得 - 总下注（从玩家角度）
+  return roomTotalGain - roomTotalBet
 })
 
 function getUserTotalAmount(userBets: PC28Bet[]): number {

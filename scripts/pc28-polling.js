@@ -403,15 +403,23 @@ async function processPC28Data() {
       } else {
         // 更新为 settled 状态
         if (existingSettledRound.status === 'betting' || existingSettledRound.status === 'sealed') {
-          // 先封盘
+          // 🎯 修复：如果状态是 betting，先封盘（但不推送消息，因为马上就要结算）
+          // 使用原子更新，避免触发不必要的 Realtime 事件
           if (existingSettledRound.status === 'betting') {
-            await supabase
+            const { data: sealedRounds } = await supabase
               .from('pc28_global_rounds')
               .update({ status: 'sealed', updated_at: new Date().toISOString() })
               .eq('id', existingSettledRound.id)
+              .eq('status', 'betting')
+              .select('id')
+
+            // 不推送封盘消息，因为马上就要结算了
+            if (sealedRounds && sealedRounds.length > 0) {
+              console.log(`🔒 Sealed before settle: ${latestPeriod}`)
+            }
           }
 
-          // 结算
+          // 结算（会直接更新为 settled 状态）
           const { error: settleError } = await supabase.rpc('settle_global_round', {
             p_global_round_id: existingSettledRound.id,
             p_num1: nums[0],
@@ -600,50 +608,48 @@ async function processPC28Data() {
 
   if (bettingRounds && bettingRounds.length > 0) {
     for (const round of bettingRounds) {
-      // 检查状态是否真的需要改变（避免重复更新）
-      if (round.status === 'sealed') {
-        continue
-      }
-
-      const { error: sealError } = await supabase
+      // 🎯 修复：使用原子更新操作，并检查是否真的更新了
+      // 使用 UPDATE ... RETURNING 来确保只更新一次，并获取更新后的状态
+      const { data: updatedRounds, error: sealError } = await supabase
         .from('pc28_global_rounds')
         .update({ status: 'sealed', updated_at: new Date().toISOString() })
         .eq('id', round.id)
         .eq('status', 'betting') // 确保只更新 betting 状态的记录
+        .select('id, period_number, status') // 返回更新后的记录
 
       if (sealError) {
         console.error(`❌ Failed to seal: ${round.period_number}`, sealError)
-      } else {
-        // 检查是否真的更新了（affected rows > 0）
-        const { data: updatedRound } = await supabase
-          .from('pc28_global_rounds')
-          .select('status')
-          .eq('id', round.id)
-          .single()
+        continue
+      }
 
-        if (updatedRound && updatedRound.status === 'sealed') {
-          console.log(`✅ Sealed: ${round.period_number}`)
+      // 🎯 修复：只有当 UPDATE 真的更新了记录（返回了数据）时才推送消息
+      // 如果记录已经是 sealed 状态，UPDATE 不会返回任何数据，从而避免重复推送
+      if (updatedRounds && updatedRounds.length > 0) {
+        const updatedRound = updatedRounds[0]
+        console.log(`✅ Sealed: ${updatedRound.period_number}`)
 
-          // 只在状态真正改变时才推送封盘消息
-          const { data: enabledRooms } = await supabase
-            .from('pc28_room_enabled')
-            .select('room_id')
-            .eq('enabled', true)
+        // 只在状态真正改变时才推送封盘消息
+        const { data: enabledRooms } = await supabase
+          .from('pc28_room_enabled')
+          .select('room_id')
+          .eq('enabled', true)
 
-          if (enabledRooms) {
-            const messages = enabledRooms.map((room) => ({
-              room_id: room.room_id,
-              msg_type: 'pc28',
-              content: JSON.stringify({
-                type: 'round_sealed',
-                period_number: round.period_number,
-                text: `PC28 ${round.period_number}期 已封盘，停止下注！`
-              })
-            }))
+        if (enabledRooms && enabledRooms.length > 0) {
+          const messages = enabledRooms.map((room) => ({
+            room_id: room.room_id,
+            msg_type: 'pc28',
+            content: JSON.stringify({
+              type: 'round_sealed',
+              period_number: updatedRound.period_number,
+              text: `PC28 ${updatedRound.period_number}期 已封盘，停止下注！`
+            })
+          }))
 
-            await supabase.from('live_broadcast_messages').insert(messages)
-          }
+          await supabase.from('live_broadcast_messages').insert(messages)
         }
+      } else {
+        // 记录已经是 sealed 状态，跳过（避免重复推送）
+        console.log(`⏭️ Period ${round.period_number} already sealed, skipping`)
       }
     }
   }

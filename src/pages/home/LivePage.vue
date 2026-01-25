@@ -878,6 +878,7 @@ function handleOpenBetRecords(round: PC28GlobalRound) {
 
 // PC28实时监听
 let pc28Channel: any = null
+let isComponentMounted = true // 🎯 跟踪组件挂载状态
 
 async function fetchPC28Data() {
   if (!roomId.value) return
@@ -1100,6 +1101,9 @@ function setupPC28Realtime() {
         table: 'pc28_global_rounds'
       },
       (payload) => {
+        // 🎯 修复：检查组件是否仍然挂载
+        if (!isComponentMounted) return
+
         const newRound = payload.new as PC28GlobalRound
         console.log('[PC28-Realtime] New round inserted:', newRound)
 
@@ -1111,9 +1115,14 @@ function setupPC28Realtime() {
           // 只有当新期数比当前期数更大时才更新挂件，避免状态回退
           if (!oldPeriod || Number(newPeriod) > Number(oldPeriod)) {
             console.log(`[PC28-Realtime] Period updated via INSERT: ${oldPeriod} -> ${newPeriod}`)
-            pc28CurrentRound.value = newRound
-            // 异步更新下注总额（不影响UI更新）
-            updateRoomBetAmount(newRound.id)
+            // 🎯 使用 nextTick 确保在正确的时机更新
+            nextTick(() => {
+              if (isComponentMounted) {
+                pc28CurrentRound.value = newRound
+                // 异步更新下注总额（不影响UI更新）
+                updateRoomBetAmount(newRound.id)
+              }
+            })
           } else {
             console.log(
               `[PC28-Realtime] Ignoring older period INSERT: ${newPeriod} <= ${oldPeriod}`
@@ -1131,43 +1140,66 @@ function setupPC28Realtime() {
         table: 'pc28_global_rounds'
       },
       (payload) => {
+        // 🎯 修复：检查组件是否仍然挂载
+        if (!isComponentMounted) return
+
         const updatedRound = payload.new as PC28GlobalRound
         console.log('[PC28-Realtime] Round updated:', updatedRound)
 
-        // 如果更新的是当前显示的期数，直接更新状态
-        if (pc28CurrentRound.value?.id === updatedRound.id) {
-          const oldStatus = pc28CurrentRound.value.status
-          pc28CurrentRound.value = updatedRound
+        // 🎯 使用 nextTick 确保在正确的时机更新
+        nextTick(() => {
+          if (!isComponentMounted) return
 
-          if (oldStatus !== updatedRound.status) {
-            console.log(
-              `[PC28-Realtime] Round status changed: ${oldStatus} -> ${updatedRound.status}`
-            )
-          }
+          // 如果更新的是当前显示的期数，检查状态是否应该更新
+          if (pc28CurrentRound.value?.id === updatedRound.id) {
+            const oldStatus = pc28CurrentRound.value.status
 
-          // 如果状态变为已结算，更新已结算期数
-          if (updatedRound.status === 'settled') {
-            pc28LastSettledRound.value = updatedRound
-          }
+            // 🎯 修复：状态只能向前推进，不能回退
+            // betting -> sealed -> settled，不允许回退
+            const statusOrder = { betting: 1, sealed: 2, settled: 3, cancelled: 0 }
+            const oldOrder = statusOrder[oldStatus as keyof typeof statusOrder] || 0
+            const newOrder = statusOrder[updatedRound.status as keyof typeof statusOrder] || 0
 
-          // 异步更新下注总额
-          updateRoomBetAmount(updatedRound.id)
-        } else if (updatedRound.status === 'betting' || updatedRound.status === 'sealed') {
-          // 只有当新期数比当前期数更大时才更新挂件，避免状态回退
-          const currentPeriod = pc28CurrentRound.value?.period_number
-          const updatedPeriod = updatedRound.period_number
-          if (!currentPeriod || Number(updatedPeriod) > Number(currentPeriod)) {
-            console.log(
-              `[PC28-Realtime] Updating to newer period: ${currentPeriod} -> ${updatedPeriod}`
-            )
-            pc28CurrentRound.value = updatedRound
-            updateRoomBetAmount(updatedRound.id)
-          } else {
-            console.log(
-              `[PC28-Realtime] Ignoring older period update: ${updatedPeriod} <= ${currentPeriod}`
-            )
+            // 只有当新状态比旧状态更高级（或相同）时才更新，防止状态回退
+            if (newOrder >= oldOrder) {
+              pc28CurrentRound.value = updatedRound
+
+              if (oldStatus !== updatedRound.status) {
+                console.log(
+                  `[PC28-Realtime] Round status changed: ${oldStatus} -> ${updatedRound.status}`
+                )
+              }
+
+              // 如果状态变为已结算，更新已结算期数
+              if (updatedRound.status === 'settled') {
+                pc28LastSettledRound.value = updatedRound
+              }
+
+              // 异步更新下注总额
+              updateRoomBetAmount(updatedRound.id)
+            } else {
+              // 状态回退，忽略更新
+              console.warn(
+                `[PC28-Realtime] Ignoring status rollback: ${oldStatus} -> ${updatedRound.status} (period: ${updatedRound.period_number})`
+              )
+            }
+          } else if (updatedRound.status === 'betting' || updatedRound.status === 'sealed') {
+            // 只有当新期数比当前期数更大时才更新挂件，避免状态回退
+            const currentPeriod = pc28CurrentRound.value?.period_number
+            const updatedPeriod = updatedRound.period_number
+            if (!currentPeriod || Number(updatedPeriod) > Number(currentPeriod)) {
+              console.log(
+                `[PC28-Realtime] Updating to newer period: ${currentPeriod} -> ${updatedPeriod}`
+              )
+              pc28CurrentRound.value = updatedRound
+              updateRoomBetAmount(updatedRound.id)
+            } else {
+              console.log(
+                `[PC28-Realtime] Ignoring older period update: ${updatedPeriod} <= ${currentPeriod}`
+              )
+            }
           }
-        }
+        })
       }
     )
     // 监听房间开关状态变化：需要重新查询
@@ -1180,9 +1212,16 @@ function setupPC28Realtime() {
         filter: `room_id=eq.${roomId.value}`
       },
       (payload) => {
+        // 🎯 修复：检查组件是否仍然挂载
+        if (!isComponentMounted) return
+
         console.log('[PC28-Realtime] Room enabled status changed:', payload.new)
         // 房间开关状态变化需要重新查询完整状态
-        fetchPC28Data()
+        nextTick(() => {
+          if (isComponentMounted) {
+            fetchPC28Data()
+          }
+        })
       }
     )
     .subscribe((status) => {
@@ -2297,11 +2336,15 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  // 🎯 修复：标记组件已卸载，防止 Realtime 回调更新已卸载的组件
+  isComponentMounted = false
+
   isLandscape.value = false // 退出时重置状态
   if (channel) supabase.removeChannel(channel)
   if (pc28Channel) {
     console.log('[PC28-Realtime] Unsubscribing pc28Channel on unmount')
     supabase.removeChannel(pc28Channel)
+    pc28Channel = null
   }
   // 🎯 watchTimeTimer 已移除，改用 Presence 自动追踪
   if (pc28CheckTimer) {

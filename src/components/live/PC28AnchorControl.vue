@@ -34,22 +34,6 @@
           <span class="label">总下注：</span>
           <span class="value">{{ roomBetAmount }} 抖币</span>
         </div>
-        <div
-          v-if="currentRound.status === 'betting' || currentRound.status === 'sealed'"
-          class="status-item"
-        >
-          <span class="label">本期抽水：</span>
-          <span class="value platform-fee">{{ currentPlatformFee.toFixed(2) }} 抖币</span>
-        </div>
-        <div
-          v-if="currentRound.status === 'settled' && currentRound.total_platform_fee !== undefined"
-          class="status-item"
-        >
-          <span class="label">本期抽水：</span>
-          <span class="value platform-fee"
-            >{{ currentRound.total_platform_fee.toFixed(2) }} 抖币</span
-          >
-        </div>
         <div v-if="currentRound.result" class="status-item">
           <span class="label">开奖结果：</span>
           <span class="value result">
@@ -86,9 +70,8 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { PC28GlobalRound } from '@/api/pc28'
-import { disablePC28ForRoom, cancelGlobalRound, getCurrentGlobalRound } from '@/api/pc28'
+import { disablePC28ForRoom, cancelGlobalRound } from '@/api/pc28'
 import { _notice } from '@/utils'
-import { supabase } from '@/utils/supabase'
 
 const props = defineProps<{
   roomId: string
@@ -104,7 +87,6 @@ const emit = defineEmits<{
 const isLoading = ref(false)
 const countdownTimer = ref<any>(null)
 const currentTime = ref(Date.now())
-const currentPlatformFee = ref(0) // 当前期的抽水金额
 
 const statusText = {
   betting: '下注中',
@@ -153,95 +135,21 @@ function stopCountdown() {
   }
 }
 
-// 计算当前期的抽水（从已结算的下注记录中汇总）
-async function calculateCurrentPlatformFee() {
-  if (!props.currentRound) {
-    currentPlatformFee.value = 0
-    return
-  }
-
-  try {
-    // 查询当前期已结算的下注记录，汇总 platform_fee
-    const { data: bets, error } = await supabase
-      .from('pc28_bets')
-      .select('platform_fee')
-      .eq('global_round_id', props.currentRound.id)
-      .eq('room_id', props.roomId)
-      .eq('status', 'settled')
-
-    if (error) {
-      console.error('[PC28AnchorControl] Error calculating platform fee:', error)
-      return
-    }
-
-    // 汇总抽水
-    currentPlatformFee.value =
-      bets?.reduce((sum, bet) => sum + Number(bet.platform_fee || 0), 0) || 0
-  } catch (e) {
-    console.error('[PC28AnchorControl] Error calculating platform fee:', e)
-  }
-}
-
 watch(
   () => props.currentRound,
   () => {
     stopCountdown()
     startCountdown()
-    // 当期数变化时，重新计算抽水
-    calculateCurrentPlatformFee()
   },
   { deep: true }
 )
 
-// 监听下注记录变化，实时更新抽水
-let betsChannel: any = null
-
-function setupBetsRealtime() {
-  if (!props.currentRound) return
-
-  // 移除旧的 channel
-  if (betsChannel) {
-    supabase.removeChannel(betsChannel)
-  }
-
-  // 监听当前期的下注记录变化
-  betsChannel = supabase
-    .channel(`pc28_bets_anchor_${props.currentRound.id}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'pc28_bets',
-        filter: `global_round_id=eq.${props.currentRound.id}`
-      },
-      () => {
-        // 下注记录更新时，重新计算抽水
-        calculateCurrentPlatformFee()
-      }
-    )
-    .subscribe()
-}
-
-watch(
-  () => props.currentRound?.id,
-  () => {
-    setupBetsRealtime()
-    calculateCurrentPlatformFee()
-  }
-)
-
 onMounted(() => {
   startCountdown()
-  calculateCurrentPlatformFee()
-  setupBetsRealtime()
 })
 
 onBeforeUnmount(() => {
   stopCountdown()
-  if (betsChannel) {
-    supabase.removeChannel(betsChannel)
-  }
 })
 
 function handleClose() {
@@ -376,10 +284,6 @@ async function handleCancel() {
 
         &.result {
           color: #ffd700;
-        }
-
-        &.platform-fee {
-          color: #ff9800;
         }
       }
     }
