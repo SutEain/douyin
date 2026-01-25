@@ -628,7 +628,25 @@ async function processPC28Data() {
         const updatedRound = updatedRounds[0]
         console.log(`✅ Sealed: ${updatedRound.period_number}`)
 
-        // 只在状态真正改变时才推送封盘消息
+        // 🎯 根本修复：检查是否已经推送过封盘消息，避免重复推送
+        // 查询 content 字段中包含该期数和"已封盘"文本的消息
+        const sealedMessageText = `${updatedRound.period_number}期 已封盘`
+        const { data: existingMessages } = await supabase
+          .from('live_broadcast_messages')
+          .select('id')
+          .eq('msg_type', 'pc28')
+          .like('content', `%${sealedMessageText}%`)
+          .limit(1)
+
+        // 如果已经存在封盘消息，跳过推送
+        if (existingMessages && existingMessages.length > 0) {
+          console.log(
+            `⏭️ Period ${updatedRound.period_number} sealed message already sent, skipping`
+          )
+          continue
+        }
+
+        // 只在状态真正改变且消息未推送时才推送封盘消息
         const { data: enabledRooms } = await supabase
           .from('pc28_room_enabled')
           .select('room_id')
@@ -645,7 +663,17 @@ async function processPC28Data() {
             })
           }))
 
-          await supabase.from('live_broadcast_messages').insert(messages)
+          const { error: insertError } = await supabase
+            .from('live_broadcast_messages')
+            .insert(messages)
+          if (insertError) {
+            console.error(
+              `❌ Failed to insert sealed messages for ${updatedRound.period_number}:`,
+              insertError
+            )
+          } else {
+            console.log(`📢 Sealed message sent for period ${updatedRound.period_number}`)
+          }
         }
       } else {
         // 记录已经是 sealed 状态，跳过（避免重复推送）
