@@ -694,6 +694,7 @@
                 v-for="amt in rechargeInfo.amounts"
                 :key="amt"
                 class="amount-item"
+                :class="{ disabled: isCreatingRecharge }"
                 @click="handleCreateRecharge(amt)"
               >
                 <div class="usdt">{{ amt }} USDT</div>
@@ -744,6 +745,7 @@ const isRefreshingBalance = ref(false) // 是否正在刷新余额
 // --- 充值相关 ---
 const showRechargeModal = ref(false)
 const rechargeInfo = ref<any>(null)
+const isCreatingRecharge = ref(false) // 🎯 防重复提交标志
 const transactions = ref<
   Array<{
     id: string
@@ -1011,7 +1013,14 @@ async function handleRecharge() {
 
 // 创建充值订单
 async function handleCreateRecharge(amount: number) {
+  // 🎯 防重复提交：如果正在创建订单，直接返回
+  if (isCreatingRecharge.value) {
+    return
+  }
+
   try {
+    isCreatingRecharge.value = true
+
     const {
       data: { session }
     } = await supabase.auth.getSession()
@@ -1039,6 +1048,9 @@ async function handleCreateRecharge(amount: number) {
     }
   } catch (e: any) {
     _notice(e.message || '系统错误')
+  } finally {
+    // 🎯 确保无论成功还是失败都重置标志
+    isCreatingRecharge.value = false
   }
 }
 
@@ -2184,7 +2196,13 @@ async function handleBet() {
         transition: all 0.2s;
         cursor: pointer;
 
-        &:active {
+        &.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          pointer-events: none;
+        }
+
+        &:active:not(.disabled) {
           transform: scale(0.95);
           background: rgba(254, 44, 85, 0.1);
           border-color: #fe2c55;
