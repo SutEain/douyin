@@ -99,6 +99,16 @@
                         <span v-else-if="bet.is_win" class="win-text"
                           >中奖 +{{ bet.user_gain }} 抖币</span
                         >
+                        <span
+                          v-else-if="
+                            bet.status === 'settled' &&
+                            bet.user_gain > 0 &&
+                            bet.user_gain === bet.amount
+                          "
+                          class="win-text"
+                        >
+                          回本 +{{ bet.user_gain }} 抖币
+                        </span>
                         <span v-else class="lose-text">未中奖</span>
                       </span>
                     </div>

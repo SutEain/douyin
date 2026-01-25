@@ -269,6 +269,14 @@
                 <div class="bet-status" :class="bet.status">
                   <span v-if="bet.status === 'pending'">待结算</span>
                   <span v-else-if="bet.is_win" class="win">中奖</span>
+                  <span
+                    v-else-if="
+                      bet.status === 'settled' && bet.user_gain > 0 && bet.user_gain === bet.amount
+                    "
+                    class="win"
+                  >
+                    回本
+                  </span>
                   <span v-else class="lose">未中奖</span>
                 </div>
               </div>
@@ -287,8 +295,18 @@
                 </div>
                 <div v-if="bet.status === 'settled'" class="detail-item">
                   <span class="label">奖金：</span>
-                  <span class="value" :class="{ win: bet.is_win }">
-                    {{ bet.is_win ? `+${bet.user_gain}` : '0' }} 抖币
+                  <span
+                    class="value"
+                    :class="{
+                      win: bet.is_win || (bet.user_gain > 0 && bet.user_gain === bet.amount)
+                    }"
+                  >
+                    {{
+                      bet.is_win || (bet.user_gain > 0 && bet.user_gain === bet.amount)
+                        ? `+${bet.user_gain}`
+                        : '0'
+                    }}
+                    抖币
                   </span>
                 </div>
                 <div class="detail-item">

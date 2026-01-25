@@ -53,7 +53,6 @@ let isTracking = false
  */
 export async function startPresenceTracking() {
   if (isTracking) {
-    console.log('[Presence] Already tracking')
     return
   }
 
@@ -62,9 +61,11 @@ export async function startPresenceTracking() {
       data: { user }
     } = await supabase.auth.getUser()
     if (!user) {
-      console.log('[Presence] User not logged in, skip tracking')
       return
     }
+
+    // 🎯 浏览器环境和 Telegram 环境都需要追踪观看时长
+    // 不跳过任何环境
 
     // 创建全局 Presence channel
     presenceChannel = supabase.channel('app_online_tracking', {
@@ -84,36 +85,32 @@ export async function startPresenceTracking() {
 
         if (myPresence && myPresence.length > 0) {
           // 用户在线（首次同步或重连）
-          console.log('[Presence] User synced (online)')
           // 🎯 异步通知，不阻塞
-          notifyPresenceOnline(user.id).catch((error) => {
-            console.warn('[Presence] Failed to notify online:', error)
+          notifyPresenceOnline(user.id).catch(() => {
+            // 静默失败，不影响用户体验
           })
         }
       })
       .on('presence', { event: 'join' }, async ({ key }: any) => {
         // join 事件：用户上线
         if (key === user.id) {
-          console.log('[Presence] User joined (online)')
           // 🎯 异步通知，不阻塞
-          notifyPresenceOnline(user.id).catch((error) => {
-            console.warn('[Presence] Failed to notify online:', error)
+          notifyPresenceOnline(user.id).catch(() => {
+            // 静默失败，不影响用户体验
           })
         }
       })
       .on('presence', { event: 'leave' }, async ({ key }: any) => {
         // leave 事件：用户下线
         if (key === user.id) {
-          console.log('[Presence] User left (offline)')
           // 🎯 异步通知，不阻塞
-          notifyPresenceOffline(user.id).catch((error) => {
-            console.warn('[Presence] Failed to notify offline:', error)
+          notifyPresenceOffline(user.id).catch(() => {
+            // 静默失败，不影响用户体验
           })
         }
       })
       .subscribe(async (status: string) => {
         if (status === 'SUBSCRIBED') {
-          console.log('[Presence] Subscribed to presence tracking')
           // 订阅成功后，立即追踪当前状态
           presenceChannel.track({
             user_id: user.id,
@@ -122,14 +119,14 @@ export async function startPresenceTracking() {
           isTracking = true
           // 🎯 订阅成功后，延迟通知上线（避免影响应用启动）
           setTimeout(() => {
-            notifyPresenceOnline(user.id).catch((error) => {
-              console.warn('[Presence] Failed to notify online:', error)
+            notifyPresenceOnline(user.id).catch(() => {
+              // 静默失败，不影响用户体验
             })
           }, 1000)
         }
       })
   } catch (error) {
-    console.error('[Presence] Error starting tracking:', error)
+    // 静默失败，不影响用户体验
   }
 }
 
@@ -157,9 +154,8 @@ export async function stopPresenceTracking() {
       presenceChannel = null
     }
     isTracking = false
-    console.log('[Presence] Stopped tracking')
   } catch (error) {
-    console.error('[Presence] Error stopping tracking:', error)
+    // 静默失败，不影响用户体验
   }
 }
 
@@ -187,13 +183,12 @@ async function notifyPresenceOnline(userId: string) {
       body: JSON.stringify({ user_id: userId })
     })
 
-    if (resp.ok) {
-      console.log('[Presence] Online notification sent')
-    } else {
-      console.warn('[Presence] Failed to notify online:', resp.status)
+    // 静默处理，不影响用户体验
+    if (!resp.ok) {
+      // 失败时静默处理
     }
   } catch (error) {
-    console.warn('[Presence] Error notifying online:', error)
+    // 静默失败，不影响用户体验
   }
 }
 
@@ -221,17 +216,11 @@ async function notifyPresenceOffline(userId: string) {
       body: JSON.stringify({ user_id: userId })
     })
 
-    if (resp.ok) {
-      const data = await resp.json()
-      console.log(
-        '[Presence] Offline notification sent, duration:',
-        data.data?.duration_seconds,
-        'seconds'
-      )
-    } else {
-      console.warn('[Presence] Failed to notify offline:', resp.status)
+    // 静默处理，不影响用户体验
+    if (!resp.ok) {
+      // 失败时静默处理
     }
   } catch (error) {
-    console.warn('[Presence] Error notifying offline:', error)
+    // 静默失败，不影响用户体验
   }
 }
