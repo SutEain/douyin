@@ -1309,6 +1309,8 @@ async function handleBet() {
   isLoading.value = true
   try {
     let successCount = 0
+    let failedBets: string[] = []
+
     for (const bet of selectedBets.value) {
       // 解析下注类型和值
       let type: string
@@ -1326,23 +1328,51 @@ async function handleBet() {
         betValue = undefined
       }
 
-      const res = await placePC28BetGlobal(
-        props.currentRound.id,
-        props.roomId,
-        type,
-        betAmount.value,
-        betValue
-      )
+      try {
+        const res = await placePC28BetGlobal(
+          props.currentRound.id,
+          props.roomId,
+          type,
+          betAmount.value,
+          betValue
+        )
 
-      if (res.success) {
-        successCount++
-      } else {
-        _notice(`${getBetName(bet)}: ${res.message}`)
+        if (res.success) {
+          successCount++
+        } else {
+          failedBets.push(getBetName(bet))
+          // 改进错误信息显示
+          const errorMsg = res.message || '下注失败'
+          if (
+            errorMsg.includes('TypeError') ||
+            errorMsg.includes('Load failed') ||
+            errorMsg.includes('Failed to fetch')
+          ) {
+            _notice(`${getBetName(bet)}: 网络错误，请检查网络连接后重试`)
+          } else {
+            _notice(`${getBetName(bet)}: ${errorMsg}`)
+          }
+        }
+      } catch (e: any) {
+        // 捕获单个下注的错误（网络错误等）
+        failedBets.push(getBetName(bet))
+        const errorMsg = e.message || '下注失败'
+        if (
+          errorMsg.includes('TypeError') ||
+          errorMsg.includes('Load failed') ||
+          errorMsg.includes('Failed to fetch')
+        ) {
+          _notice(`${getBetName(bet)}: 网络错误，请检查网络连接后重试`)
+        } else {
+          _notice(`${getBetName(bet)}: ${errorMsg}`)
+        }
       }
     }
 
     if (successCount > 0) {
-      _notice(`成功下注 ${successCount} 注`)
+      _notice(
+        `成功下注 ${successCount} 注${failedBets.length > 0 ? `，${failedBets.length} 注失败` : ''}`
+      )
       emit('success')
       // 刷新余额
       await refreshBalance()
@@ -1351,9 +1381,21 @@ async function handleBet() {
         await fetchMyBets()
       }
       handleClose()
+    } else if (failedBets.length > 0) {
+      _notice('所有下注均失败，请检查网络连接后重试')
     }
   } catch (e: any) {
-    _notice(e.message || '下注失败')
+    // 捕获整体错误（不应该发生，但作为兜底）
+    const errorMsg = e.message || '下注失败'
+    if (
+      errorMsg.includes('TypeError') ||
+      errorMsg.includes('Load failed') ||
+      errorMsg.includes('Failed to fetch')
+    ) {
+      _notice('网络错误，请检查网络连接后重试')
+    } else {
+      _notice(errorMsg)
+    }
   } finally {
     isLoading.value = false
   }
