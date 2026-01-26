@@ -1,17 +1,5 @@
 import { List, useTable } from '@refinedev/antd'
-import {
-  Table,
-  Space,
-  Button,
-  Tag,
-  message,
-  Modal,
-  Input,
-  Select,
-  Tooltip,
-  Popconfirm,
-  Form
-} from 'antd'
+import { Table, Space, Button, Tag, message, Input, Select, Tooltip, Form } from 'antd'
 import { DeleteOutlined, SearchOutlined } from '@ant-design/icons'
 import { useInvalidate } from '@refinedev/core'
 import { useState } from 'react'
@@ -65,7 +53,7 @@ export const CommentList = () => {
         )
       `
     },
-    onSearch: (params: Record<string, any>) => {
+    onSearch: (values: Record<string, any>) => {
       const filters: any[] = []
 
       // 只显示未删除的评论
@@ -76,20 +64,20 @@ export const CommentList = () => {
       })
 
       // 关键词搜索（评论内容）
-      if (params.q && params.q.trim()) {
+      if (values.q && values.q.trim()) {
         filters.push({
           field: 'content',
-          operator: 'contains',
-          value: params.q.trim()
+          operator: 'ilike',
+          value: `%${values.q.trim()}%`
         })
       }
 
       // 审核状态筛选
-      if (params.review_status && params.review_status !== 'all') {
+      if (values.review_status && values.review_status !== 'all') {
         filters.push({
           field: 'review_status',
           operator: 'eq',
-          value: params.review_status
+          value: values.review_status
         })
       }
 
@@ -104,67 +92,46 @@ export const CommentList = () => {
     return dayjs(dateStr).tz('Asia/Shanghai').format('YYYY-MM-DD HH:mm:ss')
   }
 
-  // 删除评论（软删除）
-  const handleDelete = (record: any) => {
-    Modal.confirm({
-      title: '删除评论',
-      content: `确定要删除这条评论吗？删除后用户将无法看到此评论。`,
-      okText: '确定删除',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: async () => {
-        try {
-          const { error } = await supabaseClient
-            .from('video_comments')
-            .update({ deleted_at: new Date().toISOString() })
-            .eq('id', record.id)
+  // 删除评论（硬删除）
+  const handleDelete = async (record: any) => {
+    try {
+      const { error } = await supabaseClient.from('video_comments').delete().eq('id', record.id)
 
-          if (error) throw error
+      if (error) throw error
 
-          message.success('删除成功')
-          invalidate({ resource: 'video_comments', invalidates: ['list'] })
-        } catch (error: any) {
-          console.error('[DeleteComment] Error:', error)
-          message.error('删除失败：' + (error.message || '未知错误'))
-        }
-      }
-    })
+      message.success('删除成功')
+      invalidate({ resource: 'video_comments', invalidates: ['list'] })
+    } catch (error: any) {
+      console.error('[DeleteComment] Error:', error)
+      message.error('删除失败：' + (error.message || '未知错误'))
+    }
   }
 
-  // 批量删除
-  const handleBatchDelete = () => {
+  // 批量删除（硬删除）
+  const handleBatchDelete = async () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先选择要删除的评论')
       return
     }
 
-    Modal.confirm({
-      title: '批量删除评论',
-      content: `确定要删除选中的 ${selectedRowKeys.length} 条评论吗？删除后用户将无法看到这些评论。`,
-      okText: '确定删除',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: async () => {
-        setBatchDeleting(true)
-        try {
-          const { error } = await supabaseClient
-            .from('video_comments')
-            .update({ deleted_at: new Date().toISOString() })
-            .in('id', selectedRowKeys)
+    setBatchDeleting(true)
+    try {
+      const { error } = await supabaseClient
+        .from('video_comments')
+        .delete()
+        .in('id', selectedRowKeys)
 
-          if (error) throw error
+      if (error) throw error
 
-          message.success(`成功删除 ${selectedRowKeys.length} 条评论`)
-          setSelectedRowKeys([])
-          invalidate({ resource: 'video_comments', invalidates: ['list'] })
-        } catch (error: any) {
-          console.error('[BatchDeleteComment] Error:', error)
-          message.error('批量删除失败：' + (error.message || '未知错误'))
-        } finally {
-          setBatchDeleting(false)
-        }
-      }
-    })
+      message.success(`成功删除 ${selectedRowKeys.length} 条评论`)
+      setSelectedRowKeys([])
+      invalidate({ resource: 'video_comments', invalidates: ['list'] })
+    } catch (error: any) {
+      console.error('[BatchDeleteComment] Error:', error)
+      message.error('批量删除失败：' + (error.message || '未知错误'))
+    } finally {
+      setBatchDeleting(false)
+    }
   }
 
   // 渲染评论内容（截断长文本）
@@ -202,13 +169,25 @@ export const CommentList = () => {
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
         {/* 搜索表单 */}
         <div style={{ background: '#fff', padding: 16, borderRadius: 8 }}>
-          <Form {...searchFormProps} layout="inline">
+          <Form
+            {...searchFormProps}
+            layout="inline"
+            onFinish={(values) => {
+              // 手动触发搜索
+              if (searchFormProps.onFinish) {
+                searchFormProps.onFinish(values)
+              }
+            }}
+          >
             <Form.Item name="q" style={{ flex: 1, marginRight: 8 }}>
               <Input
                 placeholder="搜索评论内容..."
                 allowClear
                 prefix={<SearchOutlined />}
                 style={{ width: '100%' }}
+                onPressEnter={() => {
+                  searchFormProps.form?.submit()
+                }}
               />
             </Form.Item>
             <Form.Item name="review_status" style={{ marginRight: 8 }}>
@@ -223,6 +202,9 @@ export const CommentList = () => {
                   { label: '自动通过', value: 'auto_approved' },
                   { label: '已拒绝', value: 'rejected' }
                 ]}
+                onChange={() => {
+                  searchFormProps.form?.submit()
+                }}
               />
             </Form.Item>
             <Form.Item>
@@ -233,7 +215,7 @@ export const CommentList = () => {
                 <Button
                   onClick={() => {
                     searchFormProps.form?.resetFields()
-                    searchFormProps.onFinish?.({})
+                    searchFormProps.form?.submit()
                   }}
                 >
                   重置
@@ -329,18 +311,15 @@ export const CommentList = () => {
             fixed="right"
             render={(record: any) => (
               <Space>
-                <Popconfirm
-                  title="确定要删除这条评论吗？"
-                  description="删除后用户将无法看到此评论"
-                  onConfirm={() => handleDelete(record)}
-                  okText="确定"
-                  cancelText="取消"
-                  okType="danger"
+                <Button
+                  type="link"
+                  danger
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  onClick={() => handleDelete(record)}
                 >
-                  <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-                    删除
-                  </Button>
-                </Popconfirm>
+                  删除
+                </Button>
               </Space>
             )}
           />
