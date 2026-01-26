@@ -1,7 +1,19 @@
 import { List, useTable } from '@refinedev/antd'
-import { Table, Space, Button, Tag, message, Modal, Input, Select, Tooltip, Popconfirm } from 'antd'
+import {
+  Table,
+  Space,
+  Button,
+  Tag,
+  message,
+  Modal,
+  Input,
+  Select,
+  Tooltip,
+  Popconfirm,
+  Form
+} from 'antd'
 import { DeleteOutlined, SearchOutlined } from '@ant-design/icons'
-import { useUpdate, useDelete } from '@refinedev/core'
+import { useInvalidate } from '@refinedev/core'
 import { useState } from 'react'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
@@ -19,8 +31,7 @@ const reviewStatusMap: Record<string, { text: string; color: string }> = {
 }
 
 export const CommentList = () => {
-  const { mutate: updateComment } = useUpdate()
-  const { mutate: deleteComment } = useDelete()
+  const invalidate = useInvalidate()
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [batchDeleting, setBatchDeleting] = useState(false)
 
@@ -111,7 +122,7 @@ export const CommentList = () => {
           if (error) throw error
 
           message.success('删除成功')
-          table.refetch()
+          invalidate({ resource: 'video_comments', invalidates: ['list'] })
         } catch (error: any) {
           console.error('[DeleteComment] Error:', error)
           message.error('删除失败：' + (error.message || '未知错误'))
@@ -145,7 +156,7 @@ export const CommentList = () => {
 
           message.success(`成功删除 ${selectedRowKeys.length} 条评论`)
           setSelectedRowKeys([])
-          table.refetch()
+          invalidate({ resource: 'video_comments', invalidates: ['list'] })
         } catch (error: any) {
           console.error('[BatchDeleteComment] Error:', error)
           message.error('批量删除失败：' + (error.message || '未知错误'))
@@ -172,61 +183,64 @@ export const CommentList = () => {
 
   return (
     <List
-      headerButtons={({ defaultButtons }) => [
-        ...defaultButtons,
-        <Button
-          key="batch-delete"
-          danger
-          icon={<DeleteOutlined />}
-          disabled={selectedRowKeys.length === 0 || batchDeleting}
-          loading={batchDeleting}
-          onClick={handleBatchDelete}
-        >
-          批量删除 ({selectedRowKeys.length})
-        </Button>
-      ]}
+      headerButtons={({ defaultButtons }) => (
+        <>
+          {defaultButtons}
+          <Button
+            key="batch-delete"
+            danger
+            icon={<DeleteOutlined />}
+            disabled={selectedRowKeys.length === 0 || batchDeleting}
+            loading={batchDeleting}
+            onClick={handleBatchDelete}
+          >
+            批量删除 ({selectedRowKeys.length})
+          </Button>
+        </>
+      )}
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
         {/* 搜索表单 */}
         <div style={{ background: '#fff', padding: 16, borderRadius: 8 }}>
-          <Input.Group compact style={{ display: 'flex', gap: 8 }}>
-            <Input
-              {...searchFormProps.form.getFieldProps('q')}
-              placeholder="搜索评论内容..."
-              style={{ flex: 1 }}
-              allowClear
-              prefix={<SearchOutlined />}
-            />
-            <Select
-              {...searchFormProps.form.getFieldProps('review_status')}
-              placeholder="审核状态"
-              style={{ width: 150 }}
-              allowClear
-              options={[
-                { label: '全部', value: 'all' },
-                { label: '待审核', value: 'pending' },
-                { label: '已通过', value: 'approved' },
-                { label: '自动通过', value: 'auto_approved' },
-                { label: '已拒绝', value: 'rejected' }
-              ]}
-            />
-            <Button
-              type="primary"
-              onClick={() => {
-                searchFormProps.form.submit()
-              }}
-            >
-              搜索
-            </Button>
-            <Button
-              onClick={() => {
-                searchFormProps.form.resetFields()
-                searchFormProps.form.submit()
-              }}
-            >
-              重置
-            </Button>
-          </Input.Group>
+          <Form {...searchFormProps} layout="inline">
+            <Form.Item name="q" style={{ flex: 1, marginRight: 8 }}>
+              <Input
+                placeholder="搜索评论内容..."
+                allowClear
+                prefix={<SearchOutlined />}
+                style={{ width: '100%' }}
+              />
+            </Form.Item>
+            <Form.Item name="review_status" style={{ marginRight: 8 }}>
+              <Select
+                placeholder="审核状态"
+                style={{ width: 150 }}
+                allowClear
+                options={[
+                  { label: '全部', value: 'all' },
+                  { label: '待审核', value: 'pending' },
+                  { label: '已通过', value: 'approved' },
+                  { label: '自动通过', value: 'auto_approved' },
+                  { label: '已拒绝', value: 'rejected' }
+                ]}
+              />
+            </Form.Item>
+            <Form.Item>
+              <Space>
+                <Button type="primary" htmlType="submit">
+                  搜索
+                </Button>
+                <Button
+                  onClick={() => {
+                    searchFormProps.form?.resetFields()
+                    searchFormProps.onFinish?.({})
+                  }}
+                >
+                  重置
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
         </div>
 
         {/* 评论表格 */}
