@@ -1192,6 +1192,24 @@ export async function handleRecordView(req: Request): Promise<Response> {
     const { video_id, progress, completed } = body
     if (!video_id) return errorResponse('video_id required', 1, 400)
 
+    // 🚨 安全加固：添加IP级别的频率限制，防止脚本用多个账号刷播放量
+    const { getClientIp } = await import('../lib/auth.ts')
+    const clientIp = getClientIp(req)
+    if (clientIp) {
+      const { checkRateLimit } = await import('../lib/rateLimit.ts')
+      // 同一IP，1分钟内最多调用30次（防止脚本批量刷）
+      const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'record_video_view', {
+        maxAttempts: 30, // 1分钟内最多30次
+        windowMs: 60000, // 1分钟窗口
+        lockDurationMs: undefined // 不锁定，直接拒绝
+      })
+
+      if (!rateLimitResult.allowed) {
+        console.warn(`[RECORD_VIEW_ATTACK] IP ${clientIp} 记录观看请求过于频繁（1分钟内超过30次）`)
+        return errorResponse('请求过于频繁，请稍后再试', 1, 429)
+      }
+    }
+
     const { data, error } = await supabaseAdmin.rpc('record_video_view_v2', {
       p_user_id: user.id,
       p_video_id: video_id,

@@ -28,6 +28,7 @@ import { Login } from './pages/login'
 import { authProvider } from './authProvider'
 import { Dashboard } from './pages/dashboard'
 import { InheritancePage } from './pages/inheritance'
+import { CommentList } from './pages/comments'
 
 // 🎯 审核员邮箱列表（仅针对 shenhe1@review.local：显示视频管理、用户管理、资金流水、频道同步管理）
 const REVIEWER_EMAILS = ['shenhe1@review.local']
@@ -198,6 +199,11 @@ function App() {
       name: 'inheritance',
       list: '/inheritance',
       meta: { label: '资产继承 (迁移)' }
+    },
+    {
+      name: 'video_comments',
+      list: '/comments',
+      meta: { label: '评论管理' }
     }
   ]
 
@@ -205,9 +211,11 @@ function App() {
   const filteredResources = (() => {
     if (!userEmail) return allResources
     if (REVIEWER_EMAILS.includes(userEmail)) {
-      // 审核员：显示视频管理、用户管理、资金流水、频道同步管理
+      // 审核员：显示视频管理、用户管理、资金流水、频道同步管理、评论管理
       return allResources.filter((r) =>
-        ['videos', 'profiles', 'coin_transactions', 'bound_channels'].includes(r.name)
+        ['videos', 'profiles', 'coin_transactions', 'bound_channels', 'video_comments'].includes(
+          r.name
+        )
       )
     }
     // 其他管理员：显示所有菜单
@@ -262,6 +270,7 @@ function App() {
                 <Route path="/bound-channels">
                   <Route index element={<BoundChannelList />} />
                 </Route>
+                <Route path="/comments" element={<CommentList />} />
                 {!isReviewer && (
                   <>
                     <Route path="/recommendation-pool">
