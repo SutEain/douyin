@@ -73,6 +73,21 @@ async function loadMore() {
       const isFirstLoad = state.list.length === 0
       state.list.push(...res.data.list)
 
+      // 🚀 优化：限制列表长度（最多保留200个视频，避免内存堆积）
+      const MAX_LIST_LENGTH = 200
+      if (state.list.length > MAX_LIST_LENGTH) {
+        // 保留最新的200个，删除最旧的
+        const removeCount = state.list.length - MAX_LIST_LENGTH
+        state.list.splice(0, removeCount)
+        console.log(
+          '[MainFeed] 🚀 清理旧数据，保留最新',
+          MAX_LIST_LENGTH,
+          '个视频，删除',
+          removeCount,
+          '个'
+        )
+      }
+
       // 🎯 Windows 深链修复：第一次加载时，根据 startVideoId 找到对应的索引
       if (isFirstLoad && baseStore.startVideoId && state.list.length > 0) {
         const deepLinkIndex = state.list.findIndex(

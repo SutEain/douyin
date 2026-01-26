@@ -1214,7 +1214,8 @@ export async function handleRecordView(req: Request): Promise<Response> {
       p_user_id: user.id,
       p_video_id: video_id,
       p_progress: progress ?? 0,
-      p_completed: completed === true
+      p_completed: completed === true,
+      p_ip_address: clientIp || null // 传递 IP 地址
     })
 
     if (error) {

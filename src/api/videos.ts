@@ -47,10 +47,11 @@ export function recommendedVideo(params?: any) {
   const pageNo = Math.floor(start / pageSize)
   const seed = params?.seed ?? 0.5
 
-  // 🎯 注入本地已看列表 (用于游客去重)
+  // 🚀 优化：限制 exclude_ids 数量（最多50个，避免URL过长和查询变慢）
   const videoStore = useVideoStore()
   const baseStore = useBaseStore()
-  const exclude_ids = videoStore.seenIds?.join(',')
+  const seenIds = videoStore.seenIds || []
+  const exclude_ids = seenIds.slice(0, 50).join(',') // 🚀 只传递最近50个
 
   // 🎯 深链接由后端自动处理
   // 为确保稳定性，如果 store 中存在 startVideoId，则显式传递给后端
@@ -71,9 +72,10 @@ export function recommendedLongVideo(params?: any) {
   const pageSize = params?.pageSize ?? 10
   const seed = params?.seed ?? 0.5
 
-  // 🎯 注入本地已看列表
+  // 🚀 优化：限制 exclude_ids 数量（最多50个）
   const videoStore = useVideoStore()
-  const exclude_ids = videoStore.seenIds?.join(',')
+  const seenIds = videoStore.seenIds || []
+  const exclude_ids = seenIds.slice(0, 50).join(',')
 
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/long-feed`,
@@ -88,9 +90,10 @@ export function recommendedVideoTab(params?: any) {
   const pageSize = params?.pageSize ?? 10
   const seed = params?.seed ?? 0.5
 
-  // 🎯 注入本地已看列表
+  // 🚀 优化：限制 exclude_ids 数量（最多50个）
   const videoStore = useVideoStore()
-  const exclude_ids = videoStore.seenIds?.join(',')
+  const seenIds = videoStore.seenIds || []
+  const exclude_ids = seenIds.slice(0, 50).join(',')
 
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/video-tab-feed`,
@@ -119,7 +122,9 @@ export function adultVideoFeed(params?: any) {
 
   // 🎯 注入本地已看列表
   const videoStore = useVideoStore()
-  const exclude_ids = videoStore.seenIds?.join(',')
+  // 🚀 优化：限制 exclude_ids 数量（最多50个）
+  const seenIds = videoStore.seenIds || []
+  const exclude_ids = seenIds.slice(0, 50).join(',')
 
   return requestSupabaseVideoList(
     `${getAppServerBase()}/video/adult-feed`,
