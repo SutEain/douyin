@@ -718,7 +718,8 @@ import {
   getMyBets,
   cancelPC28Bet,
   getPC28Transactions,
-  getPC28History
+  getPC28History,
+  getRoomPC28Status
 } from '@/api/pc28'
 import { _notice, _copy } from '@/utils'
 import { supabase } from '@/utils/supabase'
@@ -1271,10 +1272,29 @@ onBeforeUnmount(() => {
 // 监听当前期数变化，重新设置Realtime
 watch(
   () => props.currentRound?.id,
-  () => {
+  (newId, oldId) => {
+    // 🎯 如果期数切换了（ID不同），清空已选的下注并提示用户
+    if (oldId && newId && oldId !== newId) {
+      const oldPeriod = props.currentRound?.period_number
+      _notice(`期数已切换，已清空已选下注`)
+      selectedBets.value.clear()
+    }
+
     setupBetsRealtime()
     if (activeTab.value === 'my_bets') {
       fetchMyBets()
+    }
+  }
+)
+
+// 🎯 监听期号变化（更可靠的检测方式）
+watch(
+  () => props.currentRound?.period_number,
+  (newPeriod, oldPeriod) => {
+    // 如果期号变化了，清空已选的下注
+    if (oldPeriod && newPeriod && oldPeriod !== newPeriod) {
+      _notice(`期数已切换至${newPeriod}期，已清空已选下注`)
+      selectedBets.value.clear()
     }
   }
 )
@@ -1301,8 +1321,45 @@ async function handleBet() {
     return
   }
 
-  if (props.currentRound.status !== 'betting') {
-    _notice('当前期已封盘或已结算')
+  // 🎯 关键修复：在下注前重新获取最新的期数信息，防止期数切换导致下注到错误期数
+  let actualRoundId = props.currentRound.id
+  let actualRoundStatus = props.currentRound.status
+  let actualPeriodNumber = props.currentRound.period_number
+
+  try {
+    const statusRes = await getRoomPC28Status(props.roomId)
+    if (statusRes.success && statusRes.data?.current_round) {
+      const latestRound = statusRes.data.current_round
+
+      // 如果期数已经切换（期号不同），说明已经进入下一盘
+      if (latestRound.period_number !== props.currentRound.period_number) {
+        _notice(`期数已切换，当前为${latestRound.period_number}期，请重新选择下注`)
+        // 清空已选的下注
+        selectedBets.value.clear()
+        return
+      }
+
+      // 更新为最新的期数信息
+      actualRoundId = latestRound.id
+      actualRoundStatus = latestRound.status
+      actualPeriodNumber = latestRound.period_number
+    }
+  } catch (e: any) {
+    console.error('[PC28BetPanel] Failed to fetch latest round:', e)
+    // 如果获取失败，使用props中的期数信息，但会记录警告
+    console.warn('[PC28BetPanel] Using props.currentRound as fallback')
+  }
+
+  // 再次检查期数状态（使用最新获取的状态）
+  if (actualRoundStatus !== 'betting') {
+    _notice(`当前期（${actualPeriodNumber}期）已封盘或已结算，无法下注`)
+    return
+  }
+
+  // 验证期数ID是否匹配（防止期数切换但ID不同）
+  if (actualRoundId !== props.currentRound.id) {
+    _notice(`期数已切换，当前为${actualPeriodNumber}期，请重新选择下注`)
+    selectedBets.value.clear()
     return
   }
 
@@ -1329,8 +1386,9 @@ async function handleBet() {
       }
 
       try {
+        // 🎯 使用最新获取的期数ID下注
         const res = await placePC28BetGlobal(
-          props.currentRound.id,
+          actualRoundId,
           props.roomId,
           type,
           betAmount.value,
