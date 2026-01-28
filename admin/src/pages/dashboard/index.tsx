@@ -498,12 +498,14 @@ export const Dashboard = () => {
   }
 
   const drawerTitle = useMemo(() => {
-    if (drawerMode === 'activeUsersToday') return '今日播放用户（北京时间）'
-    if (drawerMode === 'newUsersToday') return '今日新增用户（北京时间）'
-    if (drawerMode === 'newFirstPublishersToday') return '今日首次发作品用户（北京时间）'
-    if (drawerMode === 'newAdultVideosToday') return '今日新增成人视频（北京时间）'
-    return '今日新增作品（北京时间）'
-  }, [drawerMode])
+    if (drawerMode === 'activeUsersToday') return `今日播放用户（北京时间） - 共 ${activeTotal} 人`
+    if (drawerMode === 'newUsersToday') return `今日新增用户（北京时间） - 共 ${activeTotal} 人`
+    if (drawerMode === 'newFirstPublishersToday')
+      return `今日首次发作品用户（北京时间） - 共 ${activeTotal} 人`
+    if (drawerMode === 'newAdultVideosToday')
+      return `今日新增成人视频（北京时间） - 共 ${activeTotal} 条`
+    return `今日新增作品（北京时间） - 共 ${activeTotal} 条`
+  }, [drawerMode, activeTotal])
 
   const tableColumns = useMemo(() => {
     if (drawerMode === 'activeUsersToday') {
