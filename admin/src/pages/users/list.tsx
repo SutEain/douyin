@@ -283,26 +283,6 @@ export const UserList = () => {
             <span style={{ fontFamily: 'monospace', color: '#666' }}>{value || '-'}</span>
           )}
         />
-        <Table.Column dataIndex="nickname" title="昵称" width={150} />
-        <Table.Column
-          dataIndex="username"
-          title="用户名"
-          width={150}
-          render={(value) => <span style={{ color: '#999' }}>@{value || '-'}</span>}
-        />
-        <Table.Column dataIndex="video_count" title="视频数" width={80} sorter />
-        <Table.Column dataIndex="follower_count" title="粉丝数" width={80} sorter />
-        <Table.Column dataIndex="total_likes" title="获赞数" width={80} sorter />
-        <Table.Column
-          title="邀请人"
-          width={160}
-          render={(_, record: any) => {
-            const inviterRaw = record?.inviter
-            const inviter = Array.isArray(inviterRaw) ? inviterRaw?.[0] : inviterRaw
-            const name = inviter?.nickname || inviter?.username || inviter?.numeric_id || '-'
-            return <span>{name}</span>
-          }}
-        />
         <Table.Column
           dataIndex="balance_coins"
           title="余额(抖币)"
@@ -323,6 +303,26 @@ export const UserList = () => {
               {(Math.floor((v ?? 0) * 100) / 100).toFixed(2)}
             </span>
           )}
+        />
+        <Table.Column dataIndex="nickname" title="昵称" width={150} />
+        <Table.Column
+          dataIndex="username"
+          title="用户名"
+          width={150}
+          render={(value) => <span style={{ color: '#999' }}>@{value || '-'}</span>}
+        />
+        <Table.Column dataIndex="video_count" title="视频数" width={80} sorter />
+        <Table.Column dataIndex="follower_count" title="粉丝数" width={80} sorter />
+        <Table.Column dataIndex="total_likes" title="获赞数" width={80} sorter />
+        <Table.Column
+          title="邀请人"
+          width={160}
+          render={(_, record: any) => {
+            const inviterRaw = record?.inviter
+            const inviter = Array.isArray(inviterRaw) ? inviterRaw?.[0] : inviterRaw
+            const name = inviter?.nickname || inviter?.username || inviter?.numeric_id || '-'
+            return <span>{name}</span>
+          }}
         />
         <Table.Column
           dataIndex="auto_approve"
