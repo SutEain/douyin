@@ -2,14 +2,10 @@ import { List, useTable } from '@refinedev/antd'
 import { Form, Input, Select, Table, Tag, Space, Button, DatePicker, InputNumber } from 'antd'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
-import { useMemo } from 'react'
 
 dayjs.extend(utc)
 
 const { RangePicker } = DatePicker
-
-// 🚀 默认日期范围：最近 7 天（优化性能，避免一次性加载所有历史数据）
-const DEFAULT_DATE_RANGE_DAYS = 7
 
 const typeColors: Record<string, string> = {
   recharge: 'green',
@@ -54,13 +50,6 @@ const typeLabels: Record<string, string> = {
 }
 
 export const CoinTransactionList = () => {
-  // 🚀 默认日期范围：最近 7 天
-  const defaultDateRange = useMemo(() => {
-    const end = dayjs().endOf('day')
-    const start = end.subtract(DEFAULT_DATE_RANGE_DAYS - 1, 'day').startOf('day')
-    return [start, end]
-  }, [])
-
   const { tableProps, searchFormProps } = useTable({
     // 🚀 使用优化的视图，避免 LATERAL JOIN，性能提升 10-100 倍
     resource: 'admin_coin_transactions_list',
@@ -76,26 +65,11 @@ export const CoinTransactionList = () => {
     sorters: {
       initial: [{ field: 'created_at', order: 'desc' }]
     },
-    filters: {
-      // 🚀 默认日期范围：最近 7 天（优化性能）
-      initial: [
-        {
-          field: 'created_at',
-          operator: 'gte',
-          value: defaultDateRange[0].toISOString()
-        },
-        {
-          field: 'created_at',
-          operator: 'lte',
-          value: defaultDateRange[1].toISOString()
-        }
-      ]
-    },
     onSearch: (params: Record<string, any>) => {
       const filters: any[] = []
       const userQ = String(params.user_q || '').trim()
 
-      // 🚀 日期范围过滤（如果指定了日期范围，使用指定的；否则使用默认的最近 7 天）
+      // 🚀 日期范围过滤（仅在用户指定日期范围时应用）
       const hasDateRange = params.date_range && params.date_range.length === 2
       if (hasDateRange) {
         const [start, end] = params.date_range
@@ -110,7 +84,6 @@ export const CoinTransactionList = () => {
           value: end.toISOString()
         })
       }
-      // 注意：如果没有指定日期范围，filters.initial 中的默认日期范围会自动应用
 
       if (userQ) {
         const isNumeric = /^[0-9]+$/.test(userQ)
@@ -192,8 +165,6 @@ export const CoinTransactionList = () => {
             showTime={{ format: 'HH:mm:ss' }}
             format="YYYY-MM-DD HH:mm:ss"
             style={{ width: 380 }}
-            // 🚀 设置默认值为最近 7 天
-            defaultValue={defaultDateRange as any}
             placeholder={['开始时间', '结束时间']}
           />
         </Form.Item>
