@@ -67,9 +67,7 @@ export const CoinTransactionList = () => {
     syncWithLocation: true,
     // 🚀 优化：设置默认分页大小（每页 50 条）
     pagination: {
-      pageSize: 50,
-      showSizeChanger: true,
-      pageSizeOptions: ['20', '50', '100', '200']
+      pageSize: 50
     },
     meta: {
       // 🚀 视图已经包含了 profiles 和 counterparty 信息，直接选择即可
@@ -238,7 +236,16 @@ export const CoinTransactionList = () => {
         </Form.Item>
       </Form>
 
-      <Table {...tableProps} rowKey="id" scroll={{ x: 1000 }}>
+      <Table
+        {...tableProps}
+        rowKey="id"
+        scroll={{ x: 1000 }}
+        pagination={{
+          ...tableProps.pagination,
+          showSizeChanger: true,
+          pageSizeOptions: ['20', '50', '100', '200']
+        }}
+      >
         <Table.Column
           title="用户"
           width={200}

@@ -8,13 +8,14 @@ import {
   // DollarOutlined // 🚨 已禁用：调整余额功能已移除
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
-import { useUpdate } from '@refinedev/core'
+import { useUpdate, useInvalidate } from '@refinedev/core'
 import { useState } from 'react'
 import { supabaseClient } from '../../supabaseClient'
 
 export const UserList = () => {
   const navigate = useNavigate()
   const { mutate: updateProfile } = useUpdate()
+  const invalidate = useInvalidate()
   // 🚨 已禁用：调整余额功能已移除
   // const [adjustModalVisible, setAdjustModalVisible] = useState(false)
   // const [adjustingUser, setAdjustingUser] = useState<any>(null)
@@ -111,7 +112,7 @@ export const UserList = () => {
             onSuccess: () => {
               message.success(newValue ? '已开启自动审核' : '已关闭自动审核')
               // 🎯 刷新表格数据，确保状态更新
-              table.tableQueryResult?.refetch()
+              invalidate({ resource: 'admin_profiles_list', invalidates: ['list'] })
             },
             onError: (error: any) => {
               console.error('[handleToggleAutoApprove] 更新失败:', error)
@@ -161,7 +162,7 @@ export const UserList = () => {
         content: `确定要为「${record.nickname || record.username}」解除封禁吗？`,
         onOk: async () => {
           try {
-            const { data, error } = await supabaseClient.rpc('admin_ban_user', {
+            const { error } = await supabaseClient.rpc('admin_ban_user', {
               p_user_id: record.id,
               p_is_banned: false,
               p_ban_reason: null
@@ -174,7 +175,7 @@ export const UserList = () => {
             }
 
             message.success('已解除封禁')
-            table.tableQueryResult?.refetch()
+            invalidate({ resource: 'admin_profiles_list', invalidates: ['list'] })
           } catch (err: any) {
             console.error('[handleToggleBan] 解封异常:', err)
             message.error(err?.message || '操作失败')
@@ -191,7 +192,7 @@ export const UserList = () => {
   const handleConfirmBan = async () => {
     try {
       const values = await banForm.validateFields()
-      const { data, error } = await supabaseClient.rpc('admin_ban_user', {
+      const { error } = await supabaseClient.rpc('admin_ban_user', {
         p_user_id: banningUser.id,
         p_is_banned: true,
         p_ban_reason: values.reason || '管理员封禁'
@@ -206,7 +207,7 @@ export const UserList = () => {
       message.success('已封禁用户')
       setBanModalVisible(false)
       banForm.resetFields()
-      table.tableQueryResult?.refetch()
+      invalidate({ resource: 'admin_profiles_list', invalidates: ['list'] })
     } catch (err: any) {
       console.error('[handleConfirmBan] 封禁异常:', err)
       message.error(err?.message || '操作失败')
