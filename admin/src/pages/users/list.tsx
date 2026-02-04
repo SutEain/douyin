@@ -10,6 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useUpdate } from '@refinedev/core'
 import { useState } from 'react'
+import { supabaseClient } from '../../supabaseClient'
 
 export const UserList = () => {
   const navigate = useNavigate()
@@ -109,9 +110,14 @@ export const UserList = () => {
           {
             onSuccess: () => {
               message.success(newValue ? '已开启自动审核' : '已关闭自动审核')
+              // 🎯 刷新表格数据，确保状态更新
+              table.tableQueryResult?.refetch()
             },
-            onError: () => {
-              message.error('操作失败')
+            onError: (error: any) => {
+              console.error('[handleToggleAutoApprove] 更新失败:', error)
+              message.error(
+                error?.message || error?.error?.message || '操作失败，请检查控制台查看详细错误'
+              )
             }
           }
         )
@@ -153,22 +159,26 @@ export const UserList = () => {
       Modal.confirm({
         title: '确认解封',
         content: `确定要为「${record.nickname || record.username}」解除封禁吗？`,
-        onOk: () => {
-          updateProfile(
-            {
-              resource: 'profiles',
-              id: record.id,
-              values: { is_banned: false, ban_reason: null }
-            },
-            {
-              onSuccess: () => {
-                message.success('已解除封禁')
-              },
-              onError: () => {
-                message.error('操作失败')
-              }
+        onOk: async () => {
+          try {
+            const { data, error } = await supabaseClient.rpc('admin_ban_user', {
+              p_user_id: record.id,
+              p_is_banned: false,
+              p_ban_reason: null
+            })
+
+            if (error) {
+              console.error('[handleToggleBan] 解封失败:', error)
+              message.error(error.message || '操作失败')
+              return
             }
-          )
+
+            message.success('已解除封禁')
+            table.tableQueryResult?.refetch()
+          } catch (err: any) {
+            console.error('[handleToggleBan] 解封异常:', err)
+            message.error(err?.message || '操作失败')
+          }
         }
       })
     } else {
@@ -181,25 +191,25 @@ export const UserList = () => {
   const handleConfirmBan = async () => {
     try {
       const values = await banForm.validateFields()
-      updateProfile(
-        {
-          resource: 'profiles',
-          id: banningUser.id,
-          values: { is_banned: true, ban_reason: values.reason }
-        },
-        {
-          onSuccess: () => {
-            message.success('已封禁用户')
-            setBanModalVisible(false)
-            banForm.resetFields()
-          },
-          onError: () => {
-            message.error('操作失败')
-          }
-        }
-      )
-    } catch (err) {
-      // 验证失败
+      const { data, error } = await supabaseClient.rpc('admin_ban_user', {
+        p_user_id: banningUser.id,
+        p_is_banned: true,
+        p_ban_reason: values.reason || '管理员封禁'
+      })
+
+      if (error) {
+        console.error('[handleConfirmBan] 封禁失败:', error)
+        message.error(error.message || '操作失败')
+        return
+      }
+
+      message.success('已封禁用户')
+      setBanModalVisible(false)
+      banForm.resetFields()
+      table.tableQueryResult?.refetch()
+    } catch (err: any) {
+      console.error('[handleConfirmBan] 封禁异常:', err)
+      message.error(err?.message || '操作失败')
     }
   }
 

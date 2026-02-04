@@ -2,10 +2,14 @@ import { List, useTable } from '@refinedev/antd'
 import { Form, Input, Select, Table, Tag, Space, Button, DatePicker, InputNumber } from 'antd'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
+import { useMemo } from 'react'
 
 dayjs.extend(utc)
 
 const { RangePicker } = DatePicker
+
+// 🚀 默认日期范围：最近 7 天（优化性能，避免一次性加载所有历史数据）
+const DEFAULT_DATE_RANGE_DAYS = 7
 
 const typeColors: Record<string, string> = {
   recharge: 'green',
@@ -50,20 +54,66 @@ const typeLabels: Record<string, string> = {
 }
 
 export const CoinTransactionList = () => {
+  // 🚀 默认日期范围：最近 7 天
+  const defaultDateRange = useMemo(() => {
+    const end = dayjs().endOf('day')
+    const start = end.subtract(DEFAULT_DATE_RANGE_DAYS - 1, 'day').startOf('day')
+    return [start, end]
+  }, [])
+
   const { tableProps, searchFormProps } = useTable({
     resource: 'coin_transactions',
     syncWithLocation: true,
+    // 🚀 优化：设置默认分页大小（每页 50 条）
+    pagination: {
+      pageSize: 50,
+      showSizeChanger: true,
+      pageSizeOptions: ['20', '50', '100', '200']
+    },
     meta: {
       // 🎯 使用 !inner 强制内联连接 profiles，并可选连接 counterparty
+      // 🚀 优化：只选择必要的字段，减少数据传输量
       select:
-        '*, profiles:user_id!inner(nickname,numeric_id), counterparty:counterparty_id(nickname,numeric_id)'
+        'id, user_id, type, amount, balance_after, description, related_id, created_at, counterparty_id, profiles:user_id!inner(nickname,numeric_id), counterparty:counterparty_id(nickname,numeric_id)'
     },
     sorters: {
       initial: [{ field: 'created_at', order: 'desc' }]
     },
+    filters: {
+      // 🚀 默认日期范围：最近 7 天（优化性能）
+      initial: [
+        {
+          field: 'created_at',
+          operator: 'gte',
+          value: defaultDateRange[0].toISOString()
+        },
+        {
+          field: 'created_at',
+          operator: 'lte',
+          value: defaultDateRange[1].toISOString()
+        }
+      ]
+    },
     onSearch: (params: Record<string, any>) => {
       const filters: any[] = []
       const userQ = String(params.user_q || '').trim()
+
+      // 🚀 日期范围过滤（如果指定了日期范围，使用指定的；否则使用默认的最近 7 天）
+      const hasDateRange = params.date_range && params.date_range.length === 2
+      if (hasDateRange) {
+        const [start, end] = params.date_range
+        filters.push({
+          field: 'created_at',
+          operator: 'gte',
+          value: start.toISOString()
+        })
+        filters.push({
+          field: 'created_at',
+          operator: 'lte',
+          value: end.toISOString()
+        })
+      }
+      // 注意：如果没有指定日期范围，filters.initial 中的默认日期范围会自动应用
 
       if (userQ) {
         const isNumeric = /^[0-9]+$/.test(userQ)
@@ -116,21 +166,6 @@ export const CoinTransactionList = () => {
         filters.push({ field: 'amount', operator: 'lte', value: Number(params.max_amount) })
       }
 
-      // 🎯 日期范围过滤
-      if (params.date_range && params.date_range.length === 2) {
-        const [start, end] = params.date_range
-        filters.push({
-          field: 'created_at',
-          operator: 'gte',
-          value: start.toISOString()
-        })
-        filters.push({
-          field: 'created_at',
-          operator: 'lte',
-          value: end.toISOString()
-        })
-      }
-
       return filters
     }
   })
@@ -158,6 +193,9 @@ export const CoinTransactionList = () => {
             showTime={{ format: 'HH:mm:ss' }}
             format="YYYY-MM-DD HH:mm:ss"
             style={{ width: 380 }}
+            // 🚀 设置默认值为最近 7 天
+            defaultValue={defaultDateRange as any}
+            placeholder={['开始时间', '结束时间']}
           />
         </Form.Item>
         <Form.Item label="金额范围">

@@ -1172,6 +1172,7 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
     })
     .eq('id', video_id)
 
+  // 🎯 检查用户是否已有通过审核的作品，如果是首个通过的作品，则开启免审权限
   const { data: profile } = await supabaseAdmin
     .from('profiles')
     .select('id, auto_approve, nickname')
@@ -1179,10 +1180,29 @@ export async function handleApproveVideo(req: Request): Promise<Response> {
     .single()
 
   if (profile && !profile.auto_approve) {
-    await supabaseAdmin.from('profiles').update({ auto_approve: true }).eq('id', profile.id)
+    // 检查用户是否已有其他通过审核的作品
+    const { data: approvedVideos } = await supabaseAdmin
+      .from('videos')
+      .select('id')
+      .eq('author_id', video.author_id)
+      .in('review_status', ['approved', 'auto_approved'])
+      .neq('id', video_id) // 排除当前作品
+      .limit(1)
+
+    // 如果没有其他通过的作品，说明这是首个通过的作品，开启免审权限
+    if (!approvedVideos || approvedVideos.length === 0) {
+      const { error: updateError } = await supabaseAdmin
+        .from('profiles')
+        .update({ auto_approve: true })
+        .eq('id', profile.id)
+
+      if (updateError) {
+        console.error('[handleApproveVideo] 设置免审权限失败:', updateError)
+      }
+    }
   }
 
-  return successResponse({ success: true })
+  return successResponse({ success: true, auto_approve_enabled: profile?.auto_approve || false })
 }
 
 export async function handleRecordView(req: Request): Promise<Response> {

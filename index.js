@@ -25,6 +25,9 @@ const PORT = 3000
 const LOCAL_BOT_API = process.env.LOCAL_BOT_API || 'http://localhost:8081'
 const R2_BUCKET = process.env.R2_BUCKET
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL
+// 🎯 Telegram Bot API 数据目录路径（用于拼接完整文件路径）
+const TELEGRAM_BOT_API_DATA_DIR =
+  process.env.TELEGRAM_BOT_API_DATA_DIR || '/var/lib/telegram-bot-api'
 
 // 🎯 Axios 请求超时配置
 // 🎯 本地 Telegram Bot API 可能需要更长时间处理大文件，增加超时时间
@@ -79,8 +82,10 @@ async function telegramApiRequest(url, retries = TELEGRAM_API_RETRY_COUNT) {
 }
 
 // 🎯 并发控制：限制同时处理的任务数（避免过载）
-const MAX_CONCURRENT_TASKS = parseInt(process.env.MAX_CONCURRENT_TASKS || '3')
+const MAX_CONCURRENT_TASKS = parseInt(process.env.MAX_CONCURRENT_TASKS || '5')
+const SMALL_FILE_SIZE_LIMIT = 50 * 1024 * 1024 // 50MB，小文件阈值
 let activeTasks = 0
+let activeSmallFileTasks = 0 // 🎯 当前正在处理的小文件任务数（最多保留1个槽位）
 const taskQueue = []
 
 // 🎯 去重：记录正在处理或队列中的任务（使用 video_id + file_id 作为唯一标识）
@@ -141,11 +146,92 @@ async function processNextTask() {
       )
     }
   }
-  const queueLengthBeforeShift = taskQueue.length // 🎯 记录取出前的队列长度（包含当前任务）
-  const task = taskQueue.shift()
+
+  // 🎯 查找下一个要处理的任务
+  // 🎯 策略：优先处理小文件（<50MB），但保留1个槽位专门给小文件
+  let taskIndex = -1
+  const isSmallFileSlotAvailable = activeSmallFileTasks === 0 // 🎯 小文件槽位是否可用
+
+  // 🎯 如果小文件槽位可用，优先找小文件
+  if (isSmallFileSlotAvailable) {
+    taskIndex = taskQueue.findIndex((t) => {
+      const size = t.fileSize || 0
+      return size > 0 && size < SMALL_FILE_SIZE_LIMIT
+    })
+  }
+
+  // 🎯 如果没找到小文件或小文件槽位不可用，找第一个任务
+  if (taskIndex === -1) {
+    taskIndex = 0
+  }
+
+  const queueLengthBeforeShift = taskQueue.length
+  const task = taskQueue.splice(taskIndex, 1)[0]
   if (!task) return
 
   const taskKey = getTaskKey(task.videoId, task.fileId)
+  const isSmallFile = (task.fileSize || 0) > 0 && (task.fileSize || 0) < SMALL_FILE_SIZE_LIMIT
+
+  // 🎯 检查是否可以处理这个任务
+  // 🎯 如果是大文件，且小文件槽位被占用，需要确保还有普通槽位
+  if (!isSmallFile && activeSmallFileTasks > 0 && activeTasks >= MAX_CONCURRENT_TASKS - 1) {
+    // 🎯 大文件但只剩小文件槽位，放回队列等待
+    taskQueue.unshift(task)
+    console.log(`[Queue] ⚡ 触发预留机制：提取 50MB 以下的小文件优先处理`)
+    // 🎯 尝试找小文件
+    const smallFileIndex = taskQueue.findIndex((t) => {
+      const size = t.fileSize || 0
+      return size > 0 && size < SMALL_FILE_SIZE_LIMIT
+    })
+    if (smallFileIndex === -1) {
+      console.log(`[Queue] ⏸️  预留 1 个坑位给小文件，但当前队列无 50MB 以下任务，等待中...`)
+      return
+    }
+    // 🎯 找到小文件，继续处理
+    const smallTask = taskQueue.splice(smallFileIndex, 1)[0]
+    const smallTaskKey = getTaskKey(smallTask.videoId, smallTask.fileId)
+    queuedTasks.delete(smallTaskKey)
+    processingTasks.add(smallTaskKey)
+    activeTasks++
+    activeSmallFileTasks++
+
+    const fileSizeMB = smallTask.fileSize ? (smallTask.fileSize / 1024 / 1024).toFixed(2) : '未知'
+    const taskStartTime = Date.now()
+    console.log(
+      `[Queue] 开始处理任务 (活跃: ${activeTasks}/${MAX_CONCURRENT_TASKS}, 队列: ${queueLengthBeforeShift}, 大小: ${fileSizeMB}MB) [${smallTaskKey}]`
+    )
+
+    const TASK_TIMEOUT = 30 * 60 * 1000
+    const timeoutId = setTimeout(() => {
+      const duration = ((Date.now() - taskStartTime) / 1000 / 60).toFixed(1)
+      console.error(
+        `[Queue] ⚠️ 任务处理超时警告 [${smallTaskKey}]: 已处理 ${duration} 分钟，可能卡住`
+      )
+    }, TASK_TIMEOUT)
+
+    try {
+      await smallTask.handler()
+    } catch (error) {
+      console.error(`[Queue] 任务处理失败 [${smallTaskKey}]:`, error.message)
+    } finally {
+      clearTimeout(timeoutId)
+      const taskDuration = ((Date.now() - taskStartTime) / 1000).toFixed(1)
+      processingTasks.delete(smallTaskKey)
+      activeTasks--
+      activeSmallFileTasks--
+      const remainingQueue = taskQueue.length
+      console.log(
+        `[Queue] ✅ 任务完成 (活跃: ${activeTasks}/${MAX_CONCURRENT_TASKS}, 队列剩余: ${remainingQueue}, 耗时: ${taskDuration}秒) [${smallTaskKey}]`
+      )
+      if (remainingQueue > 0 && activeTasks < MAX_CONCURRENT_TASKS) {
+        console.log(
+          `[Queue] 🔄 准备处理下一个任务 (队列剩余: ${remainingQueue}, 可用槽位: ${MAX_CONCURRENT_TASKS - activeTasks})`
+        )
+        setImmediate(processNextTask)
+      }
+    }
+    return
+  }
 
   // 从队列记录中移除
   queuedTasks.delete(taskKey)
@@ -153,6 +239,9 @@ async function processNextTask() {
   processingTasks.add(taskKey)
 
   activeTasks++
+  if (isSmallFile) {
+    activeSmallFileTasks++
+  }
   const fileSizeMB = task.fileSize ? (task.fileSize / 1024 / 1024).toFixed(2) : '未知'
   const taskStartTime = Date.now() // 🎯 记录任务开始时间
   // 🎯 显示取出前的队列长度（更直观：表示队列中原本有多少任务，现在开始处理其中一个）
@@ -180,6 +269,10 @@ async function processNextTask() {
     // 从处理中记录移除
     processingTasks.delete(taskKey)
     activeTasks--
+    const wasSmallFile = (task.fileSize || 0) > 0 && (task.fileSize || 0) < SMALL_FILE_SIZE_LIMIT
+    if (wasSmallFile) {
+      activeSmallFileTasks--
+    }
     const remainingQueue = taskQueue.length
     console.log(
       `[Queue] ✅ 任务完成 (活跃: ${activeTasks}/${MAX_CONCURRENT_TASKS}, 队列剩余: ${remainingQueue}, 耗时: ${taskDuration}秒) [${taskKey}]`
@@ -298,6 +391,8 @@ app.post('/process', async (req, res) => {
     try {
       // 🎯 优先使用缓存的文件路径，如果文件已存在则直接使用
       let localFilePath = cachedFilePath
+      let relativePath = null
+
       if (!localFilePath || !fs.existsSync(localFilePath)) {
         const getFileStartTime = Date.now()
         console.log(`[${video_id}] 正在从 Telegram API 获取文件路径...`)
@@ -305,13 +400,67 @@ app.post('/process', async (req, res) => {
           const fileRes = await telegramApiRequest(
             `${LOCAL_BOT_API}/bot${bot_token}/getFile?file_id=${file_id}`
           )
-          localFilePath = fileRes.data.result.file_path
+          relativePath = fileRes.data.result.file_path
+
+          // 🎯 如果返回的是相对路径，需要拼接完整路径
+          // telegram-bot-api 返回的路径格式：videos/file_xxx 或 photos/file_xxx
+          // 实际文件位置：/var/lib/telegram-bot-api/{BOT_TOKEN}/videos/file_xxx
+          if (relativePath && !path.isAbsolute(relativePath)) {
+            // 查找 BOT_TOKEN 对应的目录
+            const botDirs = fs
+              .readdirSync(TELEGRAM_BOT_API_DATA_DIR)
+              .filter(
+                (dir) =>
+                  dir.startsWith('8165687613:') &&
+                  fs.statSync(path.join(TELEGRAM_BOT_API_DATA_DIR, dir)).isDirectory()
+              )
+            if (botDirs.length > 0) {
+              localFilePath = path.join(TELEGRAM_BOT_API_DATA_DIR, botDirs[0], relativePath)
+            } else {
+              // 如果找不到，尝试使用相对路径（可能已经在正确的工作目录）
+              localFilePath = relativePath
+            }
+          } else {
+            localFilePath = relativePath
+          }
+
           const getFileDuration = ((Date.now() - getFileStartTime) / 1000).toFixed(1)
           console.log(
             `[${video_id}] ✅ 文件路径获取成功 (耗时: ${getFileDuration}秒): ${localFilePath}`
           )
         } catch (error) {
           const getFileDuration = ((Date.now() - getFileStartTime) / 1000).toFixed(1)
+
+          // 🎯 检查是否是文件太大错误
+          const isFileTooBig =
+            error.response?.data?.description?.includes('file is too big') ||
+            error.response?.data?.description?.includes('too big') ||
+            error.message?.includes('file is too big')
+
+          if (isFileTooBig) {
+            console.error(
+              `[${video_id}] ⚠️ 文件太大，无法通过 Bot API 获取 (耗时: ${getFileDuration}秒)`
+            )
+            console.error(
+              `[${video_id}] 💡 提示: 文件超过 telegram-bot-api 限制，需要检查容器配置或使用其他方式下载`
+            )
+
+            // 🎯 更新数据库状态为失败
+            try {
+              await supabase
+                .from('videos')
+                .update({
+                  status: 'failed',
+                  error_message: '文件太大，超过 telegram-bot-api 限制'
+                })
+                .eq('id', video_id)
+            } catch (dbError) {
+              console.error(`[${video_id}] ❌ 更新数据库状态失败:`, dbError.message)
+            }
+
+            throw error // 🎯 仍然抛出错误，让上层知道任务失败
+          }
+
           console.error(
             `[${video_id}] ❌ 文件路径获取失败 (耗时: ${getFileDuration}秒):`,
             error.message
@@ -320,9 +469,45 @@ app.post('/process', async (req, res) => {
         }
       } else {
         console.log(`[${video_id}] ✅ 使用缓存的文件路径: ${localFilePath}`)
+        // 从缓存路径中提取相对路径
+        if (localFilePath.includes('telegram-bot-api')) {
+          const parts = localFilePath.split(path.sep)
+          const idx = parts.findIndex((p) => p.startsWith('8165687613:'))
+          if (idx >= 0 && idx < parts.length - 1) {
+            relativePath = parts.slice(idx + 1).join(path.sep)
+          }
+        }
       }
 
-      if (!fs.existsSync(localFilePath)) throw new Error(`文件未找到: ${localFilePath}`)
+      if (!fs.existsSync(localFilePath)) {
+        // 🎯 如果文件不存在，尝试查找其他可能的路径
+        if (!relativePath) {
+          // 从 localFilePath 中提取相对路径（取最后两级目录）
+          const parts = localFilePath.split(path.sep)
+          relativePath = parts.slice(-2).join(path.sep)
+        }
+
+        const botDirs = fs
+          .readdirSync(TELEGRAM_BOT_API_DATA_DIR)
+          .filter(
+            (dir) =>
+              dir.startsWith('8165687613:') &&
+              fs.statSync(path.join(TELEGRAM_BOT_API_DATA_DIR, dir)).isDirectory()
+          )
+
+        for (const botDir of botDirs) {
+          const altPath = path.join(TELEGRAM_BOT_API_DATA_DIR, botDir, relativePath)
+          if (fs.existsSync(altPath)) {
+            console.log(`[${video_id}] 🔄 找到文件在备用路径: ${altPath}`)
+            localFilePath = altPath
+            break
+          }
+        }
+
+        if (!fs.existsSync(localFilePath)) {
+          throw new Error(`文件未找到: ${localFilePath} (相对路径: ${relativePath})`)
+        }
+      }
 
       const ext = localFilePath.split('.').pop().toLowerCase()
       const isImage = ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext)

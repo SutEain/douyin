@@ -83,6 +83,7 @@ DECLARE
     v_prog RECORD;
     v_source_nickname TEXT;
     v_target_nickname TEXT;
+    v_target_final_balance NUMERIC;
 BEGIN
     -- 🚨 安全验证 1: 权限检查
     IF NOT public.check_is_admin() THEN
@@ -136,12 +137,21 @@ BEGIN
     END LOOP;
     DELETE FROM public.user_incentive_progress WHERE user_id = v_source_profile_id;
 
-    -- 迁移余额
-    IF v_source_balance > 0 THEN
-        UPDATE public.profiles SET balance_coins = 0 WHERE id = v_source_profile_id;
-        UPDATE public.profiles SET balance_coins = balance_coins + v_source_balance WHERE id = v_target_profile_id;
+    -- 🎯 修复：迁移余额（无论余额是否为0都执行，因为用户可能只有作品没有余额）
+    -- 先清零源账号余额
+    UPDATE public.profiles SET balance_coins = 0 WHERE id = v_source_profile_id;
+    
+    -- 迁移余额到目标账号，并获取最终余额
+    UPDATE public.profiles 
+    SET balance_coins = balance_coins + v_source_balance 
+    WHERE id = v_target_profile_id
+    RETURNING balance_coins INTO v_target_final_balance;
 
+    -- 🎯 修复：只有当余额大于0时才记录流水（避免0余额时记录无效流水）
+    IF v_source_balance > 0 THEN
         v_transaction_id := gen_random_uuid();
+        
+        -- 记录源账号流水（转出）
         INSERT INTO public.coin_transactions (
             id, user_id, amount, balance_after, type, description, related_id, counterparty_id
         )
@@ -157,6 +167,7 @@ BEGIN
             v_target_profile_id
         );
 
+        -- 记录目标账号流水（转入），使用更新后的余额
         INSERT INTO public.coin_transactions (
             id, user_id, amount, balance_after, type, description, related_id, counterparty_id
         )
@@ -164,7 +175,7 @@ BEGIN
             gen_random_uuid(), 
             v_target_profile_id, 
             v_source_balance, 
-            (SELECT balance_coins FROM public.profiles WHERE id = v_target_profile_id), 
+            v_target_final_balance, 
             'inheritance_in',
             '继承自 ' || v_source_nickname || ' (ID: ' || p_from_numeric_id || ')' ||
             CASE WHEN v_admin_id IS NOT NULL THEN ' (操作员: ' || v_admin_id::TEXT || ')' ELSE '' END,
