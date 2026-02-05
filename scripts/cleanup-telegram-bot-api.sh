@@ -33,13 +33,19 @@ DISK_USAGE=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
 DISK_AVAIL=$(df -h / | awk 'NR==2 {print $4}')
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 当前磁盘使用率: ${DISK_USAGE}% (可用: ${DISK_AVAIL})" >> "$LOG_FILE"
 
-# ===== 1. 清理 temp 目录（超过1小时的文件）=====
+# ===== 1. 清理 temp 目录（根据磁盘使用率动态调整）=====
 if [ -d "$BOT_DIR/temp" ]; then
     TEMP_BEFORE=$(du -sh "$BOT_DIR/temp" 2>/dev/null | cut -f1)
     TEMP_COUNT_BEFORE=$(find "$BOT_DIR/temp" -type f 2>/dev/null | wc -l)
     
-    # 清理超过1小时的文件
-    find "$BOT_DIR/temp" -type f -mmin +60 -delete 2>/dev/null
+    # 根据磁盘使用率决定清理策略
+    if [ "$DISK_USAGE" -ge 95 ]; then
+        # 磁盘使用率 >= 95%，清理超过30分钟的文件
+        find "$BOT_DIR/temp" -type f -mmin +30 -delete 2>/dev/null
+    else
+        # 磁盘使用率 < 95%，清理超过1小时的文件
+        find "$BOT_DIR/temp" -type f -mmin +60 -delete 2>/dev/null
+    fi
     
     TEMP_AFTER=$(du -sh "$BOT_DIR/temp" 2>/dev/null | cut -f1)
     TEMP_COUNT_AFTER=$(find "$BOT_DIR/temp" -type f 2>/dev/null | wc -l)
@@ -57,27 +63,33 @@ if [ -d "$BOT_DIR/videos" ]; then
     # 重新获取磁盘使用率（清理 temp 后可能变化）
     DISK_USAGE=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
     
-    # 根据磁盘使用率决定清理策略（使用分钟，更精确）
-    if [ "$DISK_USAGE" -ge 95 ]; then
-        # 磁盘使用率 >= 95%，清理超过2小时的 HLS 目录
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 磁盘使用率 >= 95%，清理超过2小时的 HLS 目录" >> "$LOG_FILE"
-        find "$BOT_DIR/videos" -type d -name "*_hls" -mmin +120 -exec rm -rf {} \; 2>/dev/null
+    # 根据磁盘使用率决定清理策略（使用分钟，更精确，更激进）
+    if [ "$DISK_USAGE" -ge 98 ]; then
+        # 磁盘使用率 >= 98%，紧急清理：删除所有超过30分钟的 HLS 目录
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🚨 紧急：磁盘使用率 >= 98%，清理超过30分钟的 HLS 目录" >> "$LOG_FILE"
+        find "$BOT_DIR/videos" -type d -name "*_hls" -mmin +30 -exec rm -rf {} \; 2>/dev/null
+        # 同时清理所有超过30分钟的 temp 文件
+        find "$BOT_DIR/temp" -type f -mmin +30 -delete 2>/dev/null
+    elif [ "$DISK_USAGE" -ge 95 ]; then
+        # 磁盘使用率 >= 95%，清理超过1小时的 HLS 目录
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️ 警告：磁盘使用率 >= 95%，清理超过1小时的 HLS 目录" >> "$LOG_FILE"
+        find "$BOT_DIR/videos" -type d -name "*_hls" -mmin +60 -exec rm -rf {} \; 2>/dev/null
     elif [ "$DISK_USAGE" -ge 90 ]; then
-        # 磁盘使用率 >= 90%，清理超过4小时的 HLS 目录
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 磁盘使用率 >= 90%，清理超过4小时的 HLS 目录" >> "$LOG_FILE"
-        find "$BOT_DIR/videos" -type d -name "*_hls" -mmin +240 -exec rm -rf {} \; 2>/dev/null
+        # 磁盘使用率 >= 90%，清理超过2小时的 HLS 目录
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 磁盘使用率 >= 90%，清理超过2小时的 HLS 目录" >> "$LOG_FILE"
+        find "$BOT_DIR/videos" -type d -name "*_hls" -mmin +120 -exec rm -rf {} \; 2>/dev/null
     elif [ "$DISK_USAGE" -ge 85 ]; then
-        # 磁盘使用率 >= 85%，清理超过6小时的 HLS 目录
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 磁盘使用率 >= 85%，清理超过6小时的 HLS 目录" >> "$LOG_FILE"
-        find "$BOT_DIR/videos" -type d -name "*_hls" -mmin +360 -exec rm -rf {} \; 2>/dev/null
+        # 磁盘使用率 >= 85%，清理超过4小时的 HLS 目录
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 磁盘使用率 >= 85%，清理超过4小时的 HLS 目录" >> "$LOG_FILE"
+        find "$BOT_DIR/videos" -type d -name "*_hls" -mmin +240 -exec rm -rf {} \; 2>/dev/null
     elif [ "$DISK_USAGE" -ge 80 ]; then
-        # 磁盘使用率 >= 80%，清理超过12小时的 HLS 目录
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 磁盘使用率 >= 80%，清理超过12小时的 HLS 目录" >> "$LOG_FILE"
-        find "$BOT_DIR/videos" -type d -name "*_hls" -mmin +720 -exec rm -rf {} \; 2>/dev/null
+        # 磁盘使用率 >= 80%，清理超过6小时的 HLS 目录
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 磁盘使用率 >= 80%，清理超过6小时的 HLS 目录" >> "$LOG_FILE"
+        find "$BOT_DIR/videos" -type d -name "*_hls" -mmin +360 -exec rm -rf {} \; 2>/dev/null
     else
-        # 磁盘使用率 < 80%，清理超过1天的 HLS 目录
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 磁盘使用率 < 80%，清理超过1天的 HLS 目录" >> "$LOG_FILE"
-        find "$BOT_DIR/videos" -type d -name "*_hls" -mtime +1 -exec rm -rf {} \; 2>/dev/null
+        # 磁盘使用率 < 80%，清理超过12小时的 HLS 目录
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 磁盘使用率 < 80%，清理超过12小时的 HLS 目录" >> "$LOG_FILE"
+        find "$BOT_DIR/videos" -type d -name "*_hls" -mmin +720 -exec rm -rf {} \; 2>/dev/null
     fi
     
     VIDEOS_AFTER=$(du -sh "$BOT_DIR/videos" 2>/dev/null | cut -f1)
