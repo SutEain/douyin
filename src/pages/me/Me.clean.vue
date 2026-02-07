@@ -60,6 +60,7 @@
             <img
               :src="_checkImgUrl(userinfo.avatar_168x168?.url_list?.[0])"
               class="avatar"
+              @error="(e) => _handleImageError(e)"
               @click.stop="state.previewImg = _checkImgUrl(userinfo.avatar_300x300?.url_list?.[0])"
             />
             <div class="right">
@@ -108,11 +109,7 @@
           <!-- 年龄、地区等信息 -->
           <div class="more" @click="$nav('/me/edit-userinfo')">
             <div class="age item" v-if="userinfo.user_age !== -1">
-              <img
-                v-if="userinfo.gender == 2"
-                src="../../assets/img/icon/me/woman.png"
-                alt=""
-              />
+              <img v-if="userinfo.gender == 2" src="../../assets/img/icon/me/woman.png" alt="" />
               <img v-if="userinfo.gender == 1" src="../../assets/img/icon/me/man.png" alt="" />
               <span>{{ userinfo.user_age }}岁</span>
             </div>
@@ -215,11 +212,7 @@
 
     <!-- 图片预览 -->
     <transition name="fade">
-      <div
-        v-if="state.previewImg"
-        class="fixed-preview-image"
-        @click="state.previewImg = ''"
-      >
+      <div v-if="state.previewImg" class="fixed-preview-image" @click="state.previewImg = ''">
         <img :src="state.previewImg" alt="" />
       </div>
     </transition>
@@ -233,7 +226,9 @@
       <div class="star-count-content">
         <img src="../../assets/img/icon/me/love-red.png" alt="" />
         <div class="desc">
-          <p>你的视频一共获得<span> {{ _formatNumber(userinfo.total_favorited) }} </span>次赞</p>
+          <p>
+            你的视频一共获得<span> {{ _formatNumber(userinfo.total_favorited) }} </span>次赞
+          </p>
           <p>与你的粉丝互动，获得更多赞吧～</p>
         </div>
       </div>
@@ -253,7 +248,7 @@ import ConfirmDialog from '@/components/dialog/ConfirmDialog.vue'
 import Loading from '@/components/Loading.vue'
 import NoMore from '@/components/NoMore.vue'
 import DyBack from '@/components/DyBack.vue'
-import { _checkImgUrl, _formatNumber, _getUserDouyinId, _no } from '@/utils'
+import { _checkImgUrl, _formatNumber, _getUserDouyinId, _no, _handleImageError } from '@/utils'
 import { likeVideo, myVideo } from '@/api/videos'
 import { userCollect } from '@/api/user'
 import { useBaseStore } from '@/store/pinia'
@@ -282,7 +277,7 @@ const state = reactive({
   floatFixed: false,
   floatShowName: false,
   isScroll: false,
-  
+
   videos: {
     my: { list: [], total: -1, pageNo: 0, pageSize: 15 },
     like: { list: [], total: -1, pageNo: 0, pageSize: 15 },
@@ -291,13 +286,13 @@ const state = reactive({
       music: { list: [], total: -1, pageNo: 0, pageSize: 15 }
     }
   },
-  
+
   loadings: {
     loading0: false,
     loading1: false,
     loading2: false
   },
-  
+
   // 触摸相关
   touchStartY: 0,
   touchStartTime: 0,
@@ -330,14 +325,14 @@ async function loadMyVideos() {
   if (state.videos.my.total !== -1 && state.videos.my.list.length >= state.videos.my.total) {
     return
   }
-  
+
   state.loadings.loading0 = true
   const res = await myVideo({
     pageNo: state.videos.my.pageNo,
     pageSize: state.videos.my.pageSize
   })
   state.loadings.loading0 = false
-  
+
   if (res.success) {
     state.videos.my.total = res.data.total
     state.videos.my.list.push(...res.data.list)
@@ -351,14 +346,14 @@ async function loadLikedVideos() {
   if (state.videos.like.total !== -1 && state.videos.like.list.length >= state.videos.like.total) {
     return
   }
-  
+
   state.loadings.loading1 = true
   const res = await likeVideo({
     pageNo: state.videos.like.pageNo,
     pageSize: state.videos.like.pageSize
   })
   state.loadings.loading1 = false
-  
+
   if (res.success) {
     state.videos.like.total = res.data.total
     state.videos.like.list.push(...res.data.list)
@@ -369,14 +364,14 @@ async function loadLikedVideos() {
 // 加载收藏的视频
 async function loadCollectedVideos() {
   if (state.loadings.loading2) return
-  
+
   state.loadings.loading2 = true
   const res = await userCollect({
     pageNo: state.videos.collect.video.pageNo,
     pageSize: state.videos.collect.video.pageSize
   })
   state.loadings.loading2 = false
-  
+
   if (res.success) {
     state.videos.collect.video.total = res.data.total
     state.videos.collect.video.list.push(...res.data.list)
@@ -388,12 +383,12 @@ async function loadCollectedVideos() {
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement
   const scrollTop = target.scrollTop
-  
+
   // 处理顶部浮动栏显示/隐藏
   if (descRef.value && headerRef.value) {
     const descBottom = descRef.value.offsetHeight
     const headerHeight = headerRef.value.offsetHeight
-    
+
     if (scrollTop > descBottom - headerHeight) {
       state.floatFixed = true
       state.floatShowName = true
@@ -402,7 +397,7 @@ function handleScroll(e: Event) {
       state.floatShowName = false
     }
   }
-  
+
   state.lastScrollTop = scrollTop
 }
 
@@ -426,7 +421,7 @@ function handleSlideScroll(e: Event) {
   const scrollTop = target.scrollTop
   const scrollHeight = target.scrollHeight
   const clientHeight = target.clientHeight
-  
+
   // 接近底部时加载更多
   if (scrollHeight - scrollTop - clientHeight < 100) {
     if (state.contentIndex === 0) {
@@ -442,12 +437,12 @@ function handleSlideScroll(e: Event) {
 // ========== 生命周期 ==========
 onMounted(() => {
   console.log('[Me] mounted')
-  
+
   // 添加主滚动区域的滚动监听
   if (scrollRef.value) {
     scrollRef.value.addEventListener('scroll', handleScroll)
   }
-  
+
   // 初始加载我的作品
   nextTick(() => {
     loadMyVideos()
@@ -752,4 +747,3 @@ onMounted(() => {
   opacity: 0;
 }
 </style>
-

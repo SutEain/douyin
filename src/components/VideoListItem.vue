@@ -87,7 +87,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { _checkImgUrl } from '@/utils'
+import { _checkImgUrl, _handleImageError } from '@/utils'
 import { buildCdnUrl } from '@/utils/media'
 import { Icon } from '@iconify/vue'
 
@@ -151,19 +151,16 @@ const formatDuration = (seconds: number) => {
 
 // 头像加载失败
 const handleAvatarError = (e: Event) => {
-  const target = e.target as HTMLImageElement
-  target.src = new URL('../assets/img/icon/avatar/1.png', import.meta.url).href
+  // 🚨 使用安全的错误处理函数，防止XSS攻击
+  _handleImageError(e, new URL('../assets/img/icon/avatar/1.png', import.meta.url).href)
 }
 
 // 封面加载失败
 const handleCoverError = (e: Event) => {
-  const target = e.target as HTMLImageElement
-  // 使用 data URI 作为占位图，避免外部请求失败
+  // 🚨 使用安全的错误处理函数，防止XSS攻击
   const placeholderImage =
     'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7mmoLml6DlpLHotKU8L3RleHQ+PC9zdmc+'
-  if (target.src !== placeholderImage) {
-    target.src = placeholderImage
-  }
+  _handleImageError(e, placeholderImage)
 }
 
 // 点击视频

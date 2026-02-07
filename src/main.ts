@@ -62,6 +62,43 @@ if (typeof window !== 'undefined') {
 
   const fallbackImage = new URL('./assets/img/icon/img-loading.png', import.meta.url).href
 
+  // 🚨 安全加固：全局图片错误拦截器，防止onerror XSS攻击
+  const handleImageError = (event: Event) => {
+    const img = event.target as HTMLImageElement
+    if (!img) return
+
+    // 🚨 关键安全措施：移除任何可能存在的onerror属性（防止XSS）
+    if (img.onerror) {
+      img.onerror = null
+    }
+
+    // 移除onerror属性（如果存在）
+    img.removeAttribute('onerror')
+
+    // 使用安全的默认图片
+    if (!img.dataset.fallbackApplied) {
+      img.dataset.fallbackApplied = '1'
+      img.src = fallbackImage
+    }
+
+    // 阻止事件继续传播
+    event.preventDefault?.()
+    event.stopPropagation?.()
+    return false
+  }
+
+  // 🚨 全局拦截：为所有图片添加错误处理（防止XSS）
+  document.addEventListener(
+    'error',
+    (event) => {
+      const target = event.target
+      if (target instanceof HTMLImageElement) {
+        handleImageError(event)
+      }
+    },
+    true
+  ) // 使用捕获阶段，确保优先处理
+
   const handleGlobalError = (event: Event | ErrorEvent) => {
     const target = event?.target
     const errorEvent = event as ErrorEvent
@@ -80,11 +117,7 @@ if (typeof window !== 'undefined') {
     }
 
     if (target instanceof HTMLImageElement) {
-      if (!target.dataset.fallbackApplied) {
-        target.dataset.fallbackApplied = '1'
-        target.src = fallbackImage
-      }
-      event.preventDefault?.()
+      handleImageError(event)
       return false
     }
 

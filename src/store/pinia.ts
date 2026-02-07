@@ -3,6 +3,7 @@ import enums from '@/utils/enums'
 import resource from '@/assets/data/resource'
 import defaultAvatar from '@/assets/img/icon/avatar/0.png'
 import i18n from '@/locales'
+import { _checkImgUrl } from '@/utils'
 
 type SupabaseProfile = {
   id?: string
@@ -61,8 +62,14 @@ function calculateAge(birthday?: string | null): number {
 function mapProfileToUserinfo(profile: SupabaseProfile, current: any) {
   if (!profile) return current
 
-  const avatar = profile.avatar_url || current?.avatar_300x300?.url_list?.[0] || defaultAvatar
-  const cover = profile.cover_url || current?.cover_url?.[0]?.url_list?.[0] || ''
+  // 🚨 安全加固：在数据映射时就清理URL，防止XSS攻击
+  const rawAvatar = profile.avatar_url || current?.avatar_300x300?.url_list?.[0] || defaultAvatar
+  const rawCover = profile.cover_url || current?.cover_url?.[0]?.url_list?.[0] || ''
+
+  // 使用_checkImgUrl清理URL，确保安全
+  const avatar = _checkImgUrl(rawAvatar) || defaultAvatar
+  const cover = rawCover ? _checkImgUrl(rawCover) : ''
+
   const birthday = profile.birthday || current?.birthday || ''
 
   const lang = normalizeLang(profile.lang || current?.lang)

@@ -6,7 +6,7 @@
       class="image-content"
       :style="imageStyle"
       @load="onImageLoad"
-      @error="onImageError"
+      @error="(e) => handleImageError(e)"
       @click.stop="openPreview"
       draggable="false"
     />
@@ -37,6 +37,7 @@ import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { buildCdnUrl } from '@/utils/media'
 import ImagePreview from './ImagePreview.vue'
+import { _handleImageError } from '@/utils'
 
 interface Props {
   images: Array<{
@@ -82,8 +83,10 @@ function onImageLoad() {
   loading.value = false
 }
 
-function onImageError() {
+function handleImageError(event: Event) {
   loading.value = false
+  // 🚨 使用安全的错误处理函数，防止XSS攻击
+  _handleImageError(event)
   console.error('[ImageViewer] 图片加载失败:', imageUrl.value)
 }
 </script>

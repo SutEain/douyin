@@ -41,6 +41,7 @@
                   :src="getImageUrl(image)"
                   class="preview-image"
                   @load="onImageLoad(index)"
+                  @error="(e) => handleImageError(e)"
                   @dblclick.stop="toggleZoom"
                   draggable="false"
                 />
@@ -89,6 +90,7 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { buildCdnUrl } from '@/utils/media'
+import { _handleImageError } from '@/utils'
 
 interface ImageItem {
   file_id: string

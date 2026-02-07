@@ -24,6 +24,7 @@
               <img
                 class="avatar"
                 :src="_checkImgUrl(store.userinfo.avatar_300x300.url_list[0])"
+                @error="(e) => _handleImageError(e)"
                 alt=""
               />
               <div class="edit-mask">
@@ -40,6 +41,7 @@
                 v-if="store.userinfo.cover_url?.[0]?.url_list?.[0]"
                 class="cover-preview"
                 :src="_checkImgUrl(store.userinfo.cover_url[0].url_list[0])"
+                @error="(e) => _handleImageError(e)"
               />
               <span v-else>{{ $t('profile.clickToSet') }}</span>
               <dy-back scale=".8" direction="right"></dy-back>
@@ -128,7 +130,8 @@ import {
   _showLoading,
   _showSelectDialog,
   _showConfirmDialog,
-  _notice
+  _notice,
+  _handleImageError
 } from '@/utils'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useNav } from '@/utils/hooks/useNav'

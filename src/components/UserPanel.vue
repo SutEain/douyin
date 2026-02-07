@@ -61,6 +61,7 @@
                 ? _checkImgUrl(props.currentItem.author.cover_url[0].url_list[0])
                 : '/images/profile/default_bg.png'
             "
+            @error="(e) => _handleImageError(e)"
             @click="
               state.previewImg = props.currentItem?.author?.cover_url?.[0]?.url_list?.[0]
                 ? _checkImgUrl(props.currentItem.author.cover_url[0].url_list[0])
