@@ -92,6 +92,7 @@
               :src="_checkImgUrl(userinfo.avatar_168x168?.url_list?.[0])"
               class="avatar"
               referrerpolicy="no-referrer"
+              @error="(e) => _handleImageError(e)"
               @click.stop="state.previewImg = _checkImgUrl(userinfo.avatar_300x300?.url_list?.[0])"
             />
             <div class="right">
@@ -433,7 +434,7 @@ import SlideItem from '@/components/slide/SlideItem.vue'
 import BaseFooter from '@/components/BaseFooter.vue'
 import Loading from '@/components/Loading.vue'
 import NoMore from '@/components/NoMore.vue'
-import { _checkImgUrl, _formatNumber, _no, _copy } from '@/utils'
+import { _checkImgUrl, _formatNumber, _no, _copy, _handleImageError } from '@/utils'
 import {
   likeVideo,
   myVideo,

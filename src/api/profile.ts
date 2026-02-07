@@ -15,6 +15,47 @@ export type ProfileUpdatePayload = {
   lang?: string | null
 }
 
+/**
+ * 验证URL是否安全（防止XSS攻击）
+ */
+function validateImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+
+  const urlLower = String(url).toLowerCase().trim()
+
+  // 🚨 禁止危险协议
+  if (
+    urlLower.startsWith('javascript:') ||
+    urlLower.startsWith('file://') ||
+    (urlLower.startsWith('data:') && !urlLower.startsWith('data:image/'))
+  ) {
+    throw new Error('头像URL包含不安全的协议，已拒绝')
+  }
+
+  // 只允许 http://、https:// 或安全的 data:image/ URL
+  if (
+    urlLower.startsWith('http://') ||
+    urlLower.startsWith('https://') ||
+    (urlLower.startsWith('data:image/') &&
+      [
+        'data:image/png',
+        'data:image/jpeg',
+        'data:image/jpg',
+        'data:image/gif',
+        'data:image/webp'
+      ].some((type) => urlLower.startsWith(type)))
+  ) {
+    return url
+  }
+
+  // 允许相对路径
+  if (url.startsWith('/') || url.includes('assets/img')) {
+    return url
+  }
+
+  throw new Error('头像URL格式不正确')
+}
+
 export async function updateProfile(payload: ProfileUpdatePayload) {
   const user = await getCurrentUser()
   if (!user) {
@@ -37,12 +78,24 @@ export async function updateProfile(payload: ProfileUpdatePayload) {
     lang
   } = payload
 
+  // 🚨 安全验证：验证头像和封面URL的安全性（防止XSS攻击）
+  let safeAvatarUrl: string | null = null
+  let safeCoverUrl: string | null = null
+
+  if (avatar_url !== undefined) {
+    safeAvatarUrl = validateImageUrl(avatar_url)
+  }
+
+  if (cover_url !== undefined) {
+    safeCoverUrl = validateImageUrl(cover_url)
+  }
+
   const safePayload = {
     nickname,
     username,
     bio,
-    avatar_url,
-    cover_url,
+    avatar_url: safeAvatarUrl,
+    cover_url: safeCoverUrl,
     gender,
     birthday,
     country,

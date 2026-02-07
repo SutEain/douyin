@@ -1,6 +1,22 @@
-# 刷播放量漏洞完整分析报告
+# 安全漏洞完整分析报告
 
 ## 🚨 发现的严重漏洞
+
+### 漏洞0: 头像上传XSS漏洞（最严重！）
+- **问题**: 
+  - 头像URL没有安全验证，允许 `javascript:` 协议和危险的 `data:` 协议
+  - 攻击者可以通过上传恶意头像URL，当其他用户访问攻击者主页时，可以窃取JWT token
+  - 攻击载荷示例：`<img src="x" onerror="...窃取localStorage中的JWT...">`
+- **影响**: 
+  - 攻击者可以窃取其他用户的JWT token
+  - 可能导致账号被盗用、资金安全风险
+- **修复**: ✅ 
+  - 在 `_checkImgUrl` 函数中添加URL安全验证，禁止 `javascript:`、危险的 `data:` 协议
+  - 在服务端API层（`updateProfile`）添加URL安全验证
+  - 为所有头像img标签添加安全的错误处理函数 `_handleImageError`，防止 `onerror` XSS攻击
+  - 只允许 `http://`、`https://` 和安全的 `data:image/` URL
+
+## 🚨 发现的严重漏洞（历史）
 
 ### 漏洞1: `increment_view_count` 函数（最严重！）
 - **问题**: 

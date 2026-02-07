@@ -120,20 +120,90 @@ export function _time(time) {
   return str
 }
 
+/**
+ * 安全的图片URL检查和清理函数
+ * 🚨 防止XSS攻击：禁止javascript:、data:等危险协议
+ */
 export function _checkImgUrl(url) {
   // console.log(url)
-  if (!url) return
-  //本地图片
-  if (
-    url.includes('assets/img') ||
-    url.includes('file://') ||
-    url.includes('data:image') ||
-    url.includes('http') ||
-    url.includes('https')
-  ) {
+  if (!url) return ''
+
+  // 🚨 安全验证：禁止危险协议
+  const urlLower = String(url).toLowerCase().trim()
+
+  // 禁止 javascript: 协议（XSS攻击）
+  if (urlLower.startsWith('javascript:')) {
+    console.warn('[Security] 检测到危险的javascript:协议，已阻止:', url)
+    return ''
+  }
+
+  // 禁止 data: 协议（可能包含恶意脚本）
+  // 只允许 data:image/ 开头的base64图片，且必须是有效的图片格式
+  if (urlLower.startsWith('data:')) {
+    if (urlLower.startsWith('data:image/')) {
+      // 验证是否是有效的图片MIME类型
+      const validImageTypes = [
+        'data:image/png',
+        'data:image/jpeg',
+        'data:image/jpg',
+        'data:image/gif',
+        'data:image/webp'
+      ]
+      const isValid = validImageTypes.some((type) => urlLower.startsWith(type))
+      if (isValid) {
+        return url // 允许安全的data:image URL
+      }
+    }
+    console.warn('[Security] 检测到危险的data:协议，已阻止:', url)
+    return ''
+  }
+
+  // 禁止 file:// 协议（本地文件访问）
+  if (urlLower.startsWith('file://')) {
+    console.warn('[Security] 检测到file://协议，已阻止:', url)
+    return ''
+  }
+
+  // 允许 http:// 和 https:// 协议
+  if (urlLower.startsWith('http://') || urlLower.startsWith('https://')) {
     return url
   }
+
+  // 允许本地资源路径
+  if (url.includes('assets/img') || url.startsWith('/')) {
+    return url
+  }
+
+  // 其他情况，添加CDN前缀
   return IMG_URL + url
+}
+
+/**
+ * 安全的图片错误处理函数
+ * 🚨 防止XSS攻击：当图片加载失败时，使用安全的默认图片，而不是执行恶意代码
+ * @param event 图片加载错误事件
+ * @param fallbackUrl 默认图片URL（可选）
+ */
+export function _handleImageError(event: Event, fallbackUrl?: string) {
+  const img = event.target as HTMLImageElement
+  if (!img) return
+
+  // 🚨 安全措施：移除任何可能存在的onerror属性（防止XSS）
+  if (img.onerror) {
+    img.onerror = null
+  }
+
+  // 使用默认图片或清空src
+  if (fallbackUrl) {
+    img.src = fallbackUrl
+  } else {
+    // 使用一个透明的1x1像素图片作为默认值
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+  }
+
+  // 阻止事件继续传播
+  event.preventDefault()
+  event.stopPropagation()
 }
 
 export function _duration(v) {
