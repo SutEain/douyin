@@ -82,7 +82,7 @@ async function telegramApiRequest(url, retries = TELEGRAM_API_RETRY_COUNT) {
 }
 
 // 🎯 并发控制：限制同时处理的任务数（避免过载）
-const MAX_CONCURRENT_TASKS = parseInt(process.env.MAX_CONCURRENT_TASKS || '5')
+const MAX_CONCURRENT_TASKS = parseInt(process.env.MAX_CONCURRENT_TASKS || '20')
 const SMALL_FILE_SIZE_LIMIT = 50 * 1024 * 1024 // 50MB，小文件阈值
 let activeTasks = 0
 let activeSmallFileTasks = 0 // 🎯 当前正在处理的小文件任务数（最多保留1个槽位）
@@ -436,6 +436,47 @@ app.post('/process', async (req, res) => {
             error.response?.data?.description?.includes('file is too big') ||
             error.response?.data?.description?.includes('too big') ||
             error.message?.includes('file is too big')
+
+          // 🎯 检查是否是文件不可用错误（400 错误：wrong file_id or the file is temporarily unavailable）
+          const isFileUnavailable =
+            error.response?.status === 400 &&
+            (error.response?.data?.description?.includes('wrong file_id') ||
+              error.response?.data?.description?.includes('temporarily unavailable') ||
+              error.response?.data?.description?.includes('file is temporarily unavailable'))
+
+          if (isFileUnavailable) {
+            console.error(
+              `[${video_id}] ⚠️ 文件不可用或 file_id 错误 (耗时: ${getFileDuration}秒): ${error.response?.data?.description || error.message}`
+            )
+            console.log(`[${video_id}] 🗑️  删除数据库中的任务记录...`)
+
+            // 🎯 直接删除数据库中的记录
+            try {
+              const { error: deleteError } = await supabase
+                .from('videos')
+                .delete()
+                .eq('id', video_id)
+
+              if (deleteError) {
+                console.error(`[${video_id}] ❌ 删除数据库记录失败:`, deleteError.message)
+                // 如果删除失败，尝试更新状态为 failed
+                await supabase
+                  .from('videos')
+                  .update({
+                    status: 'failed',
+                    error_message: '文件不可用或 file_id 错误'
+                  })
+                  .eq('id', video_id)
+              } else {
+                console.log(`[${video_id}] ✅ 已删除数据库中的任务记录`)
+              }
+            } catch (dbError) {
+              console.error(`[${video_id}] ❌ 删除/更新数据库记录失败:`, dbError.message)
+            }
+
+            // 🎯 不抛出错误，直接返回，任务结束
+            return
+          }
 
           if (isFileTooBig) {
             console.error(

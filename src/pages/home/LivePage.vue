@@ -928,14 +928,25 @@ async function fetchPC28Data() {
       if (pc28CurrentRound.value?.status === 'settled') {
         pc28LastSettledRound.value = pc28CurrentRound.value
       } else {
-        // 查询上一个已结算的期数（按期号降序排列，确保获取最新的）
-        const { data: lastSettled } = await supabase
+        // 🚨 修复：查询上一个已结算的期数，按期数数字排序（不是字符串排序）
+        // 因为period_number是字符串，Supabase的order可能不准确，需要在内存中排序
+        const { data: allSettled } = await supabase
           .from('pc28_global_rounds')
           .select('*')
           .eq('status', 'settled')
-          .order('period_number', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+          .order('settled_at', { ascending: false }) // 先用时间排序获取最近的数据
+          .limit(100) // 获取最近100期，然后在内存中按期数排序
+
+        let lastSettled = null
+        if (allSettled && allSettled.length > 0) {
+          // 🚨 关键修复：按期数数字降序排序，获取真正最新的期数
+          const sorted = allSettled.sort((a, b) => {
+            const numA = parseInt(a.period_number || '0', 10)
+            const numB = parseInt(b.period_number || '0', 10)
+            return numB - numA // 降序，期数大的在前
+          })
+          lastSettled = sorted[0] // 取期数最大的
+        }
 
         pc28LastSettledRound.value = lastSettled as PC28GlobalRound | null
       }

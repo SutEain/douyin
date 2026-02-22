@@ -213,7 +213,7 @@ BEGIN
         r.created_at
     FROM public.pc28_global_rounds r
     WHERE r.status IN ('betting', 'sealed')
-    ORDER BY r.created_at DESC
+    ORDER BY r.period_number::bigint DESC
     LIMIT 1;
 END;
 $$;

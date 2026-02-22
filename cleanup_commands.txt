@@ -1,0 +1,91 @@
+# ============================================
+# 磁盘清理命令 - 全部清理版本（一键执行）
+# ============================================
+
+# 方式1: 全部清理 - 一键执行命令块（推荐）- 彻底清理版本
+BOT_DIR="/var/lib/telegram-bot-api/8165687613:AAE3ZEYOwG7nEY2oyaBgRIJ5TVBeMXdyI6c"; \
+if [ ! -d "$BOT_DIR" ]; then OLD_DIR=$(find /var/lib/telegram-bot-api -maxdepth 1 -type d -name "8165687613:*" 2>/dev/null | head -1); \
+if [ -n "$OLD_DIR" ]; then BOT_DIR="$OLD_DIR"; echo "使用找到的目录: $BOT_DIR"; fi; fi; \
+echo "=== 清理前磁盘使用 ==="; df -h / | grep "/$"; \
+echo ""; echo "=== 清理前状态 ==="; \
+du -sh "$BOT_DIR/temp" 2>/dev/null || echo "temp目录不存在"; \
+du -sh "$BOT_DIR/videos" 2>/dev/null || echo "videos目录不存在"; \
+echo "HLS目录数: $(find "$BOT_DIR/videos" -type d -name "*_hls" 2>/dev/null | wc -l)"; \
+echo "temp文件数: $(find "$BOT_DIR/temp" -type f 2>/dev/null | wc -l)"; \
+echo "videos文件数: $(find "$BOT_DIR/videos" -type f 2>/dev/null | wc -l)"; \
+echo ""; echo "=== 清理所有 temp 文件 ==="; \
+find "$BOT_DIR/temp" -type f -delete 2>/dev/null; \
+echo ""; echo "=== 清理所有 HLS 目录 ==="; \
+find "$BOT_DIR/videos" -type d -name "*_hls" -exec rm -rf {} \; 2>/dev/null; \
+echo "所有 HLS 目录已删除"; \
+echo ""; echo "=== 清理 videos 目录下的所有文件 ==="; \
+find "$BOT_DIR/videos" -type f -delete 2>/dev/null; \
+echo "videos 目录下的所有文件已删除"; \
+echo ""; echo "=== 清理空目录 ==="; \
+find "$BOT_DIR/videos" -mindepth 1 -type d -empty -delete 2>/dev/null; \
+echo "空目录已清理"; \
+echo ""; echo "=== 清理后状态 ==="; \
+du -sh "$BOT_DIR/temp" 2>/dev/null || echo "temp目录不存在或已清空"; \
+du -sh "$BOT_DIR/videos" 2>/dev/null || echo "videos目录不存在"; \
+echo "剩余 HLS 目录数: $(find "$BOT_DIR/videos" -type d -name "*_hls" 2>/dev/null | wc -l)"; \
+echo "剩余 temp 文件数: $(find "$BOT_DIR/temp" -type f 2>/dev/null | wc -l)"; \
+echo "剩余 videos 文件数: $(find "$BOT_DIR/videos" -type f 2>/dev/null | wc -l)"; \
+echo ""; echo "=== 清理后磁盘使用 ==="; \
+df -h / | grep "/$"
+
+# ============================================
+# 方式2: 使用脚本文件（更清晰）
+# ============================================
+# 1. 上传 cleanup_disk.sh 到服务器
+# 2. 赋予执行权限: chmod +x cleanup_disk.sh
+# 3. 执行: bash cleanup_disk.sh
+
+# ============================================
+# 方式3: 手动分步执行（便于调试）- 全部清理（彻底版）
+# ============================================
+# 1. 检查磁盘
+df -h / | grep "/$"
+
+# 2. 设置目录
+BOT_DIR="/var/lib/telegram-bot-api/8165687613:AAE3ZEYOwG7nEY2oyaBgRIJ5TVBeMXdyI6c"
+if [ ! -d "$BOT_DIR" ]; then
+    OLD_DIR=$(find /var/lib/telegram-bot-api -maxdepth 1 -type d -name "8165687613:*" 2>/dev/null | head -1)
+    if [ -n "$OLD_DIR" ]; then
+        BOT_DIR="$OLD_DIR"
+        echo "使用找到的目录: $BOT_DIR"
+    fi
+fi
+
+# 3. 查看清理前状态
+echo "=== 清理前状态 ==="
+du -sh "$BOT_DIR/temp" 2>/dev/null || echo "temp目录不存在"
+du -sh "$BOT_DIR/videos" 2>/dev/null || echo "videos目录不存在"
+echo "videos目录下前10个最大文件/目录:"
+du -sh "$BOT_DIR/videos"/* 2>/dev/null | sort -rh | head -10
+
+# 4. 清理所有 temp 文件
+echo ""
+echo "清理所有 temp 文件..."
+find "$BOT_DIR/temp" -type f -delete 2>/dev/null
+
+# 5. 清理所有 HLS 目录
+echo "清理所有 HLS 目录..."
+find "$BOT_DIR/videos" -type d -name "*_hls" -exec rm -rf {} \; 2>/dev/null
+
+# 6. 清理 videos 目录下的所有文件
+echo "清理 videos 目录下的所有文件..."
+find "$BOT_DIR/videos" -type f -delete 2>/dev/null
+
+# 7. 清理空目录
+echo "清理空目录..."
+find "$BOT_DIR/videos" -mindepth 1 -type d -empty -delete 2>/dev/null
+
+# 8. 查看结果
+echo ""
+echo "清理完成！"
+du -sh "$BOT_DIR/temp" 2>/dev/null || echo "temp目录不存在或已清空"
+du -sh "$BOT_DIR/videos" 2>/dev/null || echo "videos目录不存在"
+echo "剩余 HLS 目录数: $(find "$BOT_DIR/videos" -type d -name "*_hls" 2>/dev/null | wc -l)"
+echo "剩余 temp 文件数: $(find "$BOT_DIR/temp" -type f 2>/dev/null | wc -l)"
+echo "剩余 videos 文件数: $(find "$BOT_DIR/videos" -type f 2>/dev/null | wc -l)"
+df -h / | grep "/$"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, reactive } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { _truncate } from '@/utils'
+import { parseLinks, openLink, type ParsedLink } from '@/utils/linkParser'
 
 const props = defineProps({
   isMy: {
@@ -24,8 +24,6 @@ const emit = defineEmits<{
 }>()
 
 const item = inject<any>('item')
-
-const { t } = useI18n()
 
 const state = reactive({
   isAttention: false,
@@ -57,6 +55,18 @@ const fullDescription = computed(() => {
   // ✅ 移除字数限制，允许完整显示
   return fullText
 })
+
+// 🎯 解析描述中的链接
+const parsedDescription = computed(() => {
+  return parseLinks(fullDescription.value)
+})
+
+// 🎯 处理链接点击
+function handleLinkClick(link: ParsedLink, event: Event) {
+  event.stopPropagation()
+  event.preventDefault()
+  openLink(link)
+}
 
 const showToggle = computed(() => fullDescription.value.length > 100)
 
@@ -134,7 +144,22 @@ const publishDate = computed(() => {
           @mousemove.stop="state.expanded && $event.stopPropagation()"
           @wheel.stop="state.expanded && $event.stopPropagation()"
         >
-          {{ fullDescription }}
+          <template v-for="(part, index) in parsedDescription" :key="index">
+            <span v-if="part.type === 'text'">{{ part.text }}</span>
+            <a
+              v-else
+              :href="part.url"
+              class="description-link"
+              :class="{
+                'link-telegram': part.type === 'telegram_bot' || part.type === 'telegram_link',
+                'link-url': part.type === 'url'
+              }"
+              @click.stop.prevent="handleLinkClick(part, $event)"
+              @touchend.stop.prevent="handleLinkClick(part, $event)"
+            >
+              {{ part.text }}
+            </a>
+          </template>
         </div>
         <div class="desc-actions" v-if="showToggle || showViewDetail">
           <span
@@ -301,6 +326,27 @@ const publishDate = computed(() => {
         -webkit-box-orient: vertical;
         overflow: hidden;
         max-height: none;
+      }
+
+      // 🎯 链接样式
+      .description-link {
+        color: #4fc3f7;
+        text-decoration: underline;
+        cursor: pointer;
+        user-select: none;
+        transition: opacity 0.2s;
+
+        &:active {
+          opacity: 0.7;
+        }
+
+        &.link-telegram {
+          color: #229ed9; // Telegram 蓝色
+        }
+
+        &.link-url {
+          color: #4fc3f7; // 普通链接蓝色
+        }
       }
     }
 

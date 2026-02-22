@@ -321,13 +321,18 @@ export async function getVideoAuthorProfile(row: any, cache: Map<string, any>) {
     return cache.get(cacheKey)
   }
 
+  // 🚨 安全修复：只查询必要字段，不查询敏感字段（balance_coins, is_admin等）
+  // 注意：tg_user_id 保留，因为视频作者信息中需要显示
+  const safeFields =
+    'id, nickname, username, bio, avatar_url, cover_url, tg_user_id, numeric_id, follower_count, following_count, total_likes, video_count, created_at, updated_at, gender, birthday, country, province, city, card_entries'
+
   let query
   if (row.author_id) {
-    query = supabaseAdmin.from('profiles').select('*').eq('id', row.author_id).maybeSingle()
+    query = supabaseAdmin.from('profiles').select(safeFields).eq('id', row.author_id).maybeSingle()
   } else if (row.tg_user_id) {
     query = supabaseAdmin
       .from('profiles')
-      .select('*')
+      .select(safeFields)
       .eq('tg_user_id', row.tg_user_id)
       .maybeSingle()
   }
@@ -341,7 +346,14 @@ export async function getVideoAuthorProfile(row: any, cache: Map<string, any>) {
 
 export async function getProfileById(id: string) {
   if (!id) return null
-  const { data } = await supabaseAdmin.from('profiles').select('*').eq('id', id).maybeSingle()
+  // 🚨 安全修复：只查询必要字段，不查询敏感字段
+  const safeFields =
+    'id, nickname, username, bio, avatar_url, cover_url, tg_user_id, numeric_id, follower_count, following_count, total_likes, video_count, created_at, updated_at, gender, birthday, country, province, city, card_entries'
+  const { data } = await supabaseAdmin
+    .from('profiles')
+    .select(safeFields)
+    .eq('id', id)
+    .maybeSingle()
   return data
 }
 

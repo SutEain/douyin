@@ -1,7 +1,8 @@
 import { successResponse, errorResponse } from '../../_shared/response.ts'
 import { supabaseAdmin } from '../lib/env.ts'
 import { mapVideoRow, getProfileById } from '../lib/video.ts'
-import { HttpError, parsePagination, requireAuth, tryGetAuth } from '../lib/auth.ts'
+import { HttpError, parsePagination, requireAuth, tryGetAuth, getClientIp } from '../lib/auth.ts'
+import { checkRateLimit } from '../lib/rateLimit.ts'
 
 /**
  * 综合搜索 (用户 + 视频)
@@ -28,37 +29,49 @@ export async function handleCombinedSearch(req: Request): Promise<Response> {
 
   // 2. 如果是第一页，尝试搜索匹配的用户 (前 5 个)
   if (pageNo === 0) {
-    let userOrQuery = `nickname.ilike.%${keyword}%`
-    if (/^\d+$/.test(keyword)) {
-      userOrQuery += `,numeric_id.eq.${keyword},tg_user_id.eq.${keyword}`
-    }
-
-    const { data: userRows, count: totalUsers } = await supabaseAdmin
-      .from('profiles')
-      .select('*', { count: 'exact' })
-      .or(userOrQuery)
-      .order('total_likes', { ascending: false })
-      .limit(5)
-
-    userCount = totalUsers ?? 0
-
-    if (userRows?.length) {
-      let followingSet = new Set<string>()
-      if (user) {
-        followingSet = await batchCheckFollowStatus(
-          user.id,
-          userRows.map((r) => r.id)
-        )
+    // 🚨 安全验证：关键词长度限制
+    if (keyword.length > 50) {
+      console.warn(
+        `[CombinedSearch] 关键词过长被拒绝: length=${keyword.length}, ip=${getClientIp(req)}`
+      )
+      // 继续执行，但不搜索用户
+    } else {
+      let userOrQuery = `nickname.ilike.%${keyword}%`
+      if (/^\d+$/.test(keyword)) {
+        // 🚨 安全修复：只搜索 numeric_id，不搜索 tg_user_id（敏感信息）
+        userOrQuery += `,numeric_id.eq.${keyword}`
       }
-      users = userRows.map((row) => ({
-        id: row.id,
-        nickname: row.nickname,
-        avatar_url: row.avatar_url,
-        numeric_id: row.numeric_id,
-        follower_count: row.follower_count || 0,
-        video_count: row.video_count || 0,
-        is_following: followingSet.has(row.id)
-      }))
+
+      const { data: userRows, count: totalUsers } = await supabaseAdmin
+        .from('profiles')
+        // 🚨 安全修复：只查询必要字段，不查询敏感字段
+        .select('id, nickname, avatar_url, follower_count, video_count, numeric_id', {
+          count: 'exact'
+        })
+        .or(userOrQuery)
+        .order('total_likes', { ascending: false })
+        .limit(5)
+
+      userCount = totalUsers ?? 0
+
+      if (userRows?.length) {
+        let followingSet = new Set<string>()
+        if (user) {
+          followingSet = await batchCheckFollowStatus(
+            user.id,
+            userRows.map((r) => r.id)
+          )
+        }
+        users = userRows.map((row) => ({
+          id: row.id,
+          nickname: row.nickname,
+          avatar_url: row.avatar_url,
+          numeric_id: row.numeric_id,
+          follower_count: row.follower_count || 0,
+          video_count: row.video_count || 0,
+          is_following: followingSet.has(row.id)
+        }))
+      }
     }
   }
 
@@ -198,14 +211,46 @@ export async function handleSearchVideos(req: Request): Promise<Response> {
 /**
  * 搜索用户
  * GET /search/users?keyword=xxx&pageNo=0&pageSize=20
+ * 🚨 安全加固：限制关键词长度、添加频率限制、只查询必要字段
  */
 export async function handleSearchUsers(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const keyword = url.searchParams.get('keyword')?.trim()
   const { pageNo, pageSize, from, to } = parsePagination(url)
 
+  // 🚨 安全验证：关键词必须存在且长度限制
   if (!keyword) {
     return errorResponse('Keyword is required', 1, 400)
+  }
+
+  // 🚨 安全验证：关键词长度限制（防止SQL注入和DoS攻击）
+  if (keyword.length > 50) {
+    console.warn(`[SearchUsers] 关键词过长被拒绝: length=${keyword.length}, ip=${getClientIp(req)}`)
+    return errorResponse('Keyword too long (max 50 characters)', 1, 400)
+  }
+
+  // 🚨 安全验证：关键词只能包含字母、数字、中文、空格和常见标点
+  if (!/^[\w\s\u4e00-\u9fa5\-_.,!?@#$%^&*()+=<>?/|\\[\]{}:;"'`~]*$/.test(keyword)) {
+    console.warn(
+      `[SearchUsers] 关键词包含非法字符被拒绝: keyword=${keyword.substring(0, 20)}, ip=${getClientIp(req)}`
+    )
+    return errorResponse('Invalid keyword format', 1, 400)
+  }
+
+  // 🚨 频率限制：防止批量爬取用户数据
+  const clientIp = getClientIp(req)
+  if (clientIp) {
+    const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'search_users', {
+      maxAttempts: 30, // 每分钟最多30次
+      windowMs: 60 * 1000 // 1分钟窗口
+    })
+
+    if (!rateLimitResult.allowed) {
+      console.warn(
+        `[SearchUsers] IP频率限制触发: ip=${clientIp}, keyword=${keyword.substring(0, 20)}`
+      )
+      return errorResponse('Too many requests, please try again later', 1, 429)
+    }
   }
 
   const { user } = await tryGetAuth(req)
@@ -213,10 +258,12 @@ export async function handleSearchUsers(req: Request): Promise<Response> {
     await saveSearchHistory(user.id, keyword, 'user').catch(() => {})
   }
 
+  // 🚨 安全修复：只查询必要字段，不查询敏感字段（balance_coins, tg_user_id, is_admin等）
   // 搜索用户：昵称(模糊) + 数字ID(精确) + TGID(精确)
   let orQuery = `nickname.ilike.%${keyword}%`
   if (/^\d+$/.test(keyword)) {
-    orQuery += `,numeric_id.eq.${keyword},tg_user_id.eq.${keyword}`
+    // 数字ID搜索：只搜索 numeric_id，不搜索 tg_user_id（敏感信息）
+    orQuery += `,numeric_id.eq.${keyword}`
   }
 
   const {
@@ -225,12 +272,26 @@ export async function handleSearchUsers(req: Request): Promise<Response> {
     count
   } = await supabaseAdmin
     .from('profiles')
-    .select('*', { count: 'exact' })
+    // 🚨 安全修复：只查询必要字段，不查询敏感字段
+    .select(
+      'id, nickname, avatar_url, bio, follower_count, video_count, total_likes, numeric_id, created_at',
+      { count: 'exact' }
+    )
     .or(orQuery)
     .order('total_likes', { ascending: false })
     .range(from, to)
 
-  if (error) return errorResponse('Search users failed', 1, 500)
+  if (error) {
+    console.error('[SearchUsers] 查询失败:', error)
+    return errorResponse('Search users failed', 1, 500)
+  }
+
+  // 🚨 安全日志：记录异常搜索行为（大量结果或频繁搜索）
+  if ((count ?? 0) > 100) {
+    console.warn(
+      `[SearchUsers] 异常搜索：结果数=${count}, keyword=${keyword.substring(0, 20)}, ip=${clientIp}, user=${user?.id || 'anonymous'}`
+    )
+  }
 
   let followingSet = new Set<string>()
   if (user && rows?.length) {
@@ -244,7 +305,7 @@ export async function handleSearchUsers(req: Request): Promise<Response> {
     id: row.id,
     nickname: row.nickname,
     avatar_url: row.avatar_url,
-    signature: row.signature,
+    signature: row.bio || '', // 使用 bio 字段作为 signature
     follower_count: row.follower_count || 0,
     video_count: row.video_count || 0,
     is_following: followingSet.has(row.id)
