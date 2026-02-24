@@ -185,7 +185,7 @@ import AlbumSwiper from './AlbumSwiper.vue'
 import type { VideoItem } from '../../types'
 import { useVideoStore } from '@/stores/video'
 import { parseImages, getContentType, buildCdnUrl } from '@/utils/media'
-import { recordVideoView } from '@/api/videos'
+import { recordVideoView, reportWatchTimeSeconds } from '@/api/videos'
 // 🎯 incrementWatchTime 已移除，改用心跳机制（在 main.ts 中启动）
 // import { _copy, _notice } from '@/utils'
 // ✅ 避免循环依赖导致的 "Cannot access 'Y' before initialization"
@@ -205,6 +205,20 @@ const debugLog = (...args: any[]) => {
 const recordedViews = new Set<string>() // 已记录开始观看
 
 // 🎯 观看时长追踪已改为使用心跳机制（在 main.ts 中启动）
+// 🎯 观看视频数奖励：按视频上报观看秒数（看满10秒计1个），用于达标视频数
+let watchReportLastCurrentTime = 0
+
+// 🎯 离开当前视频前上报本段观看秒数（切视频/离开页时调用）
+function reportCurrentVideoBeforeLeave() {
+  const video = getCurrentVideo?.() ?? null
+  const item = currentItemLocal?.value ?? null
+  if (!video || !item?.aweme_id || getContentType(item) !== 'video') return
+  const currentTime = playState.currentTime ?? video.currentTime ?? 0
+  const seconds = Math.min(20, Math.max(0, Math.floor(currentTime - watchReportLastCurrentTime)))
+  if (seconds > 0) {
+    reportWatchTimeSeconds(item.aweme_id, seconds).catch(() => {})
+  }
+}
 
 // 🎯 记录进入 current（只记录已播放，不记录完播）
 function recordEnterCurrent(item: VideoItem | null, contentType: string) {
@@ -1105,6 +1119,8 @@ function rotateToNext() {
     return
   }
 
+  // 🎯 离开前上报当前视频观看秒数（用于「观看视频数」奖励）
+  reportCurrentVideoBeforeLeave()
   // 🎯 离开当前视频，清除完播计时器
   recordLeaveCurrent()
 
@@ -1188,6 +1204,8 @@ function rotateToNext() {
 function rotateToPrev() {
   if (currentIndex.value <= 0) return
 
+  // 🎯 离开前上报当前视频观看秒数（用于「观看视频数」奖励）
+  reportCurrentVideoBeforeLeave()
   // 🎯 离开当前视频，清除完播计时器
   recordLeaveCurrent()
 
@@ -1742,6 +1760,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  // 🎯 离开页面前上报当前视频观看秒数（用于「观看视频数」奖励）
+  reportCurrentVideoBeforeLeave()
   // 🎯 watchTimeHeartbeatTimer 已移除，改用心跳机制（在 main.ts 中启动）
 
   // 清理进度条事件绑定
@@ -1919,6 +1939,7 @@ function bindCurrentVideoEvents(video: HTMLVideoElement) {
   }
 
   currentBoundVideo = video
+  watchReportLastCurrentTime = video.currentTime || 0
 
   const computeStep = () => {
     const el = progressRef.value
@@ -1953,7 +1974,18 @@ function bindCurrentVideoEvents(video: HTMLVideoElement) {
     }
     updateProgressFromVideo(video)
 
-    // 🎯 不再记录完播，只记录已播放（已在 recordEnterCurrent 中记录）
+    // 🎯 观看视频数奖励：每看满 10 秒上报一次
+    const item = currentItemLocal?.value
+    if (item?.aweme_id && getContentType(item) === 'video') {
+      const cur = playState.currentTime ?? video.currentTime ?? 0
+      if (cur - watchReportLastCurrentTime >= 10) {
+        const toReport = Math.min(10, Math.floor(cur - watchReportLastCurrentTime))
+        if (toReport > 0) {
+          reportWatchTimeSeconds(item.aweme_id, toReport).then(() => {})
+          watchReportLastCurrentTime += toReport
+        }
+      }
+    }
   }
 
   nextTick(computeStep)

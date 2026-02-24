@@ -219,67 +219,64 @@
             </div>
           </div>
 
-          <!-- 🎯 观看时长奖励卡片 -->
+          <!-- 🎯 观看视频数奖励卡片（一个视频看满10秒计1个） -->
           <div class="watch-time-card">
             <div class="title-row">
               <div class="left">
                 <Icon icon="mdi:play-circle" class="icon" />
-                <span class="text">观看时长奖励</span>
+                <span class="text">观看视频奖励</span>
               </div>
             </div>
             <div class="progress-section">
-              <!-- 🎯 观看时间信息放在进度条上面 -->
               <div class="time-text">
-                <template v-if="(state.watchTimeStatus?.total_seconds || 0) >= 1800">
+                <template v-if="(state.watchTimeStatus?.total_seconds || 0) >= 100">
                   <span class="highlight">已完成任务</span>
                 </template>
                 <template v-else>
-                  今日观看：<span class="highlight">{{
-                    state.watchTimeStatus?.total_minutes || 0
+                  今日达标：<span class="highlight">{{
+                    state.watchTimeStatus?.total_seconds ?? 0
                   }}</span>
-                  分钟
+                  个视频
                 </template>
               </div>
 
-              <!-- 🎯 进度条和里程碑 -->
               <div class="progress-bar-wrapper">
                 <div class="progress-bar">
                   <div
                     class="progress-fill"
                     :style="{
-                      width: `${Math.min(((state.watchTimeStatus?.total_seconds || 0) / 1800) * 100, 100)}%`
+                      width: `${Math.min(((state.watchTimeStatus?.total_seconds || 0) / 100) * 100, 100)}%`
                     }"
                   ></div>
                 </div>
                 <div class="milestones">
                   <div
                     class="milestone"
-                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 300 }"
-                    style="left: 16.67%"
+                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 20 }"
+                    style="left: 20%"
                   >
                     <div class="milestone-dot"></div>
-                    <div class="milestone-label">5分钟<br />+5抖币</div>
+                    <div class="milestone-label">20个视频<br />+5抖币</div>
                   </div>
                   <div
                     class="milestone"
-                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 900 }"
+                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 50 }"
                     style="left: 50%"
                   >
                     <div class="milestone-dot"></div>
-                    <div class="milestone-label">15分钟<br />+10抖币</div>
+                    <div class="milestone-label">50个视频<br />+10抖币</div>
                   </div>
                   <div
                     class="milestone milestone-last"
-                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 1800 }"
+                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 100 }"
                     style="left: 100%"
                   >
                     <div class="milestone-dot"></div>
-                    <div class="milestone-label">30分钟<br />+15抖币</div>
+                    <div class="milestone-label">100个视频<br />+15抖币</div>
                   </div>
                 </div>
               </div>
 
-              <!-- 🎯 奖励信息放在进度条下面 -->
               <div class="reward-info">
                 <div class="reward-text" v-if="state.watchTimeStatus?.can_claim">
                   可领取：<span class="reward-amount"
@@ -296,7 +293,7 @@
                   >
                   抖币
                 </div>
-                <div class="reward-text" v-else>观看满5分钟可领取奖励</div>
+                <div class="reward-text" v-else>看满10秒的视频达20个可领取奖励</div>
               </div>
             </div>
             <button
@@ -311,7 +308,7 @@
                   ? '立即领取'
                   : state.watchTimeStatus?.claimed_reward > 0
                     ? '今日已领取'
-                    : '观看时长不足'
+                    : '达标视频数不足'
               }}</span>
             </button>
           </div>

@@ -30,7 +30,8 @@ import {
   handleGetAdultQuota,
   handleGetWatchTimeStatus,
   handleClaimWatchTimeReward,
-  handleWatchTimeHeartbeat
+  handleWatchTimeHeartbeat,
+  handleWatchTimeReport
 } from './routes/video.ts'
 import {
   handleVideoComments,
@@ -112,15 +113,15 @@ serve(async (req) => {
         const { checkRateLimit } = await import('./lib/rateLimit.ts')
 
         if (isHeartbeatRoute) {
-          // 🚨 心跳接口频率限制：1分钟内最多3次（允许一些误差和重试）
+          // 🚨 心跳接口频率限制：1分钟内最多 6 次（允许多标签、立即+定时、重试）
           const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'watch_time_heartbeat', {
-            maxAttempts: 3, // 1分钟内最多3次
+            maxAttempts: 6, // 1分钟内最多6次（多标签/误差/重试）
             windowMs: 60000, // 1分钟窗口
             lockDurationMs: undefined // 不锁定，直接拒绝
           })
 
           if (!rateLimitResult.allowed) {
-            console.warn(`[HEARTBEAT_ATTACK] IP ${clientIp} 心跳请求过于频繁（1分钟内超过3次）`)
+            console.warn(`[HEARTBEAT_ATTACK] IP ${clientIp} 心跳请求过于频繁（1分钟内超过6次）`)
             return errorResponse('请求过于频繁', 1, 429)
           }
         } else {
@@ -237,6 +238,10 @@ serve(async (req) => {
     // 心跳接口：1分钟发送1次，每次累加60秒
     if (route === '/video/watch-time/heartbeat' && method === 'POST') {
       return handleWatchTimeHeartbeat(req)
+    }
+    // 按视频上报观看秒数（用于「观看视频数」奖励）
+    if (route === '/video/watch-time/report' && method === 'POST') {
+      return handleWatchTimeReport(req)
     }
     // 观看时长奖励查询和领取接口
     if (route === '/video/watch-time/status' && method === 'GET') {

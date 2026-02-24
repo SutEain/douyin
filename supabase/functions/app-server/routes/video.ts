@@ -1288,6 +1288,55 @@ export async function handleClearVideoHistory(req: Request): Promise<Response> {
   return successResponse({ success: true })
 }
 
+// 🎯 按视频上报观看秒数（用于「观看视频数」奖励，一个视频看满10秒计1个）
+export async function handleWatchTimeReport(req: Request): Promise<Response> {
+  try {
+    const { user } = await requireAuth(req)
+    const body = await parseJsonBody(req)
+    const videoId = body?.video_id
+    const seconds = body?.seconds != null ? Number(body.seconds) : NaN
+
+    if (!videoId || typeof videoId !== 'string') {
+      return errorResponse('缺少 video_id', 1, 400)
+    }
+    if (!Number.isInteger(seconds) || seconds < 1 || seconds > 20) {
+      return errorResponse('seconds 须为 1～20 的整数', 1, 400)
+    }
+
+    const rateLimitResult = await checkRateLimit(user.id, 'tg_user_id', 'watch_time_report', {
+      maxAttempts: 30,
+      windowMs: 60000,
+      lockDurationMs: undefined
+    })
+    if (!rateLimitResult.allowed) {
+      return errorResponse('请求过于频繁', 1, 429)
+    }
+
+    const { data, error } = await supabaseAdmin.rpc('increment_video_watch_seconds', {
+      p_user_id: user.id,
+      p_video_id: videoId,
+      p_seconds: seconds
+    })
+
+    if (error) {
+      console.error('[handleWatchTimeReport] RPC error:', error)
+      return errorResponse('上报失败', 1, 500)
+    }
+
+    if (data && typeof data === 'object' && 'success' in data && !data.success) {
+      return errorResponse((data as { message?: string }).message || '上报过于频繁', 1, 429)
+    }
+
+    return successResponse(data)
+  } catch (error: any) {
+    console.error('[handleWatchTimeReport] Unexpected error:', error)
+    if (error instanceof HttpError) {
+      throw error
+    }
+    return errorResponse('Internal server error', 1, 500)
+  }
+}
+
 // 🎯 观看时长心跳接口：1分钟发送1次，每次累加60秒
 export async function handleWatchTimeHeartbeat(req: Request): Promise<Response> {
   try {

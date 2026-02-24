@@ -417,6 +417,36 @@ export async function getWatchTimeStatus() {
   }
 }
 
+// 🎯 按视频上报观看秒数（用于「观看视频数」奖励，看满10秒计1个）
+export async function reportWatchTimeSeconds(videoId: string, seconds: number) {
+  try {
+    const token = await resolveAccessToken(false)
+    if (!token) {
+      if (import.meta.env.DEV) console.warn('[reportWatchTimeSeconds] 未登录，跳过上报')
+      return { success: false }
+    }
+
+    const data = await callAppServer('/video/watch-time/report', {
+      method: 'POST',
+      requireAuth: true,
+      body: { video_id: videoId, seconds }
+    })
+    if (import.meta.env.DEV)
+      console.log('[reportWatchTimeSeconds] 成功', { videoId: videoId?.slice(0, 8), seconds, data })
+    return { success: true, data }
+  } catch (error: any) {
+    if (error?.status === 429) return { success: false, message: '过于频繁' }
+    if (import.meta.env.DEV)
+      console.warn('[reportWatchTimeSeconds] 失败', {
+        videoId: videoId?.slice(0, 8),
+        seconds,
+        status: error?.status,
+        msg: error?.message
+      })
+    return { success: false, message: error?.message }
+  }
+}
+
 // 🎯 领取观看时长奖励
 export async function claimWatchTimeReward() {
   try {
