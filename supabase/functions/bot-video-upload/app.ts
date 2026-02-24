@@ -413,17 +413,27 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         // /start 命令 - 创建用户并显示欢迎消息
         if (message.text && message.text.startsWith('/start')) {
+          console.log('========== [/start 命令] 开始处理 ==========')
+          console.log('[/start] chatId:', chatId)
+          console.log('[/start] message.from:', JSON.stringify(message.from, null, 2))
+          console.log('[/start] message.text:', message.text)
+
           const parts = message.text.split(' ')
           const startParam = parts.length > 1 ? parts[1] : null
+          console.log('[/start] startParam:', startParam)
 
           // 🎯 处理 Web 登录验证码生成
           if (startParam === 'web_login') {
+            console.log('[/start] 🔐 检测到 web_login 参数，开始处理 Web 登录验证码...')
             // 创建或获取用户 profile（直接使用 message.from 数据，无需额外 API 调用）
             const profile = await getOrCreateProfile(chatId, message.from)
+            console.log('[/start] getOrCreateProfile 返回结果:', profile ? '成功' : '失败')
 
             if (profile) {
+              console.log('[/start] ✅ Profile 创建/获取成功，开始生成验证码...')
               const { createVerificationCode } = await import('./services/verification.ts')
               const code = await createVerificationCode(chatId, message.from)
+              console.log('[/start] 验证码生成结果:', code ? '成功' : '失败')
 
               if (code) {
                 const loginMessage =
@@ -433,20 +443,26 @@ export async function handleRequest(req: Request): Promise<Response> {
                   `⏰ 验证码有效期：5 分钟\n\n` +
                   `💡 提示：验证码仅可使用一次，使用后自动失效。`
 
+                console.log('[/start] ✅ 发送验证码消息给用户')
                 await sendMessage(chatId, loginMessage, {
                   parse_mode: 'HTML'
                 })
               } else {
+                console.log('[/start] ❌ 验证码生成失败')
                 await sendMessage(chatId, '❌ 生成验证码失败，请稍后重试')
               }
             } else {
+              console.log('[/start] ❌❌❌ Profile 创建/获取失败！这是问题所在！')
               await sendMessage(chatId, '❌ 账号初始化失败，请稍后重试')
             }
+            console.log('========== [/start 命令] 结束（web_login）==========')
             return new Response('OK', { status: 200 })
           }
 
           // 创建或获取用户 profile（直接使用 message.from 数据，无需额外 API 调用）
+          console.log('[/start] 🔍 普通 /start 命令，开始创建/获取 profile...')
           const profile = await getOrCreateProfile(chatId, message.from)
+          console.log('[/start] getOrCreateProfile 返回结果:', profile ? '成功' : '失败')
 
           if (profile) {
             // 🎯 处理邀请逻辑 (检查是否有参数 /start 12345)

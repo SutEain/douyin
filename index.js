@@ -354,16 +354,43 @@ app.post('/process', async (req, res) => {
   res.json({ status: 'processing', video_id, queued: activeTasks >= MAX_CONCURRENT_TASKS })
 
   // 🎯 获取文件大小信息（用于优先级排序）
-  // 🎯 优先使用传入的文件大小（从数据库获取），如果没有则从 Telegram API 获取
+  // 🎯 优先使用传入的文件大小（从数据库获取），如果没有则从数据库查询，最后才尝试从 Telegram API 获取
   let fileSize = file_size ? parseInt(file_size) : 0
   let cachedFilePath = null
 
+  if (fileSize <= 0) {
+    try {
+      console.log(`[Receive] [${taskKey}] 正在从数据库获取文件大小信息...`)
+      const { data: vInfo } = await supabase
+        .from('videos')
+        .select('media_list, tg_file_id, file_size')
+        .eq('id', video_id)
+        .single()
+
+      if (vInfo) {
+        if (vInfo.file_size) {
+          fileSize = parseInt(vInfo.file_size)
+        } else if (vInfo.media_list) {
+          const list = Array.isArray(vInfo.media_list)
+            ? vInfo.media_list
+            : JSON.parse(vInfo.media_list || '[]')
+          const item = list.find((i) => i.file_id === file_id)
+          if (item && item.file_size) {
+            fileSize = parseInt(item.file_size)
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[Receive] [${taskKey}] ⚠️ 数据库获取文件大小失败:`, e.message)
+    }
+  }
+
   if (fileSize > 0) {
     console.log(
-      `[Receive] [${taskKey}] ✅ 使用数据库中的文件大小: ${(fileSize / 1024 / 1024).toFixed(2)}MB`
+      `[Receive] [${taskKey}] ✅ 使用获取到的文件大小: ${(fileSize / 1024 / 1024).toFixed(2)}MB`
     )
   } else {
-    // 🎯 如果没有传入文件大小，尝试从 Telegram API 获取
+    // 🎯 如果数据库也没有，尝试从 Telegram API 获取
     try {
       console.log(`[Receive] [${taskKey}] 正在从 Telegram API 获取文件大小信息...`)
       const fileInfoRes = await axios.get(
