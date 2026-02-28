@@ -127,7 +127,7 @@ export async function mapVideoRow(row: any, profile: any) {
         poster: coverUrl || DEFAULT_COVER
       },
       author: {
-        nickname: profile?.nickname || profile?.username || 'Telegram 用户',
+        nickname: profile?.nickname || profile?.username || '用户',
         unique_id: profile?.username || '',
         uid: profile?.id || String(row.tg_user_id ?? row.author_id ?? row.id),
         user_id: profile?.id || row.author_id || null,
@@ -323,8 +323,7 @@ export async function getVideoAuthorProfile(row: any, cache: Map<string, any>) {
 
   // 🚨 安全修复：只查询必要字段，不查询敏感字段（balance_coins, is_admin等）
   // 注意：tg_user_id 保留，因为视频作者信息中需要显示
-  const safeFields =
-    'id, nickname, username, bio, avatar_url, cover_url, tg_user_id, numeric_id, follower_count, following_count, total_likes, video_count, created_at, updated_at, gender, birthday, country, province, city, card_entries'
+  const safeFields = PROFILE_SAFE_FIELDS
 
   let query
   if (row.author_id) {
@@ -341,20 +340,182 @@ export async function getVideoAuthorProfile(row: any, cache: Map<string, any>) {
   if (cacheKey) {
     cache.set(cacheKey, data)
   }
+  // 🩺 诊断：profile 为空时打日志，便于排查「全部显示为 Telegram 用户 / 头像缺失」
+  if (!data && (row.author_id || row.tg_user_id)) {
+    console.warn(
+      '[getVideoAuthorProfile] profile 未查到 video_id=%s author_id=%s tg_user_id=%s',
+      row.id,
+      row.author_id ?? null,
+      row.tg_user_id ?? null
+    )
+  }
   return data
 }
 
 export async function getProfileById(id: string) {
   if (!id) return null
   // 🚨 安全修复：只查询必要字段，不查询敏感字段
-  const safeFields =
-    'id, nickname, username, bio, avatar_url, cover_url, tg_user_id, numeric_id, follower_count, following_count, total_likes, video_count, created_at, updated_at, gender, birthday, country, province, city, card_entries'
   const { data } = await supabaseAdmin
     .from('profiles')
-    .select(safeFields)
+    .select(PROFILE_SAFE_FIELDS)
     .eq('id', id)
     .maybeSingle()
   return data
+}
+
+function hasAuthor(r: any): boolean {
+  return getRowAuthorId(r) != null || getRowTgUserId(r) != null
+}
+
+/**
+ * 为缺少 author_id/tg_user_id 的 row 从 videos 表补全，便于 getVideoAuthorProfile 能查到作者
+ * RPC（get_sea_feed、get_adult_feed、get_video_tab_feed 等）可能不返回 tg_user_id，或库里 author_id 为空
+ * 调用方：所有返回视频列表的接口，在 mapVideoRow 前调用
+ */
+export async function enrichRowsWithAuthorIds(
+  rows: any[],
+  logPrefix: string = 'Feed'
+): Promise<void> {
+  if (!rows?.length) return
+  const needEnrich = rows.filter((r: any) => !hasAuthor(r))
+  if (needEnrich.length === 0) return
+  const ids = needEnrich.map((r: any) => r.id).filter(Boolean)
+  if (ids.length === 0) return
+  const { data: videoRows } = await supabaseAdmin
+    .from('videos')
+    .select('id, author_id, tg_user_id')
+    .in('id', ids)
+  const byId = new Map((videoRows || []).map((v: any) => [v.id, v]))
+  for (const row of rows) {
+    if (hasAuthor(row)) continue
+    const v = byId.get(row.id)
+    if (v) {
+      row.author_id = v.author_id ?? row.author_id
+      row.tg_user_id = v.tg_user_id ?? row.tg_user_id
+    }
+  }
+  const gotFromDb = needEnrich.filter((r: any) => hasAuthor(r)).length
+  console.log(
+    `[${logPrefix}] 从 videos 表补全 author_id/tg_user_id 请求:${ids.length} 补全成功:${gotFromDb}`
+  )
+}
+
+// 仅包含 profiles 表实际存在的列（无 card_entries，避免 42703）
+const PROFILE_SAFE_FIELDS =
+  'id, nickname, username, bio, avatar_url, cover_url, tg_user_id, numeric_id, follower_count, following_count, total_likes, video_count, created_at, updated_at, gender, birthday, country, province, city'
+
+/**
+ * 批量拉取本批视频行对应的作者 profile，避免逐条查导致漏查或 RPC/策略差异
+ * 使用 service_role 直查 profiles 表，不经过 RLS
+ * @returns Map: key 为 row 的 author_id 或 tg_user_id，value 为 profile；供 mapVideoRow(row, profileMap.get(row)) 使用
+ */
+export async function batchLoadAuthorProfiles(
+  rows: any[],
+  logPrefix: string = 'Feed'
+): Promise<Map<string, any>> {
+  const byId = new Map<string, any>()
+  const byTgId = new Map<string, any>()
+  if (!rows?.length) return byId
+
+  const authorIds = [
+    ...new Set(rows.map((r: any) => getRowAuthorId(r)).filter((id: any) => id != null && id !== ''))
+  ]
+  const tgUserIds = [
+    ...new Set(rows.map((r: any) => getRowTgUserId(r)).filter((id: any) => id != null && id !== ''))
+  ]
+
+  // 🩺 诊断：确认本页 row 里是否有 author 信息
+  if (authorIds.length === 0 && tgUserIds.length === 0 && rows.length > 0) {
+    const first = rows[0]
+    console.warn(
+      `[${logPrefix}] 本页无任何 author_id/tg_user_id，首条 row 键:`,
+      Object.keys(first).filter((k) => /author|tg/i.test(k))
+    )
+  }
+  if (authorIds.length > 0) {
+    console.log(`[${logPrefix}] 批量查 profiles 按 id，前3个:`, authorIds.slice(0, 3))
+  }
+
+  if (authorIds.length > 0) {
+    const { data: listById, error: errId } = await supabaseAdmin
+      .from('profiles')
+      .select(PROFILE_SAFE_FIELDS)
+      .in('id', authorIds.slice(0, 500))
+    if (errId) {
+      console.error(`[${logPrefix}] 批量查 profiles 按 id 失败:`, errId)
+    } else {
+      console.log(`[${logPrefix}] 按 id 查到 profiles 条数:`, listById?.length ?? 0)
+      if (listById?.length) {
+        const first = listById[0]
+        console.log(
+          `[${logPrefix}] 首条 profile id=%s nickname=%s`,
+          first?.id ?? '(空)',
+          first?.nickname ?? '(空)'
+        )
+        for (const p of listById) {
+          if (p?.id) byId.set(String(p.id), p)
+        }
+      }
+    }
+  }
+  if (tgUserIds.length > 0) {
+    const { data: listByTg, error: errTg } = await supabaseAdmin
+      .from('profiles')
+      .select(PROFILE_SAFE_FIELDS)
+      .in('tg_user_id', tgUserIds.slice(0, 500))
+    if (errTg) {
+      console.error(`[${logPrefix}] 批量查 profiles 按 tg_user_id 失败:`, errTg)
+    } else if (listByTg?.length) {
+      for (const p of listByTg) {
+        if (p?.tg_user_id != null) byTgId.set(String(p.tg_user_id), p)
+      }
+    }
+  }
+
+  const totalLoaded = byId.size + byTgId.size
+  const needCount = Math.max(authorIds.length, tgUserIds.length, 1)
+  console.log(
+    `[${logPrefix}] 批量 profile: author_ids=${authorIds.length} tg_user_ids=${tgUserIds.length} 查到=${totalLoaded}`
+  )
+  if (needCount > 0 && totalLoaded === 0) {
+    console.warn(
+      `[${logPrefix}] 未查到任何 profile，请检查 profiles 表与 videos.author_id/tg_user_id 是否一致`
+    )
+  }
+
+  const merged = new Map<string, any>()
+  for (const p of byId.values()) {
+    if (p?.id) merged.set(`id:${p.id}`, p)
+  }
+  for (const p of byTgId.values()) {
+    if (p?.tg_user_id != null) merged.set(`tg:${p.tg_user_id}`, p)
+  }
+  return merged
+}
+
+/** 从 RPC 返回的 row 中读取 author_id（兼容不同列名/大小写） */
+export function getRowAuthorId(row: any): string | null | undefined {
+  if (!row) return undefined
+  const v = row.author_id ?? row.Author_Id ?? row.author_Id
+  return v != null && v !== '' ? String(v) : undefined
+}
+
+/** 从 RPC 返回的 row 中读取 tg_user_id（兼容不同列名/大小写） */
+export function getRowTgUserId(row: any): string | number | null | undefined {
+  if (!row) return undefined
+  const v = row.tg_user_id ?? row.Tg_User_Id ?? row.tg_User_Id
+  return v != null && v !== '' ? v : undefined
+}
+
+/** 根据 row 从 batchLoadAuthorProfiles 返回的 map 里取 profile */
+export function getProfileForRow(row: any, profileMap: Map<string, any>): any {
+  if (!row) return null
+  const authorId = getRowAuthorId(row)
+  const byId = authorId ? profileMap.get(`id:${authorId}`) : null
+  if (byId) return byId
+  const tgId = getRowTgUserId(row)
+  const byTg = tgId != null ? profileMap.get(`tg:${tgId}`) : null
+  return byTg ?? null
 }
 
 export function applyRowFlags(mapped: any, row: any) {

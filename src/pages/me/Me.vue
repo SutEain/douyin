@@ -219,7 +219,8 @@
             </div>
           </div>
 
-          <!-- 🎯 观看视频数奖励卡片（一个视频看满10秒计1个） -->
+          <!-- 🎯 看视频数量里程碑领取奖励任务（已注释下线） -->
+          <!--
           <div class="watch-time-card">
             <div class="title-row">
               <div class="left">
@@ -312,6 +313,7 @@
               }}</span>
             </button>
           </div>
+          -->
         </div>
       </div>
 
@@ -435,9 +437,9 @@ import { _checkImgUrl, _formatNumber, _no, _copy, _handleImageError } from '@/ut
 import {
   likeVideo,
   myVideo,
-  collectedVideo,
-  getWatchTimeStatus,
-  claimWatchTimeReward
+  collectedVideo
+  // getWatchTimeStatus,
+  // claimWatchTimeReward
 } from '@/api/videos'
 import { checkIn } from '@/api/user'
 import { useBaseStore } from '@/store/pinia'
@@ -491,17 +493,17 @@ const state = reactive({
     loading0: false,
     loading1: false,
     loading2: false
-  },
-
-  // 🎯 观看时长奖励状态
-  watchTimeStatus: {
-    total_seconds: 0,
-    total_minutes: 0,
-    claimed_reward: 0,
-    available_reward: 0,
-    reward_level: 'none',
-    can_claim: false
   }
+
+  // 🎯 观看时长奖励状态（看视频数量里程碑任务已注释下线）
+  // watchTimeStatus: {
+  //   total_seconds: 0,
+  //   total_minutes: 0,
+  //   claimed_reward: 0,
+  //   available_reward: 0,
+  //   reward_level: 'none',
+  //   can_claim: false
+  // }
 })
 
 // ========== Computed ==========
@@ -685,7 +687,7 @@ async function handleRetryLogin() {
     if (userinfo.value.uid) {
       console.log('[Me] ✅ 登录成功！')
       loadMyVideos()
-      loadWatchTimeStatus()
+      // loadWatchTimeStatus()
     } else {
       console.warn('[Me] ⚠️ Session 存在但 userinfo.uid 为空，尝试获取 profile...')
       const { getCurrentProfile } = await import('@/api/auth')
@@ -694,7 +696,7 @@ async function handleRetryLogin() {
       if (profile) {
         baseStore.applyProfile(profile)
         loadMyVideos()
-        loadWatchTimeStatus()
+        // loadWatchTimeStatus()
       } else {
         errorMessage.value = '登录成功但获取用户信息失败，请刷新页面重试'
       }
@@ -756,41 +758,39 @@ async function handleCheckInClick() {
   }
 }
 
-// 🎯 加载观看时长奖励状态
-async function loadWatchTimeStatus() {
-  if (!userinfo.value.uid) return
-  try {
-    const res = await getWatchTimeStatus()
-    if (res.success && res.data) {
-      Object.assign(state.watchTimeStatus, res.data)
-    }
-  } catch (e: any) {
-    console.warn('[loadWatchTimeStatus] 加载观看时长状态失败:', e)
-  }
-}
+// 🎯 加载观看时长奖励状态（看视频数量里程碑任务已注释下线）
+// async function loadWatchTimeStatus() {
+//   if (!userinfo.value.uid) return
+//   try {
+//     const res = await getWatchTimeStatus()
+//     if (res.success && res.data) {
+//       Object.assign(state.watchTimeStatus, res.data)
+//     }
+//   } catch (e: any) {
+//     console.warn('[loadWatchTimeStatus] 加载观看时长状态失败:', e)
+//   }
+// }
 
-// 🎯 领取观看时长奖励
-async function handleClaimWatchTimeReward() {
-  if (baseStore.loading || !state.watchTimeStatus?.can_claim) return
-
-  baseStore.loading = true
-  try {
-    const res = await claimWatchTimeReward()
-    if (res.success && res.data) {
-      const { reward_amount, reward_level } = res.data
-      // 🎯 显示本次奖励
-      _no(`✅ 领取成功！获得 ${reward_amount || 0} 抖币`)
-      // 刷新用户信息和观看时长状态
-      await Promise.all([baseStore.init(), loadWatchTimeStatus()])
-    } else {
-      _no(res.message || '领取失败，请稍后重试')
-    }
-  } catch (e: any) {
-    _no(e.message || '领取失败，请稍后重试')
-  } finally {
-    baseStore.loading = false
-  }
-}
+// 🎯 领取观看时长奖励（看视频数量里程碑任务已注释下线）
+// async function handleClaimWatchTimeReward() {
+//   if (baseStore.loading || !state.watchTimeStatus?.can_claim) return
+//
+//   baseStore.loading = true
+//   try {
+//     const res = await claimWatchTimeReward()
+//     if (res.success && res.data) {
+//       const { reward_amount, reward_level } = res.data
+//       _no(`✅ 领取成功！获得 ${reward_amount || 0} 抖币`)
+//       await Promise.all([baseStore.init(), loadWatchTimeStatus()])
+//     } else {
+//       _no(res.message || '领取失败，请稍后重试')
+//     }
+//   } catch (e: any) {
+//     _no(e.message || '领取失败，请稍后重试')
+//   } finally {
+//     baseStore.loading = false
+//   }
+// }
 
 // 🎯 刷新页面数据
 async function handleRefresh() {
@@ -798,8 +798,8 @@ async function handleRefresh() {
 
   baseStore.loading = true
   try {
-    // 刷新用户信息、观看时长状态和视频列表
-    await Promise.all([baseStore.init(), loadWatchTimeStatus(), loadMyVideos()])
+    // 刷新用户信息、观看时长状态和视频列表（里程碑任务已注释：不再拉取 watchTimeStatus）
+    await Promise.all([baseStore.init(), loadMyVideos()])
     _no('刷新成功')
   } catch (e: any) {
     console.error('[handleRefresh] 刷新失败:', e)
@@ -1016,7 +1016,7 @@ async function handleVerifyCode() {
     if (userinfo.value.uid) {
       console.log('[Me] 🎉 登录成功！加载用户数据...')
       loadMyVideos() // 登录成功后立即加载数据
-      loadWatchTimeStatus() // 🎯 加载观看时长状态
+      // loadWatchTimeStatus() // 🎯 看视频数量里程碑任务已注释下线
       // 清空验证码
       verificationCode.value = ''
     } else {
@@ -1029,7 +1029,7 @@ async function handleVerifyCode() {
         console.log('[Me] ✅ 通过 getCurrentProfile 获取到 profile，应用用户信息...')
         baseStore.applyProfile(profile)
         loadMyVideos()
-        loadWatchTimeStatus()
+        // loadWatchTimeStatus()
         verificationCode.value = ''
       } else {
         console.error('[Me] ❌ 无法获取用户信息，可能是 RLS 策略问题或数据库问题')
@@ -1045,49 +1045,46 @@ async function handleVerifyCode() {
   }
 }
 
-// 🎯 监听用户信息变化，自动加载观看时长状态
-watch(
-  () => userinfo.value.uid,
-  (newUid) => {
-    if (newUid) {
-      loadWatchTimeStatus()
-    }
-  },
-  { immediate: true }
-)
+// 🎯 监听用户信息变化，自动加载观看时长状态（看视频数量里程碑任务已注释下线）
+// watch(
+//   () => userinfo.value.uid,
+//   (newUid) => {
+//     if (newUid) {
+//       loadWatchTimeStatus()
+//     }
+//   },
+//   { immediate: true }
+// )
 
-// 🎯 页面激活时刷新观看时长状态（每30秒刷新一次）
-const watchTimeRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null)
-onMounted(() => {
-  if (userinfo.value.uid) {
-    loadWatchTimeStatus()
-    // 每30秒自动刷新一次观看时长状态
-    watchTimeRefreshTimer.value = setInterval(() => {
-      if (userinfo.value.uid) {
-        loadWatchTimeStatus()
-      }
-    }, 30000)
-  }
-})
-
-// 清理定时器
-watch(
-  () => userinfo.value.uid,
-  (newUid) => {
-    if (!newUid && watchTimeRefreshTimer.value) {
-      clearInterval(watchTimeRefreshTimer.value)
-      watchTimeRefreshTimer.value = null
-    }
-  }
-)
-
-// 组件卸载时清理定时器
-onBeforeUnmount(() => {
-  if (watchTimeRefreshTimer.value) {
-    clearInterval(watchTimeRefreshTimer.value)
-    watchTimeRefreshTimer.value = null
-  }
-})
+// 🎯 页面激活时刷新观看时长状态（看视频数量里程碑任务已注释下线）
+// const watchTimeRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null)
+// onMounted(() => {
+//   if (userinfo.value.uid) {
+//     loadWatchTimeStatus()
+//     watchTimeRefreshTimer.value = setInterval(() => {
+//       if (userinfo.value.uid) {
+//         loadWatchTimeStatus()
+//       }
+//     }, 30000)
+//   }
+// })
+//
+// watch(
+//   () => userinfo.value.uid,
+//   (newUid) => {
+//     if (!newUid && watchTimeRefreshTimer.value) {
+//       clearInterval(watchTimeRefreshTimer.value)
+//       watchTimeRefreshTimer.value = null
+//     }
+//   }
+// )
+//
+// onBeforeUnmount(() => {
+//   if (watchTimeRefreshTimer.value) {
+//     clearInterval(watchTimeRefreshTimer.value)
+//     watchTimeRefreshTimer.value = null
+//   }
+// })
 </script>
 
 <style scoped lang="less">
@@ -1596,181 +1593,17 @@ onBeforeUnmount(() => {
         }
       }
 
-      // 🎯 观看时长奖励卡片样式
-      .watch-time-card {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 12px;
-        padding: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-
-        .title-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 15px;
-
-          .left {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: #fff;
-            font-weight: bold;
-
-            .icon {
-              color: #face15;
-              font-size: 18px;
-            }
-          }
-        }
-
-        .progress-section {
-          margin-bottom: 15px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-
-          // 🎯 观看时间信息
-          .time-text {
-            font-size: 14px;
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 4px;
-
-            .highlight {
-              color: #face15;
-              font-weight: bold;
-              font-size: 16px;
-            }
-          }
-
-          // 🎯 奖励信息
-          .reward-info {
-            margin-top: 4px;
-
-            .reward-text {
-              font-size: 13px;
-              color: rgba(255, 255, 255, 0.5);
-
-              &.claimed {
-                color: rgba(255, 255, 255, 0.4);
-              }
-
-              .reward-amount {
-                color: #face15;
-                font-weight: bold;
-                font-size: 15px;
-              }
-            }
-          }
-
-          .progress-bar-wrapper {
-            position: relative;
-            margin-bottom: 50px; // 🎯 给里程碑标签留出空间，避免和按钮重叠
-
-            .progress-bar {
-              width: 100%;
-              height: 6px;
-              background: rgba(255, 255, 255, 0.1);
-              border-radius: 3px;
-              overflow: hidden;
-              margin-bottom: 0; // 🎯 移除 margin-bottom，改用父容器的 margin-bottom
-
-              .progress-fill {
-                height: 100%;
-                background: linear-gradient(90deg, #face15 0%, #ffd700 100%);
-                border-radius: 3px;
-                transition: width 0.3s ease;
-              }
-            }
-
-            .milestones {
-              position: absolute;
-              top: 10px;
-              left: 0;
-              right: 0;
-              width: 100%;
-
-              .milestone {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 4px;
-                position: absolute;
-                transform: translateX(-50%);
-
-                &.milestone-last {
-                  transform: translateX(-100%);
-                }
-
-                .milestone-dot {
-                  width: 12px;
-                  height: 12px;
-                  border-radius: 50%;
-                  background: rgba(255, 255, 255, 0.2);
-                  border: 2px solid rgba(255, 255, 255, 0.3);
-                  transition: all 0.3s;
-                }
-
-                .milestone-label {
-                  font-size: 9px;
-                  color: rgba(255, 255, 255, 0.4);
-                  text-align: center;
-                  line-height: 1.2;
-                  white-space: nowrap;
-                  word-break: keep-all;
-                }
-
-                &.reached {
-                  .milestone-dot {
-                    background: #face15;
-                    border-color: #face15;
-                    box-shadow: 0 0 8px rgba(250, 206, 21, 0.5);
-                  }
-
-                  .milestone-label {
-                    color: #face15;
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        .claim-btn {
-          width: 100%;
-          padding: 12px;
-          background: linear-gradient(135deg, #face15 0%, #ffd700 100%);
-          border: none;
-          border-radius: 8px;
-          color: #000;
-          font-weight: bold;
-          font-size: 14px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          cursor: pointer;
-          transition: all 0.3s;
-
-          &:hover:not(.disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(250, 206, 21, 0.4);
-          }
-
-          &:active:not(.disabled) {
-            transform: translateY(0);
-          }
-
-          &.disabled {
-            background: rgba(255, 255, 255, 0.1);
-            color: rgba(255, 255, 255, 0.4);
-            cursor: not-allowed;
-          }
-
-          .icon {
-            font-size: 16px;
-          }
-        }
-      }
+      // 🎯 观看时长奖励卡片样式（看视频数量里程碑任务已注释下线）
+      // .watch-time-card {
+      //   background: rgba(255, 255, 255, 0.05);
+      //   border-radius: 12px;
+      //   padding: 15px;
+      //   border: 1px solid rgba(255, 255, 255, 0.1);
+      //
+      //   .title-row { ... }
+      //   .progress-section { .time-text, .reward-info, .progress-bar-wrapper, .milestones { ... } }
+      //   .claim-btn { ... }
+      // }
     }
 
     // Tab 区域

@@ -400,22 +400,22 @@ export async function getAdultQuota() {
 
 // 🎯 观看时长已改为心跳机制（在 main.ts 中启动，1分钟发送1次心跳）
 
-// 🎯 获取观看时长奖励状态
-export async function getWatchTimeStatus() {
-  try {
-    const token = await resolveAccessToken(false)
-    if (!token) return { success: false }
-
-    const data = await callAppServer('/video/watch-time/status', {
-      method: 'GET',
-      requireAuth: true
-    })
-    return { success: true, data }
-  } catch (error: any) {
-    console.error('[getWatchTimeStatus] 获取观看时长状态失败:', error)
-    return { success: false, message: error?.message || '获取观看时长状态失败' }
-  }
-}
+// 🎯 获取观看时长奖励状态（看视频数量里程碑任务已注释下线）
+// export async function getWatchTimeStatus() {
+//   try {
+//     const token = await resolveAccessToken(false)
+//     if (!token) return { success: false }
+//
+//     const data = await callAppServer('/video/watch-time/status', {
+//       method: 'GET',
+//       requireAuth: true
+//     })
+//     return { success: true, data }
+//   } catch (error: any) {
+//     console.error('[getWatchTimeStatus] 获取观看时长状态失败:', error)
+//     return { success: false, message: error?.message || '获取观看时长状态失败' }
+//   }
+// }
 
 // 🎯 按视频上报观看秒数（用于「观看视频数」奖励，看满10秒计1个）
 export async function reportWatchTimeSeconds(videoId: string, seconds: number) {
@@ -447,22 +447,22 @@ export async function reportWatchTimeSeconds(videoId: string, seconds: number) {
   }
 }
 
-// 🎯 领取观看时长奖励
-export async function claimWatchTimeReward() {
-  try {
-    const token = await resolveAccessToken(false)
-    if (!token) return { success: false, message: '未登录' }
-
-    const data = await callAppServer('/video/watch-time/claim', {
-      method: 'POST',
-      requireAuth: true
-    })
-    return { success: true, data }
-  } catch (error: any) {
-    console.error('[claimWatchTimeReward] 领取观看时长奖励失败:', error)
-    return { success: false, message: error?.message || '领取失败' }
-  }
-}
+// 🎯 领取观看时长奖励（看视频数量里程碑任务已注释下线）
+// export async function claimWatchTimeReward() {
+//   try {
+//     const token = await resolveAccessToken(false)
+//     if (!token) return { success: false, message: '未登录' }
+//
+//     const data = await callAppServer('/video/watch-time/claim', {
+//       method: 'POST',
+//       requireAuth: true
+//     })
+//     return { success: true, data }
+//   } catch (error: any) {
+//     console.error('[claimWatchTimeReward] 领取观看时长奖励失败:', error)
+//     return { success: false, message: error?.message || '领取失败' }
+//   }
+// }
 
 export async function sendReward(payload: {
   receiver_id: string

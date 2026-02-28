@@ -1,32 +1,6 @@
 import { supabaseAdmin } from './env.ts'
 import { checkRateLimit } from './rateLimit.ts'
 
-/**
- * 🔥 检查 IP 是否被封禁
- */
-export async function checkIpBlacklist(req: Request): Promise<void> {
-  const clientIp = getClientIp(req)
-  if (!clientIp) {
-    return // 无法获取 IP 时不拦截
-  }
-
-  // 检查 IP 是否在黑名单中
-  const { data: banned, error } = await supabaseAdmin.rpc('is_ip_banned', {
-    p_ip_address: clientIp
-  })
-
-  if (error) {
-    console.error('[IP_BLACKLIST] 检查失败:', error)
-    // 出错时不拦截，避免误伤
-    return
-  }
-
-  if (banned === true) {
-    console.warn(`[IP_BLACKLIST] 封禁的 IP 尝试访问: ${clientIp}`)
-    throw new HttpError('Forbidden', 403)
-  }
-}
-
 export class HttpError extends Error {
   status: number
   constructor(message: string, status = 400) {
@@ -142,9 +116,6 @@ export async function requireAdminAuth(req: Request) {
 }
 
 export async function requireAuth(req: Request, options: AuthOptions = {}) {
-  // 🔥 先检查 IP 黑名单
-  await checkIpBlacklist(req)
-
   const authHeader = req.headers.get('authorization') || req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     throw new HttpError('Unauthorized', 401)
@@ -154,16 +125,7 @@ export async function requireAuth(req: Request, options: AuthOptions = {}) {
     throw new HttpError('Unauthorized', 401)
   }
 
-  // 🔥 先检查 IP 黑名单
   const clientIp = getClientIp(req)
-  if (clientIp) {
-    const { data: isBanned } = await supabaseAdmin.rpc('is_ip_banned', {
-      p_ip_address: clientIp
-    })
-    if (isBanned === true) {
-      throw new HttpError('Forbidden', 403)
-    }
-  }
 
   // 🔥 先尝试认证
   const {
@@ -188,15 +150,7 @@ export async function requireAuth(req: Request, options: AuthOptions = {}) {
       })
 
       if (!rateLimitResult.allowed) {
-        // 🔥 直接永久封禁 IP（不临时锁定）
-        try {
-          const { autoBanIp } = await import('../routes/ipBlacklist.ts')
-          await autoBanIp(clientIp, '认证失败次数过多（10秒内超过3次），已永久封禁', null) // null 表示永久封禁
-          console.warn(`[AUTH_ATTACK] IP ${clientIp} 认证失败次数过多，已永久封禁`)
-        } catch (banError) {
-          console.error('[AUTH_ATTACK] 自动封禁失败:', banError)
-        }
-
+        console.warn(`[AUTH_ATTACK] IP ${clientIp} 认证失败次数过多（10秒内超过3次）`)
         throw new HttpError('Forbidden', 403)
       }
     }

@@ -28,8 +28,8 @@ import {
   handleRecordView,
   handleVideoAdultFeed,
   handleGetAdultQuota,
-  handleGetWatchTimeStatus,
-  handleClaimWatchTimeReward,
+  // handleGetWatchTimeStatus,
+  // handleClaimWatchTimeReward,
   handleWatchTimeHeartbeat,
   handleWatchTimeReport
 } from './routes/video.ts'
@@ -79,19 +79,12 @@ import {
 import { handleAdminProcessWithdraw } from './routes/withdraw.ts'
 import { handleAdminAutoWithdraw } from './routes/adminWithdraw.ts'
 import { handleAdminLogin } from './routes/admin.ts'
-import {
-  handleAddIpToBlacklist,
-  handleRemoveIpFromBlacklist,
-  handleGetIpBlacklist,
-  autoBanIp
-} from './routes/ipBlacklist.ts'
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
-  // 🔥 全局 IP 黑名单和频率限制检查（除了认证相关的公开接口）
+  // 🔥 全局频率限制检查（除了认证相关的公开接口）
   try {
     const route = extractRoute(req.url)
     const isPublicAuthRoute =
@@ -103,55 +96,42 @@ serve(async (req) => {
     // 🎯 心跳接口需要特殊的频率限制（防止黑客攻击）
     const isHeartbeatRoute = route === '/video/watch-time/heartbeat'
 
-    // 非公开认证接口才检查 IP 黑名单和频率限制
     if (!isPublicAuthRoute) {
-      const { checkIpBlacklist, getClientIp } = await import('./lib/auth.ts')
-      await checkIpBlacklist(req)
-
+      const { getClientIp } = await import('./lib/auth.ts')
       const clientIp = getClientIp(req)
       if (clientIp) {
         const { checkRateLimit } = await import('./lib/rateLimit.ts')
 
         if (isHeartbeatRoute) {
-          // 🚨 心跳接口频率限制：1分钟内最多 6 次（允许多标签、立即+定时、重试）
           const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'watch_time_heartbeat', {
-            maxAttempts: 6, // 1分钟内最多6次（多标签/误差/重试）
-            windowMs: 60000, // 1分钟窗口
-            lockDurationMs: undefined // 不锁定，直接拒绝
+            maxAttempts: 6,
+            windowMs: 60000,
+            lockDurationMs: undefined
           })
-
           if (!rateLimitResult.allowed) {
             console.warn(`[HEARTBEAT_ATTACK] IP ${clientIp} 心跳请求过于频繁（1分钟内超过6次）`)
             return errorResponse('请求过于频繁', 1, 429)
           }
         } else {
-          // 🔥 全项目接口频率限制：10秒内最多60次请求（正常用户不会超过）
           const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'api_request', {
-            maxAttempts: 60, // 10秒内最多60次请求（正常用户不会超过）
-            windowMs: 10000, // 10秒窗口
+            maxAttempts: 60,
+            windowMs: 10000,
             lockDurationMs: undefined
           })
-
           if (!rateLimitResult.allowed) {
-            // 请求过于频繁，直接永久封禁
-            const { autoBanIp } = await import('./routes/ipBlacklist.ts')
-            await autoBanIp(clientIp, 'API 请求过于频繁（10秒内超过60次），已永久封禁', null)
-            console.warn(`[API_ATTACK] IP ${clientIp} 请求过于频繁（10秒内超过60次），已永久封禁`)
+            console.warn(`[API_ATTACK] IP ${clientIp} 请求过于频繁（10秒内超过60次）`)
             return errorResponse('Forbidden', 1, 403)
           }
         }
       }
     }
   } catch (error: any) {
-    // IP 被封禁，直接返回
     if (error instanceof HttpError && error.status === 403) {
       return errorResponse('Forbidden', 1, 403)
     }
-    // 🔥 记录其他错误（频率限制检查时的异常）
     if (error) {
-      console.error('[app-server] IP 黑名单/频率限制检查异常:', error)
+      console.error('[app-server] 频率限制检查异常:', error)
     }
-    // 其他错误继续处理（不中断请求流程）
   }
 
   try {
@@ -243,13 +223,13 @@ serve(async (req) => {
     if (route === '/video/watch-time/report' && method === 'POST') {
       return handleWatchTimeReport(req)
     }
-    // 观看时长奖励查询和领取接口
-    if (route === '/video/watch-time/status' && method === 'GET') {
-      return handleGetWatchTimeStatus(req)
-    }
-    if (route === '/video/watch-time/claim' && method === 'POST') {
-      return handleClaimWatchTimeReward(req)
-    }
+    // 观看时长奖励查询和领取接口（看视频数量里程碑任务已注释下线）
+    // if (route === '/video/watch-time/status' && method === 'GET') {
+    //   return handleGetWatchTimeStatus(req)
+    // }
+    // if (route === '/video/watch-time/claim' && method === 'POST') {
+    //   return handleClaimWatchTimeReward(req)
+    // }
     if (route === '/video/comments' && method === 'GET') {
       return handleVideoComments(req)
     }
@@ -371,17 +351,6 @@ serve(async (req) => {
     }
     if (route === '/admin/douyin/refresh-links' && method === 'POST') {
       return handleAdminDouyinRefresh(req)
-    }
-
-    // 🔥 IP 黑名单管理（仅 admin）
-    if (route === '/admin/ip-blacklist' && method === 'GET') {
-      return handleGetIpBlacklist(req)
-    }
-    if (route === '/admin/ip-blacklist/add' && method === 'POST') {
-      return handleAddIpToBlacklist(req)
-    }
-    if (route === '/admin/ip-blacklist/remove' && method === 'POST') {
-      return handleRemoveIpFromBlacklist(req)
     }
 
     return errorResponse('Not found', 1, 404)

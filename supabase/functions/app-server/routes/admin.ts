@@ -16,36 +16,17 @@ export async function handleAdminLogin(req: Request): Promise<Response> {
       return errorResponse('Email and password are required', 1, 400)
     }
 
-    // 🔥 先检查 IP 黑名单
     const clientIp = getClientIp(req) || 'unknown'
-    if (clientIp !== 'unknown') {
-      const { data: isBanned } = await supabaseAdmin.rpc('is_ip_banned', {
-        p_ip_address: clientIp
-      })
-      if (isBanned === true) {
-        console.warn(`[ADMIN_LOGIN_BLOCKED] 封禁的 IP 尝试登录: ${clientIp}`)
-        return errorResponse('Forbidden', 1, 403)
-      }
-    }
 
-    // 🔥 Edge Function 层面的频率限制（备用保护，如果 Supabase 平台限制没生效）
+    // 🔥 Edge Function 层面的频率限制
     const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'admin_login', {
-      maxAttempts: 2, // 10秒内最多2次登录尝试
-      windowMs: 10000, // 10秒窗口
-      lockDurationMs: undefined // 不锁定，直接永久封禁
+      maxAttempts: 2,
+      windowMs: 10000,
+      lockDurationMs: undefined
     })
-
     if (!rateLimitResult.allowed) {
-      // 🔥 直接永久封禁 IP（不临时锁定）
-      try {
-        const { autoBanIp } = await import('./ipBlacklist.ts')
-        await autoBanIp(clientIp, '后台登录尝试过于频繁（10秒内超过2次），已永久封禁', null) // null 表示永久封禁
-        console.warn(`[ADMIN_LOGIN_ATTACK] IP ${clientIp} 登录尝试过于频繁，已永久封禁`)
-      } catch (banError) {
-        console.error('[ADMIN_LOGIN_ATTACK] 自动封禁失败:', banError)
-      }
-
-      return errorResponse(`登录尝试过于频繁，您的 IP 已被永久封禁`, 1, 403)
+      console.warn(`[ADMIN_LOGIN_ATTACK] IP ${clientIp} 登录尝试过于频繁（10秒内超过2次）`)
+      return errorResponse('登录尝试过于频繁', 1, 403)
     }
 
     // 🔥 尝试登录

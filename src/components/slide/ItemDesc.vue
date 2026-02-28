@@ -120,7 +120,7 @@ const publishDate = computed(() => {
       </div>
       <div class="live" v-if="props.isLive">直播中</div>
       <div class="name mb1r f18 fb" @click.stop="emit('goUserInfo')">
-        @{{ _truncate(item?.author?.nickname, 15) }}
+        @{{ _truncate(item?.author?.nickname || '用户', 15) }}
       </div>
       <div v-if="publishDate" class="publish-date">发布于 {{ publishDate }}</div>
       <div

@@ -4,8 +4,11 @@ import { checkAndSendNotification } from '../lib/notification.ts'
 import {
   applyRowFlags,
   attachUserFlags,
+  enrichRowsWithAuthorIds,
   getProfileById,
+  getProfileForRow,
   getVideoAuthorProfile,
+  batchLoadAuthorProfiles,
   mapVideoRow
 } from '../lib/video.ts'
 import {
@@ -183,6 +186,18 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     rows = data || []
   }
 
+  // 🩺 推荐页排查：看 RPC 返回的 row 是否带 author_id / tg_user_id
+  const firstRow = rows[0]
+  if (firstRow) {
+    const keys = Object.keys(firstRow).filter(
+      (k) => k.toLowerCase().includes('author') || k.toLowerCase().includes('tg')
+    )
+    console.log('[Feed] RPC 首条 row 作者相关字段:', keys, {
+      author_id: firstRow.author_id ?? firstRow.Author_Id ?? '(空)',
+      tg_user_id: firstRow.tg_user_id ?? firstRow.Tg_User_Id ?? '(空)'
+    })
+  }
+
   // 🎯 排除深链接视频（避免重复）
   if (startVideo) {
     rows = rows.filter((r) => r.id !== startVideoId)
@@ -191,21 +206,42 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
   // 🎯 合并：深链接视频在最前面（无论深链视频是什么类型，都放到第一个）
   const allRows = startVideo ? [startVideo, ...rows] : rows
 
+  await enrichRowsWithAuthorIds(allRows, 'Feed')
+
+  // 🩺 推荐页排查：补全后首条是否已有 author_id/tg_user_id
+  const firstAfterEnrich = allRows[0]
+  if (firstAfterEnrich) {
+    console.log('[Feed] 补全后首条:', {
+      author_id: firstAfterEnrich.author_id ?? '(空)',
+      tg_user_id: firstAfterEnrich.tg_user_id ?? '(空)'
+    })
+  }
+
   console.log('[Feed] 结果:', {
     深链接: !!startVideo,
-    推荐数: rows.filter((r) => r.is_recommended).length,
-    普通数: rows.filter((r) => !r.is_recommended).length,
+    推荐数: rows.filter((r: any) => r.is_recommended).length,
+    普通数: rows.filter((r: any) => !r.is_recommended).length,
     总数: allRows.length
   })
 
   // 附加用户标记
   await attachUserFlags(allRows, user?.id ?? null)
 
-  // 映射视频数据
-  const profileCache = new Map<string, any>()
+  // 批量拉取本页所有视频的作者 profile（直查 profiles 表，避免 RPC/策略导致查不到）
+  const profileMap = await batchLoadAuthorProfiles(allRows, 'Feed')
+  console.log('[Feed] profileMap.size=', profileMap.size)
   const list = []
-  for (const row of allRows) {
-    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+  for (let i = 0; i < allRows.length; i++) {
+    const row = allRows[i]
+    const authorProfile = getProfileForRow(row, profileMap)
+    if (i === 0) {
+      console.log(
+        '[Feed] 首条 row author_id=%s tg_user_id=%s 命中profile=%s',
+        row?.author_id ?? '(空)',
+        row?.tg_user_id ?? '(空)',
+        authorProfile ? `nickname=${authorProfile.nickname ?? '(空)'}` : '无'
+      )
+    }
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
       applyRowFlags(mapped, row)
@@ -224,6 +260,14 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
   // 🎯 优化 hasMore 判断：只要返回了数据，就认为可能还有更多（因为有排除列表逻辑）
   const hasMore = (rows?.length || 0) > 0
 
+  // 🩺 调试头：便于在 Network 里确认列表首条是否带作者信息（排查「还是没有」）
+  const firstAuthor = list[0]?.author
+  const debugHeaders: Record<string, string> = {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'X-Feed-Debug-First-Author': firstAuthor?.nickname ? '1' : '0',
+    'X-Feed-Debug-List-Len': String(list.length)
+  }
+
   return successResponse(
     {
       list,
@@ -233,7 +277,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
       hasMore
     },
     'ok',
-    { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' }
+    debugHeaders
   )
 }
 
@@ -318,14 +362,16 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
     }
   }
 
-  // 附加用户标记（点赞、收藏、关注状态）
-  await attachUserFlags(data ?? [], user?.id ?? null)
+  const rows = data ?? []
+  await enrichRowsWithAuthorIds(rows, 'LongFeed')
 
-  // 映射视频数据格式
-  const profileCache = new Map<string, any>()
+  // 附加用户标记（点赞、收藏、关注状态）
+  await attachUserFlags(rows, user?.id ?? null)
+
+  const profileMap = await batchLoadAuthorProfiles(rows, 'LongFeed')
   const list: any[] = []
-  for (const row of data ?? []) {
-    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+  for (const row of rows) {
+    const authorProfile = getProfileForRow(row, profileMap)
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
       applyRowFlags(mapped, row)
@@ -334,7 +380,7 @@ export async function handleVideoLongFeed(req: Request): Promise<Response> {
   }
 
   // 🎯 优化 hasMore 判断：只要本次 RPC 返回了数据，就认为可能还有更多（因为是排除式去重）
-  const hasMore = (data?.length || 0) > 0
+  const hasMore = rows.length > 0
 
   return successResponse({
     list,
@@ -419,14 +465,16 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
     lastScore: data?.[data?.length - 1]?.score
   })
 
-  // 附加用户标记（点赞、收藏、关注状态）
-  await attachUserFlags(data ?? [], user?.id ?? null)
+  const rows = data ?? []
+  await enrichRowsWithAuthorIds(rows, 'VideoTabFeed')
 
-  // 映射视频数据格式
-  const profileCache = new Map<string, any>()
+  // 附加用户标记（点赞、收藏、关注状态）
+  await attachUserFlags(rows, user?.id ?? null)
+
+  const profileMap = await batchLoadAuthorProfiles(rows, 'VideoTabFeed')
   const list: any[] = []
-  for (const row of data ?? []) {
-    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+  for (const row of rows) {
+    const authorProfile = getProfileForRow(row, profileMap)
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
       applyRowFlags(mapped, row)
@@ -435,7 +483,7 @@ export async function handleVideoTabFeed(req: Request): Promise<Response> {
   }
 
   // 🎯 优化 hasMore 判断：只要本次 RPC 返回了数据，就认为可能还有更多（因为是排除式去重）
-  const hasMore = (data?.length || 0) > 0
+  const hasMore = rows.length > 0
 
   return successResponse({
     list,
@@ -477,12 +525,14 @@ export async function handleShortDramaFeed(req: Request): Promise<Response> {
     return errorResponse('Failed to load short drama feed', 1, 500)
   }
 
-  await attachUserFlags(data ?? [], user?.id ?? null)
+  const rows = data ?? []
+  await enrichRowsWithAuthorIds(rows, 'ShortDramaFeed')
+  await attachUserFlags(rows, user?.id ?? null)
 
-  const profileCache = new Map<string, any>()
+  const profileMap = await batchLoadAuthorProfiles(rows, 'ShortDramaFeed')
   const list: any[] = []
-  for (const row of data ?? []) {
-    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+  for (const row of rows) {
+    const authorProfile = getProfileForRow(row, profileMap)
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
       applyRowFlags(mapped, row)
@@ -495,7 +545,7 @@ export async function handleShortDramaFeed(req: Request): Promise<Response> {
     total: count ?? 0,
     pageNo,
     pageSize,
-    hasMore: (data?.length || 0) >= pageSize
+    hasMore: rows.length >= pageSize
   })
 }
 
@@ -526,12 +576,14 @@ export async function handleGraphicFeed(req: Request): Promise<Response> {
     return errorResponse('Failed to load graphic feed', 1, 500)
   }
 
-  await attachUserFlags(data ?? [], user?.id ?? null)
+  const rows = data ?? []
+  await enrichRowsWithAuthorIds(rows, 'GraphicFeed')
+  await attachUserFlags(rows, user?.id ?? null)
 
-  const profileCache = new Map<string, any>()
+  const profileMap = await batchLoadAuthorProfiles(rows, 'GraphicFeed')
   const list = []
-  for (const row of data ?? []) {
-    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+  for (const row of rows) {
+    const authorProfile = getProfileForRow(row, profileMap)
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
       applyRowFlags(mapped, row)
@@ -544,7 +596,7 @@ export async function handleGraphicFeed(req: Request): Promise<Response> {
     total: count ?? 0,
     pageNo,
     pageSize,
-    hasMore: (data?.length || 0) >= pageSize
+    hasMore: rows.length >= pageSize
   })
 }
 
@@ -629,14 +681,16 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
     }
   }
 
-  // 附加用户标记（点赞、收藏、关注状态）
-  await attachUserFlags(data ?? [], user?.id ?? null)
+  const rows = data ?? []
+  await enrichRowsWithAuthorIds(rows, 'AdultFeed')
 
-  // 映射视频数据格式
-  const profileCache = new Map<string, any>()
+  // 附加用户标记（点赞、收藏、关注状态）
+  await attachUserFlags(rows, user?.id ?? null)
+
+  const profileMap = await batchLoadAuthorProfiles(rows, 'AdultFeed')
   const list: any[] = []
-  for (const row of data ?? []) {
-    const authorProfile = await getVideoAuthorProfile(row, profileCache)
+  for (const row of rows) {
+    const authorProfile = getProfileForRow(row, profileMap)
     const mapped = await mapVideoRow(row, authorProfile)
     if (mapped) {
       applyRowFlags(mapped, row)
@@ -645,7 +699,7 @@ export async function handleVideoAdultFeed(req: Request): Promise<Response> {
   }
 
   // 🎯 优化 hasMore 判断：只要本次 RPC 返回了数据，就认为可能还有更多（因为是排除式去重）
-  const hasMore = (data?.length || 0) > 0
+  const hasMore = rows.length > 0
 
   return successResponse({
     list,
@@ -772,7 +826,15 @@ export async function handleVideoAuthor(req: Request): Promise<Response> {
     .range(from, to)
 
   if (videoError) {
-    console.error('[app-server] Load author videos failed:', videoError)
+    const msg =
+      typeof videoError.message === 'string' && videoError.message.length > 300
+        ? videoError.message.slice(0, 300) + '...'
+        : videoError.message
+    console.error('[app-server] Load author videos failed:', {
+      code: videoError.code,
+      message: msg,
+      details: videoError.details
+    })
     return errorResponse('Failed to load videos', 1, 500)
   }
 
@@ -1357,7 +1419,11 @@ export async function handleWatchTimeHeartbeat(req: Request): Promise<Response> 
 
     return successResponse(data)
   } catch (error: any) {
-    console.error('[handleWatchTimeHeartbeat] Unexpected error:', error)
+    if (error instanceof HttpError && error.status === 401) {
+      console.warn('[handleWatchTimeHeartbeat] Unauthorized (未登录或 token 无效)')
+    } else {
+      console.error('[handleWatchTimeHeartbeat] Unexpected error:', error)
+    }
     if (error instanceof HttpError) {
       throw error
     }
@@ -1365,91 +1431,82 @@ export async function handleWatchTimeHeartbeat(req: Request): Promise<Response> 
   }
 }
 
-export async function handleGetWatchTimeStatus(req: Request): Promise<Response> {
-  try {
-    const { user } = await requireAuth(req)
-    const { data, error } = await supabaseAdmin.rpc('get_watch_time_reward_status', {
-      p_user_id: user.id
-    })
-    if (error) {
-      console.error('[handleGetWatchTimeStatus] RPC error:', error)
-      return errorResponse('Failed to get watch time status', 1, 500)
-    }
-    return successResponse(data)
-  } catch (error: any) {
-    console.error('[handleGetWatchTimeStatus] Unexpected error:', error)
-    if (error instanceof HttpError) {
-      throw error // 重新抛出 HttpError，让外层处理
-    }
-    return errorResponse('Internal server error', 1, 500)
-  }
-}
+// 🎯 看视频数量里程碑领取奖励任务已注释下线
+// export async function handleGetWatchTimeStatus(req: Request): Promise<Response> {
+//   try {
+//     const { user } = await requireAuth(req)
+//     const { data, error } = await supabaseAdmin.rpc('get_watch_time_reward_status', {
+//       p_user_id: user.id
+//     })
+//     if (error) {
+//       console.error('[handleGetWatchTimeStatus] RPC error:', error)
+//       return errorResponse('Failed to get watch time status', 1, 500)
+//     }
+//     return successResponse(data)
+//   } catch (error: any) {
+//     console.error('[handleGetWatchTimeStatus] Unexpected error:', error)
+//     if (error instanceof HttpError) {
+//       throw error
+//     }
+//     return errorResponse('Internal server error', 1, 500)
+//   }
+// }
 
-export async function handleClaimWatchTimeReward(req: Request): Promise<Response> {
-  const { user } = await requireAuth(req)
-  // 🚨 后端自己获取IP地址，不信任前端传递的值
-  const { getClientIp } = await import('../lib/auth.ts')
-  const clientIp = getClientIp(req) || null
-
-  // 🚨 紧急安全修复：添加频率限制，防止无限刷抖币
-  // 1分钟内最多调用3次，超过后锁定5分钟
-  const rateLimitResult = await checkRateLimit(user.id, 'tg_user_id', 'claim_watch_time', {
-    maxAttempts: 3,
-    windowMs: 60000, // 1分钟
-    lockDurationMs: 300000 // 5分钟锁定
-  })
-
-  if (!rateLimitResult.allowed) {
-    const lockedMsg = rateLimitResult.lockedUntil
-      ? `，已锁定至 ${new Date(rateLimitResult.lockedUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`
-      : ''
-    // 🔥 不泄露锁定时间给客户端
-    console.warn(`[CLAIM_WATCH_TIME] Rate limit exceeded for user ${user.id}${lockedMsg}`)
-    throw new HttpError('Too many requests', 429)
-  }
-
-  // 🚨 额外检查：检查最近一次领取时间，防止并发攻击
-  const { data: lastClaim, error: lastClaimError } = await supabaseAdmin
-    .from('coin_transactions')
-    .select('created_at')
-    .eq('user_id', user.id)
-    .eq('type', 'watch_time_reward')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (!lastClaimError && lastClaim) {
-    const lastClaimTime = new Date(lastClaim.created_at).getTime()
-    const now = Date.now()
-    const timeSinceLastClaim = now - lastClaimTime
-
-    // 同一档位领取后，至少需要等待2秒才能再次检查（防止并发竞态）
-    if (timeSinceLastClaim < 2000) {
-      console.warn(`[CLAIM_WATCH_TIME] Too frequent claim attempt for user ${user.id}`)
-      throw new HttpError('Too many requests', 429)
-    }
-  }
-
-  const { data, error } = await supabaseAdmin.rpc('claim_watch_time_reward', {
-    p_user_id: user.id,
-    p_ip_address: clientIp
-  })
-
-  if (error) {
-    // 🔥 不泄露具体错误信息给客户端
-    console.error('[handleClaimWatchTimeReward] RPC error:', error)
-    return errorResponse('Internal server error', 1, 500)
-  }
-
-  // 🚨 验证返回结果，确保没有异常奖励
-  if (data && typeof data === 'object' && 'success' in data) {
-    if (!data.success) {
-      // 🔥 不泄露具体失败原因给客户端
-      const reason = data.message || 'Claim failed'
-      console.warn(`[CLAIM_WATCH_TIME] Claim failed for user ${user.id}: ${reason}`)
-      return errorResponse('Bad request', 1, 400)
-    }
-  }
-
-  return successResponse(data)
-}
+// export async function handleClaimWatchTimeReward(req: Request): Promise<Response> {
+//   const { user } = await requireAuth(req)
+//   const { getClientIp } = await import('../lib/auth.ts')
+//   const clientIp = getClientIp(req) || null
+//
+//   const rateLimitResult = await checkRateLimit(user.id, 'tg_user_id', 'claim_watch_time', {
+//     maxAttempts: 3,
+//     windowMs: 60000,
+//     lockDurationMs: 300000
+//   })
+//
+//   if (!rateLimitResult.allowed) {
+//     const lockedMsg = rateLimitResult.lockedUntil
+//       ? `，已锁定至 ${new Date(rateLimitResult.lockedUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`
+//       : ''
+//     console.warn(`[CLAIM_WATCH_TIME] Rate limit exceeded for user ${user.id}${lockedMsg}`)
+//     throw new HttpError('Too many requests', 429)
+//   }
+//
+//   const { data: lastClaim, error: lastClaimError } = await supabaseAdmin
+//     .from('coin_transactions')
+//     .select('created_at')
+//     .eq('user_id', user.id)
+//     .eq('type', 'watch_time_reward')
+//     .order('created_at', { ascending: false })
+//     .limit(1)
+//     .maybeSingle()
+//
+//   if (!lastClaimError && lastClaim) {
+//     const lastClaimTime = new Date(lastClaim.created_at).getTime()
+//     const now = Date.now()
+//     const timeSinceLastClaim = now - lastClaimTime
+//     if (timeSinceLastClaim < 2000) {
+//       console.warn(`[CLAIM_WATCH_TIME] Too frequent claim attempt for user ${user.id}`)
+//       throw new HttpError('Too many requests', 429)
+//     }
+//   }
+//
+//   const { data, error } = await supabaseAdmin.rpc('claim_watch_time_reward', {
+//     p_user_id: user.id,
+//     p_ip_address: clientIp
+//   })
+//
+//   if (error) {
+//     console.error('[handleClaimWatchTimeReward] RPC error:', error)
+//     return errorResponse('Internal server error', 1, 500)
+//   }
+//
+//   if (data && typeof data === 'object' && 'success' in data) {
+//     if (!data.success) {
+//       const reason = data.message || 'Claim failed'
+//       console.warn(`[CLAIM_WATCH_TIME] Claim failed for user ${user.id}: ${reason}`)
+//       return errorResponse('Bad request', 1, 400)
+//     }
+//   }
+//
+//   return successResponse(data)
+// }
