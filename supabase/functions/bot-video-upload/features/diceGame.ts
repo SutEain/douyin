@@ -387,50 +387,41 @@ async function startRolling(chatId: number, roomId: string) {
       await new Promise((r) => setTimeout(r, 1000))
     }
 
-    // 4. 结算逻辑 (使用开头获取到的 roomInfo)
-    const maxVal = Math.max(...results.map((r) => r.value))
-    const winners = results.filter((r) => r.value === maxVal)
+    // 4. 结算逻辑：统一走 RPC settle_dice_room，金额在库内计算，避免 JS 传错导致 1000万/1亿 等异常
+    const rollResultsForRpc = results.map((r) => ({ user_id: r.user_id, value: r.value }))
+    const { data: settleRes, error: settleError } = await supabase.rpc('settle_dice_room', {
+      p_room_id: roomId,
+      p_roll_results: JSON.stringify(rollResultsForRpc)
+    })
 
-    const totalPrize = roomInfo.bet_amount * roomInfo.target_count
-    // 🎯 抽水 2%，保留2位小数，不四舍五入
-    const commission = Math.floor(totalPrize * 0.02 * 100) / 100
-    const netPrize = totalPrize - commission
-    // 🎯 净奖金平均分配给赢家，保留2位小数，不四舍五入
-    const perWinnerPrize = Math.floor((netPrize / winners.length) * 100) / 100
-
-    // 更新房间结果
-    await supabase
-      .from('dice_rooms')
-      .update({
-        status: 'finished',
-        winner_ids: winners.map((w) => w.user_id),
-        total_prize: totalPrize
-      })
-      .eq('id', roomId)
-
-    // 发放奖励
-    for (const winner of winners) {
-      await supabase.rpc('claim_dice_reward', {
-        p_user_id: winner.user_id,
-        p_amount: perWinnerPrize,
-        p_room_id: roomId
-      })
+    if (settleError || !settleRes?.success) {
+      throw new Error(settleRes?.message || settleError?.message || '结算失败')
     }
 
+    const maxVal = settleRes.max_value as number
+    const perWinnerPrize = Number(settleRes.per_winner_prize)
+    const isDrawNoCommission = settleRes.is_draw_no_commission === true
+
     // 5. 宣布最终结果
-    const winnerNames = winners.map((w) => `<b>${escapeHTML(w.name || '玩家')}</b>`).join(', ')
+    const winnerNames = (settleRes.winners as string[])
+      .map((winnerId) => {
+        const r = results.find((x) => x.user_id === winnerId)
+        return `<b>${escapeHTML(r?.name || '玩家')}</b>`
+      })
+      .join(', ')
     const scoreBoard = results
       .map((r, i) => {
-        const isWinner = r.value === maxVal
+        const isWinner = (settleRes.winners as string[]).includes(r.user_id)
         return `${i + 1}. ${escapeHTML(r.name || '玩家')}: <b>${r.value}</b> 点 ${isWinner ? '👑' : ''}`
       })
       .join('\n')
 
+    const commissionText = isDrawNoCommission ? '(平局不抽水)' : '(已扣除2%抽水)'
     const resultText =
       `🎊 <b>本局结算完成</b> 🎊\n\n` +
       `📊 <b>比分榜：</b>\n${scoreBoard}\n\n` +
       `🏆 赢家：${winnerNames}\n` +
-      `💰 获得奖励：<b>${perWinnerPrize.toFixed(2)}</b> 抖币 (已扣除2%抽水)\n\n` +
+      `💰 获得奖励：<b>${perWinnerPrize.toFixed(2)}</b> 抖币 ${commissionText}\n\n` +
       `感谢大家的参与！`
 
     if (progressMsgId) {
