@@ -364,6 +364,11 @@
                     {{ tx.amount > 0 ? '+' : '' }}{{ tx.amount.toFixed(2) }} 抖币
                   </div>
                 </div>
+                <!-- PC28 账变：优先显示期数/下注内容（大小单双等） -->
+                <div v-if="isPC28Type(tx.type) && tx.description" class="transaction-bet-desc">
+                  <span class="label">期数/下注：</span>
+                  <span class="value">{{ tx.description }}</span>
+                </div>
                 <div class="transaction-details">
                   <div class="detail-item">
                     <span class="label">余额：</span>
@@ -373,7 +378,7 @@
                     <span class="label">时间：</span>
                     <span class="value">{{ formatTime(tx.created_at) }}</span>
                   </div>
-                  <div v-if="tx.description" class="detail-item">
+                  <div v-if="tx.description && !isPC28Type(tx.type)" class="detail-item">
                     <span class="label">说明：</span>
                     <span class="value">{{ tx.description }}</span>
                   </div>
@@ -914,6 +919,11 @@ function getBetDisplayName(bet: PC28Bet): string {
   }
 
   return names[bet.bet_type] || bet.bet_type
+}
+
+/** 是否为 PC28 相关流水类型（用于在账变中突出显示期数/下注内容） */
+function isPC28Type(type: string): boolean {
+  return ['pc28_bet', 'pc28_win', 'pc28_refund', 'pc28_bet_income', 'pc28_payout'].includes(type)
 }
 
 function formatTime(timeStr: string): string {
@@ -2215,6 +2225,23 @@ async function handleBet() {
 
   &.negative {
     color: #ff5252;
+  }
+}
+
+.transaction-bet-desc {
+  font-size: 13rem;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 8rem;
+  padding: 6rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+  .label {
+    color: rgba(255, 255, 255, 0.55);
+    margin-right: 6rem;
+  }
+
+  .value {
+    word-break: break-all;
   }
 }
 

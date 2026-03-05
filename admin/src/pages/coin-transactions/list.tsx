@@ -25,7 +25,12 @@ const typeColors: Record<string, string> = {
   adjustment: 'geekblue',
   task_reward: 'gold',
   inheritance_in: 'lime',
-  inheritance_out: 'red'
+  inheritance_out: 'red',
+  pc28_bet: 'orange',
+  pc28_win: 'gold',
+  pc28_refund: 'cyan',
+  pc28_bet_income: 'blue',
+  pc28_anchor_reward: 'purple'
 }
 
 const typeLabels: Record<string, string> = {
@@ -46,7 +51,12 @@ const typeLabels: Record<string, string> = {
   adjustment: '手动调整',
   task_reward: '任务奖励',
   inheritance_in: '资产继承(入)',
-  inheritance_out: '资产迁移(出)'
+  inheritance_out: '资产迁移(出)',
+  pc28_bet: 'PC28下注',
+  pc28_win: 'PC28中奖',
+  pc28_refund: 'PC28退款/回本',
+  pc28_bet_income: 'PC28下注收入',
+  pc28_anchor_reward: 'PC28主播奖励'
 }
 
 export const CoinTransactionList = () => {
@@ -260,20 +270,28 @@ export const CoinTransactionList = () => {
         />
         <Table.Column
           dataIndex="description"
-          title="备注"
-          render={(v, record: any) => (
-            <Space direction="vertical" size={0}>
-              <span>{v || '-'}</span>
-              {/* 🚀 视图字段：counterparty_nickname 或 counterparty.nickname */}
-              {(record.counterparty_nickname || record.counterparty?.nickname) && (
-                <small style={{ color: '#8c8c8c' }}>
-                  {record.type === 'gift_in' ? '来自: ' : '打赏给: '}
-                  {record.counterparty_nickname || record.counterparty?.nickname} (ID:{' '}
-                  {record.counterparty_numeric_id || record.counterparty?.numeric_id})
-                </small>
-              )}
-            </Space>
-          )}
+          title="备注 / 期数·下注"
+          render={(v, record: any) => {
+            const isPC28 =
+              record.type &&
+              ['pc28_bet', 'pc28_win', 'pc28_refund', 'pc28_bet_income', 'pc28_payout'].includes(
+                record.type
+              )
+            return (
+              <Space direction="vertical" size={0}>
+                {isPC28 && v && <small style={{ color: '#1890ff' }}>期数/下注：</small>}
+                <span>{v || '-'}</span>
+                {/* 🚀 视图字段：counterparty_nickname 或 counterparty.nickname */}
+                {(record.counterparty_nickname || record.counterparty?.nickname) && (
+                  <small style={{ color: '#8c8c8c' }}>
+                    {record.type === 'gift_in' ? '来自: ' : '打赏给: '}
+                    {record.counterparty_nickname || record.counterparty?.nickname} (ID:{' '}
+                    {record.counterparty_numeric_id || record.counterparty?.numeric_id})
+                  </small>
+                )}
+              </Space>
+            )
+          }}
         />
         <Table.Column
           dataIndex="created_at"
