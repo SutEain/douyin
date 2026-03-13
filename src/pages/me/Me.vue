@@ -183,138 +183,7 @@
           </div>
         </div>
 
-        <!-- 🎯 签到日历区域 -->
-        <div class="checkin-section">
-          <div class="checkin-card" @click="handleCheckInClick">
-            <div class="title-row">
-              <div class="left">
-                <Icon icon="lucide:calendar-check" class="icon" />
-                <span class="text">每日签到</span>
-              </div>
-              <div class="right">
-                <span v-if="isCheckedInToday" class="status checked">今日已签到</span>
-                <span v-else class="status">点击签到领抖币</span>
-                <Icon icon="mdi:chevron-right" />
-              </div>
-            </div>
-            <div class="days-row">
-              <div
-                v-for="(day, index) in displayDays"
-                :key="index"
-                class="day-item"
-                :class="{
-                  active: day <= currentDisplayDay,
-                  today: !isCheckedInToday && day === currentDisplayDay + 1
-                }"
-              >
-                <div class="coin">
-                  <Icon v-if="day <= currentDisplayDay" icon="mdi:check-circle" />
-                  <span v-else>+{{ getDayReward(day) }}</span>
-                </div>
-                <div class="label">{{ day }}天</div>
-              </div>
-            </div>
-            <div class="streak-text" v-if="userinfo.checkin_streak > 0">
-              已连续签到 <span>{{ userinfo.checkin_streak }}</span> 天
-            </div>
-          </div>
-
-          <!-- 🎯 看视频数量里程碑领取奖励任务（已注释下线） -->
-          <!--
-          <div class="watch-time-card">
-            <div class="title-row">
-              <div class="left">
-                <Icon icon="mdi:play-circle" class="icon" />
-                <span class="text">观看视频奖励</span>
-              </div>
-            </div>
-            <div class="progress-section">
-              <div class="time-text">
-                <template v-if="(state.watchTimeStatus?.total_seconds || 0) >= 100">
-                  <span class="highlight">已完成任务</span>
-                </template>
-                <template v-else>
-                  今日达标：<span class="highlight">{{
-                    state.watchTimeStatus?.total_seconds ?? 0
-                  }}</span>
-                  个视频
-                </template>
-              </div>
-
-              <div class="progress-bar-wrapper">
-                <div class="progress-bar">
-                  <div
-                    class="progress-fill"
-                    :style="{
-                      width: `${Math.min(((state.watchTimeStatus?.total_seconds || 0) / 100) * 100, 100)}%`
-                    }"
-                  ></div>
-                </div>
-                <div class="milestones">
-                  <div
-                    class="milestone"
-                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 20 }"
-                    style="left: 20%"
-                  >
-                    <div class="milestone-dot"></div>
-                    <div class="milestone-label">20个视频<br />+5抖币</div>
-                  </div>
-                  <div
-                    class="milestone"
-                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 50 }"
-                    style="left: 50%"
-                  >
-                    <div class="milestone-dot"></div>
-                    <div class="milestone-label">50个视频<br />+10抖币</div>
-                  </div>
-                  <div
-                    class="milestone milestone-last"
-                    :class="{ reached: (state.watchTimeStatus?.total_seconds || 0) >= 100 }"
-                    style="left: 100%"
-                  >
-                    <div class="milestone-dot"></div>
-                    <div class="milestone-label">100个视频<br />+15抖币</div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="reward-info">
-                <div class="reward-text" v-if="state.watchTimeStatus?.can_claim">
-                  可领取：<span class="reward-amount"
-                    >+{{ state.watchTimeStatus?.available_reward || 0 }}</span
-                  >
-                  抖币
-                </div>
-                <div
-                  class="reward-text claimed"
-                  v-else-if="state.watchTimeStatus?.claimed_reward > 0"
-                >
-                  今日已领取：<span class="reward-amount"
-                    >+{{ state.watchTimeStatus?.claimed_reward }}</span
-                  >
-                  抖币
-                </div>
-                <div class="reward-text" v-else>看满10秒的视频达20个可领取奖励</div>
-              </div>
-            </div>
-            <button
-              class="claim-btn"
-              :class="{ disabled: !state.watchTimeStatus?.can_claim }"
-              :disabled="!state.watchTimeStatus?.can_claim || baseStore.loading"
-              @click.stop="handleClaimWatchTimeReward"
-            >
-              <Icon icon="mdi:gift" />
-              <span>{{
-                state.watchTimeStatus?.can_claim
-                  ? '立即领取'
-                  : state.watchTimeStatus?.claimed_reward > 0
-                    ? '今日已领取'
-                    : '达标视频数不足'
-              }}</span>
-            </button>
-          </div>
-          -->
-        </div>
+        <!-- 🎯 签到领抖币、刷视频里程碑均已下线，不再展示 -->
       </div>
 
       <!-- Tab 指示器 -->
@@ -434,14 +303,7 @@ import BaseFooter from '@/components/BaseFooter.vue'
 import Loading from '@/components/Loading.vue'
 import NoMore from '@/components/NoMore.vue'
 import { _checkImgUrl, _formatNumber, _no, _copy, _handleImageError } from '@/utils'
-import {
-  likeVideo,
-  myVideo,
-  collectedVideo
-  // getWatchTimeStatus,
-  // claimWatchTimeReward
-} from '@/api/videos'
-import { checkIn } from '@/api/user'
+import { likeVideo, myVideo, collectedVideo } from '@/api/videos'
 import { useBaseStore } from '@/store/pinia'
 import { useNav } from '@/utils/hooks/useNav'
 import { supabase } from '@/utils/supabase'
@@ -494,74 +356,10 @@ const state = reactive({
     loading1: false,
     loading2: false
   }
-
-  // 🎯 观看时长奖励状态（看视频数量里程碑任务已注释下线）
-  // watchTimeStatus: {
-  //   total_seconds: 0,
-  //   total_minutes: 0,
-  //   claimed_reward: 0,
-  //   available_reward: 0,
-  //   reward_level: 'none',
-  //   can_claim: false
-  // }
 })
 
 // ========== Computed ==========
 const userinfo = computed(() => baseStore.userinfo || ({} as any))
-
-const isCheckedInToday = computed(() => {
-  if (!userinfo.value.last_checkin_at) return false
-  const lastCheckin = new Date(userinfo.value.last_checkin_at)
-  const now = new Date()
-
-  // 🎯 修复：统一使用 Intl 接口获取北京时间日期字符串 (YYYY-MM-DD)
-  // 避免手动加 8 小时导致的跨时区计算错误
-  const toBeijingDate = (date: Date) => {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Shanghai',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(date)
-  }
-
-  return toBeijingDate(lastCheckin) === toBeijingDate(now)
-})
-
-// 计算显示的7天范围
-const displayDays = computed(() => {
-  const streak = userinfo.value.checkin_streak || 0
-
-  // 如果连续签到 <= 7天，显示周期内的天数（1-7）
-  if (streak <= 7) {
-    return [1, 2, 3, 4, 5, 6, 7]
-  }
-
-  // 如果连续签到 > 7天，显示总天数（从 streak-6 到 streak）
-  // 例如：第8天显示 [2, 3, 4, 5, 6, 7, 8]
-  // 例如：第9天显示 [3, 4, 5, 6, 7, 8, 9]
-  const startDay = streak - 6
-  return Array.from({ length: 7 }, (_, i) => startDay + i)
-})
-
-// 计算当前应该点亮到第几天
-const currentDisplayDay = computed(() => {
-  const streak = userinfo.value.checkin_streak || 0
-  // 如果今天已签到，返回当前连续签到天数
-  // 如果今天未签到，返回昨天的连续签到天数
-  return streak
-})
-
-// 获取某天的奖励金额
-const getDayReward = (day: number) => {
-  const streak = userinfo.value.checkin_streak || 0
-  // 如果连续签到 > 7天，每天奖励都是满的（10抖币）
-  if (streak > 7) {
-    return 10
-  }
-  // 如果连续签到 <= 7天，按周期内的奖励规则
-  return day === 7 ? 10 : day + 3
-}
 
 const headerBackgroundStyle = computed(() => {
   const userCoverUrl = userinfo.value.cover_url?.[0]?.url_list?.[0]
@@ -716,89 +514,12 @@ function copyNumericId() {
   }
 }
 
-// 🎯 点击签到
-async function handleCheckInClick() {
-  if (baseStore.loading) return
-
-  // 如果今天已经签过到了，直接提示剩余时间，不再请求后端
-  if (isCheckedInToday.value) {
-    const now = new Date()
-    // 🎯 修复：使用 Intl 获取准确的北京时间分量
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Shanghai',
-      hour: 'numeric',
-      minute: 'numeric',
-      hour12: false
-    })
-    const parts = formatter.formatToParts(now)
-    const bjHour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0')
-    const bjMinute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0')
-
-    const hours = 23 - bjHour
-    const minutes = 59 - bjMinute
-    _no(`您今天已经签到过了\n距离下次签到还需 ${hours} 小时 ${minutes} 分钟`)
-    return
-  }
-
-  baseStore.loading = true
-  try {
-    const res = await checkIn()
-    if (res.success) {
-      const { reward, streak, next_reward } = res.data
-      _no(`✅ 签到成功！获得 ${reward} 抖币\n已连续签到 ${streak} 天，明天可领 ${next_reward} 抖币`)
-      // 刷新用户信息以立即点亮
-      await baseStore.init()
-    } else {
-      _no(res.message)
-    }
-  } catch (e: any) {
-    _no(e.message || '签到失败，请稍后重试')
-  } finally {
-    baseStore.loading = false
-  }
-}
-
-// 🎯 加载观看时长奖励状态（看视频数量里程碑任务已注释下线）
-// async function loadWatchTimeStatus() {
-//   if (!userinfo.value.uid) return
-//   try {
-//     const res = await getWatchTimeStatus()
-//     if (res.success && res.data) {
-//       Object.assign(state.watchTimeStatus, res.data)
-//     }
-//   } catch (e: any) {
-//     console.warn('[loadWatchTimeStatus] 加载观看时长状态失败:', e)
-//   }
-// }
-
-// 🎯 领取观看时长奖励（看视频数量里程碑任务已注释下线）
-// async function handleClaimWatchTimeReward() {
-//   if (baseStore.loading || !state.watchTimeStatus?.can_claim) return
-//
-//   baseStore.loading = true
-//   try {
-//     const res = await claimWatchTimeReward()
-//     if (res.success && res.data) {
-//       const { reward_amount, reward_level } = res.data
-//       _no(`✅ 领取成功！获得 ${reward_amount || 0} 抖币`)
-//       await Promise.all([baseStore.init(), loadWatchTimeStatus()])
-//     } else {
-//       _no(res.message || '领取失败，请稍后重试')
-//     }
-//   } catch (e: any) {
-//     _no(e.message || '领取失败，请稍后重试')
-//   } finally {
-//     baseStore.loading = false
-//   }
-// }
-
 // 🎯 刷新页面数据
 async function handleRefresh() {
   if (baseStore.loading) return
 
   baseStore.loading = true
   try {
-    // 刷新用户信息、观看时长状态和视频列表（里程碑任务已注释：不再拉取 watchTimeStatus）
     await Promise.all([baseStore.init(), loadMyVideos()])
     _no('刷新成功')
   } catch (e: any) {
@@ -1015,9 +736,7 @@ async function handleVerifyCode() {
 
     if (userinfo.value.uid) {
       console.log('[Me] 🎉 登录成功！加载用户数据...')
-      loadMyVideos() // 登录成功后立即加载数据
-      // loadWatchTimeStatus() // 🎯 看视频数量里程碑任务已注释下线
-      // 清空验证码
+      loadMyVideos()
       verificationCode.value = ''
     } else {
       console.warn('[Me] ⚠️ session 存在但 userinfo.uid 为空，可能初始化失败')
@@ -1029,7 +748,6 @@ async function handleVerifyCode() {
         console.log('[Me] ✅ 通过 getCurrentProfile 获取到 profile，应用用户信息...')
         baseStore.applyProfile(profile)
         loadMyVideos()
-        // loadWatchTimeStatus()
         verificationCode.value = ''
       } else {
         console.error('[Me] ❌ 无法获取用户信息，可能是 RLS 策略问题或数据库问题')
@@ -1044,47 +762,6 @@ async function handleVerifyCode() {
     baseStore.loading = false
   }
 }
-
-// 🎯 监听用户信息变化，自动加载观看时长状态（看视频数量里程碑任务已注释下线）
-// watch(
-//   () => userinfo.value.uid,
-//   (newUid) => {
-//     if (newUid) {
-//       loadWatchTimeStatus()
-//     }
-//   },
-//   { immediate: true }
-// )
-
-// 🎯 页面激活时刷新观看时长状态（看视频数量里程碑任务已注释下线）
-// const watchTimeRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null)
-// onMounted(() => {
-//   if (userinfo.value.uid) {
-//     loadWatchTimeStatus()
-//     watchTimeRefreshTimer.value = setInterval(() => {
-//       if (userinfo.value.uid) {
-//         loadWatchTimeStatus()
-//       }
-//     }, 30000)
-//   }
-// })
-//
-// watch(
-//   () => userinfo.value.uid,
-//   (newUid) => {
-//     if (!newUid && watchTimeRefreshTimer.value) {
-//       clearInterval(watchTimeRefreshTimer.value)
-//       watchTimeRefreshTimer.value = null
-//     }
-//   }
-// )
-//
-// onBeforeUnmount(() => {
-//   if (watchTimeRefreshTimer.value) {
-//     clearInterval(watchTimeRefreshTimer.value)
-//     watchTimeRefreshTimer.value = null
-//   }
-// })
 </script>
 
 <style scoped lang="less">
@@ -1483,127 +1160,6 @@ async function handleVerifyCode() {
           }
         }
       }
-    }
-
-    // 🎯 签到区域样式
-    .checkin-section {
-      padding: 0 15px 15px;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-
-      .checkin-card {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 12px;
-        padding: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-
-        .title-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 15px;
-
-          .left {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: #fff;
-            font-weight: bold;
-
-            .icon {
-              color: #face15;
-              font-size: 18px;
-            }
-          }
-
-          .right {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            color: rgba(255, 255, 255, 0.5);
-            font-size: 13px;
-
-            .status.checked {
-              color: #face15;
-            }
-          }
-        }
-
-        .days-row {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 12px;
-
-          .day-item {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
-
-            .coin {
-              width: 36px;
-              height: 36px;
-              background: rgba(255, 255, 255, 0.1);
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: #face15;
-              font-size: 12px;
-              font-weight: bold;
-              transition: all 0.3s;
-            }
-
-            .label {
-              font-size: 11px;
-              color: rgba(255, 255, 255, 0.4);
-            }
-
-            &.active {
-              .coin {
-                background: #face15;
-                color: #000;
-                box-shadow: 0 0 10px rgba(250, 206, 21, 0.3);
-              }
-              .label {
-                color: #face15;
-              }
-            }
-
-            &.today:not(.active) {
-              .coin {
-                border: 1px solid #face15;
-                animation: pulse 2s infinite;
-              }
-            }
-          }
-        }
-
-        .streak-text {
-          font-size: 12px;
-          color: rgba(255, 255, 255, 0.4);
-          text-align: center;
-
-          span {
-            color: #face15;
-            font-weight: bold;
-          }
-        }
-      }
-
-      // 🎯 观看时长奖励卡片样式（看视频数量里程碑任务已注释下线）
-      // .watch-time-card {
-      //   background: rgba(255, 255, 255, 0.05);
-      //   border-radius: 12px;
-      //   padding: 15px;
-      //   border: 1px solid rgba(255, 255, 255, 0.1);
-      //
-      //   .title-row { ... }
-      //   .progress-section { .time-text, .reward-info, .progress-bar-wrapper, .milestones { ... } }
-      //   .claim-btn { ... }
-      // }
     }
 
     // Tab 区域

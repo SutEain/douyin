@@ -31,12 +31,7 @@ export function recommendedShop(params?: any, data?: any) {
   return request({ url: '/shop/recommended', method: 'get', params, data })
 }
 
-/**
- * 🎯 用户签到
- */
-export async function checkIn() {
-  return requestAppServer('/user/checkin', 'POST')
-}
+// 🎯 签到领抖币已下线，checkIn 接口已移除
 
 // ===== app-server 调用（与 videos.ts 保持一致的最小实现）=====
 function getAppServerBase() {

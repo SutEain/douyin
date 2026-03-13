@@ -43,7 +43,7 @@ import { createPinia } from 'pinia'
 import { useClick } from '@/utils/hooks/useClick'
 import bus, { EVENT_KEY } from '@/utils/bus'
 import i18n from '@/locales'
-import { startWatchTimeHeartbeat, stopWatchTimeHeartbeat } from '@/utils/watchTimeHeartbeat'
+// 🎯 观看时长心跳已下线，不再启动
 
 declare global {
   interface Window {
@@ -223,12 +223,4 @@ bus.on(EVENT_KEY.REMOVE_MUTED, () => {
 // ✅ Telegram WebApp 初始化已经在 index.html 中提前处理
 // 避免重复调用导致问题
 
-// 🎯 启动观看时长心跳（打开app就开始计时，1分钟发送1次心跳）
-startWatchTimeHeartbeat().catch((error) => {
-  console.warn('[Main] Failed to start watch time heartbeat:', error)
-})
-
-// 页面卸载时停止心跳
-window.addEventListener('beforeunload', () => {
-  stopWatchTimeHeartbeat()
-})
+// 🎯 观看时长心跳已下线，已移除

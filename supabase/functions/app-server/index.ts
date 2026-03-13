@@ -27,11 +27,8 @@ import {
   handleApproveVideo,
   handleRecordView,
   handleVideoAdultFeed,
-  handleGetAdultQuota,
-  // handleGetWatchTimeStatus,
-  // handleClaimWatchTimeReward,
-  handleWatchTimeHeartbeat,
-  handleWatchTimeReport
+  handleGetAdultQuota
+  // 🎯 观看时长心跳、按视频上报已下线
 } from './routes/video.ts'
 import {
   handleVideoComments,
@@ -47,7 +44,7 @@ import {
   handleRequestUpdate,
   handleVisitUserProfile,
   handleGetMyVisitors,
-  handleCheckIn
+  // handleCheckIn 签到领抖币已下线
 } from './routes/user.ts'
 import {
   handleSearchVideos,
@@ -93,35 +90,19 @@ serve(async (req) => {
       route === '/auth/verify-code' ||
       route === '/auth/admin-login'
 
-    // 🎯 心跳接口需要特殊的频率限制（防止黑客攻击）
-    const isHeartbeatRoute = route === '/video/watch-time/heartbeat'
-
     if (!isPublicAuthRoute) {
       const { getClientIp } = await import('./lib/auth.ts')
       const clientIp = getClientIp(req)
       if (clientIp) {
         const { checkRateLimit } = await import('./lib/rateLimit.ts')
-
-        if (isHeartbeatRoute) {
-          const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'watch_time_heartbeat', {
-            maxAttempts: 6,
-            windowMs: 60000,
-            lockDurationMs: undefined
-          })
-          if (!rateLimitResult.allowed) {
-            console.warn(`[HEARTBEAT_ATTACK] IP ${clientIp} 心跳请求过于频繁（1分钟内超过6次）`)
-            return errorResponse('请求过于频繁', 1, 429)
-          }
-        } else {
-          const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'api_request', {
-            maxAttempts: 60,
-            windowMs: 10000,
-            lockDurationMs: undefined
-          })
-          if (!rateLimitResult.allowed) {
-            console.warn(`[API_ATTACK] IP ${clientIp} 请求过于频繁（10秒内超过60次）`)
-            return errorResponse('Forbidden', 1, 403)
-          }
+        const rateLimitResult = await checkRateLimit(clientIp, 'ip', 'api_request', {
+          maxAttempts: 60,
+          windowMs: 10000,
+          lockDurationMs: undefined
+        })
+        if (!rateLimitResult.allowed) {
+          console.warn(`[API_ATTACK] IP ${clientIp} 请求过于频繁（10秒内超过60次）`)
+          return errorResponse('Forbidden', 1, 403)
         }
       }
     }
@@ -214,22 +195,7 @@ serve(async (req) => {
     if (route === '/video/adult-quota' && method === 'GET') {
       return handleGetAdultQuota(req)
     }
-    // 🎯 观看时长系统（改为心跳机制）
-    // 心跳接口：1分钟发送1次，每次累加60秒
-    if (route === '/video/watch-time/heartbeat' && method === 'POST') {
-      return handleWatchTimeHeartbeat(req)
-    }
-    // 按视频上报观看秒数（用于「观看视频数」奖励）
-    if (route === '/video/watch-time/report' && method === 'POST') {
-      return handleWatchTimeReport(req)
-    }
-    // 观看时长奖励查询和领取接口（看视频数量里程碑任务已注释下线）
-    // if (route === '/video/watch-time/status' && method === 'GET') {
-    //   return handleGetWatchTimeStatus(req)
-    // }
-    // if (route === '/video/watch-time/claim' && method === 'POST') {
-    //   return handleClaimWatchTimeReward(req)
-    // }
+    // 🎯 观看时长心跳、按视频上报、里程碑领取均已下线，相关接口已移除
     if (route === '/video/comments' && method === 'GET') {
       return handleVideoComments(req)
     }
@@ -248,9 +214,7 @@ serve(async (req) => {
     if (route === '/user/follow' && method === 'POST') {
       return handleFollowUser(req)
     }
-    if (route === '/user/checkin' && method === 'POST') {
-      return handleCheckIn(req)
-    }
+    // 🎯 签到领抖币已下线，/user/checkin 接口已移除
     if (route === '/user/request-update' && method === 'POST') {
       return handleRequestUpdate(req)
     }
